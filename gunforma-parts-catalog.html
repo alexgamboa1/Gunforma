@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Parts configurator — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafaf8; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+
+/* PAGE */
+.page { max-width: 1100px; margin: 0 auto; padding: 32px 32px 80px; }
+.page-eyebrow { font-size: 10px; color: #2a7bbd; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; }
+.page-title { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 14px; color: #666; line-height: 1.6; max-width: 640px; margin-bottom: 28px; }
+.page-sub strong { color: #333; font-weight: 600; }
+
+/* SECTION HEADS */
+.section { margin-bottom: 28px; }
+.section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 12px; }
+
+/* PLATFORM PICKER */
+.platform-picker { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 20px 22px; }
+.platform-grid { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 6px; }
+.platform-btn { font-size: 13px; font-weight: 600; padding: 10px 18px; border: 0.5px solid #d5d3ca; background: #fff; border-radius: 6px; cursor: pointer; font-family: inherit; color: #333; transition: all 0.15s; }
+.platform-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
+.platform-btn.active { background: #4a9edd; border-color: #4a9edd; color: #fff; }
+.platform-btn-disabled { font-size: 12px; padding: 10px 18px; border: 0.5px dashed #d5d3ca; background: #fafaf8; border-radius: 6px; color: #a8a5a0; font-family: inherit; cursor: not-allowed; }
+.platform-selected-row { display: flex; align-items: center; gap: 12px; }
+.platform-selected-name { font-size: 16px; font-weight: 700; color: #1a1a1a; }
+.platform-change-btn { font-size: 11px; padding: 5px 10px; border: 0.5px solid #d5d3ca; background: #fff; border-radius: 4px; color: #666; cursor: pointer; font-family: inherit; }
+
+/* STATS STRIP */
+.stats-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 24px; }
+.stat-tile { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 18px 20px; }
+.stat-tile.primary { background: #0e0f11; border-color: #0e0f11; color: #fff; }
+.stat-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; color: #888; margin-bottom: 6px; }
+.stat-tile.primary .stat-label { color: #b5b3ab; }
+.stat-value { font-size: 26px; font-weight: 700; line-height: 1.1; letter-spacing: -0.01em; color: #1a1a1a; }
+.stat-tile.primary .stat-value { color: #fff; }
+.stat-sub { font-size: 11px; color: #888; margin-top: 4px; }
+.stat-tile.primary .stat-sub { color: #b5b3ab; }
+.stat-meter { height: 5px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 10px; }
+.stat-meter-fill { height: 100%; background: #22a06b; transition: width 0.3s; }
+
+/* CATEGORY ACCORDIONS (ported from post-build-v6, condensed) */
+.category-block { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; margin-bottom: 10px; overflow: hidden; transition: box-shadow 0.15s; }
+.category-block.open { box-shadow: 0 4px 20px rgba(0,0,0,0.05); border-color: #4a9edd; }
+.category-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 18px; background: #fff; cursor: pointer; user-select: none; transition: background 0.15s; }
+.category-block.open .category-head { background: #0e0f11; }
+.category-name-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.category-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.category-block.open .category-name { color: #e8e6e1; }
+.category-added-count { font-size: 10px; background: #4a9edd; color: #fff; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+.category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 12px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.category-block.open .category-toggle { color: #6fb4e8; border-color: #3a3b3e; background: rgba(255,255,255,0.06); }
+
+.added-parts-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px 12px; background: #f8f7f2; border-top: 0.5px solid #efece3; }
+.added-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px 10px 4px 8px; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 20px; color: #333; }
+.added-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: #22a06b; }
+.added-chip-dot.pending { background: #f9b860; }
+.added-chip-remove { border: none; background: none; color: #999; font-size: 14px; line-height: 1; padding: 0 2px; cursor: pointer; }
+.added-chip-remove:hover { color: #a25334; }
+
+.picker-panel { display: none; padding: 12px 18px 18px; border-top: 0.5px solid #efece3; background: #fafaf8; }
+.category-block.open .picker-panel { display: block; }
+.picker-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 10px; }
+.picker-search { flex: 1; font-family: inherit; font-size: 12px; padding: 6px 10px; border: 0.5px solid #d5d3ca; background: #fff; border-radius: 4px; }
+.picker-search:focus { outline: none; border-color: #4a9edd; }
+.picker-count { font-size: 11px; color: #888; white-space: nowrap; }
+.part-cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.part-card { border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; background: #fff; }
+.part-card-img { height: 120px; background: #f4f3ee; overflow: hidden; display: flex; align-items: center; justify-content: center; border-bottom: 0.5px solid #eee; }
+.part-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.part-card-img-fallback { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
+.part-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; flex: 1; }
+.part-card-brand { font-size: 9px; color: #2a7bbd; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+.part-card-name { font-size: 12.5px; font-weight: 600; color: #1a1a1a; line-height: 1.25; }
+.part-card-desc { font-size: 11px; color: #666; line-height: 1.4; max-height: 3.7em; overflow: hidden; }
+.part-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding-top: 8px; border-top: 0.5px solid #eee; }
+.part-card-price { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.part-card-add { font-size: 11px; font-weight: 700; padding: 6px 12px; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; border-radius: 4px; cursor: pointer; font-family: inherit; letter-spacing: 0.02em; }
+.part-card-add:hover { background: #1e63a0; }
+.part-card-remove { font-size: 11px; font-weight: 700; padding: 6px 12px; color: #a25334; background: #fff; border: 0.5px solid #eec2ae; border-radius: 4px; cursor: pointer; font-family: inherit; }
+
+.picker-empty-state { text-align: left; padding: 14px 16px; background: #fff; border: 0.5px dashed #d5d3ca; border-radius: 6px; font-size: 12px; color: #888; line-height: 1.5; }
+
+.custom-part-section { margin-top: 14px; padding-top: 14px; border-top: 0.5px solid #efece3; }
+.custom-part-toggle { font-family: inherit; font-size: 11.5px; font-weight: 700; color: #2a7bbd; background: none; border: none; padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.custom-part-toggle-icon { display: inline-block; transition: transform 0.15s; }
+.custom-part-toggle-icon.open { transform: rotate(45deg); }
+.custom-part-form { display: none; margin-top: 10px; padding: 12px 14px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; }
+.custom-part-form.open { display: block; }
+.custom-part-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.custom-part-form input { font-family: inherit; font-size: 12px; padding: 6px 10px; border: 0.5px solid #d5d3ca; background: #fafaf8; border-radius: 4px; }
+.custom-part-form input:focus { outline: none; border-color: #4a9edd; }
+.custom-part-note { font-size: 11px; color: #888; margin: 6px 0 10px; line-height: 1.5; }
+.custom-part-submit { font-family: inherit; font-size: 11px; font-weight: 700; color: #fff; background: #22a06b; border: 0.5px solid #22a06b; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+
+/* LOCKED PLACEHOLDER (before platform pick) */
+.locked-notice { padding: 40px 24px; text-align: center; background: #fff; border: 0.5px dashed #d5d3ca; border-radius: 8px; color: #888; font-size: 13px; }
+
+/* CTA STRIP AT BOTTOM */
+.cta-strip { margin-top: 32px; padding: 24px 26px; background: linear-gradient(135deg, #0e0f11 0%, #1a1a1a 100%); border-radius: 10px; color: #fff; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.cta-strip-copy { max-width: 460px; }
+.cta-strip-title { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+.cta-strip-sub { font-size: 12.5px; color: #b5b3ab; line-height: 1.6; }
+.cta-strip-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.cta-btn { font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 11px 18px; border-radius: 6px; cursor: pointer; text-decoration: none; border: 0.5px solid transparent; letter-spacing: 0.02em; display: inline-flex; align-items: center; gap: 5px; }
+.cta-btn.primary { background: #4a9edd; color: #fff; border-color: #4a9edd; }
+.cta-btn.primary:hover { background: #6fb4e8; }
+.cta-btn.ghost { background: transparent; color: #e8e6e1; border-color: #444; }
+.cta-btn.ghost:hover { border-color: #b5b3ab; color: #fff; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; background: #fafaf8; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; font-size: 12.5px; padding: 12px 18px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; z-index: 200; pointer-events: none; max-width: 480px; text-align: center; }
+.toast.show { opacity: 1; pointer-events: auto; }
+.toast a { color: #6fb4e8; margin-left: 6px; text-decoration: none; font-weight: 600; }
+.toast a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="#">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build-v6.html">Post your build</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-eyebrow">Free tool</div>
+  <div class="page-title">Parts configurator</div>
+  <div class="page-sub">Pick a pistol, browse the catalog, and see the price rack up in real time. <strong>No account required</strong> to build — save it to your account when you're ready to keep it or turn it into a public build.</div>
+
+  <div class="section">
+    <div class="section-title">1 · Pick your pistol</div>
+    <div class="platform-picker" id="platform-picker">
+      <div class="platform-grid" id="platform-grid">
+        <div style="color:#888;font-size:12px;padding:6px 0;">Loading pistols…</div>
+      </div>
+    </div>
+    <div class="platform-picker" id="platform-selected" style="display:none;">
+      <div class="platform-selected-row">
+        <div>
+          <div style="font-size:11px;color:#888;letter-spacing:0.06em;text-transform:uppercase;font-weight:600;margin-bottom:2px;">Building for</div>
+          <div class="platform-selected-name" id="platform-selected-name">—</div>
+        </div>
+        <button class="platform-change-btn" onclick="changePlatform()">Change pistol</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Your build so far</div>
+    <div class="stats-strip">
+      <div class="stat-tile primary">
+        <div class="stat-label">Total MSRP</div>
+        <div class="stat-value" id="stat-total">$0</div>
+        <div class="stat-sub">Sum of catalog part MSRPs. Estimate only.</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Parts added</div>
+        <div class="stat-value" id="stat-parts">0</div>
+        <div class="stat-sub" id="stat-parts-sub">Start with a slide or an optic</div>
+      </div>
+      <div class="stat-tile">
+        <div class="stat-label">Categories filled</div>
+        <div class="stat-value" id="stat-cats">0 <span style="font-size:14px;color:#888;font-weight:500;">of 13</span></div>
+        <div class="stat-meter"><div class="stat-meter-fill" id="stat-cats-bar" style="width:0%;"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">2 · Add your parts</div>
+    <div id="parts-container">
+      <div class="locked-notice">Pick a pistol above to browse compatible parts.</div>
+    </div>
+  </div>
+
+  <div class="cta-strip">
+    <div class="cta-strip-copy">
+      <div class="cta-strip-title">Ready to make it official?</div>
+      <div class="cta-strip-sub">Post it as a public build with photos and details so other builders can find it, or save this configuration to your account to keep working on it later.</div>
+    </div>
+    <div class="cta-strip-actions">
+      <button class="cta-btn ghost" onclick="saveBuild()" id="save-btn">Save to my builds</button>
+      <a class="cta-btn primary" href="gunforma-post-build-v6.html">Post your build →</a>
+    </div>
+  </div>
+</div>
+
+<div class="footer-bar">
+  <div class="footer-txt">© 2026 Gunforma · <a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// SUPABASE
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ============================================================
+// CATEGORIES — mirror gunforma-post-build-v6.html
+// dbCategory = null means custom-only (no seeded products yet)
+// ============================================================
+const CATEGORIES = [
+  { key:'optics',   label:'Optics',                 dbCategory:['optic'] },
+  { key:'lights',   label:'Weapon Lights',          dbCategory:['light'] },
+  { key:'grips',    label:'Grip Modules',           dbCategory:['frame'] },
+  { key:'slides',   label:'Slides',                 dbCategory:['slide'] },
+  { key:'barrels',  label:'Barrels & Compensators', dbCategory:['barrel','compensator'] },
+  { key:'triggers', label:'Triggers',               dbCategory:['trigger'] },
+  { key:'sights',   label:'Sights',                 dbCategory:null },
+  { key:'magwells', label:'Magwells',               dbCategory:null },
+  { key:'holsters', label:'Holsters',               dbCategory:null },
+  { key:'mags',     label:'Magazines',              dbCategory:null },
+  { key:'paintjob', label:'Paint Job & Finish',     dbCategory:null },
+  { key:'knife',    label:'Tactical Knife',         dbCategory:null },
+  { key:'misc',     label:'Miscellaneous',          dbCategory:null },
+];
+
+// ============================================================
+// DATA + STATE
+// ============================================================
+let PLATFORMS = [];
+let CATALOG = {};                // { catKey: [ {id, brand, name, desc, price} ] }
+let catalogLoadedFor = null;
+let CURRENT_USER = null;
+
+const STATE = {
+  platform: null,                // {id, name}
+  parts: [],                     // {uid, refId, category, brand, name, pending, msrp}
+  openPicker: null,
+  customOpen: null,
+};
+let uid = 1;
+
+// LocalStorage persists picks so a sign-in redirect doesn't wipe them.
+const LS_KEY = 'gunforma.partsCatalog.state.v1';
+
+function saveLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify({
+    platform: STATE.platform,
+    parts: STATE.parts,
+  })); } catch (e) {}
+}
+function loadLocal() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (e) { return null; }
+}
+
+// ============================================================
+// INIT
+// ============================================================
+async function init() {
+  const { data: sess } = await sb.auth.getSession();
+  CURRENT_USER = sess?.session?.user || null;
+  updateSignInLink();
+  await loadPlatforms();
+  await hydrateFromLocalStorage();
+  render();
+}
+
+async function updateSignInLink() {
+  const link = document.getElementById('nav-signin');
+  if (!link) return;
+  // Remove any previously injected Sign out button so re-runs are idempotent.
+  var prev = document.getElementById('nav-signout');
+  if (prev) prev.remove();
+
+  if (!CURRENT_USER) return;
+
+  // Show username in place of "Sign in", drop a "Sign out" button before it.
+  const { data: profile } = await sb.from('profiles').select('username').eq('id', CURRENT_USER.id).maybeSingle();
+  const displayName = (profile && profile.username) || CURRENT_USER.email || 'Signed in';
+  link.textContent = displayName;
+  link.removeAttribute('href');
+  link.style.cursor = 'default';
+  link.onclick = null;
+
+  const signOutBtn = document.createElement('a');
+  signOutBtn.id = 'nav-signout';
+  signOutBtn.href = '#';
+  signOutBtn.className = link.className;
+  signOutBtn.textContent = 'Sign out';
+  signOutBtn.onclick = async function(e) {
+    e.preventDefault();
+    await sb.auth.signOut();
+    location.reload();
+  };
+  link.parentNode.insertBefore(signOutBtn, link);
+}
+
+async function loadPlatforms() {
+  const { data, error } = await sb.from('platforms').select('id,name').order('name');
+  if (error) {
+    document.getElementById('platform-grid').innerHTML =
+      '<div style="color:#c25d3a;font-size:12px;">Could not load pistols. Refresh to try again.</div>';
+    return;
+  }
+  PLATFORMS = data || [];
+  renderPlatformGrid();
+}
+
+async function hydrateFromLocalStorage() {
+  const saved = loadLocal();
+  if (!saved || !saved.platform) return;
+  // Verify the saved platform still exists — if the DB changed under us,
+  // silently drop the stale selection rather than crashing.
+  const stillExists = PLATFORMS.find(p => p.id === saved.platform.id);
+  if (!stillExists) return;
+  STATE.platform = stillExists;
+  STATE.parts = Array.isArray(saved.parts) ? saved.parts : [];
+  await loadCatalog(STATE.platform.id);
+  // Any restored part with a refId that isn't in the (now-loaded) CATALOG is
+  // still fine — we display it as its stored brand/name/msrp. It just means
+  // the product may have been discontinued between sessions.
+}
+
+// ============================================================
+// PLATFORM PICKER
+// ============================================================
+function renderPlatformGrid() {
+  const grid = document.getElementById('platform-grid');
+  if (!PLATFORMS.length) {
+    grid.innerHTML = '<div style="color:#888;font-size:12px;">No pistols in catalog yet.</div>';
+    return;
+  }
+  const moreComing = '<button class="platform-btn-disabled" disabled>More models coming soon</button>';
+  grid.innerHTML = PLATFORMS.map(p =>
+    '<button class="platform-btn" onclick="selectPlatform(\''+p.id+'\')">'+escH(p.name)+'</button>'
+  ).join('') + moreComing;
+}
+
+window.selectPlatform = async function(id) {
+  const p = PLATFORMS.find(x => x.id === id);
+  if (!p) return;
+  STATE.platform = p;
+  // Reset parts if switching to a new platform (their refIds map to the wrong catalog)
+  STATE.parts = STATE.parts.filter(x => x.pending);
+  saveLocal();
+  render();
+  await loadCatalog(p.id);
+  render();
+};
+
+window.changePlatform = function() {
+  STATE.platform = null;
+  STATE.parts = STATE.parts.filter(x => x.pending);
+  CATALOG = {};
+  catalogLoadedFor = null;
+  saveLocal();
+  render();
+};
+
+// ============================================================
+// CATALOG FETCH — msrp comes from the is_default variant per the pricing spec
+// ============================================================
+async function loadCatalog(platformId) {
+  if (catalogLoadedFor === platformId) return;
+  const { data, error } = await sb
+    .from('products')
+    .select(
+      'id, category, name, description, manufacturers(name), '+
+      'product_platforms!inner(platform_id), '+
+      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
+    )
+    .eq('is_discontinued', false)
+    .eq('product_platforms.platform_id', platformId);
+  if (error) { console.error('loadCatalog', error); CATALOG = {}; return; }
+
+  const grouped = {};
+  CATEGORIES.forEach(cat => {
+    if (!cat.dbCategory) return;
+    const rows = (data || []).filter(r => cat.dbCategory.indexOf(r.category) !== -1);
+    if (!rows.length) return;
+    grouped[cat.key] = rows.map(r => {
+      const dv = (r.product_variants || []).find(v => v.is_default) || (r.product_variants || [])[0];
+      return {
+        id:    r.id,
+        brand: r.manufacturers ? r.manufacturers.name : 'Unknown brand',
+        name:  r.name,
+        desc:  r.description || '',
+        price: dv && dv.msrp != null ? Number(dv.msrp) : 0,
+        image: dv && dv.primary_image_url ? dv.primary_image_url : null,
+      };
+    });
+  });
+  CATALOG = grouped;
+  catalogLoadedFor = platformId;
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  renderPlatform();
+  renderStats();
+  renderParts();
+  renderSaveBtn();
+}
+
+function renderPlatform() {
+  if (STATE.platform) {
+    document.getElementById('platform-picker').style.display = 'none';
+    document.getElementById('platform-selected').style.display = 'block';
+    document.getElementById('platform-selected-name').textContent = STATE.platform.name;
+  } else {
+    document.getElementById('platform-picker').style.display = 'block';
+    document.getElementById('platform-selected').style.display = 'none';
+  }
+}
+
+function renderStats() {
+  const total = STATE.parts.reduce((s, p) => s + (Number(p.msrp) || 0), 0);
+  document.getElementById('stat-total').textContent = total > 0 ? '$'+total.toFixed(2) : '$0';
+  document.getElementById('stat-parts').textContent = STATE.parts.length;
+  document.getElementById('stat-parts-sub').textContent =
+    STATE.parts.length === 0 ? 'Start with a slide or an optic' :
+    STATE.parts.some(p => p.pending) ? STATE.parts.filter(p => p.pending).length+' pending catalog review' :
+    'All from catalog';
+  const cats = new Set(STATE.parts.map(p => p.category)).size;
+  document.getElementById('stat-cats').innerHTML = cats + ' <span style="font-size:14px;color:#888;font-weight:500;">of 13</span>';
+  document.getElementById('stat-cats-bar').style.width = (cats / 13 * 100) + '%';
+}
+
+function renderParts() {
+  const c = document.getElementById('parts-container');
+  if (!STATE.platform) {
+    c.innerHTML = '<div class="locked-notice">Pick a pistol above to browse compatible parts.</div>';
+    return;
+  }
+  c.innerHTML = CATEGORIES.map(buildCategoryBlock).join('');
+}
+
+// Three picker modes (same as post-build-v6):
+//   loading  – catalog fetch in flight
+//   unseeded – dbCategory=null OR no rows for this platform → custom-only
+//   browsing – real cards + custom form
+// Product-card thumbnail slot. Real product image from the default variant
+// when we have one, else a "Photo coming soon" placeholder in the same box
+// so the grid rows don't jump around.
+function partCardImgHtml(item) {
+  if (!item.image) return '<div class="part-card-img"><div class="part-card-img-fallback">Photo coming soon</div></div>';
+  var alt = ((item.brand ? item.brand+' ' : '') + (item.name || '')).replace(/"/g, '&quot;');
+  return '<div class="part-card-img">'+
+           '<img src="'+item.image+'" alt="'+alt+'" loading="lazy" '+
+             'onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-img-fallback&quot;>No photo</div>\'"/>'+
+         '</div>';
+}
+
+// Single source of truth for a browsable product card. Called by
+// buildCategoryBlock (initial render) and by filterCards (post-search).
+function renderPartCardHtml(item, catKey) {
+  return '<div class="part-card">'+
+      partCardImgHtml(item) +
+      '<div class="part-card-body">'+
+        '<div class="part-card-brand">'+escH(item.brand)+'</div>'+
+        '<div class="part-card-name">'+escH(item.name)+'</div>'+
+        (item.desc ? '<div class="part-card-desc">'+escH(item.desc)+'</div>' : '')+
+        '<div class="part-card-footer">'+
+          '<div class="part-card-price">'+(item.price ? '$'+item.price.toFixed(2) : '—')+'</div>'+
+          '<button class="part-card-add" onclick="addCatalogPart(\''+catKey+'\',\''+item.id+'\')">+ Add</button>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+
+function categoryMode(cat) {
+  const loading = STATE.platform && catalogLoadedFor !== STATE.platform.id;
+  if (loading) return 'loading';
+  const items = CATALOG[cat.key] || [];
+  if (!cat.dbCategory || !items.length) return 'unseeded';
+  return 'browsing';
+}
+
+function buildCategoryBlock(cat) {
+  const added = STATE.parts.filter(p => p.category === cat.key);
+  const isOpen = STATE.openPicker === cat.key;
+  const isCust = STATE.customOpen === cat.key;
+  const mode = categoryMode(cat);
+
+  const chipsHtml = added.length
+    ? '<div class="added-parts-strip">'+added.map(p =>
+        '<div class="added-chip">'+
+          '<div class="added-chip-dot'+(p.pending?' pending':'')+'"></div>'+
+          escH(p.brand)+' '+escH(p.name)+
+          (p.msrp ? ' <span style="color:#666;">· $'+Number(p.msrp).toFixed(2)+'</span>' : '')+
+          '<button class="added-chip-remove" onclick="removePart(\''+p.uid+'\')">×</button>'+
+        '</div>'
+      ).join('')+'</div>'
+    : '';
+
+  const available = (CATALOG[cat.key] || []).filter(item => !STATE.parts.some(p => p.refId === item.id));
+  const cardsHtml = mode === 'browsing'
+    ? (available.length
+        ? available.map(item => renderPartCardHtml(item, cat.key)).join('')
+        : '<div class="picker-empty-state">Everything in this category is already in your build.</div>')
+    : '';
+
+  const modeNote =
+    mode === 'loading'  ? '<div class="picker-empty-state">Loading '+escH(cat.label.toLowerCase())+'…</div>' :
+    mode === 'unseeded' ? '<div class="picker-empty-state">No catalog listings for this category yet. Add your part below — it\'ll travel with your build.</div>' :
+    '';
+
+  const toolbarHtml = mode === 'browsing'
+    ? '<div class="picker-toolbar">'+
+        '<input class="picker-search" type="text" placeholder="Search '+escH(cat.label.toLowerCase())+'…" oninput="filterCards(\''+cat.key+'\',this.value)"/>'+
+        '<span class="picker-count" id="picker-count-'+cat.key+'">'+available.length+' options</span>'+
+      '</div>'
+    : '';
+
+  return '<div class="category-block'+(isOpen?' open':'')+'" id="cat-'+cat.key+'">'+
+      '<div class="category-head" onclick="togglePicker(\''+cat.key+'\')">'+
+        '<div class="category-name-wrap">'+
+          '<span class="category-name">'+escH(cat.label)+'</span>'+
+          (added.length ? '<span class="category-added-count">'+added.length+' added</span>' : '')+
+        '</div>'+
+        '<button class="category-toggle">'+(isOpen?'Close ✕':'+ Add part')+'</button>'+
+      '</div>'+
+      chipsHtml +
+      '<div class="picker-panel">'+
+        toolbarHtml + modeNote +
+        (mode === 'browsing' ? '<div class="part-cards-grid" id="cards-'+cat.key+'">'+cardsHtml+'</div>' : '')+
+        '<div class="custom-part-section">'+
+          '<button class="custom-part-toggle" onclick="toggleCustomForm(\''+cat.key+'\')">'+
+            '<span class="custom-part-toggle-icon'+(isCust?' open':'')+'">+</span>'+
+            ' Part not listed? Add a custom part'+
+          '</button>'+
+          '<div class="custom-part-form'+(isCust?' open':'')+'">'+
+            '<div class="custom-part-grid">'+
+              '<input type="text" placeholder="Brand" id="cb-'+cat.key+'"/>'+
+              '<input type="text" placeholder="Part name" id="cn-'+cat.key+'"/>'+
+            '</div>'+
+            '<div class="custom-part-note">Custom parts flag as "pending review" — Gunforma may promote them into the public catalog. They still show in your saved build and price total.</div>'+
+            '<button class="custom-part-submit" onclick="addCustomPart(\''+cat.key+'\')">Add to build</button>'+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+
+// ============================================================
+// PICKER ACTIONS
+// ============================================================
+window.togglePicker = function(k) {
+  STATE.openPicker = STATE.openPicker === k ? null : k;
+  STATE.customOpen = null;
+  render();
+};
+window.toggleCustomForm = function(k) {
+  STATE.customOpen = STATE.customOpen === k ? null : k;
+  render();
+};
+window.filterCards = function(k, q) {
+  q = (q || '').trim().toLowerCase();
+  const available = (CATALOG[k] || []).filter(i => !STATE.parts.some(p => p.refId === i.id));
+  const list = q ? available.filter(i => (i.brand+' '+i.name+' '+i.desc).toLowerCase().includes(q)) : available;
+  const countEl = document.getElementById('picker-count-'+k);
+  if (countEl) countEl.textContent = list.length + ' options';
+  const grid = document.getElementById('cards-'+k);
+  if (!grid) return;
+  grid.innerHTML = list.length
+    ? list.map(item => renderPartCardHtml(item, k)).join('')
+    : '<div class="picker-empty-state">No matches — try the custom part option below.</div>';
+};
+window.addCatalogPart = function(k, itemId) {
+  const item = (CATALOG[k] || []).find(i => i.id === itemId);
+  if (!item) return;
+  STATE.parts.push({
+    uid: 'p'+(uid++), refId: item.id, category: k,
+    brand: item.brand, name: item.name, pending: false, msrp: item.price
+  });
+  saveLocal();
+  render();
+};
+window.addCustomPart = function(k) {
+  const brand = (document.getElementById('cb-'+k).value || '').trim();
+  const name  = (document.getElementById('cn-'+k).value || '').trim();
+  if (!brand || !name) return;
+  STATE.parts.push({
+    uid: 'p'+(uid++), refId: null, category: k,
+    brand, name, pending: true, msrp: 0
+  });
+  STATE.customOpen = null;
+  saveLocal();
+  render();
+};
+window.removePart = function(partUid) {
+  STATE.parts = STATE.parts.filter(p => p.uid !== partUid);
+  saveLocal();
+  render();
+};
+
+// ============================================================
+// SAVE TO ACCOUNT
+// ============================================================
+function renderSaveBtn() {
+  const btn = document.getElementById('save-btn');
+  const disabled = !STATE.platform || !STATE.parts.length;
+  btn.disabled = disabled;
+  btn.style.opacity = disabled ? '0.5' : '1';
+  btn.style.cursor  = disabled ? 'not-allowed' : 'pointer';
+  btn.title = disabled ? 'Pick a pistol and add at least one part first' : '';
+}
+
+window.saveBuild = async function() {
+  if (!STATE.platform || !STATE.parts.length) return;
+  if (!CURRENT_USER) {
+    showToast('Sign in to save to your account', 'gunforma-signin.html');
+    return;
+  }
+  // Serialize parts_snapshot exactly like gunforma-post-build-v6.html does.
+  const snapshot = STATE.parts.map(p => ({
+    category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending
+  }));
+  const name = 'Configurator draft — ' + STATE.platform.name + ' — ' + new Date().toLocaleDateString(undefined, { month:'short', day:'numeric' });
+
+  const { data, error } = await sb.from('builds').insert({
+    user_id: CURRENT_USER.id,
+    platform_id: STATE.platform.id,
+    name: name,
+    tier: STATE.parts.length ? 'full' : 'minimum',
+    status: 'draft',   // check constraint lets drafts skip consent
+    activities: [],
+    parts_snapshot: snapshot,
+  }).select('id').single();
+
+  if (error) {
+    console.error('saveBuild', error);
+    showToast('Could not save — try again');
+    return;
+  }
+  showToast('Saved to your account as a draft');
+};
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg, linkHref) {
+  const t = document.getElementById('toast');
+  t.innerHTML = escH(msg) + (linkHref ? ' <a href="'+escH(linkHref)+'">Sign in →</a>' : '');
+  t.classList.add('show');
+  clearTimeout(window._ttoast);
+  window._ttoast = setTimeout(() => t.classList.remove('show'), 3400);
+}
+
+init();
+</script>
+</body>
+</html>

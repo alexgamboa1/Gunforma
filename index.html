@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Gunforma — Your pistol. Your loadout.</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+
+/* PAGE — white background, dark text */
+.page { background: #ffffff; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV — kept black */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: color 0.15s; }
+.nav-link:hover { color: #e8e6e1; }
+.nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.nav-btn:hover { color: #e8e6e1; border-color: #4a4b4e; }
+.nav-btn.cta { color: #fff; background: #4a9edd; border-color: #4a9edd; font-weight: 600; letter-spacing: 0.04em; }
+.nav-btn.cta:hover { background: #2a7bbd; border-color: #2a7bbd; }
+
+/* HERO */
+.hero { position: relative; height: 360px; background: #141518; border-bottom: 0.5px solid #e5e5e5; display: flex; align-items: flex-end; overflow: hidden; }
+.hero-bg { position: absolute; inset: 0; background: #1a1b1f; display: flex; align-items: center; justify-content: center; }
+.hero-img-placeholder { width: 100%; height: 100%; background: #141518; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; }
+.hero-img-placeholder span { font-size: 11px; color: #333; letter-spacing: 0.08em; text-transform: uppercase; }
+.hero-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(14,15,17,0.95) 0%, rgba(14,15,17,0.4) 50%, transparent 100%); }
+.hero-content { position: absolute; bottom: 0; left: 0; right: 0; padding: 28px 28px 32px; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; margin-bottom: 8px; font-weight: 600; }
+.hero-title { font-size: 28px; font-weight: 600; color: #e8e6e1; line-height: 1.2; margin-bottom: 10px; letter-spacing: -0.01em; }
+.hero-sub { font-size: 13px; color: #c8c6c0; max-width: 480px; line-height: 1.6; margin-bottom: 18px; }
+.hero-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn-primary { font-size: 12px; background: #4a9edd; color: #ffffff; padding: 10px 20px; border-radius: 4px; font-weight: 600; cursor: pointer; letter-spacing: 0.04em; border: none; }
+.btn-primary:hover { background: #2a7bbd; }
+.btn-ghost { font-size: 12px; color: #e8e6e1; border: 0.5px solid #3a3b3e; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: border-color 0.15s; }
+.btn-ghost:hover { border-color: #4a9edd; color: #4a9edd; }
+.hero-microlink { font-size: 11px; color: #9b9890; letter-spacing: 0.02em; }
+.hero-microlink a { color: #6fb4e8; text-decoration: none; font-weight: 600; }
+.hero-microlink a:hover { text-decoration: underline; }
+
+/* STAT BAR */
+.stat-bar { display: flex; gap: 0; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.stat-item { flex: 1; padding: 14px 20px; border-right: 0.5px solid #e5e5e5; }
+.stat-item:last-child { border-right: none; }
+.stat-num { font-size: 20px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.01em; }
+.stat-label { font-size: 10px; color: #888; letter-spacing: 0.08em; text-transform: uppercase; margin-top: 2px; }
+
+/* SECTIONS */
+.section { padding: 36px 28px; }
+.section-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 18px; gap: 16px; flex-wrap: wrap; }
+.section-title { font-size: 13px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.08em; text-transform: uppercase; }
+.section-sub { font-size: 12px; color: #888; margin-top: 4px; }
+.section-links { display: flex; gap: 16px; align-items: baseline; }
+.section-link { font-size: 11px; color: #2a7bbd; cursor: pointer; font-weight: 600; letter-spacing: 0.02em; }
+.section-link:hover { text-decoration: underline; }
+.section-link.muted { color: #888; }
+
+/* BLOCK GRID — category exploration */
+.block-grid { display: grid; grid-template-columns: 2fr 1fr 1fr; grid-template-rows: 200px 160px; gap: 6px; }
+.block { background: #1a1b1f; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; position: relative; cursor: pointer; display: flex; align-items: flex-end; transition: border-color 0.15s; }
+.block:hover { border-color: #4a9edd; }
+.block.tall { grid-row: 1 / 3; }
+.block-img-bg { position: absolute; inset: 0; background: #1a1b1f; display: flex; align-items: center; justify-content: center; }
+.block-img-label { font-size: 10px; color: #2a2b2e; letter-spacing: 0.08em; }
+.block-fade { position: absolute; inset: 0; background: linear-gradient(to top, rgba(14,15,17,0.9) 0%, transparent 60%); }
+.block-content { position: relative; padding: 12px 14px; width: 100%; }
+.block-tag { font-size: 9px; color: #4a9edd; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; font-weight: 700; }
+.block-title { font-size: 13px; font-weight: 600; color: #e8e6e1; line-height: 1.3; }
+.block-sub { font-size: 11px; color: #888780; margin-top: 3px; }
+
+/* BUILD CARDS */
+.builds-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.build-card { background: #ffffff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+.build-card:hover { border-color: #4a9edd; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+.build-img { height: 110px; background: #f4f3ee; display: flex; align-items: center; justify-content: center; border-bottom: 0.5px solid #e5e5e5; position: relative; }
+.build-img span { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; }
+.build-bookmark { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.9); border: 0.5px solid #d9d6cc; width: 26px; height: 26px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px; }
+.build-body { padding: 10px 12px; }
+.build-name { font-size: 12px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
+.build-tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+.build-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; }
+.build-tag.blue { color: #1d6fb8; border-color: #a7cdec; background: #eaf4fc; }
+.build-meta { display: flex; justify-content: space-between; align-items: center; }
+.build-price { font-size: 11px; color: #2a7bbd; font-weight: 700; }
+.build-author { font-size: 10px; color: #999; }
+
+/* SHARE-YOUR-BUILD — community contribution section */
+.share-section { background: #fafaf8; border-top: 0.5px solid #e5e5e5; border-bottom: 0.5px solid #e5e5e5; padding: 36px 28px; }
+.share-head { text-align: center; max-width: 520px; margin: 0 auto 28px; }
+.share-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; }
+.share-title { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
+.share-sub { font-size: 13px; color: #666; line-height: 1.6; }
+.share-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 880px; margin: 0 auto 26px; }
+.share-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 18px; }
+.share-icon { width: 30px; height: 30px; border-radius: 6px; background: #eaf4fc; border: 0.5px solid #a7cdec; color: #2a7bbd; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; margin-bottom: 12px; }
+.share-card h4 { font-size: 13px; font-weight: 700; margin-bottom: 6px; letter-spacing: -0.005em; }
+.share-card p { font-size: 12px; color: #666; line-height: 1.6; }
+.share-cta-row { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.share-cta-note { font-size: 11px; color: #999; letter-spacing: 0.02em; }
+
+/* HOW IT WORKS */
+.stat-bars-demo { background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 16px 18px; }
+.stat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.stat-row:last-child { margin-bottom: 0; }
+.stat-name { font-size: 10px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; width: 90px; flex-shrink: 0; }
+.stat-track { flex: 1; height: 4px; background: #e8e5dc; border-radius: 2px; overflow: hidden; }
+.stat-fill { height: 100%; border-radius: 2px; background: #4a9edd; }
+.stat-val { font-size: 10px; color: #555; width: 24px; text-align: right; flex-shrink: 0; }
+
+/* CTA — blue tint */
+.cta-strip { margin: 0 28px 36px; background: #eaf4fc; border: 0.5px solid #a7cdec; border-radius: 6px; padding: 22px 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.cta-text h3 { font-size: 14px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+.cta-text p { font-size: 12px; color: #2a5d85; }
+.cta-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.btn-outline-blue { font-size: 12px; color: #2a7bbd; background: transparent; border: 1px solid #2a7bbd; padding: 9px 18px; border-radius: 4px; font-weight: 600; cursor: pointer; letter-spacing: 0.04em; }
+.btn-outline-blue:hover { background: #fff; }
+.btn-solid-blue { font-size: 12px; color: #fff; background: #4a9edd; border: none; padding: 9px 18px; border-radius: 4px; font-weight: 600; cursor: pointer; letter-spacing: 0.04em; }
+.btn-solid-blue:hover { background: #2a7bbd; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
+.footer-legal { font-size: 10.5px; color: #999; line-height: 1.6; max-width: 900px; }
+.footer-links-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+@media (max-width: 760px) {
+  .nav-links { display: none; }
+  .block-grid { grid-template-columns: 1fr; grid-template-rows: none; }
+  .block.tall { grid-row: auto; height: 200px; }
+  .builds-row, .share-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+  <h2 style="position:absolute;left:-9999px;">Home page for Gunforma — a pistol parts catalog and community build platform</h2>
+
+  <nav class="nav">
+    <a href="index.html" class="nav-logo" style="text-decoration:none;">GUN<span>FORMA</span></a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link active" style="text-decoration:none;">Home</a>
+      <a href="gunforma-builds.html" class="nav-link" style="text-decoration:none;">Builds</a>
+      <a href="gunforma-parts-catalog.html" class="nav-link" style="text-decoration:none;">Parts catalog</a>
+      <a href="#" class="nav-link" style="text-decoration:none;">Armory</a>
+    </div>
+    <div class="nav-right">
+      <a href="gunforma-signin.html" class="nav-btn" style="text-decoration:none;" id="nav-signin">Sign in</a>
+      <a href="gunforma-post-build-v6.html" class="nav-btn cta" style="text-decoration:none;">+ Post your build</a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-bg">
+      <div class="hero-img-placeholder">
+        <span>[ Hero image — full-width cinematic pistol photo ]</span>
+        <span style="color:#1e1f22">dark studio lighting, muzzle detail, high contrast</span>
+      </div>
+    </div>
+    <div class="hero-overlay"></div>
+    <div class="hero-content">
+      <p class="hero-eyebrow">Build it. Compare it. Show it off.</p>
+      <h1 class="hero-title">Your pistol.<br>Your loadout.</h1>
+      <p class="hero-sub">Real aftermarket parts with live performance comparisons, and real configurations from owners who've already built it — with links to exactly where to buy it.</p>
+      <div class="hero-actions">
+        <a href="#" class="btn-primary" style="text-decoration:none;display:inline-block;">Start building</a>
+        <a href="#" class="btn-ghost" style="text-decoration:none;display:inline-block;">Browse builds</a>
+      </div>
+      <div class="hero-microlink" style="margin-top:14px;">Already running your own setup? <a href="gunforma-post-build-v6.html">Post your build →</a></div>
+    </div>
+  </div>
+
+  <div class="stat-bar">
+    <div class="stat-item"><div class="stat-num">340+</div><div class="stat-label">Pistol models</div></div>
+    <div class="stat-item"><div class="stat-num">2,800+</div><div class="stat-label">Aftermarket parts</div></div>
+    <div class="stat-item"><div class="stat-num">12,000+</div><div class="stat-label">Builds shared by owners</div></div>
+    <div class="stat-item"><div class="stat-num">Free</div><div class="stat-label">Always to browse</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <span class="section-title">Explore by category</span>
+      </div>
+      <a href="#" class="section-link" style="text-decoration:none;">View all →</a>
+    </div>
+    <div class="block-grid">
+      <a href="#" style="text-decoration:none;color:inherit;display:contents;"><div class="block tall">
+        <div class="block-img-bg"><span class="block-img-label">[ Full CCW build photo — tall ]</span></div>
+        <div class="block-fade"></div>
+        <div class="block-content">
+          <div class="block-tag">Most popular</div>
+          <div class="block-title">Concealed carry builds</div>
+          <div class="block-sub">Compact setups for everyday carry</div>
+        </div>
+      </div></a>
+      <a href="#" style="text-decoration:none;color:inherit;display:contents;"><div class="block">
+        <div class="block-img-bg"><span class="block-img-label">[ Home defense ]</span></div>
+        <div class="block-fade"></div>
+        <div class="block-content">
+          <div class="block-tag">Home defense</div>
+          <div class="block-title">Ready-at-night builds</div>
+        </div>
+      </div></a>
+      <a href="#" style="text-decoration:none;color:inherit;display:contents;"><div class="block">
+        <div class="block-img-bg"><span class="block-img-label">[ Red dot close-up ]</span></div>
+        <div class="block-fade"></div>
+        <div class="block-content">
+          <div class="block-tag">Optics</div>
+          <div class="block-title">Top red dots ranked</div>
+        </div>
+      </div></a>
+      <a href="#" style="text-decoration:none;color:inherit;display:contents;"><div class="block">
+        <div class="block-img-bg"><span class="block-img-label">[ USPSA shooter ]</span></div>
+        <div class="block-fade"></div>
+        <div class="block-content">
+          <div class="block-tag">Competition</div>
+          <div class="block-title">Race gun builds</div>
+        </div>
+      </div></a>
+      <a href="gunforma-post-build-v6.html" style="text-decoration:none;color:inherit;display:contents;"><div class="block">
+        <div class="block-img-bg"><span class="block-img-label">[ Owner's bench photo ]</span></div>
+        <div class="block-fade"></div>
+        <div class="block-content">
+          <div class="block-tag">From the community</div>
+          <div class="block-title">Real owner builds</div>
+        </div>
+      </div></a>
+    </div>
+  </div>
+
+  <div class="section" style="padding-top:0">
+    <div class="section-header">
+      <div>
+        <span class="section-title">Featured builds</span>
+        <div class="section-sub">Hand-picked configurations from real Gunforma owners</div>
+      </div>
+      <div class="section-links">
+        <a href="#" class="section-link" style="text-decoration:none;">See all builds →</a>
+        <a href="gunforma-post-build-v6.html" class="section-link muted" style="text-decoration:none;">+ Post yours</a>
+      </div>
+    </div>
+    <div class="builds-row" id="featured-builds">
+      <div style="grid-column:1/-1;text-align:center;padding:40px 20px;font-size:12px;color:#888;">Loading featured builds…</div>
+    </div>
+  </div>
+
+  <div class="share-section">
+    <div class="share-head">
+      <div class="share-eyebrow">From owners, for owners</div>
+      <div class="share-title">Got a build? Put it on the record.</div>
+      <p class="share-sub">Every part you list links straight to where other owners can get it. Your build becomes the reference someone else uses to plan theirs.</p>
+    </div>
+    <div class="share-grid">
+      <div class="share-card">
+        <div class="share-icon">◆</div>
+        <h4>Show what you're running</h4>
+        <p>List your platform and parts — optics, lights, triggers, grips, whatever you've changed. Takes a few minutes.</p>
+      </div>
+      <div class="share-card">
+        <div class="share-icon">⚑</div>
+        <h4>Get recognized</h4>
+        <p>Fire counts, saves, and an Author badge on your build page. Featured builds get pulled to the homepage.</p>
+      </div>
+      <div class="share-card">
+        <div class="share-icon">⚙</div>
+        <h4>You control visibility</h4>
+        <p>Post privately to your Armory, anonymously, or public to the community. Private is the default — always.</p>
+      </div>
+    </div>
+    <div class="share-cta-row">
+      <a href="gunforma-post-build-v6.html" class="btn-primary" style="text-decoration:none;display:inline-block;">Post your build →</a>
+      <span class="share-cta-note">Free account required · new public builds are reviewed before they go live</span>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div>
+        <span class="section-title">How it works</span>
+        <div class="section-sub">Every part you add updates the numbers — no guessing, no marketing copy</div>
+      </div>
+    </div>
+    <div class="stat-bars-demo">
+      <div style="display:flex; gap:20px; align-items:flex-start;">
+        <div style="flex:1">
+          <div style="font-size:11px; color:#888; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; font-weight:600;">Base gun — Glock 19</div>
+          <div class="stat-row"><div class="stat-name">Accuracy</div><div class="stat-track"><div class="stat-fill" style="width:52%; opacity:0.55"></div></div><div class="stat-val">52</div></div>
+          <div class="stat-row"><div class="stat-name">Recoil ctrl</div><div class="stat-track"><div class="stat-fill" style="width:48%; opacity:0.55"></div></div><div class="stat-val">48</div></div>
+          <div class="stat-row"><div class="stat-name">Draw speed</div><div class="stat-track"><div class="stat-fill" style="width:70%; opacity:0.55"></div></div><div class="stat-val">70</div></div>
+          <div class="stat-row"><div class="stat-name">Concealability</div><div class="stat-track"><div class="stat-fill" style="width:80%; opacity:0.55"></div></div><div class="stat-val">80</div></div>
+          <div class="stat-row"><div class="stat-name">Reliability</div><div class="stat-track"><div class="stat-fill" style="width:90%; opacity:0.55"></div></div><div class="stat-val">90</div></div>
+        </div>
+        <div style="color:#ccc; font-size:18px; padding-top:36px;">→</div>
+        <div style="flex:1">
+          <div style="font-size:11px; color:#2a7bbd; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:10px; font-weight:700;">+ Holosun 507K + TLR-7 Sub</div>
+          <div class="stat-row"><div class="stat-name">Accuracy</div><div class="stat-track"><div class="stat-fill" style="width:81%"></div></div><div class="stat-val" style="color:#2a7bbd; font-weight:700;">81</div></div>
+          <div class="stat-row"><div class="stat-name">Recoil ctrl</div><div class="stat-track"><div class="stat-fill" style="width:48%"></div></div><div class="stat-val">48</div></div>
+          <div class="stat-row"><div class="stat-name">Draw speed</div><div class="stat-track"><div class="stat-fill" style="width:62%; background:#b8b5ac"></div></div><div class="stat-val" style="color:#b8b5ac">62</div></div>
+          <div class="stat-row"><div class="stat-name">Concealability</div><div class="stat-track"><div class="stat-fill" style="width:58%; background:#b8b5ac"></div></div><div class="stat-val" style="color:#b8b5ac">58</div></div>
+          <div class="stat-row"><div class="stat-name">Reliability</div><div class="stat-track"><div class="stat-fill" style="width:90%"></div></div><div class="stat-val">90</div></div>
+        </div>
+      </div>
+      <div style="margin-top:14px; padding-top:12px; border-top:0.5px solid #e5e5e5; font-size:11px; color:#888;">Every attachment updates stats in real time. Tradeoffs shown clearly — no guessing.</div>
+    </div>
+  </div>
+
+  <div class="cta-strip">
+    <div class="cta-text">
+      <h3>Save your builds. Share your loadouts.</h3>
+      <p>Free account — bookmark builds, track part prices, get compatibility alerts.</p>
+    </div>
+    <div class="cta-actions">
+      <a href="gunforma-post-build-v6.html" class="btn-outline-blue" style="text-decoration:none;display:inline-block;">Post a build</a>
+      <a href="gunforma-signup.html" class="btn-solid-blue" style="text-decoration:none;display:inline-block;">Create free account</a>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <div class="footer-legal">Gunforma is for information and inspiration only and does not provide legal advice. Firearms, magazines, optics, barrels, suppressors, and other parts shown here may be restricted or illegal depending on your federal, state, and local laws. You are solely responsible for knowing and following all laws that apply to you before buying, owning, shipping, assembling, or modifying anything referenced on this site.</div>
+    <div class="footer-links-row">
+      <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+      <span class="footer-txt"><a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
+    </div>
+  </div>
+</div>
+
+<script>
+// Featured builds — pull the newest 3 approved builds from Supabase.
+// Only public (anon) reads via RLS's "Public can view approved builds" policy.
+(function() {
+  const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+  const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+  const sb = supabase.createClient(SB_URL, SB_ANON);
+
+  // Session watchdog: catches sign-outs (from another tab, or here) and
+  // silent token-refresh failures so the user doesn't sit on a stale UI.
+  sb.auth.onAuthStateChange(function(event, session) {
+    if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+      window.location.href = 'gunforma-signin.html';
+    }
+  });
+
+  // Session-aware nav: swap the "Sign in" button for the user's username +
+  // a "Sign out" button when signed in. Anon users see the default nav.
+  async function updateNavAuth() {
+    var signInEl = document.getElementById('nav-signin');
+    if (!signInEl) return;
+    var { data: sess } = await sb.auth.getSession();
+    var user = sess && sess.session && sess.session.user;
+    if (!user) return;
+
+    var { data: profile } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle();
+    var displayName = (profile && profile.username) || user.email || 'Signed in';
+    signInEl.textContent = displayName;
+    signInEl.removeAttribute('href');
+    signInEl.style.cursor = 'default';
+
+    var signOut = document.createElement('a');
+    signOut.href = '#';
+    signOut.className = signInEl.className;
+    signOut.setAttribute('style', signInEl.getAttribute('style') || '');
+    signOut.textContent = 'Sign out';
+    signOut.onclick = async function(e) {
+      e.preventDefault();
+      await sb.auth.signOut();
+      location.reload();
+    };
+    signInEl.parentNode.insertBefore(signOut, signInEl);
+  }
+  updateNavAuth();
+  function photoUrl(path) { return SB_URL + '/storage/v1/object/public/build-photos/' + path; }
+  function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+  async function load() {
+    const container = document.getElementById('featured-builds');
+    const { data: builds, error } = await sb
+      .from('builds')
+      .select(
+        'id,name,activities,parts_snapshot,platforms(name),'+
+        'profiles!builds_user_id_fkey(username),'+
+        'build_photos(storage_path,thumb_path,is_hero,position)'
+      )
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(3);
+    if (error) {
+      container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;font-size:12px;color:#c25d3a;">Could not load featured builds.</div>';
+      return;
+    }
+    if (!builds || !builds.length) {
+      container.innerHTML =
+        '<div style="grid-column:1/-1;text-align:center;padding:32px 20px;background:#fafaf8;border:0.5px dashed #d5d3ca;border-radius:6px;">'+
+          '<div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:6px;">No community builds yet</div>'+
+          '<div style="font-size:12px;color:#666;margin-bottom:14px;">Be the first to post one — your build shows up right here.</div>'+
+          '<a href="gunforma-post-build-v6.html" style="display:inline-block;font-size:12px;font-weight:700;padding:8px 14px;color:#fff;background:#2a7bbd;border-radius:4px;text-decoration:none;">+ Post your build</a>'+
+        '</div>';
+      return;
+    }
+
+    // Total MSRP is computed from every build's parts_snapshot refIds joined
+    // to the default variant's msrp. One batched query across all builds.
+    const refIds = new Set();
+    builds.forEach(b => (b.parts_snapshot || []).forEach(p => p.refId && refIds.add(p.refId)));
+    const msrpByProduct = {};
+    if (refIds.size) {
+      const { data: variants } = await sb
+        .from('product_variants')
+        .select('product_id, msrp')
+        .eq('is_default', true)
+        .in('product_id', Array.from(refIds));
+      (variants || []).forEach(v => { msrpByProduct[v.product_id] = Number(v.msrp || 0); });
+    }
+
+    container.innerHTML = builds.map(b => {
+      const hero = (b.build_photos || []).find(p => p.is_hero) || (b.build_photos || [])[0];
+      const photoHtml = hero
+        ? '<img src="'+escH(photoUrl(hero.thumb_path || hero.storage_path))+'" alt="" style="width:100%;height:100%;object-fit:cover;display:block;"/>'
+        : '<span>No photo yet</span>';
+      const author = b.profiles ? b.profiles.username : 'unknown';
+      const platform = b.platforms ? b.platforms.name : '';
+      const activity = (b.activities || [])[0] || '';
+      const otherTags = (b.activities || []).slice(1, 3);
+      const total = (b.parts_snapshot || []).reduce((s, p) => s + (p.refId && msrpByProduct[p.refId] || 0), 0);
+      const totalHtml = total > 0 ? '~$'+total.toFixed(0)+' total' : (b.parts_snapshot||[]).length+' parts';
+
+      return '<a href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'" style="text-decoration:none;color:inherit;display:block;"><div class="build-card">'+
+        '<div class="build-img">'+photoHtml+'<div class="build-bookmark">◇</div></div>'+
+        '<div class="build-body">'+
+          '<div class="build-name">'+escH(b.name)+'</div>'+
+          '<div class="build-tags">'+
+            (activity ? '<span class="build-tag blue">'+escH(activity)+'</span>' : '')+
+            (platform ? '<span class="build-tag">'+escH(platform)+'</span>' : '')+
+            otherTags.map(t => '<span class="build-tag">'+escH(t)+'</span>').join('')+
+          '</div>'+
+          '<div class="build-meta">'+
+            '<span class="build-price">'+totalHtml+'</span>'+
+            '<span class="build-author">by '+escH(author)+'</span>'+
+          '</div>'+
+        '</div>'+
+      '</div></a>';
+    }).join('');
+  }
+  load();
+})();
+</script>
+</body>
+</html>

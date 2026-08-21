@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Create account — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* NAV */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-link { font-size: 12px; color: #888780; text-decoration: none; }
+.nav-link:hover { color: #e8e6e1; }
+
+/* HERO STRIP */
+.hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.hero-title { font-size: 26px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; margin-bottom: 8px; }
+.hero-sub { font-size: 13px; color: #888780; line-height: 1.6; }
+
+/* CARD */
+.card-wrap { display: flex; justify-content: center; padding: 0 20px 60px; margin-top: -24px; }
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px; width: 100%; max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+
+/* FORM */
+.field { margin-bottom: 16px; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.field-input { width: 100%; font-size: 14px; padding: 11px 12px; border: 0.5px solid #e5e5e5; border-radius: 6px; font-family: inherit; color: #1a1a1a; transition: border-color 0.15s; }
+.field-input:focus { outline: none; border-color: #4a9edd; }
+.field-input.error { border-color: #e25c3a; }
+.field-input.success { border-color: #22a06b; }
+.field-help { font-size: 11px; margin-top: 5px; line-height: 1.5; }
+.field-help.error   { color: #e25c3a; }
+.field-help.success { color: #22a06b; }
+.field-help.neutral { color: #999; }
+
+/* USERNAME AVAILABILITY */
+.username-status { font-size: 11px; font-weight: 700; }
+.username-status.checking { color: #999; }
+.username-status.available { color: #22a06b; }
+.username-status.taken { color: #e25c3a; }
+
+/* PASSWORD STRENGTH */
+.strength-bar { height: 3px; border-radius: 2px; background: #e5e5e5; margin-top: 6px; overflow: hidden; }
+.strength-fill { height: 100%; border-radius: 2px; transition: width 0.3s, background 0.3s; width: 0%; }
+.strength-label { font-size: 10px; color: #999; margin-top: 4px; }
+
+/* CHECKBOX */
+.checkbox-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.checkbox-row input { margin-top: 3px; accent-color: #4a9edd; flex-shrink: 0; cursor: pointer; }
+.checkbox-row label { font-size: 12px; color: #666; line-height: 1.6; cursor: pointer; }
+.checkbox-row a { color: #2a7bbd; text-decoration: none; }
+.checkbox-row a:hover { text-decoration: underline; }
+
+/* BUTTON */
+.btn-submit { width: 100%; font-size: 13px; font-weight: 700; background: #4a9edd; color: #fff; border: none; padding: 13px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-submit:hover:not(:disabled) { background: #2a7bbd; }
+.btn-submit:disabled { background: #b0cfe8; cursor: not-allowed; }
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+.spinner.show { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* DIVIDER */
+.divider { text-align: center; font-size: 11px; color: #bbb; margin: 18px 0; position: relative; }
+.divider::before, .divider::after { content: ''; position: absolute; top: 50%; width: 38%; height: 0.5px; background: #e5e5e5; }
+.divider::before { left: 0; }
+.divider::after { right: 0; }
+
+/* FOOTER LINK */
+.card-footer { text-align: center; font-size: 12px; color: #888; margin-top: 18px; }
+.card-footer a { color: #2a7bbd; font-weight: 600; text-decoration: none; }
+.card-footer a:hover { text-decoration: underline; }
+
+/* GLOBAL ERROR */
+.global-error { background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 11px 14px; font-size: 12px; color: #9b1c1c; margin-bottom: 16px; line-height: 1.5; display: none; }
+.global-error.show { display: block; }
+
+/* SUCCESS STATE */
+.success-state { display: none; text-align: center; padding: 8px 0; }
+.success-state.show { display: block; }
+.success-icon { font-size: 40px; margin-bottom: 14px; }
+.success-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+.success-sub { font-size: 13px; color: #666; line-height: 1.7; margin-bottom: 18px; }
+.success-email { font-weight: 700; color: #1a1a1a; }
+.btn-resend { background: none; border: 0.5px solid #e5e5e5; color: #888; font-size: 12px; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-family: inherit; }
+.btn-resend:hover { border-color: #4a9edd; color: #4a9edd; }
+
+.form-section { }
+.cf-turnstile { margin-bottom: 16px; }
+.field-input-wrap { position: relative; }
+.field-input-wrap .field-input { padding-right: 40px; }
+.field-toggle-visibility { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: none; border: none; padding: 4px; cursor: pointer; color: #999; display: flex; align-items: center; justify-content: center; }
+.field-toggle-visibility:hover { color: #555; }
+.field-toggle-visibility svg { width: 18px; height: 18px; }
+.or-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-size: 12px; color: #999; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: #e5e5e5; }
+.btn-google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px; background: #fff; border: 1px solid #e5e5e5; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; color: #1a1a1a; cursor: pointer; transition: border-color 0.15s; }
+.btn-google:hover { border-color: #4a9edd; }
+.btn-google svg { flex-shrink: 0; }
+</style>
+<script>
+  // Turnstile site key — swap in Cloudflare's always-passes test key for
+  // local development so widgets don't show "Unable to connect" when the
+  // real key's hostname allowlist doesn't include localhost.
+  window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
+    ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+
+  // Explicit-render callback: Turnstile invokes this once its script loads
+  // (registered via ?onload= in the script src). We render every .cf-turnstile
+  // widget by hand so we can pass the env-swapped sitekey. Each widget's id
+  // is stashed on data-widget-id for later getResponse()/reset() calls.
+  window.onloadTurnstileCallback = function() {
+    var run = function() {
+      document.querySelectorAll('.cf-turnstile').forEach(function(el) {
+        el.dataset.widgetId = turnstile.render(el, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme:   el.dataset.theme || 'light',
+        });
+      });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  };
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <a href="gunforma-signin.html" class="nav-link">Sign in instead →</a>
+</nav>
+
+<div class="hero-strip">
+  <div class="hero-eyebrow">Join Gunforma</div>
+  <div class="hero-title">Create your account</div>
+  <p class="hero-sub">Post builds, track parts, and help identify the gear that others are running.</p>
+</div>
+
+<div class="card-wrap">
+  <div class="card">
+
+    <!-- ERROR BANNER -->
+    <div class="global-error" id="global-error"></div>
+
+    <!-- SIGN UP FORM -->
+    <div class="form-section" id="form-section">
+      <div class="field">
+        <label class="field-label">
+          Username
+          <span class="username-status" id="username-status"></span>
+        </label>
+        <input class="field-input" type="text" id="username" placeholder="e.g. jmiller_tx" autocomplete="username" oninput="onUsernameInput()" />
+        <div class="field-help neutral" id="username-help">Letters, numbers, and underscores only. This shows on your public builds.</div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Email</label>
+        <input class="field-input" type="email" id="email" placeholder="your@email.com" autocomplete="email" oninput="onEmailInput(this,'email-help')" />
+        <div class="field-help" id="email-help"></div>
+      </div>
+
+      <div class="field">
+        <label class="field-label">Password</label>
+        <div class="field-input-wrap">
+          <input class="field-input" type="password" id="password" placeholder="Minimum 8 characters" autocomplete="new-password" oninput="onPasswordInput()" />
+          <button type="button" class="field-toggle-visibility" onclick="togglePasswordVisibility('password', this)" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+        <div class="strength-label" id="strength-label"></div>
+      </div>
+
+      <div class="field" style="margin-bottom:20px;">
+        <label class="field-label">Confirm password</label>
+        <div class="field-input-wrap">
+          <input class="field-input" type="password" id="confirm-password" placeholder="Re-enter your password" autocomplete="new-password" oninput="onConfirmInput()" />
+          <button type="button" class="field-toggle-visibility" onclick="togglePasswordVisibility('confirm-password', this)" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+        <div class="field-help" id="confirm-help"></div>
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="legal" />
+        <label for="legal">I confirm I am 18 years of age or older and agree to Gunforma's <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. I understand this platform discusses legally-owned firearms and accessories.</label>
+      </div>
+
+      <div class="checkbox-row">
+        <input type="checkbox" id="marketing" />
+        <label for="marketing">I'd like to receive emails from Gunforma about new builds, parts releases, community highlights, and product recommendations. You can unsubscribe at any time. <a href="#">Privacy Policy</a></label>
+      </div>
+
+      <div class="cf-turnstile" id="ts-signup" data-theme="light"></div>
+
+      <button class="btn-submit" id="submit-btn" onclick="handleSignUp()">
+        <div class="spinner" id="spinner"></div>
+        <span id="btn-text">Create account →</span>
+      </button>
+
+      <div class="or-divider">or</div>
+
+      <button type="button" class="btn-google" onclick="handleGoogleSignIn()">
+        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+          <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+          <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+          <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/>
+          <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+        </svg>
+        Sign in with Google
+      </button>
+
+      <div class="card-footer" style="margin-top:20px;">
+        Already have an account? <a href="gunforma-signin.html">Sign in</a>
+      </div>
+    </div>
+
+    <!-- SUCCESS STATE -->
+    <div class="success-state" id="success-state">
+      <div class="success-icon">✉️</div>
+      <div class="success-title">Check your email</div>
+      <div class="success-sub">
+        We sent a confirmation link to<br>
+        <span class="success-email" id="success-email"></span><br><br>
+        Click the link to verify your account and start posting builds. Check your spam folder if you don't see it.
+      </div>
+      <button class="btn-resend" onclick="handleResend()">Resend confirmation email</button>
+      <div class="card-footer" style="margin-top:16px;">
+        Wrong email? <a href="gunforma-signup.html">Start over</a>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG — replace PASTE_YOUR_ANON_KEY_HERE
+// Find it: Supabase Dashboard → Settings → API → anon public
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co'; // Gunforma-v2
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+// Origin used when we hand Supabase a URL to email the user (email
+// confirmation, magic links). Detects local dev by hostname so the same file
+// works on the local static server and in production without a build step.
+// Any URL passed here must also be on Supabase's Redirect URL allowlist —
+// dashboard → Authentication → URL Configuration — or GoTrue silently swaps
+// it for the project's Site URL default.
+function siteBaseUrl() {
+  return window.location.hostname === 'localhost'
+    ? 'http://localhost:8794'
+    : 'https://gunforma.com';
+}
+
+// Turnstile widgets are rendered by onloadTurnstileCallback (see head) and
+// each widget's id is stashed on data-widget-id. These helpers wrap the
+// underlying getResponse/reset so handlers only need the element id.
+function getTurnstileToken(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  return (window.turnstile && wid) ? turnstile.getResponse(wid) : '';
+}
+function resetTurnstileWidget(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  if (window.turnstile && wid) turnstile.reset(wid);
+}
+
+// Real-time email input guard: emails can't contain spaces (leading, trailing,
+// or internal). Show the warning as soon as any space appears; clear it as
+// soon as the user removes them. Actual space-stripping happens in
+// sanitizeEmail() on submit — we don't rewrite the input value under the
+// user's cursor while they're typing.
+function onEmailInput(inputEl, helpElId) {
+  var helpEl = document.getElementById(helpElId);
+  if (!helpEl) return;
+  if (/\s/.test(inputEl.value)) {
+    helpEl.textContent = 'Email addresses cannot contain spaces.';
+    helpEl.className = 'field-help error';
+  } else {
+    helpEl.textContent = '';
+    helpEl.className = 'field-help';
+  }
+}
+
+// Trim + strip every space (leading, trailing, internal) so a fat-fingered
+// paste like " user @ email.com " still submits cleanly.
+function sanitizeEmail(raw) {
+  return String(raw || '').replace(/\s+/g, '');
+}
+
+// Google OAuth entry — Supabase generates the provider redirect URL and
+// navigates the tab there. On return we land on gunforma-signin.html; the
+// existing sb.auth.getSession() + redirectByRole() at the bottom of that
+// page's script picks up the session and routes admin vs regular users.
+// The redirectTo URL must be on Supabase's Redirect URL allowlist AND on
+// Google Cloud Console's authorized redirect URIs for your OAuth client.
+async function handleGoogleSignIn() {
+  showError('');
+  var res = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: siteBaseUrl() + '/gunforma-signin.html' },
+  });
+  if (res && res.error) showError(res.error.message);
+}
+
+// Toggle a password input between masked and visible. Swaps the eye icon and
+// the aria-label so screen readers stay in sync with what's on screen.
+function togglePasswordVisibility(inputId, btn) {
+  var input = document.getElementById(inputId);
+  var isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+  btn.innerHTML = isHidden
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+}
+
+// ============================================================
+// USERNAME CHECK (debounced)
+// ============================================================
+var usernameTimer = null;
+var usernameValid = false;
+
+function onUsernameInput() {
+  var val = document.getElementById('username').value.trim();
+  var status = document.getElementById('username-status');
+  var help   = document.getElementById('username-help');
+  var input  = document.getElementById('username');
+  clearTimeout(usernameTimer);
+  usernameValid = false;
+
+  if (!val) {
+    status.textContent = '';
+    input.className = 'field-input';
+    help.textContent = 'Letters, numbers, and underscores only. This shows on your public builds.';
+    help.className = 'field-help neutral';
+    return;
+  }
+  if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+    status.textContent = 'Invalid';
+    status.className = 'username-status taken';
+    input.className = 'field-input error';
+    help.textContent = '3–24 characters, letters/numbers/underscores only.';
+    help.className = 'field-help error';
+    return;
+  }
+
+  status.textContent = 'Checking…';
+  status.className = 'username-status checking';
+  input.className = 'field-input';
+
+  usernameTimer = setTimeout(async function() {
+    var res = await sb.from('profiles').select('username').eq('username', val).maybeSingle();
+    if (res.data) {
+      status.textContent = 'Taken';
+      status.className = 'username-status taken';
+      input.className = 'field-input error';
+      help.textContent = 'That username is already in use. Try another.';
+      help.className = 'field-help error';
+      usernameValid = false;
+    } else {
+      status.textContent = 'Available ✓';
+      status.className = 'username-status available';
+      input.className = 'field-input success';
+      help.textContent = '';
+      usernameValid = true;
+    }
+  }, 500);
+}
+
+// ============================================================
+// PASSWORD STRENGTH
+// ============================================================
+function onPasswordInput() {
+  var val   = document.getElementById('password').value;
+  var fill  = document.getElementById('strength-fill');
+  var label = document.getElementById('strength-label');
+  if (!val) { fill.style.width='0%'; label.textContent=''; return; }
+
+  var score = 0;
+  if (val.length >= 8)  score++;
+  if (val.length >= 12) score++;
+  if (/[A-Z]/.test(val)) score++;
+  if (/[0-9]/.test(val)) score++;
+  if (/[^A-Za-z0-9]/.test(val)) score++;
+
+  var levels = [
+    { w:'20%', bg:'#e25c3a', text:'Too weak' },
+    { w:'40%', bg:'#f59e0b', text:'Weak' },
+    { w:'60%', bg:'#f59e0b', text:'Fair' },
+    { w:'80%', bg:'#22a06b', text:'Good' },
+    { w:'100%',bg:'#166534', text:'Strong' },
+  ];
+  var l = levels[Math.min(score, 4)];
+  fill.style.width = l.w;
+  fill.style.background = l.bg;
+  label.textContent = l.text;
+  label.style.color = l.bg;
+
+  onConfirmInput();
+}
+
+function onConfirmInput() {
+  var pw  = document.getElementById('password').value;
+  var cpw = document.getElementById('confirm-password').value;
+  var help = document.getElementById('confirm-help');
+  var inp  = document.getElementById('confirm-password');
+  if (!cpw) { help.textContent=''; inp.className='field-input'; return; }
+  if (pw === cpw) {
+    help.textContent='Passwords match ✓';
+    help.className='field-help success';
+    inp.className='field-input success';
+  } else {
+    help.textContent='Passwords do not match';
+    help.className='field-help error';
+    inp.className='field-input error';
+  }
+}
+
+// ============================================================
+// SIGN UP
+// ============================================================
+async function handleSignUp() {
+  // Turnstile guard — if the script hasn't loaded yet, or the user hasn't
+  // solved the challenge, treat both cases the same and prompt them.
+  var turnstileToken = getTurnstileToken('ts-signup');
+  if (!turnstileToken) { showError('Please complete the verification.'); return; }
+
+  var username   = document.getElementById('username').value.trim();
+  var emailInput = document.getElementById('email');
+  var email      = sanitizeEmail(emailInput.value);
+  emailInput.value = email;   // reflect the cleaned value back to the user
+  onEmailInput(emailInput, 'email-help');
+  var password   = document.getElementById('password').value;
+  var confirm  = document.getElementById('confirm-password').value;
+  var legal    = document.getElementById('legal').checked;
+  var errEl    = document.getElementById('global-error');
+
+  // Validate
+  errEl.classList.remove('show');
+  if (!username || !usernameValid) { showError('Choose an available username first.'); return; }
+  if (!email)    { showError('Enter your email address.'); return; }
+  if (password.length < 8) { showError('Password must be at least 8 characters.'); return; }
+  if (password !== confirm)  { showError('Passwords do not match.'); return; }
+  if (!legal) { showError('You must confirm you are 18 or older and agree to the Terms of Service.'); return; }
+
+  setLoading(true);
+
+  var marketing = document.getElementById('marketing').checked;
+
+  // captchaToken is verified server-side by Supabase against your
+  // Turnstile secret (Auth → Attack Protection → CAPTCHA). Without that
+  // dashboard setting configured, Supabase will reject every sign-up
+  // with "captcha protection: request disallowed".
+  var res = await sb.auth.signUp({
+    email:    email,
+    password: password,
+    options: {
+      captchaToken: turnstileToken,
+      data: {
+        username:           username,
+        marketing_consent:  marketing,
+      },
+      emailRedirectTo: siteBaseUrl() + '/gunforma-signin.html'
+    }
+  });
+
+  setLoading(false);
+
+  if (res.error) {
+    // Turnstile tokens are single-use — reset so the next submit after a
+    // fixable error (duplicate email, etc.) gets a fresh token.
+    resetTurnstileWidget('ts-signup');
+    var msg = res.error.message;
+    if (msg.toLowerCase().includes('captcha')) msg = 'Verification failed. Please try again.';
+    showError(msg);
+    return;
+  }
+
+  // Show success
+  document.getElementById('success-email').textContent = email;
+  document.getElementById('form-section').style.display = 'none';
+  document.getElementById('success-state').classList.add('show');
+}
+
+async function handleResend() {
+  var email = document.getElementById('success-email').textContent;
+  await sb.auth.resend({ type:'signup', email: email });
+  var btn = document.querySelector('.btn-resend');
+  btn.textContent = 'Sent!';
+  btn.disabled = true;
+  setTimeout(function(){ btn.textContent='Resend confirmation email'; btn.disabled=false; }, 4000);
+}
+
+function showError(msg) {
+  var el = document.getElementById('global-error');
+  el.textContent = msg;
+  el.classList.add('show');
+}
+
+function setLoading(on) {
+  document.getElementById('spinner').classList.toggle('show', on);
+  document.getElementById('btn-text').textContent = on ? 'Creating account…' : 'Create account →';
+  document.getElementById('submit-btn').disabled = on;
+}
+</script>
+</body>
+</html>

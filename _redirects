@@ -1,0 +1,6 @@
+/signin        /gunforma-signin.html              200
+/signup        /gunforma-signup.html              200
+/builds        /gunforma-post-build-v6.html       200
+/build         /gunforma-build-detail.html        200
+/admin         /gunforma-admin-queue.html         200
+/field-notes   /field-notes.html                  200

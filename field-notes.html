@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Field Notes — Gunforma</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.page { background: #ffffff; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: color 0.15s; }
+.nav-link:hover { color: #e8e6e1; }
+.nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.nav-btn:hover { color: #e8e6e1; border-color: #4a4b4e; }
+.nav-btn.cta { color: #fff; background: #4a9edd; border-color: #4a9edd; font-weight: 600; letter-spacing: 0.04em; }
+.nav-btn.cta:hover { background: #2a7bbd; border-color: #2a7bbd; }
+
+/* PAGE HEADER */
+.page-header { background: #fafaf8; border-bottom: 0.5px solid #e5e5e5; padding: 28px 36px 0; }
+.page-header-inner { max-width: 1100px; margin: 0 auto; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+.page-h1 { font-size: 26px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.01em; margin-bottom: 8px; }
+.page-sub { font-size: 13px; color: #666; line-height: 1.6; max-width: 560px; margin-bottom: 20px; }
+
+/* FILTER TABS */
+.filter-tabs { display: flex; gap: 2px; flex-wrap: wrap; }
+.filter-tab { font-size: 11px; color: #888; letter-spacing: 0.04em; padding: 8px 14px; border-radius: 4px 4px 0 0; cursor: pointer; border: 0.5px solid transparent; border-bottom: none; transition: all 0.15s; background: transparent; font-family: inherit; }
+.filter-tab:hover { color: #1a1a1a; background: #f0ede7; }
+.filter-tab.active { color: #4a9edd; background: #ffffff; border-color: #e5e5e5; border-bottom-color: transparent; font-weight: 600; position: relative; bottom: -0.5px; }
+
+/* CONTENT */
+.content-area { max-width: 1100px; margin: 0 auto; padding: 32px 36px; }
+
+/* POST GRID */
+.posts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; min-height: 200px; }
+
+/* POST CARD */
+.post-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; text-decoration: none; color: inherit; }
+.post-card:hover { border-color: #4a9edd; box-shadow: 0 2px 10px rgba(0,0,0,0.04); }
+.post-card.coming-soon { cursor: default; opacity: 0.62; }
+.post-card.coming-soon:hover { border-color: #e5e5e5; box-shadow: none; }
+.card-type-badge.soon { background: #f4f3ee; color: #999; border: 0.5px solid #dddbd5; }
+
+/* CARD IMAGE */
+.card-img { aspect-ratio: 16/9; background: #f4f3ee; position: relative; overflow: hidden; border-bottom: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: center; }
+.card-img-bg { width: 100%; height: 100%; background-size: cover; background-position: center; }
+.card-img-placeholder { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; position: absolute; }
+.card-type-badge { position: absolute; top: 8px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 3px; }
+.card-type-badge.review { background: #eaf4fc; color: #1d6fb8; border: 0.5px solid #a7cdec; }
+.card-type-badge.comparison { background: #fff5e6; color: #b45309; border: 0.5px solid #f8d5a0; }
+
+/* CARD BODY */
+.card-body { padding: 14px; flex: 1; display: flex; flex-direction: column; }
+.card-category { font-size: 10px; color: #4a9edd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; margin-bottom: 6px; }
+.card-title { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.35; margin-bottom: 6px; }
+.card-excerpt { font-size: 12px; color: #666; line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; flex: 1; }
+
+/* CARD META */
+.card-meta { display: flex; justify-content: space-between; align-items: center; border-top: 0.5px solid #efece3; margin-top: 10px; padding-top: 10px; gap: 8px; }
+.card-author-date { font-size: 11px; color: #888; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card-rating { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.card-stars { color: #f59e0b; font-size: 11px; letter-spacing: 0.5px; }
+.card-score { font-size: 11px; font-weight: 700; color: #1a1a1a; }
+.card-vs-badge { font-size: 9px; color: #b45309; background: #fff5e6; border: 0.5px solid #f8d5a0; padding: 2px 7px; border-radius: 20px; font-weight: 600; letter-spacing: 0.02em; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+
+/* SKELETON */
+@keyframes shimmer {
+  0%   { background-position: -600px 0; }
+  100% { background-position:  600px 0; }
+}
+.skeleton-card { border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; }
+.skel { background: linear-gradient(90deg, #f0ede7 25%, #e8e5df 50%, #f0ede7 75%); background-size: 600px 100%; animation: shimmer 1.4s infinite linear; border-radius: 3px; }
+.skel-img { aspect-ratio: 16/9; width: 100%; border-radius: 0; }
+.skel-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+.skel-line { height: 10px; }
+.skel-title { height: 14px; width: 85%; }
+.skel-full { width: 100%; }
+.skel-medium { width: 60%; }
+.skel-short { width: 40%; }
+.skel-meta { display: flex; justify-content: space-between; border-top: 0.5px solid #efece3; padding-top: 10px; margin-top: 2px; gap: 8px; }
+
+/* EMPTY STATE */
+.empty-state { grid-column: 1 / -1; text-align: center; padding: 64px 28px; }
+.empty-icon { width: 36px; height: 36px; border-radius: 6px; background: #f4f3ee; border: 0.5px solid #e5e5e5; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
+.empty-icon-line { width: 16px; height: 2px; background: #c8c5bc; border-radius: 1px; }
+.empty-title { font-size: 14px; font-weight: 600; color: #555; margin-bottom: 6px; }
+.empty-sub { font-size: 12px; color: #999; }
+
+/* PAGINATION */
+.pagination { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 28px 0 0; }
+.page-btn { font-size: 11px; color: #555; border: 0.5px solid #e5e5e5; padding: 7px 16px; border-radius: 4px; cursor: pointer; background: #fff; transition: all 0.15s; font-family: inherit; }
+.page-btn:hover:not(:disabled) { border-color: #4a9edd; color: #4a9edd; }
+.page-btn:disabled { color: #bbb; border-color: #e5e5e5; cursor: not-allowed; background: #fafaf8; }
+.page-info { font-size: 11px; color: #999; padding: 0 8px; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafaf8; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+@media (max-width: 760px) {
+  .nav-links { display: none; }
+  .page-header { padding: 22px 18px 0; }
+  .content-area { padding: 24px 18px; }
+  .posts-grid { grid-template-columns: 1fr; }
+  .filter-tabs { gap: 2px; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="nav">
+    <a href="index.html" class="nav-logo" style="text-decoration:none;">GUN<span>FORMA</span></a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link" style="text-decoration:none;">Home</a>
+      <a href="gunforma-builds.html" class="nav-link" style="text-decoration:none;">Builds</a>
+      <a href="gunforma-parts-catalog.html" class="nav-link" style="text-decoration:none;">Parts catalog</a>
+      <a href="5-ARMORY.html" class="nav-link" style="text-decoration:none;">Armory</a>
+      <a href="/field-notes/" class="nav-link active" style="text-decoration:none;">Field Notes</a>
+    </div>
+    <div class="nav-right">
+      <a href="gunforma-signin.html" class="nav-btn" style="text-decoration:none;">Sign in</a>
+      <a href="gunforma-post-build-v6.html" class="nav-btn cta" style="text-decoration:none;">+ Post your build</a>
+    </div>
+  </nav>
+
+  <div class="page-header">
+    <div class="page-header-inner">
+      <div class="page-eyebrow">Field Notes</div>
+      <h1 class="page-h1">Field Notes</h1>
+      <p class="page-sub">Hands-on reviews, side-by-side comparisons, and buying guides from people who actually shoot.</p>
+      <div class="filter-tabs">
+        <button class="filter-tab active" data-filter="all">All</button>
+        <button class="filter-tab" data-filter="type:review">Reviews</button>
+        <button class="filter-tab" data-filter="type:comparison">Comparisons</button>
+        <button class="filter-tab" data-filter="category:Optics">Optics</button>
+        <button class="filter-tab" data-filter="category:Lights">Lights</button>
+        <button class="filter-tab" data-filter="category:Triggers">Triggers</button>
+        <button class="filter-tab" data-filter="category:Sights">Sights</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="content-area">
+    <div class="posts-grid" id="postsGrid"></div>
+    <div class="pagination" id="pagination" style="display:none;">
+      <button class="page-btn" id="prevBtn" disabled>&#8592; Prev</button>
+      <span class="page-info" id="pageInfo"></span>
+      <button class="page-btn" id="nextBtn">Next &#8594;</button>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+    <span class="footer-txt"><a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
+  </div>
+
+</div>
+
+<script>
+// ── Static article data — replace with Supabase fetch once field_notes_posts table exists ──
+const STATIC_POSTS = [
+  {
+    slug:             'holosun-507c-x2-review',
+    href:             'holosun-507c-x2-review.html',
+    type:             'review',
+    category:         'Optics',
+    title:            'Holosun 507C X2 — The Red Dot Everyone\'s Running For Good Reason',
+    excerpt:          'After 2,000 rounds across three hosts, here\'s exactly when the 507C X2 earns its reputation — and where it falls short.',
+    author_name:      'Marcus Webb',
+    publish_date:     '2026-06-18',
+    rating:           9.1,
+    comparison_label: null,
+    cover_image_url:  null,
+    coming_soon:      false
+  },
+  {
+    slug:             'holosun-507c-vs-trijicon-rmr-comparison',
+    href:             'holosun-507c-vs-trijicon-rmr-comparison.html',
+    type:             'comparison',
+    category:         'Optics',
+    title:            'Holosun 507C X2 vs Trijicon RMR Type 2 — Which One Actually Wins?',
+    excerpt:          'Six months, 3,000 rounds, back-to-back on the same Glock 17 MOS. The complete spec-by-spec breakdown.',
+    author_name:      'Marcus Webb',
+    publish_date:     '2026-06-10',
+    rating:           null,
+    comparison_label: '507C X2 vs RMR',
+    cover_image_url:  null,
+    coming_soon:      false
+  },
+  {
+    slug:             'streamlight-tlr-7-sub-review',
+    href:             null,
+    type:             'review',
+    category:         'Lights',
+    title:            'Streamlight TLR-7 Sub Review',
+    excerpt:          null,
+    author_name:      null,
+    publish_date:     null,
+    rating:           null,
+    comparison_label: null,
+    cover_image_url:  null,
+    coming_soon:      true
+  }
+];
+
+const POSTS_PER_PAGE = 12;
+
+let allPosts     = [];
+let filteredPosts = [];
+let currentPage  = 1;
+
+const grid      = document.getElementById('postsGrid');
+const pagination = document.getElementById('pagination');
+const prevBtn   = document.getElementById('prevBtn');
+const nextBtn   = document.getElementById('nextBtn');
+const pageInfo  = document.getElementById('pageInfo');
+
+// ── Skeleton ──────────────────────────────────────────────
+function renderSkeletons() {
+  grid.innerHTML = Array.from({ length: 12 }, () => `
+    <div class="skeleton-card">
+      <div class="skel skel-img"></div>
+      <div class="skel-body">
+        <div class="skel skel-line skel-short"></div>
+        <div class="skel skel-title"></div>
+        <div class="skel skel-line skel-full"></div>
+        <div class="skel skel-line skel-medium"></div>
+        <div class="skel-meta">
+          <div class="skel skel-line" style="width:110px;"></div>
+          <div class="skel skel-line" style="width:54px;"></div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+// ── Helpers ───────────────────────────────────────────────
+function formatDate(str) {
+  if (!str) return '';
+  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function buildStars(rating) {
+  const full  = Math.floor(rating);
+  const half  = (rating % 1) >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
+}
+
+// ── Card renderer ─────────────────────────────────────────
+function cardHTML(post) {
+  if (post.coming_soon) {
+    return `
+      <div class="post-card coming-soon">
+        <div class="card-img">
+          <span class="card-img-placeholder">[ Article photo ]</span>
+          <span class="card-type-badge soon">Coming Soon</span>
+        </div>
+        <div class="card-body">
+          ${post.category ? `<div class="card-category">${post.category}</div>` : ''}
+          <div class="card-title">${post.title || 'Untitled'}</div>
+          <p class="card-excerpt">Check back soon.</p>
+        </div>
+      </div>`;
+  }
+
+  const author  = post.field_notes_authors ? post.field_notes_authors.name : (post.author_name || 'Gunforma');
+  const date    = formatDate(post.publish_date);
+  const byline  = [author, date].filter(Boolean).join(' · ');
+
+  const isReview     = post.type === 'review';
+  const isComparison = post.type === 'comparison';
+
+  const badgeClass = isReview ? 'review' : isComparison ? 'comparison' : '';
+  const badgeLabel = isReview ? 'Review'  : isComparison ? 'Comparison'  : (post.type || '');
+
+  const imgStyle = post.cover_image_url
+    ? `style="background-image:url('${post.cover_image_url}');background-size:cover;background-position:center;"`
+    : '';
+
+  const metaRight = isReview && post.rating
+    ? `<span class="card-rating">
+         <span class="card-stars">${buildStars(post.rating)}</span>
+         <span class="card-score">${post.rating}/10</span>
+       </span>`
+    : isComparison && post.comparison_label
+    ? `<span class="card-vs-badge">${post.comparison_label}</span>`
+    : '';
+
+  return `
+    <a href="${post.href}" class="post-card">
+      <div class="card-img" ${imgStyle}>
+        ${!post.cover_image_url ? '<span class="card-img-placeholder">[ Article photo ]</span>' : ''}
+        ${badgeClass ? `<span class="card-type-badge ${badgeClass}">${badgeLabel}</span>` : ''}
+      </div>
+      <div class="card-body">
+        ${post.category ? `<div class="card-category">${post.category}</div>` : ''}
+        <div class="card-title">${post.title || 'Untitled'}</div>
+        <p class="card-excerpt">${post.excerpt || ''}</p>
+        <div class="card-meta">
+          <span class="card-author-date">${byline}</span>
+          ${metaRight}
+        </div>
+      </div>
+    </a>`;
+}
+
+function emptyHTML() {
+  return `
+    <div class="empty-state">
+      <div class="empty-icon"><div class="empty-icon-line"></div></div>
+      <div class="empty-title">No posts yet — check back soon.</div>
+      <div class="empty-sub">New field notes are added regularly.</div>
+    </div>`;
+}
+
+// ── Render page ───────────────────────────────────────────
+function renderPage() {
+  const total = filteredPosts.length;
+  const pages = Math.ceil(total / POSTS_PER_PAGE);
+  const start = (currentPage - 1) * POSTS_PER_PAGE;
+  const slice = filteredPosts.slice(start, start + POSTS_PER_PAGE);
+
+  grid.innerHTML = total === 0
+    ? emptyHTML()
+    : slice.map(cardHTML).join('');
+
+  if (pages > 1) {
+    pagination.style.display = 'flex';
+    prevBtn.disabled = currentPage <= 1;
+    nextBtn.disabled = currentPage >= pages;
+    pageInfo.textContent = `Page ${currentPage} of ${pages}`;
+  } else {
+    pagination.style.display = 'none';
+  }
+}
+
+// ── Filter ────────────────────────────────────────────────
+function applyFilter(filter) {
+  currentPage = 1;
+  if (filter === 'all') {
+    filteredPosts = allPosts;
+  } else if (filter.startsWith('type:')) {
+    const t = filter.slice(5);
+    filteredPosts = allPosts.filter(p => p.type === t);
+  } else if (filter.startsWith('category:')) {
+    const c = filter.slice(9);
+    filteredPosts = allPosts.filter(p => p.category === c);
+  } else {
+    filteredPosts = allPosts;
+  }
+  renderPage();
+}
+
+// ── Tabs ──────────────────────────────────────────────────
+document.querySelectorAll('.filter-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    applyFilter(tab.dataset.filter);
+  });
+});
+
+// ── Pagination ────────────────────────────────────────────
+prevBtn.addEventListener('click', () => {
+  if (currentPage > 1) { currentPage--; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+});
+nextBtn.addEventListener('click', () => {
+  const pages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE);
+  if (currentPage < pages) { currentPage++; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+});
+
+// ── Load static data ──────────────────────────────────────
+function loadPosts() {
+  allPosts      = STATIC_POSTS;
+  filteredPosts = STATIC_POSTS;
+  renderPage();
+}
+
+loadPosts();
+</script>
+</body>
+</html>

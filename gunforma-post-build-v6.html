@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Post your build — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 200; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-link:hover { color: #e8e6e1; }
+.nav-user { font-size: 11px; color: #4a9edd; border: 0.5px solid #4a9edd; padding: 5px 12px; border-radius: 4px; font-weight: 600; }
+
+.legal-notice { display: flex; gap: 9px; align-items: flex-start; background: #fff8ea; border: 0.5px solid #e8d9ad; border-radius: 6px; padding: 11px 13px; margin-top: 4px; }
+.legal-notice-icon { font-size: 13px; line-height: 1.4; flex-shrink: 0; }
+.legal-notice-text { font-size: 11px; color: #6b5a2a; line-height: 1.6; }
+.legal-notice-text strong { color: #4a3c14; }
+
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
+.footer-legal { font-size: 10.5px; color: #999; line-height: 1.6; max-width: 900px; }
+.footer-links-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 640px; line-height: 1.6; }
+
+.layout { display: grid; grid-template-columns: 1fr 300px; gap: 24px; padding: 28px 36px 80px; align-items: start; }
+.main-col { display: flex; flex-direction: column; gap: 22px; }
+.sidebar { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; }
+
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 20px; }
+.card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
+.card-step { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #1a1a1a; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0; }
+.card-step.done { background: #22a06b; }
+.card-hint { font-size: 11px; color: #999; }
+
+/* PLATFORM */
+.platform-search { width: 100%; font-size: 13px; padding: 9px 12px; border: 0.5px solid #e5e5e5; border-radius: 4px; margin-bottom: 10px; font-family: inherit; }
+.platform-search:focus { outline: none; border-color: #4a9edd; }
+.platform-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.platform-btn { border: 0.5px solid #e5e5e5; border-radius: 4px; padding: 9px 12px; cursor: pointer; text-align: center; background: #fff; font-family: inherit; font-size: 12px; font-weight: 600; color: #1a1a1a; transition: all 0.15s; }
+.platform-btn:hover { border-color: #4a9edd; color: #2a7bbd; background: #f0f6fc; }
+.platform-btn-disabled { border: 0.5px dashed #e5e5e5; border-radius: 4px; padding: 9px 12px; text-align: center; background: #fafaf8; font-family: inherit; font-size: 12px; font-weight: 600; color: #bbb; cursor: default; }
+.platform-selected { display: none; align-items: center; justify-content: space-between; background: #0e0f11; border-radius: 6px; padding: 12px 16px; }
+.platform-selected.show { display: flex; }
+.platform-selected-label { font-size: 9px; color: #888780; letter-spacing: 0.1em; text-transform: uppercase; }
+.platform-selected-name { font-size: 14px; font-weight: 700; color: #e8e6e1; margin-top: 2px; }
+.platform-change { font-size: 11px; color: #6fb4e8; background: none; border: 0.5px solid #3a3b3e; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; }
+
+/* PHOTOS */
+.photo-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 8px; }
+.photo-slot { background: #fafaf8; border: 1px dashed #d9d6cc; border-radius: 6px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.15s; text-align: center; padding: 8px; position: relative; overflow: hidden; }
+.photo-slot:hover { border-color: #4a9edd; background: #f0f6fc; }
+.photo-slot.filled { border-style: solid; border-color: #4a9edd; background: #eaf4fc; }
+.photo-slot.uploading { border-style: solid; border-color: #f9b860; background: #fef3e2; cursor: default; }
+.photo-slot.error { border-style: solid; border-color: #e25c3a; background: #fde8e2; }
+.photo-slot-icon { font-size: 20px; color: #ccc; position: relative; z-index: 1; }
+.photo-slot.filled .photo-slot-icon { color: #2a7bbd; }
+.photo-slot-label { font-size: 10px; color: #999; position: relative; z-index: 1; }
+.photo-slot.filled .photo-slot-label { color: #1d6fb8; font-weight: 700; }
+.photo-slot-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
+.photo-slot.filled .photo-slot-preview { display: block; }
+.photo-slot.filled .photo-slot-icon, .photo-slot.filled .photo-slot-label { text-shadow: 0 1px 3px rgba(0,0,0,0.6); color: #fff; }
+
+/* FORM */
+.field { margin-bottom: 16px; }
+.field:last-child { margin-bottom: 0; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin-bottom: 8px; display: block; }
+.field-sub { font-size: 11px; color: #999; margin-top: -4px; margin-bottom: 10px; }
+.field-input { width: 100%; font-size: 13px; padding: 10px 12px; border: 0.5px solid #e5e5e5; border-radius: 4px; font-family: inherit; color: #1a1a1a; }
+.field-input:focus { outline: none; border-color: #4a9edd; }
+.field-textarea { width: 100%; font-size: 13px; padding: 10px 12px; border: 0.5px solid #e5e5e5; border-radius: 4px; font-family: inherit; color: #1a1a1a; resize: vertical; min-height: 80px; }
+.field-textarea:focus { outline: none; border-color: #4a9edd; }
+.pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.pill { font-size: 11px; color: #555; background: #fff; border: 0.5px solid #d9d6cc; padding: 8px 14px; border-radius: 20px; cursor: pointer; font-weight: 600; transition: all 0.15s; font-family: inherit; }
+.pill:hover { border-color: #4a9edd; color: #1a1a1a; }
+.pill.active { background: #1a1a1a; border-color: #1a1a1a; color: #fff; }
+
+/* ============ PARTS SECTION ============ */
+.parts-disabled-note { text-align: center; padding: 32px 20px; color: #bbb; font-size: 13px; line-height: 1.7; }
+
+/* Category row — closed state */
+.category-block { border: 0.5px solid #e8e8e8; border-radius: 8px; overflow: hidden; transition: box-shadow 0.2s; }
+.category-block.open { box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-color: #4a9edd; }
+.category-head { display: flex; align-items: center; justify-content: space-between; padding: 13px 16px; background: #fafaf8; cursor: pointer; user-select: none; transition: background 0.15s; }
+.category-block.open .category-head { background: #0e0f11; }
+.category-name-wrap { display: flex; align-items: center; gap: 10px; }
+.category-icon { font-size: 16px; width: 28px; text-align: center; }
+.category-name { font-size: 13px; font-weight: 700; color: #1a1a1a; transition: color 0.15s; }
+.category-block.open .category-name { color: #e8e6e1; }
+.category-added-count { font-size: 10px; background: #4a9edd; color: #fff; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+.category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+.category-block.open .category-toggle { color: #6fb4e8; border-color: #3a3b3e; background: rgba(255,255,255,0.06); }
+
+/* Added parts strip */
+.added-parts-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fff; }
+.added-chip { display: flex; align-items: center; gap: 6px; background: #f4f3ee; border: 0.5px solid #e5e2d8; border-radius: 20px; padding: 4px 10px 4px 8px; font-size: 11px; font-weight: 600; color: #333; }
+.added-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a9edd; flex-shrink: 0; }
+.added-chip-dot.pending { background: #f9b860; }
+.added-chip-remove { background: none; border: none; cursor: pointer; color: #bbb; font-size: 14px; line-height: 1; padding: 0 0 0 2px; font-family: inherit; }
+.added-chip-remove:hover { color: #c25d3a; }
+
+/* Picker panel — expanded */
+.picker-panel { display: none; background: #fafaf8; border-top: 0.5px solid #e5e5e5; }
+.picker-panel.open { display: block; animation: slideDown 0.18s ease; }
+@keyframes slideDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
+.picker-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 0.5px solid #e5e5e5; background: #fff; }
+.picker-search-wrap { flex: 1; }
+.picker-search { width: 100%; font-size: 13px; padding: 8px 10px; border: 0.5px solid #e5e5e5; border-radius: 6px; font-family: inherit; background: #fafaf8; }
+.picker-search:focus { outline: none; border-color: #4a9edd; background: #fff; }
+.picker-count { font-size: 11px; color: #999; white-space: nowrap; }
+
+/* Part cards grid */
+.part-cards-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 14px 16px; }
+.part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden; transition: border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }
+.part-card:hover { border-color: #4a9edd; box-shadow: 0 2px 12px rgba(74,158,221,0.1); }
+.part-card.added { border-color: #22a06b; background: #f6fdf9; }
+
+.part-card-img { height: 100px; background: #f0f2f5; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; flex-shrink: 0; }
+.part-card-img-bg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; }
+.part-card-img-label { font-size: 9px; color: #bbb; letter-spacing: 0.06em; text-transform: uppercase; }
+.part-card.added .part-card-img { background: #e8f5ee; }
+.part-card-added-badge { position: absolute; top: 8px; right: 8px; background: #22a06b; color: #fff; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.04em; text-transform: uppercase; }
+
+.part-card-body { padding: 10px 12px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.part-card-brand { font-size: 9px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.part-card-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
+.part-card-desc { font-size: 11px; color: #777; line-height: 1.5; flex: 1; }
+
+.part-card-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; }
+.part-card-price { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.part-card-add { font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; border: none; transition: all 0.15s; letter-spacing: 0.04em; }
+.part-card-add.add    { background: #4a9edd; color: #fff; }
+.part-card-add.add:hover { background: #2a7bbd; }
+.part-card-add.remove { background: #f4f3ee; color: #888; border: 0.5px solid #e5e2d8; }
+.part-card-add.remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
+
+/* Empty + custom form */
+.picker-empty-state { text-align: center; padding: 28px 20px; color: #bbb; font-size: 12px; }
+.custom-part-section { border-top: 0.5px solid #e5e5e5; padding: 14px 16px; background: #fff; }
+.custom-part-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #2a7bbd; font-weight: 700; cursor: pointer; background: none; border: none; font-family: inherit; padding: 0; }
+.custom-part-toggle:hover { text-decoration: underline; }
+.custom-part-toggle-icon { font-size: 14px; transition: transform 0.15s; }
+.custom-part-toggle-icon.open { transform: rotate(45deg); }
+.custom-part-form { display: none; margin-top: 12px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px; }
+.custom-part-form.open { display: block; animation: slideDown 0.15s ease; }
+.custom-part-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.custom-part-grid input, .custom-link-input { font-size: 12px; padding: 8px 10px; border: 0.5px solid #e5e5e5; border-radius: 4px; font-family: inherit; width: 100%; background: #fff; }
+.custom-link-input { margin-bottom: 8px; display: block; }
+.custom-part-note { font-size: 10px; color: #999; line-height: 1.6; margin-bottom: 10px; }
+.custom-part-submit { font-size: 11px; color: #fff; background: #1a1a1a; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 700; text-transform: uppercase; font-family: inherit; letter-spacing: 0.04em; }
+.custom-part-submit:hover { background: #4a9edd; }
+
+/* SIDEBAR */
+.sidebar-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 14px; }
+.summary-row { display: flex; justify-content: space-between; align-items: flex-start; padding: 8px 0; border-bottom: 0.5px solid #efece3; gap: 8px; }
+.summary-row:last-child { border-bottom: none; }
+.summary-label { font-size: 11px; color: #888; text-transform: uppercase; font-weight: 600; letter-spacing: 0.04em; flex-shrink: 0; }
+.summary-value { font-size: 12px; font-weight: 700; text-align: right; }
+.activity-tag { display: inline-block; font-size: 9px; color: #555; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; margin: 2px 2px 0 0; font-weight: 600; }
+.submit-status { border-radius: 6px; padding: 12px 14px; margin-bottom: 12px; }
+.submit-status.incomplete { background: #fafaf8; border: 0.5px solid #e5e5e5; }
+.submit-status.minimum    { background: #fef3e2; border: 0.5px solid #f9b860; }
+.submit-status.full       { background: #e8f5ee; border: 0.5px solid #86cfad; }
+.submit-status-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+.submit-status.incomplete .submit-status-label { color: #999; }
+.submit-status.minimum    .submit-status-label { color: #b45309; }
+.submit-status.full       .submit-status-label { color: #166534; }
+.submit-status-desc { font-size: 11px; line-height: 1.6; }
+.submit-status.incomplete .submit-status-desc { color: #999; }
+.submit-status.minimum    .submit-status-desc { color: #78350f; }
+.submit-status.full       .submit-status-desc { color: #14532d; }
+.checklist { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+.check-item { display: flex; align-items: center; gap: 8px; font-size: 11px; color: #bbb; }
+.check-item.done { color: #1a1a1a; }
+.check-dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #d9d6cc; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 900; }
+.check-item.done .check-dot { background: #22a06b; border-color: #22a06b; color: #fff; }
+.legal-check { display: flex; align-items: flex-start; gap: 8px; font-size: 11px; color: #666; line-height: 1.5; margin-bottom: 12px; }
+.legal-check input { margin-top: 2px; accent-color: #4a9edd; cursor: pointer; flex-shrink: 0; }
+.first-post-note { color: #b06a1a; font-weight: 600; }
+.btn-block { width: 100%; font-size: 12px; padding: 11px 16px; border-radius: 4px; cursor: pointer; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; font-family: inherit; border: none; }
+.btn-block.blue { background: #4a9edd; color: #fff; }
+.btn-block.blue:hover { background: #2a7bbd; }
+.btn-block:disabled { background: #e5e5e5; color: #bbb; cursor: not-allowed; }
+.btn-draft { background: none; border: none; font-size: 11px; color: #999; cursor: pointer; font-family: inherit; display: block; width: 100%; text-align: center; margin-top: 10px; }
+.btn-draft:hover { color: #555; }
+.mod-note { font-size: 11px; color: #5a3a1a; background: #fef3e2; border: 0.5px solid #f9b860; border-radius: 6px; padding: 12px 14px; line-height: 1.6; }
+.mod-note strong { display: block; margin-bottom: 4px; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a1a; color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; opacity: 0; transition: all 0.25s ease; pointer-events: none; z-index: 999; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-check { color: #4a9edd; }
+
+@media (max-width: 900px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; }
+  .photo-grid { grid-template-columns: repeat(2, 1fr); }
+  .part-cards-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="gunforma-builds.html" class="nav-link">Builds</a>
+    <a href="gunforma-parts-catalog.html" class="nav-link">Parts catalog</a>
+    <a href="#" class="nav-link">Armory</a>
+  </div>
+  <div class="nav-right"><span class="nav-user" id="nav-user">…</span></div>
+</nav>
+
+<div class="page-header">
+  <div class="page-eyebrow">New build</div>
+  <div class="page-title">Post your build</div>
+  <p class="page-sub">Fill in sections 1–3 to submit. Add parts to get your build live faster.</p>
+</div>
+
+<div class="layout">
+<div class="main-col">
+
+  <!-- 1. PISTOL -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title"><span class="card-step" id="step1-dot">1</span> Choose your pistol</span>
+      <span class="card-hint">Determines which parts fit</span>
+    </div>
+    <div id="platform-picker">
+      <input class="platform-search" id="platform-search" type="text" placeholder="Search make or model…" oninput="filterPlatforms()" />
+      <div class="platform-grid" id="platform-grid"></div>
+    </div>
+    <div class="platform-selected" id="platform-selected">
+      <div>
+        <div class="platform-selected-label">Building for</div>
+        <div class="platform-selected-name" id="platform-selected-name"></div>
+      </div>
+      <button class="platform-change" onclick="changePlatform()">Change pistol</button>
+    </div>
+  </div>
+
+  <!-- 2. PHOTOS -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title"><span class="card-step" id="step2-dot">2</span> Photos</span>
+      <span class="card-hint">Builds with photos get saved 3× more</span>
+    </div>
+    <div class="photo-grid">
+      <div class="photo-slot" data-slot="hero" id="slot-hero" onclick="onSlotClick('hero')">
+        <img class="photo-slot-preview" id="preview-hero" />
+        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add hero photo</div>
+      </div>
+      <div class="photo-slot" data-slot="g1" id="slot-g1" onclick="onSlotClick('g1')">
+        <img class="photo-slot-preview" id="preview-g1" />
+        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
+      </div>
+      <div class="photo-slot" data-slot="g2" id="slot-g2" onclick="onSlotClick('g2')">
+        <img class="photo-slot-preview" id="preview-g2" />
+        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
+      </div>
+      <div class="photo-slot" data-slot="g3" id="slot-g3" onclick="onSlotClick('g3')">
+        <img class="photo-slot-preview" id="preview-g3" />
+        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
+      </div>
+    </div>
+    <div class="field-sub" id="photo-error" style="color:#c25d3a;display:none;"></div>
+    <input type="file" id="photo-file-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="onFileSelected(event)" />
+  </div>
+
+  <!-- 3. BUILD DETAILS -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title"><span class="card-step" id="step3-dot">3</span> Build details</span>
+    </div>
+    <div class="field">
+      <label class="field-label">Build name</label>
+      <input class="field-input" id="build-name" type="text" placeholder="e.g. Sig P320 2011 Build" oninput="onNameInput()" />
+    </div>
+    <div class="field">
+      <label class="field-label">Activity</label>
+      <div class="field-sub">Pick all that apply</div>
+      <div class="pill-row">
+        <button class="pill" data-val="Concealed carry" onclick="toggleActivity(this)">Concealed carry</button>
+        <button class="pill" data-val="Home defense"    onclick="toggleActivity(this)">Home defense</button>
+        <button class="pill" data-val="Competition"     onclick="toggleActivity(this)">Competition</button>
+        <button class="pill" data-val="Range"           onclick="toggleActivity(this)">Range</button>
+        <button class="pill" data-val="Hunting"         onclick="toggleActivity(this)">Hunting</button>
+        <button class="pill" data-val="Duty"            onclick="toggleActivity(this)">Duty</button>
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label">Description</label>
+      <textarea class="field-textarea" id="build-description" placeholder="What's this build for? Why these parts? Anything other owners should know."></textarea>
+    </div>
+  </div>
+
+  <!-- 4. PARTS -->
+  <div class="card">
+    <div class="card-head">
+      <span class="card-title"><span class="card-step" id="step4-dot">4</span> Parts in this build</span>
+      <span class="card-hint" id="parts-hint">Optional — gets your build live faster</span>
+    </div>
+    <div id="parts-container"></div>
+  </div>
+
+</div>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="card">
+    <div class="sidebar-title">Summary</div>
+    <div class="summary-row"><span class="summary-label">Build</span><span class="summary-value" id="summary-name">Untitled build</span></div>
+    <div class="summary-row"><span class="summary-label">Pistol</span><span class="summary-value" id="summary-platform">—</span></div>
+    <div class="summary-row"><span class="summary-label">Activity</span><span class="summary-value" id="summary-activity">—</span></div>
+    <div class="summary-row"><span class="summary-label">Parts</span><span class="summary-value" id="summary-count">0 added</span></div>
+  </div>
+
+  <div class="card">
+    <div class="checklist">
+      <div class="check-item" id="chk1"><div class="check-dot"></div> Choose a pistol</div>
+      <div class="check-item" id="chk2"><div class="check-dot"></div> Add at least one photo</div>
+      <div class="check-item" id="chk3"><div class="check-dot"></div> Name your build</div>
+    </div>
+    <div class="submit-status incomplete" id="submit-status">
+      <div class="submit-status-label">Not ready yet</div>
+      <div class="submit-status-desc" id="submit-status-desc">Complete sections 1–3 to submit your build.</div>
+    </div>
+    <div class="legal-notice">
+      <span class="legal-notice-icon">⚠</span>
+      <div class="legal-notice-text"><strong>Information and inspiration only — not legal advice.</strong> Gunforma does not verify that any build, part, or configuration is legal in your federal, state, or local jurisdiction. Rules on magazine capacity, barrel/overall length, optics and light mounting, suppressors, SBRs, and dealer transfer requirements vary and change often.</div>
+    </div>
+    <div class="legal-check">
+      <input type="checkbox" id="legal-confirm" onchange="renderSidebar()" />
+      <label for="legal-confirm">I confirm I am solely responsible for knowing and following all applicable federal, state, and local laws for every part and configuration in this build.</label>
+    </div>
+    <div class="legal-check">
+      <input type="checkbox" id="content-license-confirm" onchange="renderSidebar()" />
+      <label for="content-license-confirm">These are my own photos, and I agree to the <a href="builder-agreement.html" target="_blank">Builder Agreement</a> covering how Gunforma can use my build content. <span id="first-post-note" class="first-post-note"></span></label>
+    </div>
+    <button class="btn-block blue" id="publish-btn" onclick="publishBuild()" disabled>Submit build →</button>
+    <button class="btn-draft" onclick="saveDraft()">Save as draft instead</button>
+  </div>
+
+  <div class="mod-note">
+    <strong>Before it goes live</strong>
+    New builds are reviewed within 24 hours. You'll get a notification either way.
+  </div>
+</div>
+</div>
+
+<div class="footer-bar">
+  <div class="footer-legal">Gunforma is for information and inspiration only and does not provide legal advice. Firearms, magazines, optics, barrels, suppressors, and other parts shown here may be restricted or illegal depending on your federal, state, and local laws. You are solely responsible for knowing and following all laws that apply to you before buying, owning, shipping, assembling, or modifying anything referenced on this site.</div>
+  <div class="footer-links-row">
+    <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+    <span class="footer-txt"><a href="index.html">Home</a> · <a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+// Version shown to the builder via the Builder Agreement link next to
+// the content-license-confirm checkbox below.
+const BUILDER_AGREEMENT_VERSION = 'v1-2026-01';
+
+let currentUser = null;          // { id, email }
+let hasAcceptedBuilderAgreement = false;
+
+// Live platform list, fetched from public.platforms — replaces the old
+// hardcoded mock array. { id: uuid, name: text }
+let PLATFORMS = [];
+let platformsLoaded = false;
+
+// dbCategory: which values in the products.category enum feed this UI section.
+// null = no catalog backing yet — the picker only offers the "Add custom part"
+// flow for that category (goes in as pending: true for admin review).
+const CATEGORIES = [
+  { key:'optics',   label:'Optics',                 dbCategory:['optic'] },
+  { key:'lights',   label:'Weapon Lights',          dbCategory:['light'] },
+  { key:'grips',    label:'Grip Modules',           dbCategory:['frame'] },
+  { key:'slides',   label:'Slides',                 dbCategory:['slide'] },
+  { key:'barrels',  label:'Barrels & Compensators', dbCategory:['barrel','compensator'] },
+  { key:'triggers', label:'Triggers',               dbCategory:['trigger'] },
+  { key:'sights',   label:'Sights',                 dbCategory:null },
+  { key:'magwells', label:'Magwells',               dbCategory:null },
+  { key:'holsters', label:'Holsters',               dbCategory:null },
+  { key:'mags',     label:'Magazines',              dbCategory:null },
+  { key:'paintjob', label:'Paint Job & Finish',     dbCategory:null },
+  { key:'knife',    label:'Tactical Knife',         dbCategory:null },
+  { key:'misc',     label:'Miscellaneous',          dbCategory:null },
+];
+
+// Runtime-populated per platform, keyed by UI category key. Each entry:
+//   { id: <products.id UUID>, brand, name, desc, price }
+// Filled by loadCatalog(platformId) after a pistol is picked. Categories
+// with no DB backing (or no products yet) simply have no entry here — the
+// picker then falls through to custom-part only.
+let CATALOG = {};
+let catalogLoadingFor = null;   // platform id currently loading
+let catalogLoadedFor  = null;   // platform id most recently loaded
+
+const state = {
+  platform: null, photos: { hero: null, g1: null, g2: null, g3: null }, name: '', activities: [],
+  parts: [], openPicker: null, customOpen: null,
+};
+let uid = 1;
+
+// Storage folder for this in-progress build. Photos upload as soon as
+// they're picked (before the build row exists), so we need a stable
+// folder segment now — the real build_id gets attached at submit time.
+const draftId = crypto.randomUUID();
+
+function photoCount() {
+  return Object.values(state.photos).filter(function(p) { return p && !p.uploading; }).length;
+}
+
+// ===== STEP 1 =====
+async function loadPlatforms() {
+  const { data, error } = await sb.from('platforms').select('id,name').order('name');
+  platformsLoaded = true;
+  if (error) {
+    document.getElementById('platform-grid').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;padding:16px;color:#c25d3a;font-size:12px;">Couldn\'t load pistols — refresh to try again.</div>';
+    return;
+  }
+  PLATFORMS = data || [];
+  renderPlatformGrid();
+}
+
+// Fetches all products that map to this platform via public.product_platforms,
+// buckets them into the UI's CATEGORIES via each cat's dbCategory hint.
+// Un-mapped/unseeded categories are simply absent from CATALOG — the picker
+// then only offers the custom-part form for them.
+// Product-thumbnail slot HTML. Uses the default variant's primary_image_url
+// when we have one, else falls back to the "Photo coming soon" placeholder.
+// object-fit:cover in the CSS keeps mixed aspect ratios rendering cleanly.
+function partImageHtml(item) {
+  if (!item || !item.image) {
+    return '<div class="part-card-img"><div class="part-card-img-bg">'+
+             '<div class="part-card-img-label">Photo coming soon</div>'+
+           '</div></div>';
+  }
+  var alt = ((item.brand ? item.brand+' ' : '') + (item.name || '')).replace(/"/g, '&quot;');
+  return '<div class="part-card-img">'+
+           '<img src="'+item.image+'" alt="'+alt+'" loading="lazy" '+
+             'style="width:100%;height:100%;object-fit:cover;display:block;" '+
+             'onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-img-bg&quot;><div class=&quot;part-card-img-label&quot;>No photo</div></div>\'"/>'+
+         '</div>';
+}
+
+async function loadCatalog(platformId) {
+  if (catalogLoadedFor === platformId || catalogLoadingFor === platformId) return;
+  catalogLoadingFor = platformId;
+  const { data, error } = await sb
+    .from('products')
+    .select(
+      // base_price was removed from the products table; pricing now comes
+      // from the default variant's msrp. lowest_price is a stale-safe fallback.
+      'id, category, name, description, lowest_price, manufacturers(name), '+
+      'product_platforms!inner(platform_id), '+
+      // Named FK to avoid the products↔product_variants ambiguity from
+      // products.lowest_price_variant_id also referencing product_variants.id.
+      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
+    )
+    .eq('is_discontinued', false)
+    .eq('product_platforms.platform_id', platformId);
+  catalogLoadingFor = null;
+  if (error) { console.error('loadCatalog error', error); CATALOG = {}; catalogLoadedFor = platformId; return; }
+
+  const grouped = {};
+  CATEGORIES.forEach(function(cat) {
+    if (!cat.dbCategory) return;
+    const rows = (data || []).filter(function(r) { return cat.dbCategory.indexOf(r.category) !== -1; });
+    if (!rows.length) return;
+    grouped[cat.key] = rows.map(function(r) {
+      // Default variant carries the canonical display image + MSRP.
+      var dv = (r.product_variants || []).find(function(v){ return v.is_default; })
+             || (r.product_variants || [])[0]
+             || null;
+      var price = dv && dv.msrp != null ? Number(dv.msrp)
+                : (r.lowest_price != null ? Number(r.lowest_price) : 0);
+      return {
+        id:    r.id,
+        brand: r.manufacturers ? r.manufacturers.name : 'Unknown brand',
+        name:  r.name,
+        desc:  r.description || '',
+        price: price,
+        image: dv && dv.primary_image_url ? dv.primary_image_url : null,
+      };
+    });
+  });
+  CATALOG = grouped;
+  catalogLoadedFor = platformId;
+}
+
+function renderPlatformGrid(search) {
+  if (!platformsLoaded) {
+    document.getElementById('platform-grid').innerHTML =
+      '<div style="grid-column:1/-1;text-align:center;padding:16px;color:#bbb;font-size:12px;">Loading pistols…</div>';
+    return;
+  }
+  search = (search||'').trim().toLowerCase();
+  const items = PLATFORMS.filter(p => !search || p.name.toLowerCase().includes(search));
+  const moreComingHtml = '<button class="platform-btn-disabled" disabled>More models coming in the future</button>';
+  document.getElementById('platform-grid').innerHTML =
+    (items.length
+      ? items.map(p => '<button class="platform-btn" onclick="selectPlatform(\''+p.id+'\')">'+p.name+'</button>').join('')
+      : '<div style="grid-column:1/-1;text-align:center;padding:16px;color:#bbb;font-size:12px;">No matches found.</div>'
+    ) + moreComingHtml;
+}
+function filterPlatforms() { renderPlatformGrid(document.getElementById('platform-search').value); }
+async function selectPlatform(id) {
+  state.platform = PLATFORMS.find(p => p.id === id);
+  document.getElementById('platform-picker').style.display = 'none';
+  document.getElementById('platform-selected').classList.add('show');
+  document.getElementById('platform-selected-name').textContent = state.platform.name;
+  renderParts(); renderSidebar();          // shows "Loading catalog…" state
+  await loadCatalog(state.platform.id);
+  renderParts();                            // re-render with real cards
+}
+function changePlatform() {
+  // Catalog picks reference products only guaranteed to fit the current
+  // platform — drop them on platform change. Custom (pending) parts survive
+  // since they aren't tied to catalog IDs.
+  state.parts = state.parts.filter(function(p) { return p.pending; });
+  state.platform = null;
+  CATALOG = {};
+  catalogLoadedFor = null;
+  document.getElementById('platform-picker').style.display = 'block';
+  document.getElementById('platform-selected').classList.remove('show');
+  renderParts(); renderSidebar();
+}
+
+// ===== STEP 2 =====
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;      // matches the bucket's server-side limit
+// Two stored sizes per photo — one plan tier away from just using Storage's
+// on-the-fly transform API and dropping this, but that's Pro-only and this
+// project is on the free plan.
+const DISPLAY_MAX_DIMENSION = 1600;            // long edge, px — hero/full view
+const DISPLAY_JPEG_QUALITY = 0.80;
+const THUMB_MAX_DIMENSION = 480;               // long edge, px — grid/card views
+const THUMB_JPEG_QUALITY = 0.70;
+
+let activeSlot = null;
+
+function onSlotClick(slot) {
+  const cur = state.photos[slot];
+  if (cur && cur.uploading) return;             // ignore clicks mid-upload
+  if (cur) { removePhoto(slot); return; }        // filled -> click removes
+  activeSlot = slot;
+  document.getElementById('photo-file-input').click();
+}
+
+function photoError(msg) {
+  const el = document.getElementById('photo-error');
+  el.textContent = msg;
+  el.style.display = msg ? 'block' : 'none';
+}
+
+async function onFileSelected(event) {
+  const file = event.target.files[0];
+  event.target.value = '';                       // allow re-selecting the same file later
+  const slot = activeSlot;
+  if (!file || !slot) return;
+  photoError('');
+
+  if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
+    photoError('Please choose a JPEG, PNG, or WebP photo.');
+    return;
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    photoError('That photo is too large — please choose one under 8MB.');
+    return;
+  }
+
+  setSlotUploading(slot);
+
+  let displayBlob, thumbBlob;
+  try {
+    const normalized = await normalizeImage(file);
+    displayBlob = normalized.displayBlob;
+    thumbBlob = normalized.thumbBlob;
+  } catch (e) {
+    console.error(e);
+    photoError('Couldn\'t read that image — try a different file.');
+    clearSlot(slot);
+    return;
+  }
+
+  const previewUrl = URL.createObjectURL(thumbBlob);
+  setSlotPreview(slot, previewUrl);
+
+  const base = currentUser.id + '/' + draftId + '/' + slot + '-' + Date.now();
+  const path = base + '.jpg';
+  const thumbPath = base + '-thumb.jpg';
+
+  const [displayRes, thumbRes] = await Promise.all([
+    sb.storage.from('build-photos').upload(path, displayBlob, { contentType: 'image/jpeg', upsert: false }),
+    sb.storage.from('build-photos').upload(thumbPath, thumbBlob, { contentType: 'image/jpeg', upsert: false }),
+  ]);
+
+  if (displayRes.error || thumbRes.error) {
+    console.error(displayRes.error || thumbRes.error);
+    if (!displayRes.error) sb.storage.from('build-photos').remove([path]);
+    if (!thumbRes.error) sb.storage.from('build-photos').remove([thumbPath]);
+    photoError('Upload failed — try again.');
+    clearSlot(slot);
+    return;
+  }
+
+  state.photos[slot] = { path: path, thumbPath: thumbPath, uploading: false, previewUrl: previewUrl };
+  setSlotFilled(slot);
+  renderSidebar();
+}
+
+// Re-encodes through a canvas: normalizes to JPEG regardless of source
+// format, strips all EXIF (including GPS — phone photos routinely embed
+// geolocation, which nobody posting a carry gun photo wants published),
+// and produces two sizes from the one decode — a display version for
+// hero/full view and a small thumbnail for grid/card views, so a phone
+// on cellular data isn't downloading a 1600px image to render a 100px
+// thumbnail.
+function normalizeImage(file) {
+  return new Promise(function(resolve, reject) {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = function() {
+      URL.revokeObjectURL(objectUrl);
+      const w0 = img.naturalWidth, h0 = img.naturalHeight;
+      if (!w0 || !h0) { reject(new Error('Image has no dimensions')); return; }
+
+      function renderAt(maxDim, quality) {
+        const scale = Math.min(1, maxDim / Math.max(w0, h0));
+        const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        return new Promise(function(res, rej) {
+          canvas.toBlob(function(blob) {
+            if (!blob) { rej(new Error('Could not encode image')); return; }
+            res(blob);
+          }, 'image/jpeg', quality);
+        });
+      }
+
+      Promise.all([
+        renderAt(DISPLAY_MAX_DIMENSION, DISPLAY_JPEG_QUALITY),
+        renderAt(THUMB_MAX_DIMENSION, THUMB_JPEG_QUALITY),
+      ]).then(function(results) {
+        resolve({ displayBlob: results[0], thumbBlob: results[1] });
+      }).catch(reject);
+    };
+    img.onerror = function() { URL.revokeObjectURL(objectUrl); reject(new Error('Unsupported image')); };
+    img.src = objectUrl;
+  });
+}
+
+async function removePhoto(slot) {
+  const cur = state.photos[slot];
+  if (!cur) return;
+  state.photos[slot] = null;
+  clearSlot(slot);
+  renderSidebar();
+  const { error } = await sb.storage.from('build-photos').remove([cur.path, cur.thumbPath].filter(Boolean));
+  if (error) console.error(error);   // slot is already cleared client-side either way
+}
+
+function setSlotUploading(slot) {
+  state.photos[slot] = { uploading: true };
+  const el = document.getElementById('slot-' + slot);
+  el.classList.remove('filled','error'); el.classList.add('uploading');
+  el.querySelector('.photo-slot-icon').textContent = '…';
+  el.querySelector('.photo-slot-label').textContent = 'Uploading…';
+}
+function setSlotPreview(slot, url) {
+  document.getElementById('preview-' + slot).src = url;
+}
+function setSlotFilled(slot) {
+  const el = document.getElementById('slot-' + slot);
+  el.classList.remove('uploading','error'); el.classList.add('filled');
+  el.querySelector('.photo-slot-icon').textContent = '✓';
+  el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Hero photo set' : 'Photo added';
+}
+function clearSlot(slot) {
+  const el = document.getElementById('slot-' + slot);
+  el.classList.remove('filled','uploading','error');
+  document.getElementById('preview-' + slot).removeAttribute('src');
+  el.querySelector('.photo-slot-icon').textContent = '⊕';
+  el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Add hero photo' : 'Add photo';
+}
+
+// ===== STEP 3 =====
+function onNameInput() { state.name = document.getElementById('build-name').value; renderSidebar(); }
+function toggleActivity(btn) {
+  const v = btn.dataset.val, i = state.activities.indexOf(v);
+  if (i===-1) { state.activities.push(v); btn.classList.add('active'); }
+  else         { state.activities.splice(i,1); btn.classList.remove('active'); }
+  renderSidebar();
+}
+
+// ===== STEP 4: PARTS =====
+function renderParts() {
+  const c = document.getElementById('parts-container');
+  if (!state.platform) {
+    c.innerHTML = '<div class="parts-disabled-note">Select a pistol in step 1 to browse compatible parts.</div>';
+    return;
+  }
+  c.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
+    CATEGORIES.map(cat => buildCategoryBlock(cat)).join('') + '</div>';
+}
+
+// Three states drive the picker body for each category:
+//   - loading   : catalog fetch is in flight for this platform
+//   - unseeded  : this category has no catalog backing (dbCategory=null) or
+//                 the fetch returned zero rows — custom-part form only
+//   - browsing  : real cards available, plus custom-part form as usual
+function categoryPickerState(cat) {
+  const loading = state.platform && catalogLoadedFor !== state.platform.id;
+  if (loading) return 'loading';
+  const items = CATALOG[cat.key] || [];
+  if (!cat.dbCategory || !items.length) return 'unseeded';
+  return 'browsing';
+}
+
+function buildCategoryBlock(cat) {
+  const added  = state.parts.filter(p => p.category === cat.key);
+  const isOpen = state.openPicker === cat.key;
+  const isCust = state.customOpen === cat.key;
+  const mode   = categoryPickerState(cat);
+
+  // Added chips strip
+  const chipsHtml = added.length
+    ? '<div class="added-parts-strip">' + added.map(p =>
+        '<div class="added-chip">' +
+          '<div class="added-chip-dot' + (p.pending?' pending':'') + '"></div>' +
+          p.brand + ' ' + p.name +
+          '<button class="added-chip-remove" onclick="removePart(\''+p.uid+'\')">×</button>' +
+        '</div>'
+      ).join('') + '</div>'
+    : '';
+
+  // Cards grid — only in browsing mode
+  const available = (CATALOG[cat.key]||[]).filter(item => !state.parts.some(p => p.refId===item.id));
+  const cardsHtml = mode === 'browsing'
+    ? (available.length
+        ? available.map(item =>
+            '<div class="part-card">' +
+              partImageHtml(item) +
+              '<div class="part-card-body">' +
+                '<div class="part-card-brand">' + item.brand + '</div>' +
+                '<div class="part-card-name">'  + item.name  + '</div>' +
+                '<div class="part-card-desc">'  + item.desc  + '</div>' +
+              '</div>' +
+              '<div class="part-card-footer">' +
+                (item.price ? '<div class="part-card-price">$' + item.price + '</div>' : '<div class="part-card-price">—</div>') +
+                '<button class="part-card-add add" onclick="addCatalogPart(\''+cat.key+'\',\''+item.id+'\')">+ Add</button>' +
+              '</div>' +
+            '</div>'
+          ).join('')
+        : '<div class="picker-empty-state">All parts in this category have been added.</div>')
+    : '';
+
+  // Header note for non-browsing states
+  const modeNote =
+    mode === 'loading'  ? '<div class="picker-empty-state">Loading '+cat.label.toLowerCase()+'…</div>' :
+    mode === 'unseeded' ? '<div class="picker-empty-state" style="text-align:left;">No catalog listings yet for this category. Add your part below and Gunforma will review it — approved parts get added to the catalog for everyone.</div>' :
+    '';
+
+  const toolbarHtml = mode === 'browsing'
+    ? '<div class="picker-toolbar">' +
+        '<div class="picker-search-wrap">' +
+          '<input class="picker-search" type="text" placeholder="Search '+cat.label.toLowerCase()+'…" oninput="filterCards(\''+cat.key+'\',this.value)" />' +
+        '</div>' +
+        '<span class="picker-count" id="picker-count-'+cat.key+'">'+available.length+' options</span>' +
+      '</div>'
+    : '';
+
+  return '<div class="category-block' + (isOpen?' open':'') + '" id="cat-'+cat.key+'">' +
+    '<div class="category-head" onclick="togglePicker(\''+cat.key+'\')">' +
+      '<div class="category-name-wrap">' +
+        '<span class="category-name">' + cat.label + '</span>' +
+        (added.length ? '<span class="category-added-count">'+added.length+' added</span>' : '') +
+      '</div>' +
+      '<button class="category-toggle">' + (isOpen ? 'Close ✕' : '+ Add part') + '</button>' +
+    '</div>' +
+    chipsHtml +
+    '<div class="picker-panel' + (isOpen?' open':'') + '">' +
+      toolbarHtml +
+      modeNote +
+      (mode === 'browsing' ? '<div class="part-cards-grid" id="cards-'+cat.key+'">' + cardsHtml + '</div>' : '') +
+      '<div class="custom-part-section">' +
+        '<button class="custom-part-toggle" onclick="toggleCustomForm(\''+cat.key+'\')">' +
+          '<span class="custom-part-toggle-icon' + (isCust?' open':'') + '">+</span>' +
+          ' Part not listed? Add a custom part' +
+        '</button>' +
+        '<div class="custom-part-form' + (isCust?' open':'') + '">' +
+          '<div class="custom-part-grid">' +
+            '<input type="text" placeholder="Brand" id="cb-'+cat.key+'" />' +
+            '<input type="text" placeholder="Part name" id="cn-'+cat.key+'" />' +
+          '</div>' +
+          '<input class="custom-link-input" type="text" placeholder="Link to where you bought it (optional)" id="cl-'+cat.key+'" />' +
+          '<div class="custom-part-note">Your part goes into your build immediately as "Pending review." Once verified by Gunforma it\'s added to the catalog permanently — with your build as the first to list it.</div>' +
+          '<button class="custom-part-submit" onclick="addCustomPart(\''+cat.key+'\')">Add for review →</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function togglePicker(k) {
+  state.openPicker = state.openPicker===k ? null : k;
+  state.customOpen = null;
+  renderParts();
+  if (state.openPicker===k) {
+    setTimeout(() => {
+      const el = document.getElementById('cat-'+k);
+      if (el) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+    }, 60);
+  }
+}
+function toggleCustomForm(k) { state.customOpen = state.customOpen===k ? null : k; renderParts(); }
+
+function filterCards(k, q) {
+  q = (q||'').trim().toLowerCase();
+  const available = (CATALOG[k]||[]).filter(i => !state.parts.some(p => p.refId===i.id));
+  const filtered  = q ? available.filter(i => (i.brand+' '+i.name+' '+i.desc).toLowerCase().includes(q)) : available;
+  document.getElementById('picker-count-'+k).textContent = filtered.length + ' options';
+  document.getElementById('cards-'+k).innerHTML = filtered.length
+    ? filtered.map(item =>
+        '<div class="part-card">' +
+          partImageHtml(item) +
+          '<div class="part-card-body"><div class="part-card-brand">'+item.brand+'</div><div class="part-card-name">'+item.name+'</div><div class="part-card-desc">'+item.desc+'</div></div>' +
+          '<div class="part-card-footer"><div class="part-card-price">$'+item.price+'</div><button class="part-card-add add" onclick="addCatalogPart(\''+k+'\',\''+item.id+'\')">+ Add</button></div>' +
+        '</div>'
+      ).join('')
+    : '<div class="picker-empty-state">No matches — try the custom part option below.</div>';
+}
+
+function addCatalogPart(k, itemId) {
+  const item = (CATALOG[k]||[]).find(i => i.id===itemId);
+  if (!item) return;
+  state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false });
+  renderParts(); renderSidebar();
+}
+function addCustomPart(k) {
+  const brand = (document.getElementById('cb-'+k).value||'').trim();
+  const name  = (document.getElementById('cn-'+k).value||'').trim();
+  if (!brand||!name) return;
+  state.parts.push({ uid:'p'+(uid++), refId:null, category:k, brand, name, pending:true });
+  state.customOpen = null;
+  renderParts(); renderSidebar();
+}
+function removePart(partUid) {
+  state.parts = state.parts.filter(p => p.uid!==partUid);
+  renderParts(); renderSidebar();
+}
+
+// ===== SIDEBAR =====
+function renderSidebar() {
+  const hasPistol=!!state.platform, hasPhoto=photoCount()>0, hasName=state.name.trim().length>0;
+  const hasParts=state.parts.length>0;
+  const legalChecked=document.getElementById('legal-confirm').checked;
+  const licenseChecked=document.getElementById('content-license-confirm').checked;
+  const checked=legalChecked&&licenseChecked;
+  const minimum=hasPistol&&hasPhoto&&hasName, full=minimum&&hasParts;
+
+  document.getElementById('summary-name').textContent     = state.name.trim()||'Untitled build';
+  document.getElementById('summary-platform').textContent = state.platform ? state.platform.name : '—';
+  document.getElementById('summary-count').textContent    = state.parts.length+' added';
+  const actEl = document.getElementById('summary-activity');
+  actEl.innerHTML = state.activities.length
+    ? state.activities.map(a=>'<span class="activity-tag">'+a+'</span>').join('') : '—';
+
+  setDone('step1-dot','1',hasPistol); setDone('step2-dot','2',hasPhoto);
+  setDone('step3-dot','3',hasName);   setDone('step4-dot','4',hasParts);
+  setCheck('chk1',hasPistol); setCheck('chk2',hasPhoto); setCheck('chk3',hasName);
+
+  const st=document.getElementById('submit-status'), sd=document.getElementById('submit-status-desc');
+  if (full)         { st.className='submit-status full';       sd.textContent='Full build — goes into review and can go live once approved.'; }
+  else if (minimum) { st.className='submit-status minimum';    sd.textContent='Minimum build — will be reviewed but needs parts to go live.'; }
+  else              { st.className='submit-status incomplete';  sd.textContent='Complete sections 1–3 to submit your build.'; }
+
+  document.getElementById('publish-btn').disabled = !(minimum&&checked);
+}
+function setDone(id,num,done) {
+  const el=document.getElementById(id);
+  el.textContent=done?'✓':num; el.className='card-step'+(done?' done':'');
+}
+function setCheck(id,done) {
+  const el=document.getElementById(id), dot=el.querySelector('.check-dot');
+  el.className='check-item'+(done?' done':''); dot.textContent=done?'✓':'';
+}
+
+// ===== ACTIONS =====
+
+// Snapshot the parts list onto the build row as jsonb rather than a
+// normalized relation — a build's parts capture a point in time and
+// shouldn't drift if the catalog changes later. refId is either the real
+// products.id UUID (for catalog picks, pending:false) or null (for
+// hand-typed entries, pending:true — admin review can promote them into
+// the catalog).
+function buildPartsSnapshot() {
+  return state.parts.map(function(p) {
+    return { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+  });
+}
+
+async function submitBuild(status) {
+  const legalConfirmed   = document.getElementById('legal-confirm').checked;
+  const licenseConfirmed = document.getElementById('content-license-confirm').checked;
+
+  const payload = {
+    user_id: currentUser.id,
+    platform_id: state.platform.id,
+    name: state.name.trim(),
+    tier: state.parts.length ? 'full' : 'minimum',
+    status: status,
+    activities: state.activities,
+    description: document.getElementById('build-description').value || null,
+    parts_snapshot: buildPartsSnapshot(),
+    legal_confirmed: legalConfirmed,
+    content_license_confirmed: licenseConfirmed,
+    // confirmed_at is stamped server-side by a trigger — not sent here.
+    builder_agreement_version: licenseConfirmed ? BUILDER_AGREEMENT_VERSION : null,
+  };
+
+  const { data, error } = await sb.from('builds').insert(payload).select('id').single();
+  if (error) return { error: error };
+
+  const buildId = data.id;
+  const photoRows = Object.keys(state.photos)
+    .filter(function(slot) { return state.photos[slot] && !state.photos[slot].uploading; })
+    .map(function(slot, i) {
+      return {
+        build_id: buildId,
+        user_id: currentUser.id,
+        storage_path: state.photos[slot].path,
+        thumb_path: state.photos[slot].thumbPath,
+        is_hero: slot === 'hero',
+        position: i + 1,
+      };
+    });
+
+  if (photoRows.length) {
+    const { error: photoErr } = await sb.from('build_photos').insert(photoRows);
+    if (photoErr) return { error: photoErr, buildId: buildId };
+  }
+
+  return { error: null, buildId: buildId };
+}
+
+async function publishBuild() {
+  const btn = document.getElementById('publish-btn');
+  if (btn.disabled) return;
+  btn.disabled = true;
+
+  const result = await submitBuild('pending');
+  btn.disabled = false;
+
+  if (result.error) {
+    console.error(result.error);
+    showToast('Something went wrong — try again');
+    return;
+  }
+
+  // The backend cascade only ever flips this false -> true once, tied
+  // to this actual submission — mirror that locally so the note updates
+  // without a re-fetch.
+  hasAcceptedBuilderAgreement = hasAcceptedBuilderAgreement || document.getElementById('content-license-confirm').checked;
+  renderFirstPostNote();
+
+  showToast(state.parts.length ? 'Submitted — pending review before going live' : 'Submitted — add parts to get your build live');
+}
+
+function renderFirstPostNote() {
+  const note = document.getElementById('first-post-note');
+  if (!note) return;
+  note.textContent = hasAcceptedBuilderAgreement
+    ? ''
+    : '(This is your first build — checking this box also enables your Builder account.)';
+}
+
+async function saveDraft() {
+  if (!state.platform||!state.name.trim()) { showToast('Add a pistol and build name first'); return; }
+  const result = await submitBuild('draft');
+  if (result.error) {
+    console.error(result.error);
+    showToast('Something went wrong — try again');
+    return;
+  }
+  showToast('Draft saved to your Armory');
+}
+
+function showToast(msg) {
+  document.getElementById('toast-msg').textContent=msg;
+  const t=document.getElementById('toast');
+  t.classList.add('show'); clearTimeout(window._tt);
+  window._tt=setTimeout(()=>t.classList.remove('show'),2800);
+}
+
+// ===== INIT =====
+async function requireAuthAndLoadUser() {
+  const { data } = await sb.auth.getSession();
+  const session = data && data.session;
+  if (!session) {
+    window.location.href = 'gunforma-signin.html';
+    return false;
+  }
+  currentUser = session.user;
+
+  const { data: profile } = await sb
+    .from('profiles')
+    .select('username, builder_agreement_accepted, onboarding_complete')
+    .eq('id', currentUser.id)
+    .maybeSingle();
+
+  // Onboarding gate: an OAuth user who hasn't picked a username yet has no
+  // usable identity to attach to a build — send them through complete-profile
+  // first, then they can come back and post.
+  if (!profile || !profile.onboarding_complete) {
+    window.location.href = 'gunforma-complete-profile.html';
+    return false;
+  }
+
+  document.getElementById('nav-user').textContent = (profile && profile.username) || currentUser.email;
+  hasAcceptedBuilderAgreement = !!(profile && profile.builder_agreement_accepted);
+  return true;
+}
+
+(async function init() {
+  renderParts(); renderSidebar(); renderFirstPostNote();
+  const ok = await requireAuthAndLoadUser();
+  if (!ok) return;
+  renderFirstPostNote();
+  renderPlatformGrid();
+  loadPlatforms();
+})();
+</script>
+</body>
+</html>

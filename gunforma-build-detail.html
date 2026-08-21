@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Gunforma build</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+
+/* LEGAL NOTICE */
+.legal-notice { display: flex; gap: 10px; align-items: flex-start; background: #fff8ea; border: 0.5px solid #e8d9ad; border-radius: 6px; padding: 12px 14px; margin-bottom: 28px; }
+.legal-notice-icon { font-size: 14px; line-height: 1.4; flex-shrink: 0; }
+.legal-notice-text { font-size: 11.5px; color: #6b5a2a; line-height: 1.6; }
+.legal-notice-text strong { color: #4a3c14; }
+.legal-notice-text a { color: #2a7bbd; }
+.legal-details { display: inline; }
+.legal-details summary { display: inline; cursor: pointer; color: #2a7bbd; font-weight: 600; list-style: none; }
+.legal-details summary::-webkit-details-marker { display: none; }
+.legal-details summary::before { content: 'Show details ▾'; margin-left: 4px; }
+.legal-details[open] summary::before { content: 'Hide details ▴'; }
+.legal-details p { margin: 6px 0 0; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
+.footer-legal { font-size: 10.5px; color: #999; line-height: 1.6; max-width: 900px; }
+.footer-links-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+/* BREADCRUMB */
+.breadcrumb { padding: 14px 36px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; font-size: 12px; color: #888; }
+.breadcrumb a { color: #2a7bbd; text-decoration: none; }
+.breadcrumb-sep { margin: 0 8px; color: #ccc; }
+
+/* PAGE */
+.page { max-width: 1100px; margin: 0 auto; padding: 32px 36px 64px; }
+
+/* BUILD HEADER */
+.build-header { display: grid; grid-template-columns: 1fr 320px; gap: 32px; margin-bottom: 20px; align-items: start; }
+.build-hero { background: #f4f3ee; border: 0.5px solid #e5e5e5; border-radius: 6px; aspect-ratio: 16/10; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+.build-hero span { font-size: 12px; color: #b8b5ac; letter-spacing: 0.06em; }
+.build-gallery { display: flex; gap: 8px; margin-bottom: 36px; }
+.gallery-thumb { width: 90px; height: 68px; border-radius: 6px; overflow: hidden; border: 0.5px solid #e5e5e5; flex-shrink: 0; }
+.gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.build-meta { display: flex; flex-direction: column; gap: 14px; }
+.build-eyebrow { font-size: 10px; color: #2a7bbd; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; }
+.build-title { font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
+.build-author-row { font-size: 12px; color: #888; }
+.build-author-row strong { color: #1a1a1a; font-weight: 600; }
+.build-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.build-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 3px 8px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.build-tag.blue { color: #1d6fb8; border-color: #a7cdec; background: #eaf4fc; }
+.build-total { padding: 14px 16px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; }
+.build-total-label { font-size: 10px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 4px; }
+.build-total-num { font-size: 20px; font-weight: 700; line-height: 1.3; margin-bottom: 4px; }
+.build-total-sub { font-size: 11px; color: #888; }
+.engagement-row { display: flex; align-items: center; gap: 8px; }
+.share-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; cursor: pointer; color: #555; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
+.share-btn:hover { border-color: #4a9edd; color: #4a9edd; }
+
+/* SECTION */
+.section-divider { display: flex; align-items: center; justify-content: space-between; padding: 28px 0 16px; border-bottom: 0.5px solid #e5e5e5; margin-bottom: 20px; }
+.section-divider h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.section-count { font-size: 11px; color: #888; }
+
+/* PART CARD — no photo/desc/tags/retailer columns: parts_snapshot doesn't
+   carry that data, so we don't fabricate it. */
+.parts-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+.part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; transition: border-color 0.15s; display: flex; flex-direction: column; }
+.part-card:hover { border-color: #cfcdc4; }
+.part-card-top { display: flex; gap: 14px; padding: 16px 18px; align-items: flex-start; }
+.part-thumb { flex-shrink: 0; width: 88px; height: 88px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.part-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.part-thumb-fallback { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 4px; }
+.part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.part-type { font-size: 10px; color: #2a7bbd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+.part-brand { font-size: 16px; font-weight: 700; line-height: 1.2; }
+.part-model { font-size: 12px; color: #666; }
+.part-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.part-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 0.5px solid #eee; background: #fafaf8; border-radius: 0 0 6px 6px; }
+.part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-price { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
+.part-affiliate-partner { font-size: 11px; color: #888; }
+.part-affiliate-partner strong { color: #444; font-weight: 600; }
+.part-affiliate-stock { display: inline-block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
+.part-affiliate-stock.in { color: #2f7a3d; background: #eaf5ec; border: 0.5px solid #b7dcbe; }
+.part-affiliate-stock.out { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
+.part-affiliate-btn { flex-shrink: 0; font-size: 11px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; padding: 8px 14px; border-radius: 4px; text-decoration: none; transition: background 0.15s; letter-spacing: 0.02em; }
+.part-affiliate-btn:hover { background: #1e63a0; }
+.part-affiliate-disclosure { font-size: 10px; color: #a8a5a0; padding: 8px 18px 0; }
+.part-affiliate-range { font-size: 11px; color: #666; font-weight: 500; margin-left: 6px; }
+.part-affiliate-options { border-top: 0.5px solid #eee; padding: 0; }
+.part-affiliate-options-summary { list-style: none; cursor: pointer; padding: 10px 18px; font-size: 11px; color: #2a7bbd; font-weight: 600; user-select: none; }
+.part-affiliate-options-summary::-webkit-details-marker { display: none; }
+.part-affiliate-options-summary::after { content: ' ▾'; }
+.part-affiliate-options[open] .part-affiliate-options-summary::after { content: ' ▴'; }
+.part-affiliate-variant-list { display: flex; flex-direction: column; padding: 0 0 6px; background: #f4f3ee; border-radius: 0 0 6px 6px; }
+.part-affiliate-variant-header { padding: 10px 18px 8px; border-bottom: 0.5px solid #dcdbd3; }
+.part-affiliate-variant-header-label { font-size: 10.5px; color: #555; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.part-affiliate-variant-header-note { font-size: 11.5px; color: #6b6a63; font-style: italic; margin-top: 5px; letter-spacing: 0; text-transform: none; font-weight: 400; line-height: 1.45; }
+.part-affiliate-variant-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 18px; border-top: 0.5px solid #e8e6df; }
+.part-affiliate-variant-row:first-child { border-top: none; }
+.part-affiliate-variant-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-variant-label { font-size: 12px; color: #333; font-weight: 600; }
+.part-affiliate-variant-sub { font-size: 11px; color: #888; }
+.part-affiliate-variant-sub strong { color: #444; font-weight: 600; }
+.part-affiliate-variant-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; padding: 6px 12px; border-radius: 4px; text-decoration: none; transition: background 0.15s; }
+.part-affiliate-variant-btn:hover { background: #eaf4fc; }
+.no-parts-note { text-align: center; color: #999; padding: 24px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; }
+
+/* NOT FOUND */
+.not-found { text-align: center; padding: 80px 20px; color: #999; }
+.not-found-title { font-size: 15px; font-weight: 700; color: #555; margin-bottom: 8px; }
+.not-found-sub { font-size: 13px; line-height: 1.6; }
+.not-found a { display: inline-block; margin-top: 16px; color: #2a7bbd; font-size: 13px; text-decoration: none; }
+
+/* VERIFIED & CORRECTED — real data, from builds.edit_history */
+.part-verified-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 8px; margin-top: 2px; }
+.verified-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #166534; background: #e8f5ee; border: 0.5px solid #86cfad; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.verified-badge:hover { background: #d9f0e3; }
+.contest-link { font-size: 11px; color: #999; text-decoration: none; }
+.contest-link:hover { color: #c25d3a; text-decoration: underline; }
+.contest-link.flagged { color: #b45309; font-weight: 600; cursor: default; }
+.verified-diff-panel { display: none; margin-top: 8px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 12px 14px; }
+.verified-diff-panel.open { display: block; animation: fadeIn 0.15s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+.verified-diff-row { font-size: 12px; color: #444; line-height: 1.6; }
+.verified-diff-row + .verified-diff-row { margin-top: 8px; padding-top: 8px; border-top: 0.5px dashed #e5e2d8; }
+.verified-diff-field { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #888; display: block; margin-bottom: 2px; }
+.verified-diff-from { color: #9b1c1c; text-decoration: line-through; }
+.verified-diff-to { color: #166534; font-weight: 700; }
+.verified-diff-meta { font-size: 10px; color: #aaa; margin-top: 2px; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a1a; color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; opacity: 0; transition: all 0.25s ease; pointer-events: none; z-index: 999; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+@media (max-width: 760px) {
+  .build-header { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="gunforma-builds.html" class="nav-link active">Builds</a>
+    <a href="gunforma-parts-catalog.html" class="nav-link">Parts catalog</a>
+    <a href="#" class="nav-link">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a href="gunforma-signin.html" class="nav-btn" id="nav-signin">Sign in</a>
+    <a href="gunforma-post-build-v6.html" class="nav-btn cta">Post your build</a>
+  </div>
+</nav>
+
+<div class="breadcrumb">
+  <a href="gunforma-builds.html">Builds</a><span class="breadcrumb-sep">/</span>
+  <span id="breadcrumb-platform">—</span><span class="breadcrumb-sep">/</span>
+  <span id="breadcrumb-name">—</span>
+</div>
+
+<div class="page" id="page">
+
+  <!-- BUILD HEADER -->
+  <div class="build-header">
+    <div class="build-hero" id="build-hero"><span>Loading…</span></div>
+    <div class="build-meta">
+      <div>
+        <div class="build-eyebrow" id="build-eyebrow">—</div>
+        <h1 class="build-title" id="build-title">—</h1>
+      </div>
+      <div class="build-author-row" id="build-author-row">—</div>
+      <div class="build-tags" id="build-tags"></div>
+      <div class="build-total">
+        <div class="build-total-label">This build</div>
+        <div class="build-total-num" id="build-tier-label">—</div>
+        <div class="build-total-sub" id="build-parts-sub">—</div>
+      </div>
+      <div class="engagement-row">
+        <button class="share-btn" title="Copy link" onclick="copyLink()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          Copy link
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="build-gallery" id="build-gallery" style="display:none;"></div>
+
+  <div class="legal-notice">
+    <span class="legal-notice-icon">⚠</span>
+    <div class="legal-notice-text">
+      <strong>For information and inspiration only — not legal advice.</strong>
+      <details class="legal-details">
+        <summary></summary>
+        <p>This build, and every part shown on it, may not be legal to own, buy, ship, or configure this way where you live. Laws on magazine capacity, barrel and overall length, optics/light mounting, suppressors, SBRs, and dealer transfer requirements vary by federal, state, and local jurisdiction and change often. You are solely responsible for confirming compliance with all applicable laws before purchasing, assembling, or modifying anything based on this page. When in doubt, consult your local FFL or an attorney — <a href="#">Legal</a>.</p>
+      </details>
+    </div>
+  </div>
+
+  <div id="parts-container"></div>
+
+</div>
+
+<div class="footer-bar">
+  <div class="footer-legal">Gunforma is for information and inspiration only and does not provide legal advice. Firearms, magazines, optics, barrels, suppressors, and other parts shown here may be restricted or illegal depending on your federal, state, and local laws. You are solely responsible for knowing and following all laws that apply to you before buying, owning, shipping, assembling, or modifying anything referenced on this site.</div>
+  <div class="footer-links-row">
+    <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+    <span class="footer-txt"><a href="index.html">Home</a> · <a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg">Done</span></div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+// Session-aware nav: signed-in users see their username + a Sign out button
+// in place of the default "Sign in" link. Anon users see the default nav.
+async function updateNavAuth() {
+  var signInEl = document.getElementById('nav-signin');
+  if (!signInEl) return;
+  var { data: sess } = await sb.auth.getSession();
+  var user = sess && sess.session && sess.session.user;
+  if (!user) return;
+
+  var { data: profile } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle();
+  var displayName = (profile && profile.username) || user.email || 'Signed in';
+  signInEl.textContent = displayName;
+  signInEl.removeAttribute('href');
+  signInEl.style.cursor = 'default';
+
+  var signOut = document.createElement('a');
+  signOut.href = '#';
+  signOut.className = signInEl.className;
+  signOut.textContent = 'Sign out';
+  signOut.onclick = async function(e) {
+    e.preventDefault();
+    await sb.auth.signOut();
+    location.reload();
+  };
+  signInEl.parentNode.insertBefore(signOut, signInEl);
+}
+updateNavAuth();
+
+const CATEGORY_LABELS = {
+  optics:'Optics', lights:'Weapon Lights', grips:'Grip Modules', slides:'Slides',
+  barrels:'Barrels & Compensators', triggers:'Triggers', sights:'Sights',
+  magwells:'Magwells', holsters:'Holsters', mags:'Magazines',
+  paintjob:'Paint Job & Finish', knife:'Tactical Knife', misc:'Miscellaneous'
+};
+function categoryLabel(key) { return CATEGORY_LABELS[key] || key || 'Miscellaneous'; }
+
+function escH(s) { return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
+function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+function relTime(iso) {
+  if (!iso) return '—';
+  var diffMs = Date.now() - new Date(iso).getTime();
+  var mins = Math.max(0, Math.round(diffMs/60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins+' min ago';
+  var hrs = Math.round(mins/60);
+  if (hrs < 24) return hrs+' hr ago';
+  var days = Math.round(hrs/24);
+  return days+' day'+(days!==1?'s':'')+' ago';
+}
+function formatDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+}
+
+// edit_history entries for a given part_index, in the order they were
+// recorded (append-only, so this is already chronological).
+function partHistory(build, idx) {
+  return (build.edit_history || []).filter(function(e){ return e.part_index === idx; });
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.add('show');
+  clearTimeout(window._tt);
+  window._tt = setTimeout(() => t.classList.remove('show'), 2600);
+}
+function copyLink() {
+  navigator.clipboard.writeText(window.location.href).then(function() {
+    showToast('Link copied');
+  }).catch(function() {
+    showToast('Could not copy link');
+  });
+}
+
+// ============================================================
+// LOAD
+// ============================================================
+// productId -> { url, affiliate_url, price, in_stock, partnerName }
+// Populated by loadAffiliates before renderBuild. Products with no default
+// variant, or no affiliate link on that variant, simply have no entry —
+// their part card renders without the affiliate CTA.
+var AFFILIATE_BY_PRODUCT_ID = {};
+
+// productId -> primary_image_url from the default variant. Separate from
+// AFFILIATE_BY_PRODUCT_ID because a product can have an image without any
+// affiliate link (and vice-versa).
+var IMAGE_BY_PRODUCT_ID = {};
+
+async function loadBuild() {
+  const id = new URLSearchParams(window.location.search).get('id');
+  if (!id) { renderNotFound(); return; }
+
+  // No status filter needed here — RLS's "Public can view approved builds"
+  // policy already means this returns nothing for anon if the build isn't
+  // approved, so a not-yet-approved build correctly 404s instead of leaking.
+  const { data, error } = await sb
+    .from('builds')
+    .select('id,name,tier,activities,description,created_at,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (error || !data) { console.error(error); renderNotFound(); return; }
+
+  await loadAffiliates(data);
+  renderBuild(data);
+}
+
+async function loadAffiliates(build) {
+  var refIds = (build.parts_snapshot || [])
+    .map(function(p){ return p.refId; })
+    .filter(function(x){ return !!x; });
+  if (!refIds.length) return;
+
+  // Fetch every variant and every affiliate link for each product. builds
+  // store product_id only (not variant_id), so we don't know which variant
+  // the user bought — surface all buyable listings and let the shopper pick.
+  var { data, error } = await sb
+    .from('product_variants')
+    .select('id,product_id,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))')
+    .in('product_id', refIds);
+
+  if (error) { console.error('loadAffiliates', error); return; }
+
+  // Cache the default variant's image per product — used by the part-card
+  // thumbnail regardless of whether the product also has affiliate links.
+  (data || []).forEach(function(v) {
+    if (v.is_default && v.primary_image_url && !IMAGE_BY_PRODUCT_ID[v.product_id]) {
+      IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
+    }
+  });
+
+  // Group variants by product, flatten to (variant, link) rows, drop
+  // variants with no links. axes stays as raw values so we can figure out
+  // per-product which columns are worth showing in the expanded list header.
+  var byProduct = {};
+  (data || []).forEach(function(v) {
+    var links = v.affiliate_links || [];
+    if (!links.length) return;
+    if (!byProduct[v.product_id]) byProduct[v.product_id] = [];
+    var axes = extractVariantAxes(v);
+    links.forEach(function(l) {
+      byProduct[v.product_id].push({
+        variantId:   v.id,
+        axes:        axes,
+        isDefault:   !!v.is_default,
+        url:         l.affiliate_url || l.url,
+        price:       l.street_price != null ? Number(l.street_price) : null,
+        in_stock:    l.in_stock,
+        is_primary:  !!l.is_primary,
+        partnerName: displayPartnerName(l.partners ? l.partners.name : null),
+      });
+    });
+  });
+
+  Object.keys(byProduct).forEach(function(productId) {
+    var listings = byProduct[productId];
+    var activeAxes = computeActiveAxes(listings);
+    listings.forEach(function(l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes); });
+    // Sort: primary first, then in-stock, then price ascending (nulls last).
+    listings.sort(function(a, b) {
+      if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+      if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
+      if (a.price == null && b.price == null) return 0;
+      if (a.price == null) return 1;
+      if (b.price == null) return -1;
+      return a.price - b.price;
+    });
+
+    var priced = listings.filter(function(l){ return l.price != null; });
+    var inStockPriced = priced.filter(function(l){ return l.in_stock === true; });
+    var priceSet = (inStockPriced.length ? inStockPriced : priced).map(function(l){ return l.price; });
+    var hero = listings[0];  // primary if present, else best in-stock, else cheapest
+
+    AFFILIATE_BY_PRODUCT_ID[productId] = {
+      hero: hero,
+      listings: listings,
+      activeAxes: activeAxes,
+      minPrice: priceSet.length ? Math.min.apply(null, priceSet) : null,
+      maxPrice: priceSet.length ? Math.max.apply(null, priceSet) : null,
+      anyInStock: listings.some(function(l){ return l.in_stock === true; }),
+      variantsWithListings: new Set(listings.map(function(l){ return l.variantId; })).size,
+    };
+  });
+}
+
+// Distinguishing axes a product's variants can differ on. Order here is
+// the order columns show in the expanded list header + row values.
+var VARIANT_AXES = [
+  { key: 'color',                 label: 'Color'         },
+  { key: 'finish',                label: 'Finish'        },
+  { key: 'optic_cut',             label: 'Optic Cut'     },
+  { key: 'bundle',                label: 'Bundle'        },
+  { key: 'clamp',                 label: 'Clamp'         },
+  { key: 'manual_safety_variant', label: 'Manual Safety' },
+];
+
+function extractVariantAxes(v) {
+  return {
+    color:                 v.color || null,
+    finish:                v.finish || null,
+    optic_cut:             v.optic_cut || null,
+    bundle:                v.bundle || null,
+    clamp:                 v.clamp || null,
+    manual_safety_variant: v.manual_safety_variant === true ? 'Yes'
+                         : v.manual_safety_variant === false ? 'No'
+                         : null,
+  };
+}
+
+// An axis is "active" for a product only if at least two of its listings
+// disagree on it — an axis every variant shares carries no information for
+// the shopper and just clutters the header + rows.
+function computeActiveAxes(listings) {
+  return VARIANT_AXES.filter(function(axis) {
+    var seen = new Set();
+    listings.forEach(function(l) { seen.add(l.axes[axis.key]); });
+    return seen.size > 1;
+  });
+}
+
+function formatVariantLabel(axes, activeAxes) {
+  if (!activeAxes.length) return 'Standard';
+  return activeAxes.map(function(a) {
+    var val = axes[a.key];
+    return val != null && val !== '' ? val : '—';
+  }).join(' / ');
+}
+
+// The DB stores the underlying affiliate network alongside the retailer
+// (e.g. "OpticsPlanet (Awin)") for internal accounting. Shoppers only
+// need the retailer name — strip anything trailing in parens.
+function displayPartnerName(name) {
+  if (!name) return name;
+  return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
+}
+
+function renderNotFound() {
+  document.getElementById('page').innerHTML =
+    '<div class="not-found">'+
+      '<div class="not-found-title">Build not found</div>'+
+      '<div class="not-found-sub">This build doesn\'t exist, or hasn\'t been approved yet.</div>'+
+      '<a href="index.html">← Back to Gunforma</a>'+
+    '</div>';
+}
+
+function renderBuild(b) {
+  document.title = b.name + ' — Gunforma';
+
+  var platformName = b.platforms ? b.platforms.name : 'Unknown pistol';
+  var username = b.profiles ? b.profiles.username : 'unknown';
+  var photos = b.build_photos || [];
+  var hero = photos.find(function(p){ return p.is_hero; }) || photos[0];
+  var gallery = photos.filter(function(p){ return p !== hero; });
+
+  document.getElementById('breadcrumb-platform').textContent = platformName;
+  document.getElementById('breadcrumb-name').textContent = b.name;
+
+  document.getElementById('build-eyebrow').textContent = (b.activities||[]).join(' · ') || platformName;
+  document.getElementById('build-title').textContent = b.name;
+  document.getElementById('build-author-row').innerHTML = 'Built by <strong>'+escH(username)+'</strong> · Posted '+formatDate(b.created_at);
+
+  document.getElementById('build-tags').innerHTML =
+    '<span class="build-tag blue">'+escH(platformName)+'</span>'+
+    (b.activities||[]).map(function(a){ return '<span class="build-tag">'+escH(a)+'</span>'; }).join('');
+
+  var partsCount = (b.parts_snapshot||[]).length;
+  document.getElementById('build-tier-label').textContent = b.tier === 'full' ? 'Full build' : 'Minimum build';
+  document.getElementById('build-parts-sub').textContent = partsCount ? partsCount+' part'+(partsCount!==1?'s':'')+' listed' : 'No parts listed yet';
+
+  document.getElementById('build-hero').innerHTML = hero
+    ? '<img src="'+photoUrl(hero.storage_path)+'" alt="" style="width:100%;height:100%;object-fit:cover;" />'
+    : '<span>No hero photo yet</span>';
+
+  var galleryEl = document.getElementById('build-gallery');
+  if (gallery.length) {
+    galleryEl.style.display = 'flex';
+    galleryEl.innerHTML = gallery.map(function(p){ return '<div class="gallery-thumb"><img src="'+photoUrl(p.thumb_path)+'" alt="" /></div>'; }).join('');
+  } else {
+    galleryEl.style.display = 'none';
+  }
+
+  document.getElementById('parts-container').innerHTML = renderParts(b);
+}
+
+function renderParts(b) {
+  var parts = b.parts_snapshot || [];
+  if (!parts.length) {
+    return '<div class="no-parts-note">No parts listed for this build yet.</div>';
+  }
+
+  var groups = {}, order = [];
+  parts.forEach(function(p, idx) {
+    var cat = p.category || 'misc';
+    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    groups[cat].push(idx);
+  });
+
+  return order.map(function(cat) {
+    var idxs = groups[cat];
+    return '<div class="section-divider"><h2>'+escH(categoryLabel(cat))+'</h2><span class="section-count">'+idxs.length+' part'+(idxs.length!==1?'s':'')+'</span></div>'+
+      '<div class="parts-list">'+idxs.map(function(idx){ return renderPartCard(b, parts[idx], idx); }).join('')+'</div>';
+  }).join('');
+}
+
+function renderPartCard(build, part, idx) {
+  var history = partHistory(build, idx);
+  var pendingTag = part.pending ? '<span class="part-tag" style="color:#b45309;background:#fef3e2;border-color:#f9b860;">Pending catalog review</span>' : '';
+  var verifiedHtml = history.length ? buildVerifiedHtml(build.id, idx, history) : '';
+  var affiliateHtml = renderAffiliateRow(part);
+
+  // Thumbnail: default variant's primary_image_url when we have a real
+  // product; hand-typed pending parts have no refId and get the fallback slot.
+  var thumbUrl = part.refId ? IMAGE_BY_PRODUCT_ID[part.refId] : null;
+  var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
+  var thumbHtml = thumbUrl
+    ? '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>'
+    : '<div class="part-thumb"><div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div></div>';
+
+  return '<div class="part-card">'+
+    '<div class="part-card-top">'+
+      thumbHtml +
+      '<div class="part-body">'+
+        '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
+        '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
+        '<div class="part-model">'+escH(part.name||'Unnamed part')+'</div>'+
+        (pendingTag ? '<div class="part-tags">'+pendingTag+'</div>' : '')+
+        verifiedHtml+
+      '</div>'+
+    '</div>'+
+    affiliateHtml+
+  '</div>';
+}
+
+// Only rendered when the part maps to a real product that has at least one
+// affiliate listing across any of its variants. Hand-typed pending parts
+// have no refId; products without seller coverage have no lookup entry;
+// both silently omit the CTA row.
+function renderAffiliateRow(part) {
+  if (!part.refId) return '';
+  var aff = AFFILIATE_BY_PRODUCT_ID[part.refId];
+  if (!aff || !aff.hero) return '';
+
+  var hero = aff.hero;
+  var multi = aff.listings.length > 1;
+
+  // Price label: single listing → exact price, multi with a range → "From $X",
+  // no price data at all → "See price".
+  var priceHtml;
+  if (aff.minPrice != null && multi && aff.maxPrice !== aff.minPrice) {
+    priceHtml = '<span class="part-affiliate-price">From $'+aff.minPrice.toFixed(2)+'</span>'+
+                '<span class="part-affiliate-range">up to $'+aff.maxPrice.toFixed(2)+'</span>';
+  } else if (aff.minPrice != null) {
+    priceHtml = '<span class="part-affiliate-price">$'+aff.minPrice.toFixed(2)+'</span>';
+  } else if (hero.price != null) {
+    priceHtml = '<span class="part-affiliate-price">$'+hero.price.toFixed(2)+'</span>';
+  } else {
+    priceHtml = '<span class="part-affiliate-price">See price</span>';
+  }
+
+  var stockHtml = aff.anyInStock
+    ? '<span class="part-affiliate-stock in">In stock</span>'
+    : (aff.listings.every(function(l){ return l.in_stock === false; })
+        ? '<span class="part-affiliate-stock out">Out of stock</span>'
+        : '');
+
+  var partnerHtml = hero.partnerName
+    ? '<span class="part-affiliate-partner">at <strong>'+escH(hero.partnerName)+'</strong>'+stockHtml+'</span>'
+    : (stockHtml ? '<span class="part-affiliate-partner">'+stockHtml+'</span>' : '');
+
+  var btnLabel = hero.partnerName ? 'Buy at '+escH(hero.partnerName)+' ↗' : 'View listing ↗';
+
+  var mainRow = '<div class="part-affiliate">'+
+      '<div class="part-affiliate-info">'+priceHtml+partnerHtml+'</div>'+
+      '<a class="part-affiliate-btn" href="'+escH(hero.url)+'" target="_blank" rel="noopener sponsored nofollow">'+btnLabel+'</a>'+
+    '</div>';
+
+  if (!multi) return mainRow;
+
+  var optionsLabel = 'See all '+aff.listings.length+' options';
+  var headerRow =
+    '<div class="part-affiliate-variant-header">'+
+      (aff.activeAxes.length
+        ? '<div class="part-affiliate-variant-header-label">'+escH(aff.activeAxes.map(function(a){ return a.label; }).join(' / '))+'</div>'
+        : '')+
+      '<div class="part-affiliate-variant-header-note">Prices and availability may vary based on promotions and in-stock items.</div>'+
+    '</div>';
+  var variantRows = aff.listings.map(function(l) {
+    var lPrice = l.price != null ? '$'+l.price.toFixed(2) : 'See price';
+    var lStock = l.in_stock === true
+      ? '<span class="part-affiliate-stock in">In stock</span>'
+      : l.in_stock === false
+        ? '<span class="part-affiliate-stock out">Out of stock</span>'
+        : '';
+    var lPartner = l.partnerName ? 'at <strong>'+escH(l.partnerName)+'</strong>' : '';
+    var lBtn = l.partnerName ? escH(l.partnerName)+' ↗' : 'View ↗';
+    return '<div class="part-affiliate-variant-row">'+
+        '<div class="part-affiliate-variant-info">'+
+          '<span class="part-affiliate-variant-label">'+escH(l.variantLabel)+'</span>'+
+          '<span class="part-affiliate-variant-sub">'+lPrice+' '+lPartner+' '+lStock+'</span>'+
+        '</div>'+
+        '<a class="part-affiliate-variant-btn" href="'+escH(l.url)+'" target="_blank" rel="noopener sponsored nofollow">'+lBtn+'</a>'+
+      '</div>';
+  }).join('');
+
+  return mainRow +
+    '<details class="part-affiliate-options">'+
+      '<summary class="part-affiliate-options-summary">'+optionsLabel+'</summary>'+
+      '<div class="part-affiliate-variant-list">'+headerRow+variantRows+'</div>'+
+    '</details>';
+}
+
+// ============================================================
+// VERIFIED & CORRECTED — real data from builds.edit_history.
+// ============================================================
+function buildVerifiedHtml(buildId, partIdx, history) {
+  var key = buildId+'-'+partIdx;
+  var contested = history.some(function(h){ return h.status === 'contested'; });
+  var diffRows = history.map(function(h) {
+    return '<div class="verified-diff-row">'+
+        '<span class="verified-diff-field">'+escH(h.field)+'</span>'+
+        '<span class="verified-diff-from">"'+escH(h.from_value)+'"</span> → <span class="verified-diff-to">"'+escH(h.to_value)+'"</span>'+
+        '<div class="verified-diff-meta">Corrected by '+escH(h.edited_by)+' · '+relTime(h.edited_at)+'</div>'+
+      '</div>';
+  }).join('');
+
+  return '<div class="part-verified-row">'+
+      '<button class="verified-badge" onclick="toggleVerifiedDiff(\''+key+'\')">✓ Verified &amp; corrected by Gunforma</button>'+
+      (contested
+        ? '<span class="contest-link flagged">Flagged for review ✓</span>'
+        : '<a href="#" class="contest-link" onclick="flagForReview(\''+buildId+'\','+partIdx+');return false;">This looks wrong — flag for review</a>')+
+    '</div>'+
+    '<div class="verified-diff-panel" id="diff-'+key+'">'+diffRows+'</div>';
+}
+
+function toggleVerifiedDiff(key) {
+  var panel = document.getElementById('diff-'+key);
+  if (panel) panel.classList.toggle('open');
+}
+
+// Calls the narrow contest_build_part RPC — it can only flip one matching
+// edit_history entry's status to 'contested' on an already-approved build,
+// nothing else on the row is reachable through it. No sign-in required by
+// design (lightweight flagging, not a full dispute workflow yet).
+async function flagForReview(buildId, partIdx) {
+  const { error } = await sb.rpc('contest_build_part', { p_build_id: buildId, p_part_index: partIdx });
+  if (error) { console.error(error); showToast('Something went wrong — try again'); return; }
+  showToast('Sent back for review — thanks for flagging this');
+  await loadBuild();
+}
+
+loadBuild();
+</script>
+</body>
+</html>

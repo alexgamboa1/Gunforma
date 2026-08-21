@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sign in — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-link { font-size: 12px; color: #888780; text-decoration: none; }
+.nav-link:hover { color: #e8e6e1; }
+
+.hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.hero-title { font-size: 26px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; margin-bottom: 8px; }
+.hero-sub { font-size: 13px; color: #888780; line-height: 1.6; }
+
+.card-wrap { display: flex; justify-content: center; padding: 0 20px 60px; margin-top: -24px; }
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px; width: 100%; max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+
+.field { margin-bottom: 16px; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.field-label a { font-size: 11px; font-weight: 600; color: #2a7bbd; text-decoration: none; text-transform: none; letter-spacing: 0; }
+.field-label a:hover { text-decoration: underline; }
+.field-input { width: 100%; font-size: 14px; padding: 11px 12px; border: 0.5px solid #e5e5e5; border-radius: 6px; font-family: inherit; color: #1a1a1a; transition: border-color 0.15s; }
+.field-input:focus { outline: none; border-color: #4a9edd; }
+.field-input.error { border-color: #e25c3a; }
+.field-input-wrap { position: relative; }
+.field-input-wrap .field-input { padding-right: 40px; }
+.field-toggle-visibility { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: none; border: none; padding: 4px; cursor: pointer; color: #999; display: flex; align-items: center; justify-content: center; }
+.field-toggle-visibility:hover { color: #555; }
+.field-toggle-visibility svg { width: 18px; height: 18px; }
+
+.btn-submit { width: 100%; font-size: 13px; font-weight: 700; background: #1a1a1a; color: #fff; border: none; padding: 13px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
+.btn-submit:hover:not(:disabled) { background: #333; }
+.btn-submit:disabled { background: #ccc; cursor: not-allowed; }
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+.spinner.show { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.global-error { background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 11px 14px; font-size: 12px; color: #9b1c1c; margin-bottom: 16px; line-height: 1.5; display: none; }
+.global-error.show { display: block; }
+
+.card-footer { text-align: center; font-size: 12px; color: #888; margin-top: 6px; }
+.card-footer a { color: #2a7bbd; font-weight: 600; text-decoration: none; }
+.card-footer a:hover { text-decoration: underline; }
+
+.forgot-section { display: none; }
+.forgot-section.show { display: block; }
+.forgot-back { background: none; border: none; font-size: 12px; color: #4a9edd; cursor: pointer; font-family: inherit; padding: 0; margin-bottom: 16px; font-weight: 600; }
+.forgot-back:hover { text-decoration: underline; }
+.forgot-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.forgot-sub { font-size: 13px; color: #666; margin-bottom: 20px; line-height: 1.6; }
+
+.reset-sent { display: none; text-align: center; padding: 8px 0; }
+.reset-sent.show { display: block; }
+.reset-icon { font-size: 36px; margin-bottom: 12px; }
+.reset-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.reset-sub { font-size: 13px; color: #666; line-height: 1.6; }
+.cf-turnstile { margin-bottom: 16px; }
+.field-help { font-size: 11px; margin-top: 5px; line-height: 1.5; min-height: 0; }
+.field-help.error { color: #e25c3a; }
+.or-divider { display: flex; align-items: center; gap: 10px; margin: 20px 0; font-size: 12px; color: #999; }
+.or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: #e5e5e5; }
+.btn-google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px; background: #fff; border: 1px solid #e5e5e5; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; color: #1a1a1a; cursor: pointer; transition: border-color 0.15s; }
+.btn-google:hover { border-color: #4a9edd; }
+.btn-google svg { flex-shrink: 0; }
+</style>
+<script>
+  // Turnstile site key — swap in Cloudflare's always-passes test key for
+  // local development so widgets don't show "Unable to connect" when the
+  // real key's hostname allowlist doesn't include localhost.
+  window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
+    ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+
+  // Explicit-render callback: Turnstile invokes this once its script loads
+  // (registered via ?onload= in the script src). We render every .cf-turnstile
+  // widget by hand so we can pass the env-swapped sitekey. Each widget's id
+  // is stashed on data-widget-id for later getResponse()/reset() calls.
+  window.onloadTurnstileCallback = function() {
+    var run = function() {
+      document.querySelectorAll('.cf-turnstile').forEach(function(el) {
+        el.dataset.widgetId = turnstile.render(el, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme:   el.dataset.theme || 'light',
+        });
+      });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  };
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <a href="gunforma-signup.html" class="nav-link">Create account →</a>
+</nav>
+
+<div class="hero-strip">
+  <div class="hero-eyebrow">Welcome back</div>
+  <div class="hero-title">Sign in to Gunforma</div>
+  <p class="hero-sub">Your builds, your Armory, your community.</p>
+</div>
+
+<div class="card-wrap">
+  <div class="card">
+
+    <div class="global-error" id="global-error"></div>
+
+    <!-- SIGN IN FORM -->
+    <div id="signin-section">
+      <div class="field">
+        <label class="field-label">Email</label>
+        <input class="field-input" type="email" id="email" placeholder="your@email.com" autocomplete="email" oninput="onEmailInput(this,'email-help')" />
+        <div class="field-help" id="email-help"></div>
+      </div>
+
+      <div class="field" style="margin-bottom:20px;">
+        <label class="field-label">
+          Password
+          <a href="#" onclick="showForgot();return false;">Forgot password?</a>
+        </label>
+        <div class="field-input-wrap">
+          <input class="field-input" type="password" id="password" placeholder="Your password" autocomplete="current-password" />
+          <button type="button" class="field-toggle-visibility" id="password-toggle" onclick="togglePasswordVisibility('password', this)" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="cf-turnstile" id="ts-signin" data-theme="light"></div>
+
+      <button class="btn-submit" id="submit-btn" onclick="handleSignIn()">
+        <div class="spinner" id="spinner"></div>
+        <span id="btn-text">Sign in →</span>
+      </button>
+
+      <div class="or-divider">or</div>
+
+      <button type="button" class="btn-google" onclick="handleGoogleSignIn()">
+        <svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true">
+          <path fill="#4285F4" d="M45.12 24.5c0-1.56-.14-3.06-.4-4.5H24v8.51h11.84c-.51 2.75-2.06 5.08-4.39 6.64v5.52h7.11c4.16-3.83 6.56-9.47 6.56-16.17z"/>
+          <path fill="#34A853" d="M24 46c5.94 0 10.92-1.97 14.56-5.33l-7.11-5.52c-1.97 1.32-4.49 2.1-7.45 2.1-5.73 0-10.58-3.87-12.31-9.07H4.34v5.7C7.96 41.07 15.4 46 24 46z"/>
+          <path fill="#FBBC05" d="M11.69 28.18C11.25 26.86 11 25.45 11 24s.25-2.86.69-4.18v-5.7H4.34C2.85 17.09 2 20.45 2 24c0 3.55.85 6.91 2.34 9.88l7.35-5.7z"/>
+          <path fill="#EA4335" d="M24 10.75c3.23 0 6.13 1.11 8.41 3.29l6.31-6.31C34.91 4.18 29.93 2 24 2 15.4 2 7.96 6.93 4.34 14.12l7.35 5.7c1.73-5.2 6.58-9.07 12.31-9.07z"/>
+        </svg>
+        Sign in with Google
+      </button>
+
+      <div class="card-footer">
+        Don't have an account? <a href="gunforma-signup.html">Create one free</a>
+      </div>
+    </div>
+
+    <!-- FORGOT PASSWORD -->
+    <div class="forgot-section" id="forgot-section">
+      <button class="forgot-back" onclick="hideForgot()">← Back to sign in</button>
+      <div class="forgot-title">Reset your password</div>
+      <div class="forgot-sub">Enter your email and we'll send you a link to reset your password.</div>
+      <div class="field">
+        <label class="field-label">Email</label>
+        <input class="field-input" type="email" id="reset-email" placeholder="your@email.com" autocomplete="email" oninput="onEmailInput(this,'reset-email-help')" />
+        <div class="field-help" id="reset-email-help"></div>
+      </div>
+      <div class="cf-turnstile" id="ts-reset" data-theme="light"></div>
+      <button class="btn-submit" onclick="handleReset()" style="background:#4a9edd;">
+        <span>Send reset link →</span>
+      </button>
+    </div>
+
+    <!-- RESET SENT -->
+    <div class="reset-sent" id="reset-sent">
+      <div class="reset-icon">✉️</div>
+      <div class="reset-title">Reset link sent</div>
+      <div class="reset-sub">Check your email for a link to reset your password. It expires in 1 hour.</div>
+      <div class="card-footer" style="margin-top:16px;"><a href="gunforma-signin.html">Back to sign in</a></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG
+// Replace PASTE_YOUR_ANON_KEY_HERE with your anon key
+// Supabase Dashboard → Settings → API → anon public
+// ============================================================
+var SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co'; // Gunforma-v2
+var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+// Origin used when we hand Supabase a URL to email the user (password reset,
+// email confirmation). Detects local dev by hostname so the same file works
+// on the local static server and in production without a build step. Any
+// URL passed here must also be on Supabase's Redirect URL allowlist —
+// dashboard → Authentication → URL Configuration — or GoTrue silently
+// swaps it for the project's Site URL default.
+function siteBaseUrl() {
+  return window.location.hostname === 'localhost'
+    ? 'http://localhost:8794'
+    : 'https://gunforma.com';
+}
+
+// Turnstile widgets are rendered by onloadTurnstileCallback (see head) and
+// each widget's id is stashed on data-widget-id. These helpers wrap the
+// underlying getResponse/reset so handlers only need the element id.
+function getTurnstileToken(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  return (window.turnstile && wid) ? turnstile.getResponse(wid) : '';
+}
+function resetTurnstileWidget(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  if (window.turnstile && wid) turnstile.reset(wid);
+}
+
+// Redirect if already signed in
+sb.auth.getSession().then(function(res) {
+  if (res.data && res.data.session) {
+    redirectByRole(res.data.session.user.id);
+  }
+});
+
+// ============================================================
+// REDIRECT BY ROLE
+// ============================================================
+async function redirectByRole(userId) {
+  try {
+    var res = await sb.from('profiles').select('role, onboarding_complete').eq('id', userId).maybeSingle();
+    var profile = res.data || {};
+    // Onboarding check comes BEFORE role routing — an admin OAuth user (rare
+    // but possible) still needs a username before they land in the admin queue.
+    if (!profile.onboarding_complete) {
+      window.location.href = 'gunforma-complete-profile.html';
+      return;
+    }
+    if (profile.role === 'admin') {
+      window.location.href = 'gunforma-admin-queue.html';
+    } else {
+      window.location.href = 'index.html';
+    }
+  } catch (e) {
+    window.location.href = 'index.html';
+  }
+}
+
+// ============================================================
+// SIGN IN
+// ============================================================
+async function handleSignIn() {
+  // Turnstile guard — if the script hasn't loaded yet, or the user hasn't
+  // solved the challenge, treat both cases the same and prompt them.
+  var turnstileToken = getTurnstileToken('ts-signin');
+  if (!turnstileToken) { showError('Please complete the verification.'); return; }
+
+  var emailInput = document.getElementById('email');
+  var email      = sanitizeEmail(emailInput.value);
+  emailInput.value = email;   // reflect the cleaned value back to the user
+  onEmailInput(emailInput, 'email-help');
+  var password   = document.getElementById('password').value;
+
+  showError('');
+
+  if (!email)    { showError('Enter your email address.'); return; }
+  if (!password) { showError('Enter your password.'); return; }
+
+  setLoading(true);
+
+  try {
+    // captchaToken is verified server-side by Supabase against your
+    // Turnstile secret (Auth → Attack Protection → CAPTCHA). Without that
+    // dashboard setting configured, Supabase will reject every sign-in
+    // with "captcha protection: request disallowed".
+    var res = await sb.auth.signInWithPassword({
+      email: email,
+      password: password,
+      options: { captchaToken: turnstileToken },
+    });
+
+    if (res.error) {
+      setLoading(false);
+      // Turnstile tokens are single-use — reset the widget so the next
+      // attempt after a wrong password doesn't reuse a spent token.
+      resetTurnstileWidget('ts-signin');
+      var msg = res.error.message;
+      if (msg.toLowerCase().includes('invalid'))          msg = 'Incorrect email or password. Try again.';
+      if (msg.toLowerCase().includes('not confirmed'))    msg = 'Please verify your email first — check your inbox for the confirmation link.';
+      if (msg.toLowerCase().includes('captcha'))          msg = 'Verification failed. Please try again.';
+      showError(msg);
+      return;
+    }
+
+    // Small delay to ensure profile row is ready
+    await new Promise(function(r) { setTimeout(r, 400); });
+    await redirectByRole(res.data.user.id);
+
+  } catch (err) {
+    setLoading(false);
+    resetTurnstileWidget('ts-signin');
+    showError('Something went wrong. Please try again.');
+  }
+}
+
+// ============================================================
+// FORGOT PASSWORD
+// ============================================================
+function showForgot() {
+  document.getElementById('signin-section').style.display = 'none';
+  document.getElementById('forgot-section').classList.add('show');
+  showError('');
+}
+function hideForgot() {
+  document.getElementById('signin-section').style.display = 'block';
+  document.getElementById('forgot-section').classList.remove('show');
+  document.getElementById('reset-sent').classList.remove('show');
+  showError('');
+}
+async function handleReset() {
+  // Same guard pattern as sign in — Turnstile token from the reset widget
+  // is required before we hit Supabase.
+  var turnstileToken = getTurnstileToken('ts-reset');
+  if (!turnstileToken) { showError('Please complete the verification.'); return; }
+
+  var resetEmailInput = document.getElementById('reset-email');
+  var email = sanitizeEmail(resetEmailInput.value);
+  resetEmailInput.value = email;
+  onEmailInput(resetEmailInput, 'reset-email-help');
+  if (!email) { showError('Enter your email address.'); return; }
+  var res = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo:   siteBaseUrl() + '/gunforma-signin.html',
+    captchaToken: turnstileToken,
+  });
+  if (res.error) {
+    // Tokens are single-use — cycle it so a fixable error (e.g. rate-limited
+    // email) doesn't leave the widget stuck on a spent token.
+    resetTurnstileWidget('ts-reset');
+    var msg = res.error.message;
+    if (msg.toLowerCase().includes('captcha')) msg = 'Verification failed. Please try again.';
+    showError(msg);
+    return;
+  }
+  document.getElementById('forgot-section').classList.remove('show');
+  document.getElementById('reset-sent').classList.add('show');
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function showError(msg) {
+  var el = document.getElementById('global-error');
+  if (msg) { el.textContent = msg; el.classList.add('show'); }
+  else      { el.classList.remove('show'); }
+}
+function setLoading(on) {
+  document.getElementById('spinner').classList.toggle('show', on);
+  document.getElementById('btn-text').textContent = on ? 'Signing in…' : 'Sign in →';
+  document.getElementById('submit-btn').disabled = on;
+}
+// Real-time email input guard: emails can't contain spaces (leading, trailing,
+// or internal). Show the warning as soon as any space appears; clear it as
+// soon as the user removes them. Actual space-stripping happens in
+// sanitizeEmail() on submit — we don't rewrite the input value under the
+// user's cursor while they're typing.
+function onEmailInput(inputEl, helpElId) {
+  var helpEl = document.getElementById(helpElId);
+  if (!helpEl) return;
+  if (/\s/.test(inputEl.value)) {
+    helpEl.textContent = 'Email addresses cannot contain spaces.';
+    helpEl.className = 'field-help error';
+  } else {
+    helpEl.textContent = '';
+    helpEl.className = 'field-help';
+  }
+}
+
+// Trim + strip every space (leading, trailing, internal) so a fat-fingered
+// paste like " user @ email.com " still submits cleanly.
+function sanitizeEmail(raw) {
+  return String(raw || '').replace(/\s+/g, '');
+}
+
+// Google OAuth entry — Supabase generates the provider redirect URL and
+// navigates the tab there. On return we land back on this page; the existing
+// sb.auth.getSession() + redirectByRole() at the bottom of the script picks
+// up the session from the URL fragment and routes admin vs regular users.
+// The redirectTo URL must be on Supabase's Redirect URL allowlist AND on
+// Google Cloud Console's authorized redirect URIs for your OAuth client.
+async function handleGoogleSignIn() {
+  showError('');
+  var res = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: siteBaseUrl() + '/gunforma-signin.html' },
+  });
+  if (res && res.error) showError(res.error.message);
+}
+
+function togglePasswordVisibility(inputId, btn) {
+  var input = document.getElementById(inputId);
+  var isHidden = input.type === 'password';
+  input.type = isHidden ? 'text' : 'password';
+  btn.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+  btn.innerHTML = isHidden
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+}
+</script>
+</body>
+</html>

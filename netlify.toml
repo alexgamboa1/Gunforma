@@ -1,0 +1,29 @@
+[[redirects]]
+  from = "/field-notes"
+  to = "/field-notes.html"
+  status = 200
+
+[[redirects]]
+  from = "/field-notes/"
+  to = "/field-notes.html"
+  status = 200
+
+[[redirects]]
+  from = "/field-notes/:slug"
+  to = "/field-notes-review.html"
+  status = 200
+
+[[redirects]]
+  from = "/field-notes/:slug/"
+  to = "/field-notes-review.html"
+  status = 200
+
+[[redirects]]
+  from = "/parts/compare/:slug"
+  to = "/field-notes-comparison.html"
+  status = 200
+
+[[redirects]]
+  from = "/parts/compare/:slug/"
+  to = "/field-notes-comparison.html"
+  status = 200

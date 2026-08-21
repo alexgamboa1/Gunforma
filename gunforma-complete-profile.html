@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Complete your profile — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* NAV */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-link { font-size: 12px; color: #888780; text-decoration: none; background: none; border: none; font-family: inherit; cursor: pointer; }
+.nav-link:hover { color: #e8e6e1; }
+
+/* HERO STRIP */
+.hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.hero-title { font-size: 26px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; margin-bottom: 8px; }
+.hero-sub { font-size: 13px; color: #888780; line-height: 1.6; }
+
+/* CARD */
+.card-wrap { display: flex; justify-content: center; padding: 0 20px 60px; margin-top: -24px; }
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px; width: 100%; max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+
+/* FORM */
+.field { margin-bottom: 16px; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.field-input { width: 100%; font-size: 14px; padding: 11px 12px; border: 0.5px solid #e5e5e5; border-radius: 6px; font-family: inherit; color: #1a1a1a; transition: border-color 0.15s; }
+.field-input:focus { outline: none; border-color: #4a9edd; }
+.field-input.error { border-color: #e25c3a; }
+.field-input.success { border-color: #22a06b; }
+.field-help { font-size: 11px; margin-top: 5px; line-height: 1.5; }
+.field-help.error   { color: #e25c3a; }
+.field-help.success { color: #22a06b; }
+.field-help.neutral { color: #999; }
+
+/* USERNAME AVAILABILITY */
+.username-status { font-size: 11px; font-weight: 700; }
+.username-status.checking { color: #999; }
+.username-status.available { color: #22a06b; }
+.username-status.taken { color: #e25c3a; }
+
+/* CHECKBOX */
+.checkbox-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.checkbox-row input { margin-top: 3px; accent-color: #4a9edd; flex-shrink: 0; cursor: pointer; }
+.checkbox-row label { font-size: 12px; color: #666; line-height: 1.6; cursor: pointer; }
+.checkbox-row a { color: #2a7bbd; text-decoration: none; }
+.checkbox-row a:hover { text-decoration: underline; }
+
+/* BUTTON */
+.btn-submit { width: 100%; font-size: 13px; font-weight: 700; background: #4a9edd; color: #fff; border: none; padding: 13px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-submit:hover:not(:disabled) { background: #2a7bbd; }
+.btn-submit:disabled { background: #b0cfe8; cursor: not-allowed; }
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+.spinner.show { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* FOOTER LINK */
+.card-footer { text-align: center; font-size: 12px; color: #888; margin-top: 18px; }
+.card-footer a, .card-footer button { color: #2a7bbd; font-weight: 600; text-decoration: none; background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; font-size: 12px; }
+.card-footer a:hover, .card-footer button:hover { text-decoration: underline; }
+
+/* GLOBAL ERROR */
+.global-error { background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 11px 14px; font-size: 12px; color: #9b1c1c; margin-bottom: 16px; line-height: 1.5; display: none; }
+.global-error.show { display: block; }
+
+/* SIGNED-IN-AS BANNER */
+.signed-in-as { font-size: 11px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; border-radius: 6px; padding: 8px 12px; margin-bottom: 18px; line-height: 1.5; }
+.signed-in-as strong { color: #1a1a1a; font-weight: 700; }
+
+.form-section { }
+.cf-turnstile { margin-bottom: 16px; }
+
+/* Full-page loading gate (before we know whether to show or redirect) */
+.gate { display: flex; align-items: center; justify-content: center; flex: 1; font-size: 12px; color: #888; }
+</style>
+<script>
+  // Turnstile site key — swap in Cloudflare's always-passes test key for
+  // local development so widgets don't show "Unable to connect" when the
+  // real key's hostname allowlist doesn't include localhost.
+  window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
+    ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+
+  // Explicit-render callback: Turnstile invokes this once its script loads
+  // (registered via ?onload= in the script src). We render every .cf-turnstile
+  // widget by hand so we can pass the env-swapped sitekey. Each widget's id
+  // is stashed on data-widget-id for later getResponse()/reset() calls.
+  window.onloadTurnstileCallback = function() {
+    var run = function() {
+      document.querySelectorAll('.cf-turnstile').forEach(function(el) {
+        el.dataset.widgetId = turnstile.render(el, {
+          sitekey: TURNSTILE_SITE_KEY,
+          theme:   el.dataset.theme || 'light',
+        });
+      });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  };
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <button class="nav-link" onclick="signOutAndBounce()">Not you? Sign out</button>
+</nav>
+
+<div class="hero-strip">
+  <div class="hero-eyebrow">Almost there</div>
+  <div class="hero-title">Complete your profile</div>
+  <p class="hero-sub">Pick a username and accept the terms to start posting builds.</p>
+</div>
+
+<!-- Session gate: rendered while we resolve the session; replaced by the card
+     once we know the user is auth'd + not-yet-onboarded, or replaced by a
+     redirect if they're anon or already-onboarded. -->
+<div class="card-wrap" id="page-body">
+  <div class="gate" id="gate">Checking your session…</div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+// Origin used when we hand Supabase a URL to email the user. Detects local
+// dev by hostname so the same file works on the local static server and in
+// production without a build step.
+function siteBaseUrl() {
+  return window.location.hostname === 'localhost'
+    ? 'http://localhost:8794'
+    : 'https://gunforma.com';
+}
+
+// Turnstile widget helpers — same pattern used across the auth pages.
+function getTurnstileToken(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  return (window.turnstile && wid) ? turnstile.getResponse(wid) : '';
+}
+function resetTurnstileWidget(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  if (window.turnstile && wid) turnstile.reset(wid);
+}
+
+// ============================================================
+// STATE
+// ============================================================
+var CURRENT_USER = null;
+var usernameTimer = null;
+var usernameValid = false;
+
+// ============================================================
+// INIT — three possible outcomes:
+//   (a) no session       → bounce to sign-in
+//   (b) already onboarded → bounce to home (they don't belong here)
+//   (c) needs onboarding  → render the form
+// ============================================================
+(async function init() {
+  var { data: sess } = await sb.auth.getSession();
+  CURRENT_USER = sess && sess.session && sess.session.user;
+  if (!CURRENT_USER) { window.location.href = 'gunforma-signin.html'; return; }
+
+  var { data: profile, error } = await sb
+    .from('profiles')
+    .select('onboarding_complete, username, marketing_consent')
+    .eq('id', CURRENT_USER.id)
+    .maybeSingle();
+  if (error) { showFatal("Couldn't load your profile. Try signing in again."); return; }
+  if (profile && profile.onboarding_complete) { window.location.href = 'index.html'; return; }
+
+  renderForm(CURRENT_USER, profile || {});
+})();
+
+function showFatal(msg) {
+  document.getElementById('gate').textContent = msg;
+}
+
+async function signOutAndBounce() {
+  await sb.auth.signOut();
+  window.location.href = 'gunforma-signin.html';
+}
+
+// ============================================================
+// FORM RENDER — swaps the "Checking your session…" gate for the real card
+// once we know the user needs to onboard. Kept in JS so the form only ever
+// hits the DOM after we've confirmed the user has the right to see it.
+// ============================================================
+function renderForm(user, profile) {
+  var body = document.getElementById('page-body');
+  var emailLine = user.email
+    ? '<div class="signed-in-as">Signed in as <strong>'+escH(user.email)+'</strong></div>'
+    : '';
+
+  body.innerHTML =
+    '<div class="card">'+
+      '<div class="global-error" id="global-error"></div>'+
+      emailLine +
+      '<div class="form-section" id="form-section">'+
+        '<div class="field">'+
+          '<label class="field-label">Username <span class="username-status" id="username-status"></span></label>'+
+          '<input class="field-input" type="text" id="username" placeholder="e.g. jmiller_tx" autocomplete="username" oninput="onUsernameInput()"/>'+
+          '<div class="field-help neutral" id="username-help">Letters, numbers, and underscores only. This shows on your public builds.</div>'+
+        '</div>'+
+        '<div class="checkbox-row">'+
+          '<input type="checkbox" id="legal"/>'+
+          '<label for="legal">I confirm I am 18 years of age or older and agree to Gunforma\'s <a href="#">Terms of Service</a> and <a href="#">Privacy Policy</a>. I understand this platform discusses legally-owned firearms and accessories.</label>'+
+        '</div>'+
+        '<div class="checkbox-row">'+
+          '<input type="checkbox" id="marketing"/>'+
+          '<label for="marketing">I\'d like to receive emails from Gunforma about new builds, parts releases, community highlights, and product recommendations. You can unsubscribe at any time. <a href="#">Privacy Policy</a></label>'+
+        '</div>'+
+        '<div class="cf-turnstile" id="ts-onboard" data-theme="light"></div>'+
+        '<button class="btn-submit" id="submit-btn" onclick="handleFinish()">'+
+          '<div class="spinner" id="spinner"></div>'+
+          '<span id="btn-text">Finish setup →</span>'+
+        '</button>'+
+      '</div>'+
+    '</div>';
+
+  // If Turnstile's script has already loaded (because init ran fast), the
+  // callback that scans .cf-turnstile elements already fired for a DOM that
+  // didn't yet contain the widget. Render it explicitly now to catch up.
+  if (window.turnstile) {
+    var el = document.getElementById('ts-onboard');
+    if (el && !el.dataset.widgetId) {
+      el.dataset.widgetId = turnstile.render(el, { sitekey: TURNSTILE_SITE_KEY, theme: 'light' });
+    }
+  }
+}
+
+// ============================================================
+// USERNAME AVAILABILITY — same logic as signup: shape check first, then
+// a debounced round-trip to profiles to see if it's already in use.
+// ============================================================
+function onUsernameInput() {
+  var val = document.getElementById('username').value.trim();
+  var status = document.getElementById('username-status');
+  var help   = document.getElementById('username-help');
+  var input  = document.getElementById('username');
+  clearTimeout(usernameTimer);
+  usernameValid = false;
+
+  if (!val) {
+    status.textContent = '';
+    input.className = 'field-input';
+    help.textContent = 'Letters, numbers, and underscores only. This shows on your public builds.';
+    help.className = 'field-help neutral';
+    return;
+  }
+  if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+    status.textContent = 'Invalid';
+    status.className = 'username-status taken';
+    input.className = 'field-input error';
+    help.textContent = '3–24 characters, letters/numbers/underscores only.';
+    help.className = 'field-help error';
+    return;
+  }
+  status.textContent = 'Checking…';
+  status.className = 'username-status checking';
+  input.className = 'field-input';
+
+  usernameTimer = setTimeout(async function() {
+    var res = await sb.from('profiles').select('username').eq('username', val).maybeSingle();
+    if (res.data) {
+      status.textContent = 'Taken';
+      status.className = 'username-status taken';
+      input.className = 'field-input error';
+      help.textContent = 'That username is already in use. Try another.';
+      help.className = 'field-help error';
+      usernameValid = false;
+    } else {
+      status.textContent = 'Available ✓';
+      status.className = 'username-status available';
+      input.className = 'field-input success';
+      help.textContent = '';
+      usernameValid = true;
+    }
+  }, 500);
+}
+
+// ============================================================
+// SUBMIT
+// ============================================================
+async function handleFinish() {
+  // Turnstile guard first — same pattern as sign-in/sign-up.
+  var turnstileToken = getTurnstileToken('ts-onboard');
+  if (!turnstileToken) { showError('Please complete the verification.'); return; }
+
+  var username = document.getElementById('username').value.trim();
+  var legal    = document.getElementById('legal').checked;
+  var marketing= document.getElementById('marketing').checked;
+
+  if (!username || !usernameValid) { showError('Choose an available username first.'); return; }
+  if (!legal) { showError('You must confirm you are 18 or older and agree to the Terms of Service.'); return; }
+
+  setLoading(true);
+  var { error } = await sb
+    .from('profiles')
+    .update({ username: username, marketing_consent: marketing, onboarding_complete: true })
+    .eq('id', CURRENT_USER.id);
+  setLoading(false);
+
+  if (error) {
+    // Uniqueness race (someone else grabbed the username in the last few
+    // hundred ms) or any other DB error — reset Turnstile so the token
+    // isn't wasted and the user can just try a different name.
+    resetTurnstileWidget('ts-onboard');
+    if (error.code === '23505' || /duplicate|unique/i.test(error.message)) {
+      showError('That username was just taken. Try another.');
+    } else {
+      showError(error.message || 'Something went wrong — please try again.');
+    }
+    return;
+  }
+  // Land on the home page. There's no dedicated "welcome" screen yet.
+  window.location.href = 'index.html';
+}
+
+// ============================================================
+// UI helpers
+// ============================================================
+function showError(msg) {
+  var el = document.getElementById('global-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle('show', !!msg);
+}
+function setLoading(on) {
+  var btn = document.getElementById('submit-btn');
+  var sp  = document.getElementById('spinner');
+  var tx  = document.getElementById('btn-text');
+  if (!btn) return;
+  btn.disabled = on;
+  sp.classList.toggle('show', on);
+  tx.textContent = on ? 'Saving…' : 'Finish setup →';
+}
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+</body>
+</html>

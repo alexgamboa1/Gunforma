@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Build your P365 — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafaf8; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+
+/* PAGE */
+.page { max-width: 1200px; margin: 0 auto; padding: 28px 32px 64px; }
+.page-header { margin-bottom: 20px; }
+.page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; margin-bottom: 18px; }
+.target-gun-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.target-gun-label { font-size: 11px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; margin-right: 4px; }
+.target-gun-btn { font-size: 12px; padding: 6px 12px; border: 0.5px solid #d5d3ca; background: #fff; border-radius: 4px; cursor: pointer; font-family: inherit; color: #333; transition: all 0.15s; }
+.target-gun-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
+.target-gun-btn.active { background: #eaf4fc; border-color: #4a9edd; color: #1d6fb8; font-weight: 600; }
+
+/* BANNERS */
+.banners { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.banner { font-size: 12px; padding: 10px 14px; border-radius: 6px; border: 0.5px solid; display: flex; align-items: flex-start; gap: 10px; line-height: 1.5; }
+.banner.info    { background: #eaf4fc; border-color: #a7cdec; color: #1d6fb8; }
+.banner.warning { background: #fff8ea; border-color: #e8d9ad; color: #6b5a2a; }
+.banner-icon { flex-shrink: 0; font-weight: 700; }
+
+/* LAYOUT */
+.builder-layout { display: grid; grid-template-columns: 1fr 340px; gap: 28px; align-items: start; }
+@media (max-width: 900px) { .builder-layout { grid-template-columns: 1fr; } .summary-panel { position: static !important; } }
+
+/* CATEGORY ACCORDION */
+.category-block { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+.category-block.hidden { display: none; }
+.category-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; cursor: pointer; user-select: none; background: #fff; transition: background 0.15s; }
+.category-head:hover { background: #fafaf8; }
+.category-block.open .category-head { border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.category-name-wrap { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.category-name { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1a1a1a; }
+.category-selected-chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 3px 10px; background: #eaf5ec; color: #2f7a3d; border: 0.5px solid #b7dcbe; border-radius: 20px; font-weight: 600; }
+.category-selected-chip .chip-x { cursor: pointer; font-size: 13px; line-height: 1; opacity: 0.7; margin-left: 2px; }
+.category-selected-chip .chip-x:hover { opacity: 1; }
+.category-count { font-size: 11px; color: #888; }
+.category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 600; }
+.category-body { padding: 12px 18px 18px; display: none; }
+.category-block.open .category-body { display: block; }
+.category-hint { font-size: 12px; color: #888; font-style: italic; padding: 8px 0; }
+
+/* PRODUCT CARDS */
+.product-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.product-card { border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; background: #fff; transition: border-color 0.15s; }
+.product-card:hover { border-color: #cfcdc4; }
+.product-card.selected { border-color: #4a9edd; box-shadow: 0 0 0 1px rgba(74,158,221,0.3); }
+.product-card-img { height: 110px; background: #f4f3ee; overflow: hidden; display: flex; align-items: center; justify-content: center; border-bottom: 0.5px solid #eee; }
+.product-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.product-card-img-fallback { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
+.product-card-body { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.product-brand { font-size: 9px; color: #2a7bbd; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.product-name { font-size: 13px; font-weight: 600; line-height: 1.25; color: #1a1a1a; }
+.product-desc { font-size: 11px; color: #666; line-height: 1.4; margin-top: 2px; max-height: 3.7em; overflow: hidden; }
+.product-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; padding-top: 8px; border-top: 0.5px solid #eee; }
+.product-msrp { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.product-variants-note { font-size: 10px; color: #888; margin-top: -2px; }
+.product-btn { font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 4px; cursor: pointer; border: 0.5px solid; font-family: inherit; letter-spacing: 0.02em; }
+.product-btn.add { color: #fff; background: #2a7bbd; border-color: #2a7bbd; }
+.product-btn.add:hover { background: #1e63a0; }
+.product-btn.remove { color: #a25334; background: #fff; border-color: #eec2ae; }
+.product-btn.remove:hover { background: #faece7; }
+
+/* SMALL PARTS SUBGROUPS */
+.smallparts-group { margin-top: 14px; }
+.smallparts-group:first-child { margin-top: 0; }
+.smallparts-group-name { font-size: 11px; color: #666; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; margin-bottom: 8px; }
+
+/* EMPTY STATES */
+.empty-state { padding: 14px; background: #fafaf8; border: 0.5px dashed #d5d3ca; border-radius: 6px; font-size: 12px; color: #888; text-align: left; }
+
+/* SUMMARY PANEL (Build Post) */
+.summary-panel { position: sticky; top: 72px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.summary-title { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; font-weight: 600; }
+.summary-heading { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+.summary-target { font-size: 12px; color: #666; }
+.summary-target strong { color: #1a1a1a; font-weight: 600; }
+.summary-empty { font-size: 12px; color: #888; font-style: italic; padding: 10px 0; }
+.summary-items { display: flex; flex-direction: column; }
+.summary-item { padding: 12px 0; border-top: 0.5px solid #eee; display: flex; flex-direction: column; gap: 4px; }
+.summary-item:first-child { border-top: none; padding-top: 0; }
+.summary-item-cat { font-size: 9px; color: #2a7bbd; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 600; }
+.summary-item-name { font-size: 12.5px; font-weight: 600; color: #1a1a1a; line-height: 1.3; }
+.summary-item-variant-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #666; }
+.summary-item-variant-select { font-size: 11px; padding: 2px 4px; border: 0.5px solid #d5d3ca; border-radius: 3px; background: #fafaf8; font-family: inherit; color: #333; max-width: 160px; }
+.summary-item-price-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+.summary-item-msrp { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.summary-item-affiliate { font-size: 11px; color: #666; line-height: 1.4; }
+.summary-item-affiliate a { color: #2a7bbd; text-decoration: none; font-weight: 600; }
+.summary-item-affiliate a:hover { text-decoration: underline; }
+.summary-item-affiliate .affiliate-better { color: #2f7a3d; font-weight: 600; }
+.summary-total-row { display: flex; align-items: baseline; justify-content: space-between; padding-top: 14px; border-top: 0.5px solid #d5d3ca; }
+.summary-total-label { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: #666; font-weight: 600; }
+.summary-total-amount { font-size: 20px; font-weight: 700; color: #1a1a1a; }
+.summary-total-sub { font-size: 10px; color: #a8a5a0; font-style: italic; margin-top: 4px; text-align: right; }
+.summary-notes { display: flex; flex-direction: column; gap: 6px; padding-top: 12px; border-top: 0.5px solid #eee; }
+.summary-note { font-size: 11px; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 6px 10px; border-radius: 4px; line-height: 1.4; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+/* LOADING */
+.loading-veil { padding: 60px 20px; text-align: center; font-size: 13px; color: #888; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="#">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build-v6.html">Post your build</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Build your P365</div>
+    <div class="page-sub">Pick parts in any order — we'll filter out anything that doesn't fit as you go.</div>
+    <div class="target-gun-row" id="target-gun-row">
+      <span class="target-gun-label">Building for:</span>
+      <span id="target-gun-buttons" style="display:contents;"></span>
+    </div>
+  </div>
+
+  <div class="banners" id="banners"></div>
+
+  <div class="builder-layout">
+    <div class="builder-main" id="main-col">
+      <div class="loading-veil" id="loading-veil">Loading catalog…</div>
+    </div>
+    <aside>
+      <div class="summary-panel" id="summary-panel">
+        <div class="summary-title">Build post</div>
+        <div class="summary-heading">Your P365 build</div>
+        <div class="summary-empty">Pick a part to start your build.</div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="footer-bar">
+  <div class="footer-txt">© 2026 Gunforma · <a href="#">Affiliate disclosure</a> · <a href="#">Legal</a></div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+// Session-aware nav: signed-in users see their username + a Sign out button
+// in place of the default "Sign in" link. Anon users see the default nav.
+async function updateNavAuth() {
+  var signInEl = document.getElementById('nav-signin');
+  if (!signInEl) return;
+  var { data: sess } = await sb.auth.getSession();
+  var user = sess && sess.session && sess.session.user;
+  if (!user) return;
+
+  var { data: profile } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle();
+  var displayName = (profile && profile.username) || user.email || 'Signed in';
+  signInEl.textContent = displayName;
+  signInEl.removeAttribute('href');
+  signInEl.style.cursor = 'default';
+
+  var signOut = document.createElement('a');
+  signOut.href = '#';
+  signOut.className = signInEl.className;
+  signOut.textContent = 'Sign out';
+  signOut.onclick = async function(e) {
+    e.preventDefault();
+    await sb.auth.signOut();
+    location.reload();
+  };
+  signInEl.parentNode.insertBefore(signOut, signInEl);
+}
+updateNavAuth();
+
+// ============================================================
+// CONFIG
+// ============================================================
+// Categories the user picks a single item for. Order = display order.
+const MAIN_CATEGORIES = [
+  { key: 'slide',       label: 'Slide' },
+  { key: 'barrel',      label: 'Barrel' },
+  { key: 'compensator', label: 'Compensator' },
+  { key: 'frame',       label: 'Frame' },
+  { key: 'magwell',     label: 'Magwell' },
+  { key: 'trigger',     label: 'Trigger' },
+  { key: 'optic',       label: 'Optic / Sight' },
+  { key: 'light',       label: 'Light' },
+];
+
+// Small parts share one accordion — they're each single-select internally,
+// but grouped visually so the main list stays scannable.
+const SMALL_PART_CATEGORIES = [
+  { key: 'mag_release',     label: 'Magazine Release' },
+  { key: 'basepad',         label: 'Basepad' },
+  { key: 'slide_release',   label: 'Slide Release' },
+  { key: 'safety_selector', label: 'Safety Selector' },
+  { key: 'takedown_lever',  label: 'Takedown Lever' },
+  { key: 'slide_plate',     label: 'Slide Plate' },
+];
+const SMALL_PART_KEY_SET = new Set(SMALL_PART_CATEGORIES.map(c => c.key));
+
+// ============================================================
+// DATA (populated by loadData)
+// ============================================================
+let P365_PLATFORM_ID = null;
+let GUNS = [];                    // P365 gun models
+let PRODUCTS_BY_CATEGORY = {};    // { slide: [product,...], barrel: [...] }
+let PRODUCT_BY_ID = {};           // id -> product
+let BSR_BY_BARREL = {};           // barrel_product_id -> [rows]
+let MFR_BY_MAGWELL = {};          // magwell_product_id -> [rows]
+let MFR_BY_FRAME = {};            // frame_product_id -> [rows]
+let BSR_LOOKUP = {};              // `${barrel_id}::${slide_id}` -> row (compat notes)
+let MFR_LOOKUP = {};              // `${magwell_id}::${frame_id}` -> row (compat notes)
+
+// ============================================================
+// STATE
+// ============================================================
+const STATE = {
+  targetGun: null,          // guns row (drives housing_class for frame filter)
+  selections: {             // category key -> product (main categories)
+    slide: null, barrel: null, compensator: null, frame: null,
+    magwell: null, trigger: null, optic: null, light: null,
+  },
+  smallParts: {},           // small-part category key -> product
+  variantByProductId: {},   // productId -> variantId override (else the is_default variant)
+  openCategory: null,       // which accordion is expanded
+};
+
+// ============================================================
+// LOAD
+// ============================================================
+async function loadData() {
+  // Platform
+  const { data: platform, error: pErr } = await sb.from('platforms').select('id').eq('slug','p365').maybeSingle();
+  if (pErr || !platform) { showFatal("Couldn't load platform data."); return; }
+  P365_PLATFORM_ID = platform.id;
+
+  // Everything else in parallel
+  const [gunsRes, productsRes, bsrRes, mfrRes] = await Promise.all([
+    sb.from('guns').select('id,slug,name,housing_class,integrated_comp,barrel_length_in,slide_length_in,oem_capacity')
+      .eq('platform_id', P365_PLATFORM_ID)
+      .order('housing_class').order('name'),
+    sb.from('products')
+      .select(
+        'id,slug,name,category,description,url,'+
+        'manufacturers(name),'+
+        'product_platforms!inner(platform_id),'+
+        // Two FKs between products/product_variants (products.lowest_price_variant_id
+        // reverse-embeds). Name the forward one explicitly.
+        'product_variants!product_variants_product_id_fkey(id,msrp,is_default,color,finish,optic_cut,bundle,clamp,manual_safety_variant,sku,primary_image_url,'+
+          'affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))'+
+        '),'+
+        // Explicit FK names — there's a composite (id,category) FK on some
+        // of these tables plus the simple product_id FK, and PostgREST refuses
+        // to guess between the two. product_id_fkey is the one we want.
+        'slide_specs!slide_specs_product_id_fkey(*),'+
+        'barrel_specs!barrel_specs_product_id_fkey(*),'+
+        'compensator_specs!compensator_specs_product_id_fkey(*),'+
+        'frame_specs!frame_specs_product_id_fkey(*),'+
+        'magwell_specs(*)'
+      )
+      .eq('product_platforms.platform_id', P365_PLATFORM_ID)
+      .order('name'),
+    sb.from('barrel_slide_requirements').select('barrel_product_id,slide_product_id,compatibility_note'),
+    sb.from('magwell_frame_requirements').select('magwell_product_id,frame_product_id,compatibility_note'),
+  ]);
+
+  if (gunsRes.error)     { showFatal('Load error (guns): '     + gunsRes.error.message);     return; }
+  if (productsRes.error) { showFatal('Load error (products): ' + productsRes.error.message); return; }
+  if (bsrRes.error)      { showFatal('Load error (BSR): '      + bsrRes.error.message);      return; }
+  if (mfrRes.error)      { showFatal('Load error (MFR): '      + mfrRes.error.message);      return; }
+
+  GUNS = gunsRes.data || [];
+
+  // Flatten single-row spec embeds ([{...}] -> {...} or null) for ergonomics.
+  const SPEC_KEYS = ['slide_specs','barrel_specs','compensator_specs','frame_specs','magwell_specs'];
+  (productsRes.data || []).forEach(p => {
+    SPEC_KEYS.forEach(k => { p[k] = Array.isArray(p[k]) ? (p[k][0] || null) : (p[k] || null); });
+    PRODUCT_BY_ID[p.id] = p;
+    if (!PRODUCTS_BY_CATEGORY[p.category]) PRODUCTS_BY_CATEGORY[p.category] = [];
+    PRODUCTS_BY_CATEGORY[p.category].push(p);
+  });
+
+  // Whitelist lookups
+  (bsrRes.data || []).forEach(r => {
+    (BSR_BY_BARREL[r.barrel_product_id] = BSR_BY_BARREL[r.barrel_product_id] || []).push(r);
+    BSR_LOOKUP[r.barrel_product_id+'::'+r.slide_product_id] = r;
+  });
+  (mfrRes.data || []).forEach(r => {
+    (MFR_BY_MAGWELL[r.magwell_product_id] = MFR_BY_MAGWELL[r.magwell_product_id] || []).push(r);
+    (MFR_BY_FRAME[r.frame_product_id]     = MFR_BY_FRAME[r.frame_product_id]     || []).push(r);
+    MFR_LOOKUP[r.magwell_product_id+'::'+r.frame_product_id] = r;
+  });
+
+  // Default the target gun to the base P365 if present, else the first gun.
+  STATE.targetGun = GUNS.find(g => g.housing_class === 'p365') || GUNS[0] || null;
+
+  renderAll();
+}
+
+function showFatal(msg) {
+  const el = document.getElementById('loading-veil');
+  if (el) el.textContent = msg;
+}
+
+// ============================================================
+// COMPATIBILITY RULES (pure functions of product + STATE)
+// ============================================================
+
+// Rule 2 helper: barrel_slide_requirements is a whitelist. Empty = universal fit
+// (all barrels that match slide length work). Populated = only listed slides.
+function barrelFitsSlide(barrel, slide) {
+  const wl = BSR_BY_BARREL[barrel.id] || [];
+  if (!wl.length) return true;
+  return wl.some(r => r.slide_product_id === slide.id);
+}
+
+function isThreadedBarrelType(t) {
+  return t === 'threaded' || t === 'threaded-and-ported';
+}
+
+function slideOk(slide, sel) {
+  // Rule 1 + 2 against barrel
+  if (sel.barrel) {
+    if (slide.slide_specs?.barrel_length_in !== sel.barrel.barrel_specs?.barrel_length_in) return false;
+    if (!barrelFitsSlide(sel.barrel, slide)) return false;
+  }
+  // Rule 4: comp selected means slide must not be integrated-comp
+  if (sel.compensator && slide.slide_specs?.integrated_comp) return false;
+  return true;
+}
+
+function barrelOk(barrel, sel) {
+  // Rule 1 + 2 against slide
+  if (sel.slide) {
+    if (barrel.barrel_specs?.barrel_length_in !== sel.slide.slide_specs?.barrel_length_in) return false;
+    if (!barrelFitsSlide(barrel, sel.slide)) return false;
+  }
+  // Rule 5: if a comp is selected, disallow ported barrels
+  if (sel.compensator && barrel.barrel_specs?.barrel_type === 'ported') return false;
+  // Rule 3 (reverse): if a comp is selected, barrel thread must match
+  if (sel.compensator) {
+    const c = sel.compensator.compensator_specs;
+    if (c?.requires_threaded_barrel && !c?.comes_with_barrel) {
+      if (!isThreadedBarrelType(barrel.barrel_specs?.barrel_type)) return false;
+    }
+    if (c?.thread_pitch && barrel.barrel_specs?.thread_pitch !== c.thread_pitch) return false;
+  }
+  return true;
+}
+
+function compensatorOk(comp, sel) {
+  const cs = comp.compensator_specs || {};
+  // Rules 4 + 5: category visibility handled elsewhere, but keep defensive
+  if (sel.slide?.slide_specs?.integrated_comp) return false;
+  if (sel.barrel?.barrel_specs?.barrel_type === 'ported') return false;
+  // Rule 3 against barrel
+  if (sel.barrel) {
+    const bt = sel.barrel.barrel_specs?.barrel_type;
+    if (cs.requires_threaded_barrel && !cs.comes_with_barrel && !isThreadedBarrelType(bt)) return false;
+    if (cs.thread_pitch && sel.barrel.barrel_specs?.thread_pitch !== cs.thread_pitch) return false;
+  }
+  return true;
+}
+
+function frameOk(frame, sel, targetGun) {
+  // Rule 6: housing_class must match the target gun
+  if (targetGun && frame.frame_specs?.housing_class !== targetGun.housing_class) return false;
+  // Rule 8 (reverse): if a magwell is selected, this frame must be in that magwell's whitelist
+  if (sel.magwell) {
+    const wl = MFR_BY_MAGWELL[sel.magwell.id] || [];
+    if (!wl.length || !wl.some(r => r.frame_product_id === frame.id)) return false;
+  }
+  return true;
+}
+
+function magwellOk(magwell, sel) {
+  // Rule 8: magwell whitelist against selected frame
+  if (sel.frame) {
+    const wl = MFR_BY_MAGWELL[magwell.id] || [];
+    if (!wl.length) return true; // universal (currently unused per spec)
+    return wl.some(r => r.frame_product_id === sel.frame.id);
+  }
+  return true;
+}
+
+function isCompatible(product, cat) {
+  const sel = STATE.selections;
+  switch (cat) {
+    case 'slide':       return slideOk(product, sel);
+    case 'barrel':      return barrelOk(product, sel);
+    case 'compensator': return compensatorOk(product, sel);
+    case 'frame':       return frameOk(product, sel, STATE.targetGun);
+    case 'magwell':     return magwellOk(product, sel);
+    default:            return true;   // trigger / optic / light / small parts
+  }
+}
+
+// Compensator category is HIDDEN (Rule 4 + 5) when a picked slide is integrated
+// or a picked barrel is ported. Everything else always shows.
+function isCategoryVisible(catKey) {
+  if (catKey !== 'compensator') return true;
+  if (STATE.selections.slide?.slide_specs?.integrated_comp) return false;
+  if (STATE.selections.barrel?.barrel_specs?.barrel_type === 'ported') return false;
+  return true;
+}
+
+// ============================================================
+// SELECTION HELPERS
+// ============================================================
+function currentVariant(product) {
+  if (!product?.product_variants?.length) return null;
+  const overrideId = STATE.variantByProductId[product.id];
+  if (overrideId) {
+    const v = product.product_variants.find(x => x.id === overrideId);
+    if (v) return v;
+  }
+  return product.product_variants.find(v => v.is_default) || product.product_variants[0];
+}
+
+function primaryAffiliate(variant) {
+  const links = variant?.affiliate_links || [];
+  return links.find(l => l.is_primary) || links[0] || null;
+}
+
+function displayPartnerName(name) {
+  if (!name) return null;
+  return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
+}
+
+function brandName(product) {
+  return product?.manufacturers?.name || '';
+}
+
+// Applies the spec's tri-state pricing display logic.
+// Returns { msrp, affiliateLabel, affiliateUrl, isBetterDeal, fallbackUrl }.
+function pricingDisplay(product) {
+  const v = currentVariant(product);
+  const msrp = v?.msrp != null ? Number(v.msrp) : null;
+  const aff  = primaryAffiliate(v);
+  const partner = displayPartnerName(aff?.partners?.name);
+
+  if (aff && aff.street_price != null && msrp != null && Number(aff.street_price) < msrp) {
+    return {
+      msrp,
+      affiliateLabel: 'Est. from $' + Number(aff.street_price).toFixed(2) + (partner ? ' at ' + partner : ''),
+      affiliateUrl: aff.affiliate_url || aff.url,
+      isBetterDeal: true,
+      fallbackUrl: null,
+    };
+  }
+  if (aff) {
+    return {
+      msrp,
+      affiliateLabel: 'Available' + (partner ? ' at ' + partner : ''),
+      affiliateUrl: aff.affiliate_url || aff.url,
+      isBetterDeal: false,
+      fallbackUrl: null,
+    };
+  }
+  return { msrp, affiliateLabel: null, affiliateUrl: null, isBetterDeal: false, fallbackUrl: product.url || null };
+}
+
+function variantLabel(v) {
+  if (!v) return '';
+  const bits = [];
+  if (v.color)                 bits.push(v.color);
+  if (v.finish)                bits.push(v.finish);
+  if (v.optic_cut)             bits.push(v.optic_cut);
+  if (v.bundle)                bits.push(v.bundle);
+  if (v.clamp)                 bits.push(v.clamp + ' clamp');
+  if (v.manual_safety_variant) bits.push('manual safety');
+  return bits.length ? bits.join(' / ') : 'Standard';
+}
+
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ============================================================
+// RENDER — top-level orchestration
+// ============================================================
+function renderAll() {
+  renderTargetGuns();
+  renderMainColumn();
+  renderBanners();
+  renderSummary();
+}
+
+// ---- Target gun picker
+function renderTargetGuns() {
+  const wrap = document.getElementById('target-gun-buttons');
+  wrap.innerHTML = GUNS.map(g =>
+    '<button class="target-gun-btn'+(STATE.targetGun?.id===g.id?' active':'')+'" onclick="onSelectGun(\''+g.id+'\')">'+
+      escH(g.name)+
+    '</button>'
+  ).join('');
+}
+window.onSelectGun = function(id) {
+  STATE.targetGun = GUNS.find(g => g.id === id) || null;
+  // Wipe frame if its housing_class no longer matches the new target gun.
+  if (STATE.selections.frame && STATE.targetGun &&
+      STATE.selections.frame.frame_specs?.housing_class !== STATE.targetGun.housing_class) {
+    STATE.selections.frame = null;
+    // Frame gone → magwell may no longer fit → wipe if incompatible
+    if (STATE.selections.magwell && !magwellOk(STATE.selections.magwell, STATE.selections)) {
+      STATE.selections.magwell = null;
+    }
+  }
+  renderAll();
+};
+
+// ---- Main column: category accordions
+function renderMainColumn() {
+  const col = document.getElementById('main-col');
+  const blocks = [];
+  MAIN_CATEGORIES.forEach(cat => blocks.push(renderCategoryBlock(cat)));
+  blocks.push(renderSmallPartsBlock());
+  col.innerHTML = blocks.join('');
+}
+
+function renderCategoryBlock(cat) {
+  const visible = isCategoryVisible(cat.key);
+  if (!visible) return '';
+
+  const selected = STATE.selections[cat.key];
+  const isOpen = STATE.openCategory === cat.key;
+  const products = (PRODUCTS_BY_CATEGORY[cat.key] || []).filter(p => isCompatible(p, cat.key));
+
+  // Frame category special hint if no target gun picked yet
+  let hint = '';
+  if (cat.key === 'frame' && !STATE.targetGun) {
+    hint = '<div class="category-hint">Pick a target pistol above to see compatible frames.</div>';
+  }
+
+  const bodyHtml = hint || (products.length
+    ? renderProductList(products, cat.key)
+    : renderEmptyForCategory(cat.key));
+
+  return renderAccordionShell({
+    catKey: cat.key,
+    label: cat.label,
+    selected: selected,
+    count: products.length,
+    isOpen: isOpen,
+    body: bodyHtml,
+  });
+}
+
+function renderSmallPartsBlock() {
+  const anySelected = Object.keys(STATE.smallParts).length;
+  const isOpen = STATE.openCategory === '__small';
+  const groups = SMALL_PART_CATEGORIES.map(sc => {
+    const products = (PRODUCTS_BY_CATEGORY[sc.key] || []);
+    if (!products.length) return '';
+    return '<div class="smallparts-group">'+
+        '<div class="smallparts-group-name">'+escH(sc.label)+' <span class="category-count">('+products.length+')</span></div>'+
+        renderProductList(products, sc.key)+
+      '</div>';
+  }).join('');
+  const body = groups || '<div class="empty-state">No small parts loaded yet.</div>';
+
+  // Fake "chip" showing count of small parts picked
+  const chip = anySelected
+    ? '<span class="category-selected-chip">'+anySelected+' selected</span>'
+    : '';
+
+  return '<div class="category-block'+(isOpen?' open':'')+'">'+
+      '<div class="category-head" onclick="toggleCategory(\'__small\')">'+
+        '<div class="category-name-wrap">'+
+          '<span class="category-name">Small parts</span>'+
+          chip+
+        '</div>'+
+        '<span class="category-toggle">'+(isOpen?'Close ✕':'Browse ↓')+'</span>'+
+      '</div>'+
+      '<div class="category-body">'+body+'</div>'+
+    '</div>';
+}
+
+function renderAccordionShell({catKey, label, selected, count, isOpen, body}) {
+  const chip = selected
+    ? '<span class="category-selected-chip">'+
+        escH(shortProductLabel(selected))+
+        '<span class="chip-x" onclick="event.stopPropagation();removeSelection(\''+catKey+'\')" title="Remove">×</span>'+
+      '</span>'
+    : '';
+  const rightSide = selected
+    ? '<span class="category-toggle">'+(isOpen?'Close ✕':'Change ↓')+'</span>'
+    : '<span class="category-count">'+count+' compatible</span><span class="category-toggle" style="margin-left:10px;">'+(isOpen?'Close ✕':'Browse ↓')+'</span>';
+
+  return '<div class="category-block'+(isOpen?' open':'')+'">'+
+      '<div class="category-head" onclick="toggleCategory(\''+catKey+'\')">'+
+        '<div class="category-name-wrap">'+
+          '<span class="category-name">'+escH(label)+'</span>'+
+          chip+
+        '</div>'+
+        '<div>'+rightSide+'</div>'+
+      '</div>'+
+      '<div class="category-body">'+body+'</div>'+
+    '</div>';
+}
+
+function shortProductLabel(product) {
+  const brand = brandName(product);
+  const name  = product.name || '';
+  return (brand && name.indexOf(brand) === -1 ? brand+' '+name : name).slice(0, 46);
+}
+
+function renderProductList(products, catKey) {
+  return '<div class="product-list">'+products.map(p => renderProductCard(p, catKey)).join('')+'</div>';
+}
+
+function renderProductCard(product, catKey) {
+  const isSelected = SMALL_PART_KEY_SET.has(catKey)
+    ? STATE.smallParts[catKey]?.id === product.id
+    : STATE.selections[catKey]?.id === product.id;
+  const pricing = pricingDisplay(product);
+  const priceHtml = pricing.msrp != null
+    ? '<div class="product-msrp">$'+pricing.msrp.toFixed(2)+'</div>'
+    : '<div class="product-msrp">—</div>';
+  const variantCount = product.product_variants?.length || 0;
+  const variantsNote = variantCount > 1
+    ? '<div class="product-variants-note">'+variantCount+' options</div>'
+    : '';
+  const brand = brandName(product);
+  const brandHtml = brand ? '<div class="product-brand">'+escH(brand)+'</div>' : '';
+  const desc = product.description
+    ? '<div class="product-desc">'+escH(product.description)+'</div>'
+    : '';
+  const btn = isSelected
+    ? '<button class="product-btn remove" onclick="removeSelectionFor(\''+catKey+'\',\''+product.id+'\')">Remove</button>'
+    : '<button class="product-btn add" onclick="addSelection(\''+catKey+'\',\''+product.id+'\')">Add</button>';
+
+  // Product photo from the default variant's primary_image_url. Uses currentVariant()
+  // so a manually-picked variant with its own image swaps in cleanly.
+  const dv = currentVariant(product) || (product.product_variants||[]).find(v => v.is_default);
+  const imgUrl = dv && dv.primary_image_url ? dv.primary_image_url : null;
+  const alt = ((brand ? brand+' ' : '') + (product.name || '')).replace(/"/g, '&quot;');
+  const imgHtml = imgUrl
+    ? '<div class="product-card-img"><img src="'+imgUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;product-card-img-fallback&quot;>No photo</div>\'"/></div>'
+    : '<div class="product-card-img"><div class="product-card-img-fallback">Photo coming soon</div></div>';
+
+  return '<div class="product-card'+(isSelected?' selected':'')+'">'+
+      imgHtml+
+      '<div class="product-card-body">'+
+        brandHtml+
+        '<div class="product-name">'+escH(product.name)+'</div>'+
+        desc+
+        '<div class="product-footer">'+
+          '<div>'+priceHtml+variantsNote+'</div>'+
+          btn+
+        '</div>'+
+      '</div>'+
+    '</div>';
+}
+
+function renderEmptyForCategory(catKey) {
+  if (catKey === 'magwell' && STATE.selections.frame) {
+    return '<div class="empty-state">No compatible magwells found for this frame.</div>';
+  }
+  const list = (PRODUCTS_BY_CATEGORY[catKey] || []);
+  if (!list.length) {
+    return '<div class="empty-state">No '+escH(catKey)+'s in the catalog yet.</div>';
+  }
+  return '<div class="empty-state">No compatible '+escH(catKey)+'s for the current selection. Try removing another part.</div>';
+}
+
+// ---- Banners
+function renderBanners() {
+  const banners = [];
+  const sel = STATE.selections;
+
+  // barrel_specs.requires_slide_text — warning whenever a barrel with that
+  // field set is picked, regardless of which slide is currently selected.
+  if (sel.barrel?.barrel_specs?.requires_slide_text) {
+    banners.push({ type: 'warning', text: sel.barrel.barrel_specs.requires_slide_text });
+  }
+
+  // barrel_slide_requirements.compatibility_note — info when a slide+barrel
+  // combo is picked AND that pair has a note attached.
+  if (sel.barrel && sel.slide) {
+    const bsr = BSR_LOOKUP[sel.barrel.id+'::'+sel.slide.id];
+    if (bsr?.compatibility_note) banners.push({ type: 'info', text: bsr.compatibility_note });
+  }
+
+  // magwell_frame_requirements.compatibility_note — info when a magwell+frame
+  // combo is picked AND that pair has a note attached.
+  if (sel.magwell && sel.frame) {
+    const mfr = MFR_LOOKUP[sel.magwell.id+'::'+sel.frame.id];
+    if (mfr?.compatibility_note) banners.push({ type: 'info', text: mfr.compatibility_note });
+  }
+
+  const el = document.getElementById('banners');
+  el.innerHTML = banners.map(b =>
+    '<div class="banner '+b.type+'">'+
+      '<span class="banner-icon">'+(b.type==='warning'?'⚠':'ⓘ')+'</span>'+
+      '<span>'+escH(b.text)+'</span>'+
+    '</div>'
+  ).join('');
+}
+
+// ---- Selection actions
+window.toggleCategory = function(key) {
+  STATE.openCategory = (STATE.openCategory === key) ? null : key;
+  renderMainColumn();
+};
+
+window.addSelection = function(catKey, productId) {
+  const product = PRODUCT_BY_ID[productId];
+  if (!product) return;
+  if (SMALL_PART_KEY_SET.has(catKey)) {
+    STATE.smallParts[catKey] = product;
+  } else {
+    STATE.selections[catKey] = product;
+    // Cascade: any downstream selection that is now incompatible gets wiped.
+    cascadeInvalidate();
+  }
+  renderAll();
+};
+
+window.removeSelection = function(catKey) {
+  if (SMALL_PART_KEY_SET.has(catKey)) delete STATE.smallParts[catKey];
+  else STATE.selections[catKey] = null;
+  cascadeInvalidate();
+  renderAll();
+};
+
+window.removeSelectionFor = function(catKey, productId) {
+  // Only remove if the removed product is actually the one selected here.
+  if (SMALL_PART_KEY_SET.has(catKey)) {
+    if (STATE.smallParts[catKey]?.id === productId) delete STATE.smallParts[catKey];
+  } else if (STATE.selections[catKey]?.id === productId) {
+    STATE.selections[catKey] = null;
+    cascadeInvalidate();
+  }
+  renderAll();
+};
+
+// After any main selection changes, re-check every OTHER main selection against
+// the new state and wipe anything that no longer fits. Keeps the build valid
+// without complaining at the user.
+function cascadeInvalidate() {
+  const catsToCheck = ['slide','barrel','compensator','frame','magwell'];
+  let changed = true;
+  // Loop until stable (a wiped selection could reveal a new incompatibility).
+  while (changed) {
+    changed = false;
+    for (const c of catsToCheck) {
+      const p = STATE.selections[c];
+      if (!p) continue;
+      if (!isCompatible(p, c)) { STATE.selections[c] = null; changed = true; }
+    }
+  }
+  // Hidden compensator category → drop any picked comp
+  if (!isCategoryVisible('compensator') && STATE.selections.compensator) {
+    STATE.selections.compensator = null;
+  }
+}
+
+// ---- Variant switcher (in the summary panel)
+window.onVariantChange = function(productId, variantId) {
+  STATE.variantByProductId[productId] = variantId;
+  renderSummary();
+};
+
+// ============================================================
+// SUMMARY PANEL (Build Post)
+// ============================================================
+function collectSummaryItems() {
+  const items = [];
+  MAIN_CATEGORIES.forEach(cat => {
+    const p = STATE.selections[cat.key];
+    if (p) items.push({ catKey: cat.key, catLabel: cat.label, product: p });
+  });
+  SMALL_PART_CATEGORIES.forEach(sc => {
+    const p = STATE.smallParts[sc.key];
+    if (p) items.push({ catKey: sc.key, catLabel: sc.label, product: p });
+  });
+  return items;
+}
+
+function collectCompatibilityNotes() {
+  const notes = [];
+  const sel = STATE.selections;
+  if (sel.barrel && sel.slide) {
+    const bsr = BSR_LOOKUP[sel.barrel.id+'::'+sel.slide.id];
+    if (bsr?.compatibility_note) notes.push(bsr.compatibility_note);
+  }
+  if (sel.magwell && sel.frame) {
+    const mfr = MFR_LOOKUP[sel.magwell.id+'::'+sel.frame.id];
+    if (mfr?.compatibility_note) notes.push(mfr.compatibility_note);
+  }
+  return notes;
+}
+
+function renderSummary() {
+  const el = document.getElementById('summary-panel');
+  const items = collectSummaryItems();
+  const target = STATE.targetGun ? '<div class="summary-target">Building for <strong>'+escH(STATE.targetGun.name)+'</strong></div>' : '';
+  const heading =
+    '<div class="summary-title">Build post</div>'+
+    '<div class="summary-heading">Your P365 build</div>'+
+    target;
+
+  if (!items.length) {
+    el.innerHTML = heading + '<div class="summary-empty">Pick a part to start your build.</div>';
+    return;
+  }
+
+  let total = 0;
+  const rowsHtml = items.map(item => {
+    const p = item.product;
+    const v = currentVariant(p);
+    const msrp = v?.msrp != null ? Number(v.msrp) : null;
+    if (msrp != null) total += msrp;
+    const pricing = pricingDisplay(p);
+
+    const variantOptions = (p.product_variants || []).length > 1
+      ? '<select class="summary-item-variant-select" onchange="onVariantChange(\''+p.id+'\',this.value)">'+
+          p.product_variants.map(pv =>
+            '<option value="'+pv.id+'"'+(pv.id === v?.id ? ' selected' : '')+'>'+escH(variantLabel(pv))+
+              (pv.msrp != null ? ' — $'+Number(pv.msrp).toFixed(2) : '')+
+            '</option>'
+          ).join('')+
+        '</select>'
+      : '<span class="summary-item-variant-select" style="border:none;background:transparent;padding:0;">'+escH(variantLabel(v))+'</span>';
+
+    // Pricing display per spec:
+    //   street < msrp     → "Est. from $X at [partner]" (better deal)
+    //   affiliate no deal → "Available at [partner]"    (button, no price)
+    //   no affiliate      → msrp only, link to products.url
+    let affiliateRow = '';
+    if (pricing.affiliateLabel && pricing.isBetterDeal) {
+      affiliateRow = '<div class="summary-item-affiliate">'+
+          '<a class="affiliate-better" href="'+escH(pricing.affiliateUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
+            escH(pricing.affiliateLabel)+' ↗'+
+          '</a>'+
+        '</div>';
+    } else if (pricing.affiliateLabel) {
+      affiliateRow = '<div class="summary-item-affiliate">'+
+          '<a href="'+escH(pricing.affiliateUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
+            escH(pricing.affiliateLabel)+' ↗'+
+          '</a>'+
+        '</div>';
+    } else if (pricing.fallbackUrl) {
+      affiliateRow = '<div class="summary-item-affiliate">'+
+          '<a href="'+escH(pricing.fallbackUrl)+'" target="_blank" rel="noopener nofollow">'+
+            'View at manufacturer ↗'+
+          '</a>'+
+        '</div>';
+    }
+
+    return '<div class="summary-item">'+
+        '<div class="summary-item-cat">'+escH(item.catLabel)+'</div>'+
+        '<div class="summary-item-name">'+escH((brandName(p) ? brandName(p)+' — ' : '')+p.name)+'</div>'+
+        '<div class="summary-item-variant-row">'+variantOptions+'</div>'+
+        '<div class="summary-item-price-row">'+
+          '<div class="summary-item-msrp">'+(msrp != null ? '$'+msrp.toFixed(2) : '—')+'</div>'+
+        '</div>'+
+        affiliateRow+
+      '</div>';
+  }).join('');
+
+  const notes = collectCompatibilityNotes();
+  const notesHtml = notes.length
+    ? '<div class="summary-notes">'+notes.map(n => '<div class="summary-note">'+escH(n)+'</div>').join('')+'</div>'
+    : '';
+
+  el.innerHTML =
+    heading +
+    '<div class="summary-items">'+rowsHtml+'</div>'+
+    '<div class="summary-total-row">'+
+      '<div class="summary-total-label">Total MSRP</div>'+
+      '<div class="summary-total-amount">$'+total.toFixed(2)+'</div>'+
+    '</div>'+
+    '<div class="summary-total-sub">Sum of MSRPs — street prices may be lower. See per-part links.</div>'+
+    notesHtml;
+}
+
+// ============================================================
+// GO
+// ============================================================
+loadData();
+</script>
+</body>
+</html>

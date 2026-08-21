@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Review Queue — Gunforma Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; position: sticky; top: 0; z-index: 300; }
+.nav-logo { font-size: 14px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-admin-tag { font-size: 9px; font-weight: 700; background: #4a9edd; color: #fff; padding: 3px 8px; border-radius: 4px; letter-spacing: 0.08em; text-transform: uppercase; margin-left: 10px; }
+.nav-right { display: flex; align-items: center; gap: 16px; }
+.nav-right-link { font-size: 11px; color: #888780; text-decoration: none; letter-spacing: 0.06em; text-transform: uppercase; }
+.nav-right-link:hover { color: #e8e6e1; }
+
+.shell { display: grid; grid-template-columns: 340px 1fr; min-height: calc(100vh - 52px); }
+
+/* LEFT PANEL */
+.queue-panel { background: #fff; border-right: 0.5px solid #e5e5e5; display: flex; flex-direction: column; overflow: hidden; }
+.queue-header { padding: 16px 20px 12px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; flex-shrink: 0; }
+.queue-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+.queue-count { font-size: 11px; color: #888; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.filter-tabs { display: flex; gap: 4px; }
+.filter-tab { font-size: 11px; font-weight: 600; color: #888; background: none; border: 0.5px solid transparent; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.filter-tab:hover { color: #1a1a1a; background: #f4f3ee; }
+.filter-tab.active { color: #1a1a1a; background: #f4f3ee; border-color: #d9d6cc; }
+.stats-row { display: flex; border-bottom: 0.5px solid #e5e5e5; flex-shrink: 0; }
+.stat-box { flex: 1; padding: 10px 16px; border-right: 0.5px solid #e5e5e5; }
+.stat-box:last-child { border-right: none; }
+.stat-num { font-size: 18px; font-weight: 700; }
+.stat-num.amber { color: #b45309; }
+.stat-num.blue  { color: #1d6fb8; }
+.stat-num.green { color: #166534; }
+.stat-lbl { font-size: 9px; color: #999; letter-spacing: 0.06em; text-transform: uppercase; margin-top: 1px; }
+.queue-list { flex: 1; overflow-y: auto; }
+
+/* QUEUE ITEMS */
+.queue-item { padding: 14px 20px; border-bottom: 0.5px solid #efece3; cursor: pointer; transition: background 0.1s; }
+.queue-item:hover { background: #fafaf8; }
+.queue-item.selected { background: #eaf4fc; border-left: 3px solid #4a9edd; padding-left: 17px; }
+.qi-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
+.qi-name { font-size: 13px; font-weight: 700; line-height: 1.3; }
+.qi-badge { font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 20px; letter-spacing: 0.05em; text-transform: uppercase; flex-shrink: 0; }
+.qi-badge.full       { background: #e8f5ee; color: #166534; border: 0.5px solid #86cfad; }
+.qi-badge.minimum    { background: #fef3e2; color: #b45309; border: 0.5px solid #f9b860; }
+.qi-badge.approved   { background: #e8f5ee; color: #166534; border: 0.5px solid #86cfad; }
+.qi-badge.rejected   { background: #fde8e2; color: #9b1c1c; border: 0.5px solid #f9c4b6; }
+.qi-meta { font-size: 11px; color: #888; margin-bottom: 5px; }
+.qi-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.qi-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 600; }
+.qi-time { font-size: 10px; color: #bbb; margin-top: 5px; }
+
+/* RIGHT PANEL */
+.detail-panel { overflow-y: auto; }
+.detail-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #bbb; gap: 10px; padding: 40px; text-align: center; }
+.detail-empty-text { font-size: 13px; line-height: 1.6; }
+.detail-content { padding: 28px 32px 60px; max-width: 900px; }
+
+.detail-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+.detail-eyebrow { font-size: 10px; color: #4a9edd; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
+.detail-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
+.detail-submeta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.detail-submeta-item { font-size: 12px; color: #888; }
+.detail-submeta-item strong { color: #1a1a1a; }
+.tier-badge { font-size: 10px; font-weight: 700; padding: 4px 10px; border-radius: 4px; letter-spacing: 0.05em; text-transform: uppercase; }
+.tier-badge.full    { background: #e8f5ee; color: #166534; border: 0.5px solid #86cfad; }
+.tier-badge.minimum { background: #fef3e2; color: #b45309; border: 0.5px solid #f9b860; }
+
+.detail-section { margin-bottom: 24px; }
+.detail-section-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: space-between; }
+
+/* PHOTOS */
+.detail-photos { display: flex; flex-direction: column; gap: 8px; }
+.detail-photo-hero { height: 220px; border-radius: 6px; overflow: hidden; background: #f0f2f5; border: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; }
+.detail-photo-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.detail-photo-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.detail-photo-thumb { height: 90px; border-radius: 6px; overflow: hidden; background: #f0f2f5; border: 0.5px solid #e5e5e5; }
+.detail-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* PARTS (read-only — parts_snapshot has no persisted verification state) */
+.simple-parts-list { border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
+.simple-part-row { display: flex; gap: 14px; align-items: center; padding: 12px 16px; border-bottom: 0.5px solid #efece3; background: #fff; }
+.simple-part-row:last-child { border-bottom: none; }
+.simple-part-cat { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; width: 100px; flex-shrink: 0; }
+.simple-part-name { font-size: 13px; font-weight: 700; }
+.simple-part-thumb { flex-shrink: 0; width: 56px; height: 56px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.simple-part-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.simple-part-thumb-fallback { font-size: 8px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 2px; }
+.simple-part-brand { font-size: 10px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.simple-part-pending-tag { font-size: 9px; color: #b45309; background: #fef3e2; border: 0.5px solid #f9b860; padding: 2px 6px; border-radius: 20px; font-weight: 700; margin-left: 6px; }
+.no-parts-note { font-size: 12px; color: #999; padding: 16px; text-align: center; background: #fafaf8; border-radius: 6px; border: 0.5px solid #e5e5e5; }
+
+/* PART EDIT (mock — see partEditHistory; not persisted to Supabase) */
+.simple-part-row { align-items: flex-start; flex-wrap: wrap; }
+.simple-part-main { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 0; }
+.simple-part-actions { flex-shrink: 0; }
+.edited-flag { font-size: 9px; color: #4a9edd; font-weight: 700; margin-left: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.btn-edit-inline { font-size: 10px; font-weight: 700; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px solid #a7cdec; background: #fff; color: #2a7bbd; transition: all 0.15s; }
+.btn-edit-inline:hover { background: #eaf4fc; }
+.part-edit-panel { display: none; width: 100%; margin-top: 10px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px; }
+.part-edit-panel.open { display: block; animation: slideIn 0.15s ease; }
+.part-edit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+.part-edit-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #888; margin-bottom: 3px; display: block; }
+.part-edit-input, .part-edit-select { width: 100%; font-size: 12px; padding: 7px 10px; border: 0.5px solid #e5e5e5; border-radius: 4px; font-family: inherit; background: #fff; }
+.part-edit-input:focus, .part-edit-select:focus { outline: none; border-color: #4a9edd; }
+.part-edit-actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; }
+.btn-edit-save { font-size: 11px; color: #fff; background: #4a9edd; border: none; padding: 7px 14px; border-radius: 4px; cursor: pointer; font-weight: 700; font-family: inherit; }
+.btn-edit-save:hover { background: #2a7bbd; }
+.btn-edit-close { font-size: 11px; color: #888; background: none; border: 0.5px solid #d9d6cc; padding: 7px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; }
+.part-edit-history { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 0.5px dashed #e5e2d8; font-size: 11px; color: #888; line-height: 1.7; }
+.part-edit-history strong { color: #555; }
+.contested-tag { font-size: 9px; color: #9b1c1c; background: #fde8e2; border: 0.5px solid #f9c4b6; padding: 2px 6px; border-radius: 20px; font-weight: 700; margin-left: 6px; }
+.qi-contested-note { font-size: 10px; color: #9b1c1c; font-weight: 700; margin-top: 3px; }
+
+/* CONSENT */
+.consent-row { display: flex; gap: 18px; flex-wrap: wrap; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 12px 16px; }
+.consent-item { font-size: 12px; color: #666; }
+.consent-item strong { color: #1a1a1a; }
+
+.detail-desc { font-size: 13px; color: #444; line-height: 1.7; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 16px; }
+
+/* REVIEW ACTIONS */
+.review-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 20px; }
+.review-card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 6px; }
+.review-card-sub { font-size: 12px; color: #888; margin-bottom: 16px; line-height: 1.5; }
+.review-actions-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.btn-approve { background: #22a06b; color: #fff; border: none; padding: 12px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: background 0.15s; }
+.btn-approve:hover:not(:disabled) { background: #1a8057; }
+.btn-approve:disabled { background: #d1d5db; color: #9ca3af; cursor: not-allowed; }
+.btn-reject { background: #fff; color: #9b1c1c; border: 1.5px solid #f9c4b6; padding: 12px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.btn-reject:hover { background: #fde8e2; }
+
+@keyframes slideIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+.reject-form { display: none; background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 16px; margin-top: 2px; }
+.reject-form.open { display: block; animation: slideIn 0.15s ease; }
+.reject-form-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #7f1d1d; margin-bottom: 8px; display: block; }
+.reject-reasons { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.reject-reason { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: #7f1d1d; cursor: pointer; line-height: 1.4; }
+.reject-reason input { accent-color: #e25c3a; margin-top: 2px; flex-shrink: 0; }
+.reject-note { width: 100%; font-size: 12px; padding: 8px 10px; border: 0.5px solid #f9c4b6; border-radius: 4px; font-family: inherit; background: #fff; resize: vertical; min-height: 56px; margin-bottom: 10px; }
+.reject-note:focus { outline: none; border-color: #e25c3a; }
+.reject-row { display: flex; gap: 8px; }
+.btn-reject-confirm { background: #c0392b; color: #fff; border: none; padding: 9px 18px; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.btn-reject-confirm:hover { background: #a93226; }
+.btn-reject-cancel { background: none; border: 0.5px solid #f9c4b6; color: #9b1c1c; padding: 9px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
+
+.notif-preview { background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 16px; margin-top: 14px; }
+.notif-preview-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #bbb; margin-bottom: 8px; }
+.notif-preview-body { font-size: 12px; color: #555; line-height: 1.7; }
+
+.reviewed-banner { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; }
+.reviewed-banner.approved { background: #e8f5ee; border: 0.5px solid #86cfad; }
+.reviewed-banner.rejected { background: #fde8e2; border: 0.5px solid #f9c4b6; }
+.rb-text { font-size: 13px; font-weight: 700; }
+.reviewed-banner.approved .rb-text { color: #166534; }
+.reviewed-banner.rejected .rb-text { color: #9b1c1c; }
+.rb-sub { font-size: 11px; margin-top: 2px; }
+.reviewed-banner.approved .rb-sub { color: #15803d; }
+.reviewed-banner.rejected .rb-sub  { color: #b91c1c; }
+.btn-undo { font-size: 11px; background: none; border: 0.5px solid currentColor; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: 600; }
+.reviewed-banner.approved .btn-undo { color: #166534; }
+.reviewed-banner.rejected .btn-undo { color: #9b1c1c; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a1a; color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; opacity: 0; transition: all 0.25s ease; pointer-events: none; z-index: 999; white-space: nowrap; }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.toast-dot.green { background: #22a06b; }
+.toast-dot.red   { background: #e25c3a; }
+.toast-dot.blue  { background: #4a9edd; }
+.toast-dot.amber { background: #d97706; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div style="display:flex;align-items:center;">
+    <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+    <span class="nav-admin-tag">Admin</span>
+  </div>
+  <div class="nav-right">
+    <a href="gunforma-builds.html" class="nav-right-link">Builds</a>
+    <a href="#" class="nav-right-link">Catalog</a>
+    <a href="#" class="nav-right-link">Users</a>
+    <a href="index.html" class="nav-right-link">← Site</a>
+  </div>
+</nav>
+
+<div class="shell">
+  <div class="queue-panel">
+    <div class="queue-header">
+      <div class="queue-title">Review Queue <span class="queue-count" id="queue-count">— pending</span></div>
+      <div class="filter-tabs">
+        <button class="filter-tab active" onclick="setFilter(this,'pending')">Pending</button>
+        <button class="filter-tab" onclick="setFilter(this,'approved')">Approved</button>
+        <button class="filter-tab" onclick="setFilter(this,'rejected')">Rejected</button>
+        <button class="filter-tab" onclick="setFilter(this,'all')">All</button>
+      </div>
+    </div>
+    <div class="stats-row">
+      <div class="stat-box"><div class="stat-num amber" id="stat-pending">—</div><div class="stat-lbl">Pending</div></div>
+      <div class="stat-box"><div class="stat-num green" id="stat-approved">—</div><div class="stat-lbl">Approved</div></div>
+      <div class="stat-box"><div class="stat-num blue"  id="stat-all">—</div><div class="stat-lbl">Total</div></div>
+    </div>
+    <div class="queue-list" id="queue-list"><div style="padding:28px;text-align:center;color:#bbb;font-size:12px;">Loading…</div></div>
+  </div>
+
+  <div class="detail-panel" id="detail-panel">
+    <div class="detail-empty">
+      <div style="font-size:36px;color:#ddd;">←</div>
+      <div class="detail-empty-text">Select a build from the queue<br>to start reviewing it.</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><div class="toast-dot green" id="toast-dot"></div><span id="toast-msg">Done</span></div>
+
+<script>
+// ============================================================
+// SUPABASE CONFIG
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+let currentAdmin = null;
+let BUILDS = [];
+// productId -> primary_image_url from the default variant. Populated by
+// loadProductImages after loadBuilds so the review pane can show a small
+// thumbnail alongside each catalog-picked part.
+let IMAGE_BY_PRODUCT_ID = {};
+let filterState = 'pending';
+let selectedId = null;
+let currentAdminUsername = 'Admin';
+let editOpenKey = null; // buildId+'-'+partIndex of the currently open edit panel
+let currentDetailUser = '';
+let currentDetailName = '';
+
+// edit_history lives on the real build row (builds.edit_history jsonb),
+// fetched fresh with every loadBuilds() call — no separate client-side
+// store anymore.
+function partHistory(build, idx) {
+  return (build.edit_history || []).filter(function(e){ return e.part_index === idx; });
+}
+// Resolves the current value of a field: to_value of the most recent edit
+// for that field, falling back to the original parts_snapshot value.
+function currentPartValue(build, idx, field, original) {
+  var history = partHistory(build, idx);
+  for (var i = history.length - 1; i >= 0; i--) {
+    if (history[i].field === field) return history[i].to_value;
+  }
+  return original || '';
+}
+function buildEditedPartCount(build) {
+  var seen = {};
+  (build.edit_history || []).forEach(function(e){ seen[e.part_index] = true; });
+  return Object.keys(seen).length;
+}
+function buildHasContestedEdit(build) {
+  return (build.edit_history || []).some(function(e){ return e.status === 'contested'; });
+}
+
+function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+
+function relTime(iso) {
+  if (!iso) return '—';
+  var diffMs = Date.now() - new Date(iso).getTime();
+  var mins = Math.max(0, Math.round(diffMs/60000));
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins + ' min ago';
+  var hrs = Math.round(mins/60);
+  if (hrs < 24)  return hrs + ' hr ago';
+  var days = Math.round(hrs/24);
+  return days + ' day' + (days!==1?'s':'') + ' ago';
+}
+function escH(s){ return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
+
+// ============================================================
+// AUTH GUARD — must be signed in AND profiles.role = 'admin'
+// ============================================================
+async function requireAdmin() {
+  const { data } = await sb.auth.getSession();
+  const session = data && data.session;
+  if (!session) { window.location.href = 'gunforma-signin.html'; return false; }
+  const { data: profile } = await sb.from('profiles').select('role,username,onboarding_complete').eq('id', session.user.id).maybeSingle();
+  // Any auth'd user without a completed profile gets bounced through
+  // onboarding first — even an admin can't run the queue with no username.
+  if (profile && !profile.onboarding_complete) { window.location.href = 'gunforma-complete-profile.html'; return false; }
+  if (!profile || profile.role !== 'admin') { window.location.href = 'gunforma-signin.html'; return false; }
+  currentAdmin = session.user;
+  currentAdminUsername = profile.username || 'Admin';
+  return true;
+}
+
+// ============================================================
+// DATA — real builds, joined with the submitter's profile, the
+// pistol platform, and every attached photo.
+// ============================================================
+// Batch-fetch default-variant image URLs for every catalog-picked part
+// across all currently-loaded builds. One query regardless of build count.
+async function loadProductImages() {
+  const refIds = new Set();
+  BUILDS.forEach(function(b) {
+    (b.parts_snapshot || []).forEach(function(p) { if (p.refId) refIds.add(p.refId); });
+  });
+  if (!refIds.size) return;
+  const { data, error } = await sb
+    .from('product_variants')
+    .select('product_id, primary_image_url')
+    .eq('is_default', true)
+    .in('product_id', Array.from(refIds));
+  if (error) { console.error('loadProductImages', error); return; }
+  (data || []).forEach(function(v) {
+    if (v.primary_image_url) IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
+  });
+}
+
+async function loadBuilds() {
+  const { data, error } = await sb
+    .from('builds')
+    .select('id,name,tier,status,activities,description,legal_confirmed,content_license_confirmed,builder_agreement_version,created_at,reviewed_at,rejection_reason,parts_snapshot,edit_history,platforms(name),profiles(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .order('created_at', { ascending: false });
+
+  if (error) {
+    console.error(error);
+    document.getElementById('queue-list').innerHTML = '<div style="padding:28px;text-align:center;color:#c25d3a;font-size:12px;">Couldn\'t load the queue — refresh to try again.</div>';
+    return;
+  }
+
+  BUILDS = (data || []).map(function(b) {
+    b.build_photos = (b.build_photos || []).slice().sort(function(x,y){ return x.position - y.position; });
+    return b;
+  });
+
+  await loadProductImages();
+  renderQueue();
+  if (selectedId) {
+    var b = BUILDS.find(function(x){ return x.id===selectedId; });
+    if (b) renderDetail(b);
+    else { selectedId = null; document.getElementById('detail-panel').innerHTML = emptyDetailHtml(); }
+  }
+}
+
+function emptyDetailHtml() {
+  return '<div class="detail-empty"><div style="font-size:36px;color:#ddd;">←</div><div class="detail-empty-text">Select a build from the queue<br>to start reviewing it.</div></div>';
+}
+
+// ============================================================
+// QUEUE
+// ============================================================
+function setFilter(btn, f) {
+  document.querySelectorAll('.filter-tab').forEach(function(t){ t.classList.remove('active'); });
+  btn.classList.add('active');
+  filterState = f;
+  renderQueue();
+}
+
+function renderQueue() {
+  var filtered = BUILDS.filter(function(b){ return filterState==='all'||b.status===filterState; });
+  var pending  = BUILDS.filter(function(b){ return b.status==='pending'; }).length;
+  var approved = BUILDS.filter(function(b){ return b.status==='approved'; }).length;
+  document.getElementById('queue-count').textContent   = pending+' pending';
+  document.getElementById('stat-pending').textContent  = pending;
+  document.getElementById('stat-approved').textContent = approved;
+  document.getElementById('stat-all').textContent      = BUILDS.length;
+
+  if (!filtered.length) { document.getElementById('queue-list').innerHTML='<div style="padding:28px;text-align:center;color:#bbb;font-size:12px;">Nothing here.</div>'; return; }
+
+  document.getElementById('queue-list').innerHTML = filtered.map(function(b) {
+    var isSel = b.id===selectedId;
+    var badgeClass, badgeText;
+    if      (b.status==='approved') { badgeClass='approved'; badgeText='Approved'; }
+    else if (b.status==='rejected') { badgeClass='rejected'; badgeText='Rejected'; }
+    else                            { badgeClass=b.tier;     badgeText=b.tier==='full'?'Full':'Minimum'; }
+    var partsCount    = (b.parts_snapshot||[]).length;
+    var photoCount    = (b.build_photos||[]).length;
+    var platformName  = b.platforms ? b.platforms.name : 'Unknown pistol';
+    var username      = b.profiles ? b.profiles.username : 'unknown';
+    var contestedNote = buildHasContestedEdit(b) ? '<div class="qi-contested-note">⚠ A visitor flagged a correction for review</div>' : '';
+
+    return '<div class="queue-item'+(isSel?' selected':'')+'" onclick="selectBuild(\''+b.id+'\')">'+
+      '<div class="qi-top"><span class="qi-name">'+escH(b.name)+'</span><span class="qi-badge '+badgeClass+'">'+badgeText+'</span></div>'+
+      '<div class="qi-meta">'+escH(platformName)+' · '+escH(username)+'</div>'+
+      '<div class="qi-tags">'+(b.activities||[]).map(function(a){ return '<span class="qi-tag">'+escH(a)+'</span>'; }).join('')+'</div>'+
+      '<div class="qi-time">'+relTime(b.created_at)+' · '+photoCount+' photo'+(photoCount!==1?'s':'')+' · '+(partsCount?partsCount+' parts':'no parts')+'</div>'+
+      contestedNote+
+    '</div>';
+  }).join('');
+}
+
+// ============================================================
+// DETAIL
+// ============================================================
+function selectBuild(id) {
+  selectedId = id;
+  renderQueue();
+  var b = BUILDS.find(function(x){ return x.id===id; });
+  if (b) renderDetail(b);
+}
+
+function renderDetail(b) {
+  var isPending    = b.status==='pending';
+  var platformName = b.platforms ? b.platforms.name : 'Unknown pistol';
+  var username      = b.profiles ? b.profiles.username : 'unknown';
+  currentDetailUser = username;
+  currentDetailName = b.name;
+
+  var photos  = b.build_photos || [];
+  var hero    = photos.find(function(p){ return p.is_hero; }) || photos[0];
+  var gallery = photos.filter(function(p){ return p !== hero; });
+
+  var heroHtml = hero
+    ? '<div class="detail-photo-hero"><img src="'+photoUrl(hero.storage_path)+'" alt="" /></div>'
+    : '<div class="detail-photo-hero">No hero photo</div>';
+  var thumbsHtml = gallery.length
+    ? '<div class="detail-photo-thumbs">'+gallery.map(function(p){
+        return '<div class="detail-photo-thumb"><img src="'+photoUrl(p.thumb_path)+'" alt="" /></div>';
+      }).join('')+'</div>'
+    : '';
+
+  var parts = b.parts_snapshot || [];
+  var partsHtml;
+  if (!parts.length) {
+    partsHtml = '<div class="no-parts-note">No parts listed — minimum build. You can still approve or reject based on photos and description.</div>';
+  } else {
+    partsHtml = '<div class="simple-parts-list">'+parts.map(function(p, i) {
+      var history = partHistory(b, i);
+      var dCat   = currentPartValue(b, i, 'category', p.category);
+      var dBrand = currentPartValue(b, i, 'brand', p.brand);
+      var dName  = currentPartValue(b, i, 'name', p.name);
+      var isEditOpen = editOpenKey === (b.id+'-'+i);
+
+      var editBtnHtml = isPending
+        ? '<button class="btn-edit-inline" onclick="doToggleEdit(\''+b.id+'\','+i+')">'+(isEditOpen?'Close':'Edit')+'</button>'
+        : '';
+
+      var historyHtml = history.length
+        ? '<div class="part-edit-history">'+history.map(function(h) {
+            var contestedTag = h.status==='contested' ? '<span class="contested-tag">⚠ Contested by visitor</span>' : '';
+            return '<div><strong>'+escH(h.field)+'</strong> corrected: "'+escH(h.from_value)+'" → "'+escH(h.to_value)+'" — '+escH(h.edited_by)+', '+relTime(h.edited_at)+contestedTag+'</div>';
+          }).join('')+'</div>'
+        : '';
+
+      var editPanelHtml = isEditOpen
+        ? '<div class="part-edit-panel open">'+
+            '<div class="part-edit-grid">'+
+              '<div><label class="part-edit-label">Category</label><input class="part-edit-input" type="text" id="pe-cat-'+b.id+'-'+i+'" value="'+escH(dCat)+'" /></div>'+
+              '<div><label class="part-edit-label">Brand</label><input class="part-edit-input" type="text" id="pe-brand-'+b.id+'-'+i+'" value="'+escH(dBrand)+'" /></div>'+
+            '</div>'+
+            '<div><label class="part-edit-label">Part name</label><input class="part-edit-input" type="text" id="pe-name-'+b.id+'-'+i+'" value="'+escH(dName)+'" /></div>'+
+            '<div class="part-edit-actions">'+
+              '<button class="btn-edit-save" onclick="doSaveEdit(\''+b.id+'\','+i+')">Save correction →</button>'+
+              '<button class="btn-edit-close" onclick="doToggleEdit(\''+b.id+'\','+i+')">Cancel</button>'+
+            '</div>'+
+          '</div>'
+        : '';
+
+      // Thumbnail from the default variant's primary_image_url. Hand-typed
+      // pending parts have no refId → fallback slot lets the admin see at a
+      // glance which rows need catalog cross-checking.
+      var thumbUrl = p.refId ? IMAGE_BY_PRODUCT_ID[p.refId] : null;
+      var alt = ((dBrand ? dBrand+' ' : '') + (dName || '')).replace(/"/g, '&quot;');
+      var thumbHtml = thumbUrl
+        ? '<div class="simple-part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;simple-part-thumb-fallback&quot;>No photo</div>\'"/></div>'
+        : '<div class="simple-part-thumb"><div class="simple-part-thumb-fallback">'+(p.pending?'Pending':'No photo')+'</div></div>';
+
+      return '<div class="simple-part-row">'+
+        '<div class="simple-part-main">'+
+          thumbHtml +
+          '<div class="simple-part-cat">'+escH(dCat||'—')+'</div>'+
+          '<div><div class="simple-part-name">'+escH(dName||'Unnamed part')+(p.pending?'<span class="simple-part-pending-tag">Pending catalog review</span>':'')+(history.length?'<span class="edited-flag">Edited</span>':'')+'</div>'+
+          '<div class="simple-part-brand">'+escH(dBrand||'')+'</div></div>'+
+        '</div>'+
+        '<div class="simple-part-actions">'+editBtnHtml+'</div>'+
+        editPanelHtml+
+        historyHtml+
+      '</div>';
+    }).join('')+'</div>';
+  }
+
+  var consentHtml = '<div class="consent-row">'+
+    '<span class="consent-item">Legal confirmed: <strong>'+(b.legal_confirmed?'Yes':'No')+'</strong></span>'+
+    '<span class="consent-item">Content license confirmed: <strong>'+(b.content_license_confirmed?'Yes':'No')+'</strong></span>'+
+    (b.builder_agreement_version ? '<span class="consent-item">Agreement version: <strong>'+escH(b.builder_agreement_version)+'</strong></span>' : '')+
+  '</div>';
+
+  var editedPartCount = buildEditedPartCount(b);
+  var approveNotif = 'Hi <strong>'+escH(username)+'</strong>, your build <strong>"'+escH(b.name)+'"</strong> has been approved and is now live on Gunforma. Thanks for contributing.'+
+    (editedPartCount ? ' We corrected '+editedPartCount+' part'+(editedPartCount!==1?'s':'')+' on your build for accuracy — view what changed.' : '');
+
+  var reviewedBanner = '';
+  if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="gunforma-build-detail.html?id='+b.id+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
+  if (b.status==='rejected') reviewedBanner='<div class="reviewed-banner rejected"><div><div class="rb-text">Rejected — '+escH(b.rejection_reason||'')+'</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+'</div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
+
+  var html =
+    '<div class="detail-content">'+
+    '<div class="detail-top"><div>'+
+      '<div class="detail-eyebrow">Submitted by '+escH(username)+' · '+relTime(b.created_at)+'</div>'+
+      '<div class="detail-title">'+escH(b.name)+'</div>'+
+      '<div class="detail-submeta">'+
+        '<span class="detail-submeta-item"><strong>'+escH(platformName)+'</strong></span>'+
+        '<span class="detail-submeta-item">'+(b.activities||[]).map(escH).join(', ')+'</span>'+
+        '<span class="tier-badge '+b.tier+'">'+b.tier+' build</span>'+
+      '</div>'+
+    '</div></div>'+
+    reviewedBanner+
+    '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+'</div></div>'+
+    '<div class="detail-section"><div class="detail-section-title">Description</div><div class="detail-desc">'+(b.description?escH(b.description):'<span style="color:#bbb">No description provided.</span>')+'</div></div>'+
+    '<div class="detail-section"><div class="detail-section-title">Consent</div>'+consentHtml+'</div>'+
+    '<div class="detail-section"><div class="detail-section-title">Parts ('+parts.length+')</div>'+partsHtml+'</div>';
+
+  if (isPending) {
+    html +=
+      '<div class="detail-section"><div class="review-card">'+
+        '<div class="review-card-title">Final decision</div>'+
+        '<div class="review-card-sub">Review the photos, description, and parts above, then approve or reject.</div>'+
+        '<div class="review-actions-row">'+
+          '<button class="btn-approve" onclick="doApprove(\''+b.id+'\')">Approve &amp; publish →</button>'+
+          '<button class="btn-reject" onclick="openRejectForm()">Reject with reason</button>'+
+        '</div>'+
+        '<div class="reject-form" id="reject-form">'+
+          '<label class="reject-form-label">Select a reason</label>'+
+          '<div class="reject-reasons">'+
+          ['No photos uploaded','Blurry or unusable photos','No parts listed','Incomplete description','Possible prohibited content','Custom parts need verification'].map(function(r){
+            return '<label class="reject-reason"><input type="radio" name="rr" value="'+escH(r)+'" onchange="updateNotifPreview(this.value)" /> '+r+'</label>';
+          }).join('')+
+          '</div>'+
+          '<textarea class="reject-note" id="reject-note" placeholder="Optional — add a specific note for the user…"></textarea>'+
+          '<div class="reject-row">'+
+            '<button class="btn-reject-confirm" onclick="doReject(\''+b.id+'\')">Confirm rejection →</button>'+
+            '<button class="btn-reject-cancel" onclick="closeRejectForm()">Cancel</button>'+
+          '</div>'+
+        '</div>'+
+        '<div class="notif-preview"><div class="notif-preview-label">Preview — what '+escH(username)+' would see once notifications are built</div>'+
+        '<div class="notif-preview-body" id="notif-text">'+approveNotif+'</div></div>'+
+      '</div></div>';
+  }
+
+  html += '</div>';
+  document.getElementById('detail-panel').innerHTML = html;
+}
+
+// ============================================================
+// ACTIONS — real updates to builds.status, gated by the
+// admin-only RLS policy and stamped server-side by the DB trigger.
+// ============================================================
+async function doApprove(id) {
+  const { error } = await sb.from('builds').update({ status: 'approved' }).eq('id', id);
+  if (error) { console.error(error); showToast('red','Something went wrong'); return; }
+  showToast('green','Build approved');
+  await loadBuilds();
+}
+async function doReject(id) {
+  var sel = document.querySelector('input[name="rr"]:checked');
+  if (!sel) { showToast('red','Select a rejection reason first'); return; }
+  var note = document.getElementById('reject-note').value.trim();
+  var reason = sel.value + (note ? ' — ' + note : '');
+  const { error } = await sb.from('builds').update({ status: 'rejected', rejection_reason: reason }).eq('id', id);
+  if (error) { console.error(error); showToast('red','Something went wrong'); return; }
+  showToast('red','Build rejected');
+  await loadBuilds();
+}
+async function doUndo(id) {
+  const { error } = await sb.from('builds').update({ status: 'pending' }).eq('id', id);
+  if (error) { console.error(error); showToast('red','Something went wrong'); return; }
+  showToast('blue','Moved back to pending');
+  await loadBuilds();
+}
+function doToggleEdit(buildId, idx) {
+  var key = buildId+'-'+idx;
+  editOpenKey = (editOpenKey === key) ? null : key;
+  var b = BUILDS.find(function(x){ return x.id===buildId; });
+  if (b) renderDetail(b);
+}
+// Appends diff entries to the real builds.edit_history column (admin-only
+// write, covered by the existing "Admins can review and edit any build"
+// RLS policy) — parts_snapshot itself is never touched.
+async function doSaveEdit(buildId, idx) {
+  var b = BUILDS.find(function(x){ return x.id===buildId; });
+  if (!b) return;
+  var part = (b.parts_snapshot||[])[idx];
+  if (!part) return;
+
+  var fields = [
+    { key: 'category', inputId: 'pe-cat-'+buildId+'-'+idx },
+    { key: 'brand',     inputId: 'pe-brand-'+buildId+'-'+idx },
+    { key: 'name',      inputId: 'pe-name-'+buildId+'-'+idx },
+  ];
+
+  var newEntries = [];
+  fields.forEach(function(f) {
+    var input = document.getElementById(f.inputId);
+    if (!input) return;
+    var newVal = input.value.trim();
+    var curVal = currentPartValue(b, idx, f.key, part[f.key]);
+    if (newVal && newVal !== curVal) {
+      newEntries.push({
+        part_index: idx,
+        field: f.key,
+        from_value: curVal,
+        to_value: newVal,
+        edited_by: currentAdminUsername,
+        edited_at: new Date().toISOString(),
+        status: 'active',
+      });
+    }
+  });
+
+  if (!newEntries.length) {
+    editOpenKey = null;
+    renderDetail(b);
+    showToast('blue', 'No changes to save');
+    return;
+  }
+
+  var updatedHistory = (b.edit_history || []).concat(newEntries);
+  const { error } = await sb.from('builds').update({ edit_history: updatedHistory }).eq('id', buildId);
+  if (error) { console.error(error); showToast('red', 'Something went wrong'); return; }
+
+  editOpenKey = null;
+  showToast('blue', 'Correction saved — '+newEntries.length+' field'+(newEntries.length!==1?'s':'')+' updated');
+  await loadBuilds();
+}
+
+function openRejectForm()  { var f=document.getElementById('reject-form'); if(f) f.classList.add('open'); }
+function closeRejectForm() { var f=document.getElementById('reject-form'); if(f) f.classList.remove('open'); }
+function updateNotifPreview(reason) {
+  var el = document.getElementById('notif-text');
+  if (el) el.innerHTML='Hi <strong>'+escH(currentDetailUser)+'</strong>, your build <strong>"'+escH(currentDetailName)+'"</strong> needs a small update — <em>'+escH(reason)+'</em>. Use the link below to edit and resubmit.';
+}
+
+function showToast(color, msg) {
+  document.getElementById('toast-dot').className='toast-dot '+color;
+  document.getElementById('toast-msg').textContent=msg;
+  var t=document.getElementById('toast');
+  t.classList.add('show');
+  clearTimeout(window._tt);
+  window._tt=setTimeout(function(){ t.classList.remove('show'); },2800);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+(async function init() {
+  var ok = await requireAdmin();
+  if (!ok) return;
+  await loadBuilds();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Builder Agreement — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-link:hover { color: #e8e6e1; }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 640px; line-height: 1.6; }
+
+.wrap { max-width: 720px; margin: 0 auto; padding: 32px 28px 80px; }
+
+/* STATUS BANNER */
+.status-banner { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 20px; border-radius: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+.status-banner.signed { background: #f6fdf9; border: 0.5px solid #86cfad; }
+.status-banner.unsigned { background: #fef4e8; border: 0.5px solid #f0c074; }
+.status-banner.loggedout { background: #fafaf8; border: 0.5px solid #e5e5e5; }
+.status-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; flex-shrink: 0; }
+.status-banner.signed .status-icon { background: #22a06b; color: #fff; }
+.status-banner.unsigned .status-icon { background: #f0a83f; color: #fff; }
+.status-banner.loggedout .status-icon { background: #ccc; color: #fff; }
+.status-text-title { font-size: 13px; font-weight: 700; }
+.status-banner.signed .status-text-title { color: #166534; }
+.status-banner.unsigned .status-text-title { color: #7a4f1c; }
+.status-banner.loggedout .status-text-title { color: #555; }
+.status-text-sub { font-size: 11px; color: #666; margin-top: 2px; }
+.status-left { display: flex; align-items: center; gap: 12px; }
+.status-actions a, .status-actions button { font-size: 11px; font-weight: 700; text-decoration: none; padding: 7px 14px; border-radius: 4px; font-family: inherit; cursor: pointer; white-space: nowrap; }
+.btn-accept { color: #fff; background: #1a1a1a; border: none; }
+.btn-accept:hover:not(:disabled) { background: #333; }
+.btn-accept:disabled { background: #ccc; cursor: not-allowed; }
+.link-signin { color: #2a7bbd; border: 0.5px solid #d9d6cc; background: #fff; }
+
+/* AGREEMENT TEXT */
+.agreement { border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px 32px; background: #fff; }
+.agreement h2 { font-size: 15px; font-weight: 700; margin: 24px 0 8px; letter-spacing: -0.005em; }
+.agreement h2:first-child { margin-top: 0; }
+.agreement p { font-size: 13px; line-height: 1.7; color: #333; margin-bottom: 10px; }
+.agreement p.lede { font-size: 13px; line-height: 1.7; color: #555; padding-bottom: 16px; border-bottom: 0.5px solid #efece3; margin-bottom: 16px; }
+.agreement ul { margin: 8px 0 12px 20px; }
+.agreement li { font-size: 13px; line-height: 1.7; color: #333; margin-bottom: 4px; }
+.agreement strong { color: #1a1a1a; }
+
+/* ACCEPT BAR — sits under the text for logged-in users who haven't accepted yet */
+.accept-bar { margin-top: 20px; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 18px 20px; background: #fafaf8; display: flex; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.accept-bar input { margin-top: 3px; accent-color: #4a9edd; cursor: pointer; }
+.accept-bar label { font-size: 12px; color: #444; line-height: 1.6; flex: 1; min-width: 220px; }
+
+/* SIGNED RECORD */
+.record-card { border: 0.5px solid #86cfad; background: #f6fdf9; border-radius: 8px; padding: 20px 24px; margin-top: 20px; }
+.record-row { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 0.5px solid #dcefe2; font-size: 13px; }
+.record-row:last-child { border-bottom: none; }
+.record-key { color: #888; }
+.record-val { color: #1a1a1a; font-weight: 600; }
+
+.hidden { display: none; }
+
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafaf8; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="gunforma-post-build-v6.html" class="nav-link">Post a build</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <p class="page-eyebrow">Legal · Builder Program</p>
+  <h1 class="page-title">Builder Agreement</h1>
+  <p class="page-sub">Covers what happens to the builds, photos, and descriptions you submit as a Gunforma Builder. Checking the box on signup (or below) is your acceptance — tied to your account, same as any other agreement on the platform.</p>
+</div>
+
+<div class="wrap">
+
+  <div id="banner"></div>
+
+  <div class="agreement">
+    <p class="lede">By accepting this — at signup or below — you're agreeing to let Gunforma use the builds, photos, and descriptions you submit as a Builder, both on the platform and in how we promote it. Read it, it's short.</p>
+
+    <h2>1. What you're giving us</h2>
+    <p>You grant Gunforma a <strong>non-exclusive, worldwide, royalty-free, sublicensable license</strong> to host, reproduce, display, adapt (for formatting/sizing only), and distribute the photos, text, build lists, and other content you submit as a Builder ("Contributor Content"), for:</p>
+    <ul>
+      <li>Displaying it on Gunforma (site, app, any future platform we operate)</li>
+      <li>Gunforma's own marketing — social media, email, ads, the homepage, "featured build" placements</li>
+      <li>Materials shared with brand or retail partners (e.g., aggregate or per-build usage in partner decks, co-marketing, or "most-used parts" features), provided such use does not imply the partner brand endorses you personally without your separate consent</li>
+      <li>Internal product use, including using build/parts data to improve recommendations, search, and compatibility features</li>
+    </ul>
+    <p>This license is <strong>perpetual for content already published or distributed</strong> under it — see Section 5.</p>
+
+    <h2>2. What you're keeping</h2>
+    <p>You retain full ownership of everything you submit. This is a license, not a transfer of ownership or copyright. You're free to post the same content anywhere else.</p>
+
+    <h2>3. What you're promising us</h2>
+    <p>You confirm that you own the photos you submit (or have the right to grant this license), the firearm and parts shown are legally yours to own and depict in your jurisdiction, nothing you submit infringes anyone else's rights or violates any law, and you're not knowingly submitting misleading part identifications or fabricated builds.</p>
+
+    <h2>4. Credit</h2>
+    <p>Gunforma will credit your builder handle/username on content we display, where practical. We won't misattribute your work to someone else.</p>
+
+    <h2>5. If you leave the Builder Program</h2>
+    <p>You can ask us in writing to stop featuring your content in <strong>new</strong> marketing or partner materials going forward. This does not retroactively pull content already published, distributed, cached, or shared with a partner before your request.</p>
+
+    <h2>6. Compensation</h2>
+    <p>Participation is unpaid unless a separate written agreement (e.g., affiliate revenue-share) is signed between you and Gunforma.</p>
+
+    <h2>7. No obligation to publish</h2>
+    <p>Gunforma may decline to publish, or may remove, any submission at its discretion.</p>
+
+    <h2>8. Indemnification</h2>
+    <p>You agree to indemnify Gunforma against claims arising from a breach of Section 3.</p>
+
+    <p style="margin-top:16px;"><a href="gunforma-builder-agreement.md" style="color:#2a7bbd;font-weight:600;">View full text as a document →</a></p>
+  </div>
+
+  <!-- Only shown to a logged-in user who hasn't accepted yet -->
+  <div class="accept-bar hidden" id="accept-bar">
+    <input type="checkbox" id="accept-check" onchange="document.getElementById('accept-btn').disabled = !this.checked;" />
+    <label for="accept-check">I've read this and agree to the Builder Agreement above, including the license grant in Section 1. This will enable Builder posting on my account (<strong id="accept-account">—</strong>).</label>
+    <button class="btn-accept" id="accept-btn" onclick="acceptAgreement()" disabled>Enable Builder posting</button>
+  </div>
+
+  <div id="record-wrap" class="hidden">
+    <div class="record-card">
+      <div class="record-row"><span class="record-key">Status</span><span class="record-val">Accepted</span></div>
+      <div class="record-row"><span class="record-key">Account</span><span class="record-val" id="rec-account">—</span></div>
+      <div class="record-row"><span class="record-key">Accepted on</span><span class="record-val" id="rec-date">—</span></div>
+      <div class="record-row"><span class="record-key">Agreement version</span><span class="record-val" id="rec-version">v1-2026-01</span></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer-bar">
+  <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+  <span class="footer-txt"><a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Contact</a></span>
+</div>
+
+<script>
+// ============================================================
+// This page reads acceptance status off the logged-in user's
+// own profile row — no separate signature record is created.
+// The checkbox + account IS the record, same pattern as the
+// signup page's builder-agreement checkbox.
+//
+// Expected profile columns (Supabase `profiles` table):
+//   builder_agreement_accepted    boolean
+//   builder_agreement_accepted_at timestamptz  (set by DB trigger/RPC,
+//                                                 never trust client clock)
+//   builder_agreement_version     text
+// ============================================================
+const SUPABASE_URL  = 'https://wcrkktxkvkvmfvbgqrbz.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjcmtrdHhrdmt2bWZ2YmdxcmJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MzQ0NjIsImV4cCI6MjA5NjExMDQ2Mn0.66ZBMaQPle_j8e5bLcu6lsTusVcxmL8-SSQ9Ou8-AqM';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+const AGREEMENT_VERSION = 'v1-2026-01';
+
+async function init() {
+  const { data: { user } } = await sb.auth.getUser();
+
+  if (!user) {
+    renderLoggedOut();
+    return;
+  }
+
+  const { data: profile } = await sb.from('profiles')
+    .select('username, builder_agreement_accepted, builder_agreement_accepted_at, builder_agreement_version')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  const accepted = !!(profile && profile.builder_agreement_accepted);
+
+  if (accepted) {
+    renderSigned(profile);
+  } else {
+    renderUnsigned(profile, user);
+  }
+}
+
+function renderLoggedOut() {
+  document.getElementById('banner').innerHTML =
+    '<div class="status-banner loggedout">' +
+      '<div class="status-left"><div class="status-icon">?</div>' +
+      '<div><div class="status-text-title">Sign in to see your status</div>' +
+      '<div class="status-text-sub">Accepting this is part of your account, not a separate signature.</div></div></div>' +
+      '<div class="status-actions"><a class="link-signin" href="gunforma-signin.html">Sign in →</a></div>' +
+    '</div>';
+}
+
+function renderUnsigned(profile, user) {
+  document.getElementById('banner').innerHTML =
+    '<div class="status-banner unsigned">' +
+      '<div class="status-left"><div class="status-icon">!</div>' +
+      '<div><div class="status-text-title">Not yet accepted</div>' +
+      '<div class="status-text-sub">Accept below to enable Builder posting on your account.</div></div></div>' +
+    '</div>';
+  document.getElementById('accept-account').textContent = (profile && profile.username) || user.email;
+  document.getElementById('accept-bar').classList.remove('hidden');
+}
+
+function renderSigned(profile) {
+  document.getElementById('banner').innerHTML =
+    '<div class="status-banner signed">' +
+      '<div class="status-left"><div class="status-icon">✓</div>' +
+      '<div><div class="status-text-title">Builder Agreement accepted</div>' +
+      '<div class="status-text-sub">Accepted ' + formatDate(profile.builder_agreement_accepted_at) + ' — you\'re covered to post builds.</div></div></div>' +
+    '</div>';
+  document.getElementById('rec-account').textContent = profile.username || '—';
+  document.getElementById('rec-date').textContent = formatDate(profile.builder_agreement_accepted_at);
+  document.getElementById('rec-version').textContent = profile.builder_agreement_version || AGREEMENT_VERSION;
+  document.getElementById('record-wrap').classList.remove('hidden');
+}
+
+function formatDate(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+async function acceptAgreement() {
+  const btn = document.getElementById('accept-btn');
+  if (btn.disabled) return;
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) return;
+
+  // Server-side default (accepted_at timestamptz default now()) should
+  // stamp the time — do not send a client Date() as the record of when
+  // this happened.
+  await sb.from('profiles').update({
+    builder_agreement_accepted: true,
+    builder_agreement_version: AGREEMENT_VERSION,
+  }).eq('id', user.id);
+
+  init();
+}
+
+init();
+</script>
+
+</body>
+</html>

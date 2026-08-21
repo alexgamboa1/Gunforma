@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Community builds — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafaf8; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+
+/* PAGE */
+.page { max-width: 1240px; margin: 0 auto; padding: 28px 32px 64px; }
+.page-header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+.page-count { font-size: 12px; color: #666; }
+
+/* FILTER BAR */
+.filter-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 14px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; margin-bottom: 22px; }
+.filter-label { font-size: 11px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+.filter-select { font-family: inherit; font-size: 12px; padding: 6px 24px 6px 10px; border: 0.5px solid #d5d3ca; background: #fafaf8; border-radius: 4px; color: #333; cursor: pointer; min-width: 140px; }
+.filter-select:focus { outline: none; border-color: #4a9edd; }
+.filter-clear { margin-left: auto; font-family: inherit; font-size: 11px; padding: 6px 12px; background: transparent; border: 0.5px solid #d5d3ca; color: #666; border-radius: 4px; cursor: pointer; }
+.filter-clear:hover { color: #a25334; border-color: #eec2ae; }
+.filter-clear[disabled] { opacity: 0.4; cursor: not-allowed; }
+
+/* GRID */
+.builds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 18px; }
+
+/* CARD */
+.build-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, transform 0.15s; text-decoration: none; color: inherit; }
+.build-card:hover { border-color: #cfcdc4; transform: translateY(-1px); }
+.build-card-photo { position: relative; aspect-ratio: 16/10; background: #f4f3ee; overflow: hidden; }
+.build-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.build-card-nophoto { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 11px; color: #b8b5ac; letter-spacing: 0.06em; }
+.build-card-badge { position: absolute; top: 10px; left: 10px; font-size: 9px; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 3px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; backdrop-filter: blur(4px); }
+.build-card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+.build-card-name { font-size: 15px; font-weight: 700; line-height: 1.25; color: #1a1a1a; }
+.build-card-author-row { font-size: 11.5px; color: #888; }
+.build-card-author-row strong { color: #333; font-weight: 600; }
+.build-card-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.build-card-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 3px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+.build-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: auto; padding-top: 10px; border-top: 0.5px solid #eee; }
+.build-card-meta { display: flex; flex-direction: column; gap: 2px; }
+.build-card-total { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.build-card-parts { font-size: 10.5px; color: #888; }
+.fire-btn { display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #fafaf8; border: 0.5px solid #d5d3ca; border-radius: 20px; color: #666; cursor: pointer; transition: all 0.15s; }
+.fire-btn:hover { border-color: #d85a30; color: #d85a30; }
+.fire-btn.fired { background: #faece7; border-color: #d85a30; color: #a25334; }
+.fire-btn-icon { font-size: 14px; line-height: 1; filter: grayscale(0.4); }
+.fire-btn.fired .fire-btn-icon { filter: none; }
+
+/* STATES */
+.loading, .empty { padding: 60px 20px; text-align: center; font-size: 13px; color: #888; }
+.empty-title { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
+.empty-cta { display: inline-block; margin-top: 14px; font-size: 12px; font-weight: 700; padding: 8px 14px; color: #fff; background: #2a7bbd; border-radius: 4px; text-decoration: none; }
+.empty-cta:hover { background: #1e63a0; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; font-size: 12px; padding: 10px 16px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; z-index: 200; pointer-events: none; }
+.toast.show { opacity: 1; }
+.toast a { color: #6fb4e8; margin-left: 6px; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+</style>
+</head>
+<body>
+
+<div class="nav">
+  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link active" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="#">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build-v6.html">Post your build</a>
+  </div>
+</div>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Community builds</div>
+    <div class="page-count" id="page-count"></div>
+  </div>
+
+  <div class="filter-bar">
+    <span class="filter-label">Platform</span>
+    <select class="filter-select" id="filter-platform" onchange="onFilterChange()">
+      <option value="">All platforms</option>
+    </select>
+
+    <span class="filter-label">Activity</span>
+    <select class="filter-select" id="filter-activity" onchange="onFilterChange()">
+      <option value="">Any activity</option>
+    </select>
+
+    <span class="filter-label">Sort</span>
+    <select class="filter-select" id="filter-sort" onchange="onFilterChange()">
+      <option value="newest">Newest first</option>
+      <option value="fires">Most fires</option>
+      <option value="price-high">Price high → low</option>
+      <option value="price-low">Price low → high</option>
+    </select>
+
+    <button class="filter-clear" id="filter-clear" onclick="clearFilters()">Clear</button>
+  </div>
+
+  <div id="grid-container">
+    <div class="loading">Loading builds…</div>
+  </div>
+</div>
+
+<div class="footer-bar">
+  <div class="footer-txt">© 2026 Gunforma · <a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// SUPABASE
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog: catches sign-outs (from another tab, or here) and
+// silent token-refresh failures so the user doesn't sit on a stale UI.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+// ============================================================
+// STATE
+// ============================================================
+let CURRENT_USER = null;         // { id, ... } or null
+let BUILDS = [];                 // approved builds with joins + computed fields
+let USER_FIRES = new Set();      // build ids the current user has fired
+
+// ============================================================
+// LOAD
+// ============================================================
+async function init() {
+  const { data: sessData } = await sb.auth.getSession();
+  CURRENT_USER = sessData?.session?.user || null;
+  updateSignInLink();   // fire-and-forget; nav can update after loadBuilds
+  await loadBuilds();
+}
+
+async function updateSignInLink() {
+  const link = document.getElementById('nav-signin');
+  if (!link) return;
+  // Remove any previously injected Sign out button so re-runs are idempotent.
+  var prev = document.getElementById('nav-signout');
+  if (prev) prev.remove();
+
+  if (CURRENT_USER) {
+    // Show username in place of "Sign in", drop a "Sign out" button before it.
+    const { data: profile } = await sb.from('profiles').select('username').eq('id', CURRENT_USER.id).maybeSingle();
+    const displayName = (profile && profile.username) || CURRENT_USER.email || 'Signed in';
+    link.textContent = displayName;
+    link.removeAttribute('href');
+    link.style.cursor = 'default';
+    link.onclick = null;
+
+    const signOutBtn = document.createElement('a');
+    signOutBtn.id = 'nav-signout';
+    signOutBtn.href = '#';
+    signOutBtn.className = link.className;
+    signOutBtn.textContent = 'Sign out';
+    signOutBtn.onclick = async function(e) {
+      e.preventDefault();
+      await sb.auth.signOut();
+      location.reload();
+    };
+    link.parentNode.insertBefore(signOutBtn, link);
+  } else {
+    link.textContent = 'Sign in';
+    link.setAttribute('href', 'gunforma-signin.html');
+    link.style.cursor = '';
+    link.onclick = null;
+  }
+}
+
+async function signOut(e) {
+  e.preventDefault();
+  await sb.auth.signOut();
+  location.reload();
+}
+
+async function loadBuilds() {
+  // Only approved builds are visible to anon by RLS anyway, but keeping the
+  // filter explicit makes the intent obvious in the query text.
+  const { data, error } = await sb
+    .from('builds')
+    .select(
+      'id,name,tier,activities,description,created_at,parts_snapshot,'+
+      'platforms(id,name,slug),'+
+      // Two FKs to profiles exist (user_id + reviewed_by via role escalation trigger etc.).
+      // Name the author FK explicitly so PostgREST doesn't complain.
+      'profiles!builds_user_id_fkey(id,username),'+
+      'build_photos(storage_path,thumb_path,is_hero,position),'+
+      'build_fires(count)'
+    )
+    .eq('status', 'approved');
+
+  if (error) { showError('Could not load builds: ' + error.message); return; }
+
+  BUILDS = (data || []).map(function(b) {
+    const photos = b.build_photos || [];
+    const hero = photos.find(function(p){ return p.is_hero; }) || photos[0] || null;
+    const fireCount = Array.isArray(b.build_fires) && b.build_fires[0] ? Number(b.build_fires[0].count) : 0;
+    return Object.assign({}, b, {
+      _hero: hero,
+      _fireCount: fireCount,
+      _partsCount: Array.isArray(b.parts_snapshot) ? b.parts_snapshot.length : 0,
+      _msrpTotal: null,   // filled in by loadTotals
+    });
+  });
+
+  await Promise.all([loadTotals(), loadUserFires()]);
+  populateFilters();
+  renderGrid();
+}
+
+// Sum default-variant MSRPs for every catalog-picked part in visible builds.
+// One batched query for all products across all visible builds.
+async function loadTotals() {
+  const refIds = new Set();
+  BUILDS.forEach(function(b) {
+    (b.parts_snapshot || []).forEach(function(p) { if (p.refId) refIds.add(p.refId); });
+  });
+  if (!refIds.size) { BUILDS.forEach(function(b){ b._msrpTotal = 0; }); return; }
+
+  const { data, error } = await sb
+    .from('product_variants')
+    .select('product_id,msrp')
+    .eq('is_default', true)
+    .in('product_id', Array.from(refIds));
+
+  if (error) { console.error('loadTotals', error); return; }
+
+  const msrpByProduct = {};
+  (data || []).forEach(function(v) { msrpByProduct[v.product_id] = Number(v.msrp || 0); });
+
+  BUILDS.forEach(function(b) {
+    let sum = 0;
+    (b.parts_snapshot || []).forEach(function(p) {
+      if (p.refId && msrpByProduct[p.refId] != null) sum += msrpByProduct[p.refId];
+    });
+    b._msrpTotal = sum;
+  });
+}
+
+async function loadUserFires() {
+  if (!CURRENT_USER || !BUILDS.length) return;
+  const buildIds = BUILDS.map(function(b){ return b.id; });
+  const { data, error } = await sb
+    .from('build_fires')
+    .select('build_id')
+    .eq('user_id', CURRENT_USER.id)
+    .in('build_id', buildIds);
+  if (error) { console.error('loadUserFires', error); return; }
+  USER_FIRES = new Set((data || []).map(function(r){ return r.build_id; }));
+}
+
+// ============================================================
+// FILTER POPULATION
+// ============================================================
+function populateFilters() {
+  const platforms = {};
+  const activities = new Set();
+  BUILDS.forEach(function(b) {
+    if (b.platforms) platforms[b.platforms.id] = b.platforms.name;
+    (b.activities || []).forEach(function(a) { activities.add(a); });
+  });
+
+  const platSel = document.getElementById('filter-platform');
+  Object.keys(platforms).sort(function(a,b){ return platforms[a].localeCompare(platforms[b]); })
+    .forEach(function(id) {
+      const opt = document.createElement('option');
+      opt.value = id; opt.textContent = platforms[id];
+      platSel.appendChild(opt);
+    });
+
+  const actSel = document.getElementById('filter-activity');
+  Array.from(activities).sort().forEach(function(a) {
+    const opt = document.createElement('option');
+    opt.value = a; opt.textContent = a;
+    actSel.appendChild(opt);
+  });
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function filteredBuilds() {
+  const platformId = document.getElementById('filter-platform').value;
+  const activity   = document.getElementById('filter-activity').value;
+  const sort       = document.getElementById('filter-sort').value;
+
+  let out = BUILDS.slice();
+  if (platformId) out = out.filter(function(b){ return b.platforms && b.platforms.id === platformId; });
+  if (activity)   out = out.filter(function(b){ return (b.activities || []).indexOf(activity) !== -1; });
+
+  switch (sort) {
+    case 'fires':      out.sort(function(a,b){ return b._fireCount - a._fireCount; }); break;
+    case 'price-high': out.sort(function(a,b){ return (b._msrpTotal || 0) - (a._msrpTotal || 0); }); break;
+    case 'price-low':  out.sort(function(a,b){ return (a._msrpTotal || 0) - (b._msrpTotal || 0); }); break;
+    default:           out.sort(function(a,b){ return new Date(b.created_at) - new Date(a.created_at); });
+  }
+  return out;
+}
+
+function renderGrid() {
+  const container = document.getElementById('grid-container');
+  const list = filteredBuilds();
+
+  document.getElementById('page-count').textContent = list.length ? list.length+' build'+(list.length!==1?'s':'') : '';
+  document.getElementById('filter-clear').disabled = !hasActiveFilters();
+
+  if (!BUILDS.length) {
+    container.innerHTML =
+      '<div class="empty">'+
+        '<div class="empty-title">No builds yet</div>'+
+        '<div>Be the first to post a build.</div>'+
+        '<a class="empty-cta" href="gunforma-post-build-v6.html">Post your build</a>'+
+      '</div>';
+    return;
+  }
+  if (!list.length) {
+    container.innerHTML =
+      '<div class="empty">'+
+        '<div class="empty-title">No builds match those filters</div>'+
+        '<div>Try changing or clearing your filter selections.</div>'+
+      '</div>';
+    return;
+  }
+  container.innerHTML = '<div class="builds-grid">'+list.map(renderCard).join('')+'</div>';
+}
+
+function renderCard(b) {
+  const hero = b._hero;
+  const photoHtml = hero
+    ? '<img src="'+escH(photoUrl(hero.thumb_path || hero.storage_path))+'" alt=""/>'
+    : '<div class="build-card-nophoto">No photo</div>';
+  const platform = b.platforms ? b.platforms.name : '';
+  const author   = b.profiles ? b.profiles.username : 'unknown';
+  const tags = (b.activities || []).slice(0, 3).map(function(a) {
+    return '<span class="build-card-tag">'+escH(a)+'</span>';
+  }).join('');
+  const total = b._msrpTotal != null && b._msrpTotal > 0
+    ? '$'+Number(b._msrpTotal).toFixed(0)
+    : '—';
+  const parts = b._partsCount+' part'+(b._partsCount!==1?'s':'');
+  const fired = USER_FIRES.has(b.id);
+
+  // Click on the fire button must NOT navigate to the build detail — the
+  // whole card is a link, so we intercept the click and stop propagation.
+  const fireBtn =
+    '<button class="fire-btn'+(fired?' fired':'')+'" onclick="event.preventDefault();event.stopPropagation();toggleFire(\''+b.id+'\',this)">'+
+      '<span class="fire-btn-icon">🔥</span>'+
+      '<span class="fire-btn-count">'+b._fireCount+'</span>'+
+    '</button>';
+
+  return '<a class="build-card" href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'">'+
+      '<div class="build-card-photo">'+photoHtml+
+        (platform ? '<div class="build-card-badge">'+escH(platform)+'</div>' : '')+
+      '</div>'+
+      '<div class="build-card-body">'+
+        '<div class="build-card-name">'+escH(b.name)+'</div>'+
+        '<div class="build-card-author-row">by <strong>'+escH(author)+'</strong> · '+formatRelDate(b.created_at)+'</div>'+
+        (tags ? '<div class="build-card-tags">'+tags+'</div>' : '')+
+        '<div class="build-card-footer">'+
+          '<div class="build-card-meta">'+
+            '<div class="build-card-total">'+total+'</div>'+
+            '<div class="build-card-parts">'+parts+'</div>'+
+          '</div>'+
+          fireBtn+
+        '</div>'+
+      '</div>'+
+    '</a>';
+}
+
+function formatRelDate(iso) {
+  const d = new Date(iso), now = Date.now(), diff = (now - d.getTime()) / 1000;
+  if (diff < 60)      return 'just now';
+  if (diff < 3600)    return Math.floor(diff/60)   +'m ago';
+  if (diff < 86400)   return Math.floor(diff/3600) +'h ago';
+  if (diff < 604800)  return Math.floor(diff/86400)+'d ago';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function hasActiveFilters() {
+  return document.getElementById('filter-platform').value ||
+         document.getElementById('filter-activity').value ||
+         document.getElementById('filter-sort').value !== 'newest';
+}
+
+window.onFilterChange = function() { renderGrid(); };
+window.clearFilters = function() {
+  document.getElementById('filter-platform').value = '';
+  document.getElementById('filter-activity').value = '';
+  document.getElementById('filter-sort').value = 'newest';
+  renderGrid();
+};
+
+// ============================================================
+// FIRE / UNFIRE
+// ============================================================
+window.toggleFire = async function(buildId, btn) {
+  if (!CURRENT_USER) {
+    showToast('Sign in to fire builds', 'gunforma-signin.html');
+    return;
+  }
+  const build = BUILDS.find(function(b){ return b.id === buildId; });
+  if (!build) return;
+
+  const wasFired = USER_FIRES.has(buildId);
+  // Optimistic UI
+  if (wasFired) { USER_FIRES.delete(buildId); build._fireCount = Math.max(0, build._fireCount - 1); }
+  else          { USER_FIRES.add(buildId);    build._fireCount++; }
+  btn.classList.toggle('fired', !wasFired);
+  btn.querySelector('.fire-btn-count').textContent = build._fireCount;
+
+  const call = wasFired
+    ? sb.from('build_fires').delete().eq('build_id', buildId).eq('user_id', CURRENT_USER.id)
+    : sb.from('build_fires').insert({ build_id: buildId, user_id: CURRENT_USER.id });
+
+  const { error } = await call;
+  if (error) {
+    // Revert optimistic change
+    if (wasFired) { USER_FIRES.add(buildId);    build._fireCount++; }
+    else          { USER_FIRES.delete(buildId); build._fireCount = Math.max(0, build._fireCount - 1); }
+    btn.classList.toggle('fired', wasFired);
+    btn.querySelector('.fire-btn-count').textContent = build._fireCount;
+    showToast('Could not update — try again');
+    console.error('toggleFire', error);
+  }
+};
+
+// ============================================================
+// UI helpers
+// ============================================================
+function showError(msg) { document.getElementById('grid-container').innerHTML = '<div class="empty"><div class="empty-title">Error</div><div>'+escH(msg)+'</div></div>'; }
+function showToast(msg, linkHref) {
+  const t = document.getElementById('toast');
+  t.innerHTML = escH(msg) + (linkHref ? ' <a href="'+escH(linkHref)+'">Sign in →</a>' : '');
+  t.classList.add('show');
+  clearTimeout(window._ttoast);
+  window._ttoast = setTimeout(function(){ t.classList.remove('show'); }, 3200);
+}
+
+init();
+</script>
+</body>
+</html>

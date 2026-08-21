@@ -1,0 +1,310 @@
+<!-- DEMO CONTENT — Replace before publishing. Remove this comment block and the noindex
+     meta tag below when live content is ready:
+     <meta name="robots" content="noindex"> -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex">
+<title>Holosun 507C X2 Review — Field Notes — Gunforma</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+.page { background: #ffffff; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; cursor: pointer; transition: color 0.15s; }
+.nav-link:hover { color: #e8e6e1; }
+.nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.nav-btn:hover { color: #e8e6e1; border-color: #4a4b4e; }
+.nav-btn.cta { color: #fff; background: #4a9edd; border-color: #4a9edd; font-weight: 600; letter-spacing: 0.04em; }
+.nav-btn.cta:hover { background: #2a7bbd; border-color: #2a7bbd; }
+
+/* ARTICLE HEADER */
+.article-header { background: #fafaf8; border-bottom: 0.5px solid #e5e5e5; padding: 28px 36px; }
+.article-header-inner { max-width: 1100px; margin: 0 auto; }
+.breadcrumb { font-size: 11px; color: #999; margin-bottom: 14px; letter-spacing: 0.02em; }
+.breadcrumb a { color: #4a9edd; text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.breadcrumb-sep { margin: 0 6px; color: #ccc; }
+.article-type-badge { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 3px 9px; border-radius: 3px; background: #eaf4fc; color: #1d6fb8; border: 0.5px solid #a7cdec; margin-bottom: 12px; }
+.article-h1 { font-size: 28px; font-weight: 700; color: #1a1a1a; line-height: 1.2; letter-spacing: -0.02em; margin-bottom: 12px; max-width: 720px; }
+.article-byline { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.byline-author { font-size: 12px; color: #555; font-weight: 600; }
+.byline-meta { font-size: 11px; color: #999; }
+.byline-dot { color: #ccc; margin: 0 4px; }
+
+/* LAYOUT — main column + sticky sidebar */
+.article-body { max-width: 1100px; margin: 0 auto; padding: 36px 36px 48px; display: grid; grid-template-columns: 1fr 300px; gap: 36px; align-items: start; }
+
+/* MAIN COLUMN */
+.article-main {}
+
+/* COVER IMAGE */
+.cover-img { aspect-ratio: 16/9; background: #f4f3ee; border: 0.5px solid #e5e5e5; border-radius: 6px; display: flex; align-items: center; justify-content: center; margin-bottom: 32px; overflow: hidden; }
+.cover-img-label { font-size: 10px; color: #b8b5ac; letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* ARTICLE SECTIONS */
+.section-block { margin-bottom: 32px; }
+.section-block h2 { font-size: 16px; font-weight: 700; color: #1a1a1a; padding-bottom: 10px; border-bottom: 0.5px solid #e5e5e5; margin-bottom: 14px; letter-spacing: -0.01em; }
+.section-block p { font-size: 14px; color: #555; line-height: 1.75; margin-bottom: 12px; }
+.section-block p:last-child { margin-bottom: 0; }
+.section-block ul { margin: 0 0 12px 18px; }
+.section-block li { font-size: 14px; color: #555; line-height: 1.75; }
+
+/* PRODUCT CALLOUT CARD */
+.product-callout { display: flex; align-items: stretch; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; margin: 20px 0; background: #fff; }
+.product-callout-img { width: 90px; flex-shrink: 0; background: #f4f3ee; border-right: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: center; }
+.product-callout-img span { font-size: 8px; color: #b8b5ac; letter-spacing: 0.06em; writing-mode: vertical-rl; }
+.product-callout-body { padding: 12px 14px; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.product-callout-type { font-size: 9px; color: #4a9edd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; }
+.product-callout-name { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.product-callout-price { font-size: 12px; color: #2a7bbd; font-weight: 700; }
+.product-callout-link { margin-left: auto; padding: 0 18px; display: flex; align-items: center; justify-content: center; background: #eaf4fc; border-left: 0.5px solid #a7cdec; font-size: 11px; color: #1d6fb8; font-weight: 600; text-decoration: none; white-space: nowrap; transition: background 0.15s; flex-shrink: 0; }
+.product-callout-link:hover { background: #d0e9f8; }
+
+/* SIDEBAR */
+.article-sidebar {}
+.verdict-card { background: #fafaf8; border: 0.5px solid #e5e5e5; border-left: 3px solid #4a9edd; border-radius: 6px; padding: 18px; position: sticky; top: 72px; }
+.verdict-label { font-size: 9px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.verdict-product { font-size: 14px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+.verdict-stars { color: #f59e0b; font-size: 16px; letter-spacing: 1px; margin-bottom: 14px; display: block; }
+.verdict-divider { border: none; border-top: 0.5px solid #e5e5e5; margin: 12px 0; }
+.verdict-pros-cons { margin-bottom: 2px; }
+.verdict-pros-cons-label { font-size: 9px; color: #888; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.verdict-item { display: flex; align-items: flex-start; gap: 7px; font-size: 12px; color: #555; line-height: 1.5; margin-bottom: 5px; }
+.verdict-item-icon { flex-shrink: 0; font-size: 11px; font-weight: 700; width: 14px; }
+.verdict-item-icon.pro  { color: #16a34a; }
+.verdict-item-icon.con  { color: #dc2626; }
+.verdict-score-row { display: flex; align-items: baseline; justify-content: space-between; margin-top: 4px; }
+.verdict-score-num { font-size: 24px; font-weight: 700; color: #1a1a1a; letter-spacing: -0.03em; }
+.verdict-score-denom { font-size: 13px; color: #999; margin-left: 2px; }
+.verdict-score-label { font-size: 10px; color: #999; letter-spacing: 0.08em; text-transform: uppercase; }
+.verdict-buy-btn { display: block; margin-top: 14px; background: #4a9edd; color: #fff; font-size: 12px; font-weight: 600; text-align: center; padding: 9px 14px; border-radius: 4px; text-decoration: none; letter-spacing: 0.04em; transition: background 0.15s; }
+.verdict-buy-btn:hover { background: #2a7bbd; }
+
+/* RELATED ARTICLES */
+.related-section { border-top: 0.5px solid #e5e5e5; padding: 32px 36px 48px; }
+.related-inner { max-width: 1100px; margin: 0 auto; }
+.related-label { font-size: 11px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 16px; }
+.related-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.related-card { border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; text-decoration: none; color: inherit; display: block; transition: border-color 0.15s, box-shadow 0.15s; }
+.related-card:hover { border-color: #4a9edd; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
+.related-img { aspect-ratio: 16/9; background: #f4f3ee; border-bottom: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: center; position: relative; }
+.related-img-label { font-size: 8px; color: #b8b5ac; letter-spacing: 0.06em; }
+.related-type-badge { position: absolute; top: 6px; left: 6px; font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 2px 7px; border-radius: 3px; }
+.related-type-badge.review     { background: #eaf4fc; color: #1d6fb8; border: 0.5px solid #a7cdec; }
+.related-type-badge.comparison { background: #fff5e6; color: #b45309; border: 0.5px solid #f8d5a0; }
+.related-body { padding: 12px; }
+.related-title { font-size: 13px; font-weight: 700; color: #1a1a1a; line-height: 1.35; margin-bottom: 6px; }
+.related-meta { font-size: 10px; color: #999; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafaf8; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+@media (max-width: 760px) {
+  .nav-links { display: none; }
+  .article-header { padding: 22px 18px; }
+  .article-body { grid-template-columns: 1fr; padding: 24px 18px 36px; gap: 24px; }
+  .verdict-card { position: static; }
+  .related-section { padding: 24px 18px 36px; }
+  .related-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <nav class="nav">
+    <a href="index.html" class="nav-logo" style="text-decoration:none;">GUN<span>FORMA</span></a>
+    <div class="nav-links">
+      <a href="index.html" class="nav-link" style="text-decoration:none;">Home</a>
+      <a href="gunforma-builds.html" class="nav-link" style="text-decoration:none;">Builds</a>
+      <a href="gunforma-parts-catalog.html" class="nav-link" style="text-decoration:none;">Parts catalog</a>
+      <a href="5-ARMORY.html" class="nav-link" style="text-decoration:none;">Armory</a>
+      <a href="/field-notes/" class="nav-link active" style="text-decoration:none;">Field Notes</a>
+    </div>
+    <div class="nav-right">
+      <a href="gunforma-signin.html" class="nav-btn" style="text-decoration:none;">Sign in</a>
+      <a href="gunforma-post-build-v6.html" class="nav-btn cta" style="text-decoration:none;">+ Post your build</a>
+    </div>
+  </nav>
+
+  <div style="background:#fafaf8;border-bottom:0.5px solid #e5e5e5;padding:8px 36px;font-size:11px;color:#888;">
+    Gunforma earns affiliate commissions on purchases made through our links — at no extra cost to you. <a href="#" style="color:#4a9edd;text-decoration:none;">Learn more</a>
+  </div>
+
+  <div class="article-header">
+    <div class="article-header-inner">
+      <div class="breadcrumb">
+        <a href="/field-notes/">Field Notes</a>
+        <span class="breadcrumb-sep">›</span>
+        <a href="/field-notes/">Reviews</a>
+        <span class="breadcrumb-sep">›</span>
+        Holosun 507C X2
+      </div>
+      <span class="article-type-badge">Review</span>
+      <h1 class="article-h1">Holosun 507C X2 — The Red Dot Everyone's Running For Good Reason</h1>
+      <div class="article-byline">
+        <span class="byline-author">Marcus Webb</span>
+        <span class="byline-meta">
+          June 18, 2026
+          <span class="byline-dot">·</span>
+          8 min read
+          <span class="byline-dot">·</span>
+          Optics
+        </span>
+      </div>
+    </div>
+  </div>
+
+  <div class="article-body">
+
+    <main class="article-main">
+      <div class="cover-img">
+        <span class="cover-img-label">[ Cover photo — Holosun 507C X2 mounted on pistol, studio lighting ]</span>
+      </div>
+
+      <div class="section-block">
+        <h2>Overview</h2>
+        <p>The Holosun 507C X2 has become the default recommendation for anyone building a red-dot equipped pistol in the $250–$300 range. After running one for over 2,000 rounds across three different hosts — a Glock 17, a P320 X-Carry, and a Shadow Systems MR920 — I can tell you exactly when it earns that reputation and where it falls short.</p>
+        <p>Holosun's Multi-Reticle System (MRS) gives you the choice between a 2 MOA dot, a 32 MOA circle, or both together. In practice, most shooters land on circle-dot and stay there. The solar failsafe cell on top means you almost never touch the battery.</p>
+      </div>
+
+      <div class="product-callout">
+        <div class="product-callout-img"><span>[ product ]</span></div>
+        <div class="product-callout-body">
+          <div class="product-callout-type">Optic — Red Dot</div>
+          <div class="product-callout-name">Holosun 507C X2</div>
+          <div class="product-callout-price">$289 at Brownells</div>
+        </div>
+        <a href="#" class="product-callout-link">Check price &#8594;</a>
+      </div>
+
+      <div class="section-block">
+        <h2>Build quality and footprint</h2>
+        <p>The 507C X2 uses a 6061 aluminum housing with a titanium top plate — noticeably more solid than the plastic-feeling SRO at double the price. The shake-awake feature activates the optic on any motion, so you draw to a live dot every time. Standby battery life is rated at 50,000 hours; real-world I've seen over two years between changes even running it manually most of the time.</p>
+        <p>Footprint is the standard Holosun K pattern, which fits most optics-ready slides without a plate. On the Glock MOS, you'll want the appropriate adapter. The screws are T10 torx — carry a spare on any long range day.</p>
+      </div>
+
+      <div class="section-block">
+        <h2>Glass and reticle clarity</h2>
+        <p>The lens is green-tinted glass, not the clearer glass you get in the 509T or the Trijicon RMR. In direct sunlight at low brightness settings the dot can wash out slightly. At settings 6–8 it's bright enough for any outdoor use. Indoors, settings 3–4 are plenty. The 32 MOA circle is crisp with no visible pixelation at arm's length.</p>
+        <p>Astigmatism sufferers: the dot can appear as a starburst depending on your prescription. This is an optic limitation, not a defect. Try a 3 MOA dot variant if the 2 MOA gives you trouble.</p>
+      </div>
+
+      <div class="section-block">
+        <h2>Durability</h2>
+        <p>IP67 rated. I've shot it in heavy rain with no issues, and it's survived a couple of unintentional drops from bench height. The X2 generation added a larger, recessed adjustment cap versus the original 507C — the old design was notorious for breaking if torqued too hard. The new caps are significantly more durable. Zero retention after 500 rounds of +P has been rock solid on all three hosts tested.</p>
+      </div>
+
+      <div class="section-block">
+        <h2>Mounting and co-witness</h2>
+        <p>The 507C X2 sits lower than competitors like the Trijicon RMR, which gives you a lower 1/3 co-witness with most suppressor-height sights. Full co-witness requires taller sights. If you're switching from an RMR footprint slide, confirm the plate compatibility — they don't share mounting patterns despite the similar size.</p>
+      </div>
+
+      <div class="section-block">
+        <h2>Who it's for</h2>
+        <ul>
+          <li>First-time red dot shooter who wants a reliable optic without spending RMR money</li>
+          <li>Carry builds where solar failsafe battery life matters</li>
+          <li>Competition shooters running USPSA Production/Carry Optics who want a proven platform</li>
+          <li>Anyone who wants MRS flexibility — the circle-dot combo is genuinely useful for fast target acquisition</li>
+        </ul>
+      </div>
+
+      <div class="section-block">
+        <h2>Bottom line</h2>
+        <p>At $289, the 507C X2 is the honest answer to "what red dot should I start with?" It's not the clearest glass on the market and it's not as bombproof as a Trijicon RMR, but it's 85% of the optic at 55% of the price with features — solar cell, MRS, shake-awake — the RMR still doesn't have. If you're already spending $500+ on a slide cut, spend the $289 here and don't look back.</p>
+      </div>
+    </main>
+
+    <aside class="article-sidebar">
+      <div class="verdict-card">
+        <div class="verdict-label">Verdict</div>
+        <div class="verdict-product">Holosun 507C X2</div>
+        <span class="verdict-stars">&#9733;&#9733;&#9733;&#9733;&#9734;</span>
+        <hr class="verdict-divider">
+        <div class="verdict-pros-cons">
+          <div class="verdict-pros-cons-label">Pros</div>
+          <div class="verdict-item"><span class="verdict-item-icon pro">+</span><span>Solar failsafe — battery outlasts the gun</span></div>
+          <div class="verdict-item"><span class="verdict-item-icon pro">+</span><span>Multi-reticle system (dot, circle, or both)</span></div>
+          <div class="verdict-item"><span class="verdict-item-icon pro">+</span><span>Shake-awake activation</span></div>
+          <div class="verdict-item"><span class="verdict-item-icon pro">+</span><span>Strong zero retention</span></div>
+        </div>
+        <hr class="verdict-divider">
+        <div class="verdict-pros-cons">
+          <div class="verdict-pros-cons-label">Cons</div>
+          <div class="verdict-item"><span class="verdict-item-icon con">–</span><span>Green-tinted glass, not competition-grade clarity</span></div>
+          <div class="verdict-item"><span class="verdict-item-icon con">–</span><span>Dot washes out at low brightness in direct sun</span></div>
+          <div class="verdict-item"><span class="verdict-item-icon con">–</span><span>Astigmatism can distort the dot</span></div>
+        </div>
+        <hr class="verdict-divider">
+        <div class="verdict-score-row">
+          <div>
+            <span class="verdict-score-num">9.1</span><span class="verdict-score-denom">/10</span>
+          </div>
+          <div class="verdict-score-label">Overall score</div>
+        </div>
+        <a href="#" class="verdict-buy-btn">Buy on Brownells &#8594;</a>
+      </div>
+    </aside>
+
+  </div>
+
+  <div class="related-section">
+    <div class="related-inner">
+      <div class="related-label">Related Field Notes</div>
+      <div class="related-grid">
+        <a href="holosun-507c-vs-trijicon-rmr-comparison.html" class="related-card">
+          <div class="related-img">
+            <span class="related-img-label">[ article photo ]</span>
+            <span class="related-type-badge comparison">Comparison</span>
+          </div>
+          <div class="related-body">
+            <div class="related-title">Holosun 507C X2 vs Trijicon RMR — Which One Actually Wins?</div>
+            <div class="related-meta">Marcus Webb · June 10, 2026</div>
+          </div>
+        </a>
+        <a href="#" class="related-card">
+          <div class="related-img">
+            <span class="related-img-label">[ article photo ]</span>
+            <span class="related-type-badge review">Review</span>
+          </div>
+          <div class="related-body">
+            <div class="related-title">Trijicon RMR Type 2 — Still the Standard After All These Years</div>
+            <div class="related-meta">Field Notes · Coming soon</div>
+          </div>
+        </a>
+        <a href="#" class="related-card">
+          <div class="related-img">
+            <span class="related-img-label">[ article photo ]</span>
+            <span class="related-type-badge review">Review</span>
+          </div>
+          <div class="related-body">
+            <div class="related-title">Streamlight TLR-7 Sub — The Right Light for a Compact Build</div>
+            <div class="related-meta">Field Notes · Coming soon</div>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-bar">
+    <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+    <span class="footer-txt"><a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
+  </div>
+
+</div>
+</body>
+</html>
