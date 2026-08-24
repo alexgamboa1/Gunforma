@@ -1,7 +1,7 @@
 // nav.js — renders the shared top nav into <div id="nav-mount" data-nav="...">
 // -----------------------------------------------------------------------------
 // Variants (data-nav="..."):
-//   full        — logo + Home/Builds/Parts Catalog/Armory + Sign in / Post btn
+//   full        — logo + Home/Builds/Parts Catalog + Sign in / Post btn
 //   full-authed — same, but no "Post your build" CTA and no "Sign in" link.
 //                 Used on auth-required workflow pages (post-build-v6,
 //                 admin-queue, complete-profile, claim) where the user is
@@ -58,7 +58,6 @@
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-          '<a class="nav-link" href="#">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<span class="nav-btn" id="nav-signin">…</span>' +
@@ -73,7 +72,6 @@
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-          '<a class="nav-link" href="#">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
