@@ -11,3 +11,7 @@ scripts/builders.json
 
 # Claude Code local scratch state
 .claude/
+
+# Draft blog mockups — kept locally, not for public tracking
+holosun-507c-vs-trijicon-rmr-comparison.html
+holosun-507c-x2-review.html
