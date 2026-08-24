@@ -198,14 +198,6 @@ var SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co'; // Gunforma-v2
 var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// Session watchdog: catches sign-outs (from another tab, or here) and
-// silent token-refresh failures so the user doesn't sit on a stale UI.
-sb.auth.onAuthStateChange(function(event, session) {
-  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    window.location.href = 'gunforma-signin.html';
-  }
-});
-
 // Origin used when we hand Supabase a URL to email the user (password reset,
 // email confirmation). Detects local dev by hostname so the same file works
 // on the local static server and in production without a build step. Any

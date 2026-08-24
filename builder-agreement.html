@@ -171,14 +171,6 @@ const SUPABASE_URL  = 'https://wcrkktxkvkvmfvbgqrbz.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjcmtrdHhrdmt2bWZ2YmdxcmJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MzQ0NjIsImV4cCI6MjA5NjExMDQ2Mn0.66ZBMaQPle_j8e5bLcu6lsTusVcxmL8-SSQ9Ou8-AqM';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// Session watchdog: catches sign-outs (from another tab, or here) and
-// silent token-refresh failures so the user doesn't sit on a stale UI.
-sb.auth.onAuthStateChange(function(event, session) {
-  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    window.location.href = 'gunforma-signin.html';
-  }
-});
-
 const AGREEMENT_VERSION = 'v1-2026-01';
 
 async function init() {

@@ -238,12 +238,11 @@ const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// Session watchdog: catches sign-outs (from another tab, or here) and
-// silent token-refresh failures so the user doesn't sit on a stale UI.
+// Session watchdog: public page — update nav state, don't redirect.
+// Supabase can fire SIGNED_OUT during the initial auth check for anon
+// users; redirecting would bounce visitors off a public build page.
 sb.auth.onAuthStateChange(function(event, session) {
-  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    window.location.href = 'gunforma-signin.html';
-  }
+  updateNavAuth();
 });
 
 // Session-aware nav: signed-in users see their username + a Sign out button

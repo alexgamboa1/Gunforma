@@ -142,12 +142,20 @@ const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
 
-// Session watchdog: catches sign-outs (from another tab, or here) and
-// silent token-refresh failures so the user doesn't sit on a stale UI.
+// Session watchdog: public page — refresh UI state, don't redirect.
+// Supabase can fire SIGNED_OUT during the initial auth check for anon
+// users; redirecting on that would bounce visitors off the grid.
+// Use the callback's `session` param so an INITIAL_SESSION for a signed-in
+// user doesn't wipe their state and re-render the grid as anon.
 sb.auth.onAuthStateChange(function(event, session) {
-  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    window.location.href = 'gunforma-signin.html';
-  }
+  var newUser = session ? session.user : null;
+  var wasSignedIn = !!CURRENT_USER;
+  CURRENT_USER = newUser;
+  if (!newUser) USER_FIRES = new Set();
+  updateSignInLink();
+  // Only re-render on an actual auth change — INITIAL_SESSION firing with
+  // the same state we already loaded doesn't need another repaint.
+  if ((!newUser) !== (!wasSignedIn)) renderGrid();
 });
 
 function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
