@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Claim your account — Gunforma</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
+
+/* NAV — matches complete-profile / signup */
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-link { font-size: 12px; color: #888780; text-decoration: none; background: none; border: none; font-family: inherit; cursor: pointer; }
+.nav-link:hover { color: #e8e6e1; }
+
+/* HERO STRIP */
+.hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.hero-title { font-size: 26px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; margin-bottom: 8px; }
+.hero-sub { font-size: 13px; color: #888780; line-height: 1.6; max-width: 460px; margin: 0 auto; }
+
+/* CARD */
+.card-wrap { display: flex; justify-content: center; padding: 0 20px 60px; margin-top: -24px; flex: 1; }
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px; width: 100%; max-width: 460px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+
+/* BUILD PREVIEW — the VIP moment: builder sees their own build on first load */
+.build-preview { border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden; margin-bottom: 22px; background: #fafaf8; opacity: 0; transform: translateY(4px); animation: fade-in .38s ease-out forwards; }
+@keyframes fade-in { to { opacity: 1; transform: translateY(0); } }
+.build-preview-photo { aspect-ratio: 16 / 10; background: #efece5; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.build-preview-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.build-preview-photo-fallback { font-size: 10px; color: #b8b5ac; letter-spacing: 0.08em; text-transform: uppercase; }
+.build-preview-body { padding: 14px 16px 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.build-preview-meta { min-width: 0; }
+.build-preview-eyebrow { font-size: 9px; color: #2a7bbd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+.build-preview-name { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.25; margin-bottom: 3px; }
+.build-preview-platform { font-size: 11px; color: #666; }
+.build-preview-link { flex-shrink: 0; font-size: 11px; font-weight: 700; color: #2a7bbd; text-decoration: none; padding: 6px 10px; border: 0.5px solid #a7cdec; border-radius: 4px; white-space: nowrap; transition: background .12s ease, color .12s ease, border-color .12s ease; }
+.build-preview-link:hover { background: #2a7bbd; color: #fff; border-color: #2a7bbd; }
+
+/* FORM */
+.field { margin-bottom: 16px; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #555; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between; }
+.field-input { width: 100%; font-size: 14px; padding: 11px 12px; border: 0.5px solid #e5e5e5; border-radius: 6px; font-family: inherit; color: #1a1a1a; transition: border-color .18s ease, box-shadow .18s ease; }
+.field-input:focus { outline: none; border-color: #4a9edd; box-shadow: 0 0 0 3px rgba(74,158,221,0.12); }
+.field-input.error { border-color: #e25c3a; }
+.field-input.success { border-color: #22a06b; }
+.field-input:read-only { background: #fafaf8; color: #555; cursor: default; }
+.field-help { font-size: 11px; margin-top: 5px; line-height: 1.5; transition: color .18s ease; }
+.field-help.error   { color: #e25c3a; }
+.field-help.success { color: #22a06b; }
+.field-help.neutral { color: #999; }
+
+/* USERNAME AVAILABILITY badge */
+.username-status { font-size: 11px; font-weight: 700; transition: color .18s ease; }
+.username-status.checking { color: #999; }
+.username-status.available { color: #22a06b; }
+.username-status.taken { color: #e25c3a; }
+
+/* CHECKBOX */
+.checkbox-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 20px; }
+.checkbox-row input { margin-top: 3px; accent-color: #4a9edd; flex-shrink: 0; cursor: pointer; }
+.checkbox-row label { font-size: 12px; color: #666; line-height: 1.6; cursor: pointer; }
+.checkbox-row a { color: #2a7bbd; text-decoration: none; }
+.checkbox-row a:hover { text-decoration: underline; }
+
+/* BUTTON */
+.btn-submit { width: 100%; font-size: 13px; font-weight: 700; background: #4a9edd; color: #fff; border: none; padding: 14px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; transition: background .15s ease, transform .12s ease, box-shadow .15s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-submit:hover:not(:disabled) { background: #2a7bbd; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(42,123,189,0.22); }
+.btn-submit:active:not(:disabled) { transform: translateY(0); box-shadow: none; }
+.btn-submit:disabled { background: #d9e6f2; color: #6a97be; cursor: not-allowed; }
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+.spinner.show { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* FOOTER LINK */
+.card-footer { text-align: center; font-size: 12px; color: #888; margin-top: 18px; }
+.card-footer a, .card-footer button { color: #2a7bbd; font-weight: 600; text-decoration: none; background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; font-size: 12px; }
+.card-footer a:hover, .card-footer button:hover { text-decoration: underline; }
+
+/* GLOBAL ERROR */
+.global-error { background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 11px 14px; font-size: 12px; color: #9b1c1c; margin-bottom: 16px; line-height: 1.5; display: none; }
+.global-error.show { display: block; }
+
+/* SIGNED-IN AS BANNER (email shown as read-only pill above form) */
+.signed-in-as { font-size: 11px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; border-radius: 6px; padding: 8px 12px; margin-bottom: 18px; line-height: 1.5; }
+.signed-in-as strong { color: #1a1a1a; font-weight: 700; }
+
+/* GATE / EXPIRED STATES */
+.gate { display: flex; align-items: center; justify-content: center; min-height: 200px; font-size: 12px; color: #888; }
+.state-expired { text-align: center; padding: 12px 0; }
+.state-expired-icon { font-size: 32px; margin-bottom: 12px; color: #999; }
+.state-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.state-sub { font-size: 13px; color: #666; line-height: 1.7; margin-bottom: 16px; }
+
+.cf-turnstile { margin-bottom: 16px; }
+
+/* MOBILE */
+@media (max-width: 480px) {
+  .card { padding: 22px 18px; }
+  .hero-strip { padding: 32px 20px 40px; }
+  .hero-title { font-size: 22px; }
+  .build-preview-body { flex-direction: column; align-items: flex-start; }
+  .build-preview-link { align-self: stretch; text-align: center; }
+}
+</style>
+<script>
+  // Turnstile site key — swap in Cloudflare's always-passes test key for
+  // local development so widgets don't show "Unable to connect" when the
+  // real key's hostname allowlist doesn't include localhost.
+  window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
+    ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+
+  // Explicit-render callback: Turnstile invokes this once its script loads.
+  // Since the widget is injected AFTER the invite session resolves, we also
+  // trigger a render from renderForm() on the freshly-added element.
+  window.onloadTurnstileCallback = function() {
+    document.querySelectorAll('.cf-turnstile').forEach(function(el) {
+      if (el.dataset.widgetId) return;
+      el.dataset.widgetId = turnstile.render(el, {
+        sitekey: TURNSTILE_SITE_KEY,
+        theme:   el.dataset.theme || 'light',
+      });
+    });
+  };
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <button class="nav-link" onclick="signOutAndBounce()">Not you? Sign out</button>
+</nav>
+
+<div class="hero-strip">
+  <div class="hero-eyebrow">Welcome</div>
+  <div class="hero-title" id="hero-title">Welcome to Gunforma</div>
+  <p class="hero-sub" id="hero-sub">You're one of the first 30 builders. Your build is already live.</p>
+</div>
+
+<div class="card-wrap">
+  <div class="card" id="card">
+    <div class="gate" id="gate">Verifying your invite…</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// SUPABASE
+// ============================================================
+const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+
+// Session watchdog — same defensive redirect used across the auth pages.
+sb.auth.onAuthStateChange(function(event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+
+// Turnstile widget helpers (same pattern as the other auth pages).
+function getTurnstileToken(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  return (window.turnstile && wid) ? turnstile.getResponse(wid) : '';
+}
+function resetTurnstileWidget(widgetElId) {
+  var el = document.getElementById(widgetElId);
+  var wid = el && el.dataset.widgetId;
+  if (window.turnstile && wid) turnstile.reset(wid);
+}
+
+// ============================================================
+// STATE
+// ============================================================
+var CURRENT_USER = null;
+var LINKED_BUILD = null;    // {id, name, platform, hero_thumb_path}
+var usernameTimer = null;
+var usernameValid = false;
+
+// ============================================================
+// INIT — three cases
+//   (a) no invite tokens → expired screen
+//   (b) tokens present, setSession fails → expired screen
+//   (c) success → fetch linked build, render form
+// ============================================================
+(async function init() {
+  var frag = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  var accessToken  = frag.get('access_token');
+  var refreshToken = frag.get('refresh_token');
+  var type         = frag.get('type');
+
+  if (!accessToken || !refreshToken || type !== 'invite') return showExpired();
+
+  var { data: sessData, error: sessErr } = await sb.auth.setSession({
+    access_token:  accessToken,
+    refresh_token: refreshToken,
+  });
+  if (sessErr || !sessData || !sessData.session) return showExpired();
+
+  CURRENT_USER = sessData.session.user;
+
+  // Clean the invite token out of the address bar so a refresh doesn't
+  // try to re-consume it and so it doesn't linger in browser history.
+  history.replaceState({}, '', window.location.pathname);
+
+  // Best-effort fetch of the linked build. Some invited users may have no
+  // build yet (per spec), so this failing silently is fine.
+  try {
+    var { data: builds } = await sb
+      .from('builds')
+      .select('id, name, platforms(name), build_photos(storage_path, thumb_path, is_hero, position)')
+      .eq('user_id', CURRENT_USER.id)
+      .limit(1);
+    if (builds && builds.length) {
+      var b = builds[0];
+      var photos = b.build_photos || [];
+      // Prefer explicit hero, fall back to lowest position, then just the first.
+      var hero = photos.find(function(p){ return p.is_hero; })
+              || photos.slice().sort(function(x,y){ return (x.position||0) - (y.position||0); })[0]
+              || null;
+      LINKED_BUILD = {
+        id: b.id,
+        name: b.name,
+        platform: b.platforms ? b.platforms.name : '',
+        heroPath: hero ? (hero.thumb_path || hero.storage_path) : null,
+      };
+    }
+  } catch (e) { /* build preview is nice-to-have; onboarding proceeds without it */ }
+
+  renderForm();
+})();
+
+// ============================================================
+// RENDER — expired
+// ============================================================
+function showExpired() {
+  document.getElementById('hero-title').textContent = 'That invite didn’t work';
+  document.getElementById('hero-sub').textContent   = '';
+  document.getElementById('card').innerHTML =
+    '<div class="state-expired">'+
+      '<div class="state-expired-icon">✖</div>'+
+      '<div class="state-title">This invite link has expired or was already used</div>'+
+      '<div class="state-sub">Invites are single-use. If you’ve already claimed your account, just sign in.</div>'+
+      '<a class="btn-submit" href="gunforma-signin.html" style="text-decoration:none;">Go to sign in →</a>'+
+    '</div>';
+}
+
+// ============================================================
+// RENDER — main claim form
+// ============================================================
+function renderForm() {
+  var email = CURRENT_USER.email || '';
+
+  var buildPreviewHtml = '';
+  if (LINKED_BUILD) {
+    var photoHtml = LINKED_BUILD.heroPath
+      ? '<img src="'+escH(photoUrl(LINKED_BUILD.heroPath))+'" alt="'+escH(LINKED_BUILD.name)+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;build-preview-photo-fallback&quot;>Hero photo unavailable</div>\'"/>'
+      : '<div class="build-preview-photo-fallback">No hero photo yet</div>';
+    buildPreviewHtml =
+      '<div class="build-preview">'+
+        '<div class="build-preview-photo">'+photoHtml+'</div>'+
+        '<div class="build-preview-body">'+
+          '<div class="build-preview-meta">'+
+            '<div class="build-preview-eyebrow">Your build is live</div>'+
+            '<div class="build-preview-name">'+escH(LINKED_BUILD.name)+'</div>'+
+            (LINKED_BUILD.platform ? '<div class="build-preview-platform">'+escH(LINKED_BUILD.platform)+'</div>' : '')+
+          '</div>'+
+          '<a class="build-preview-link" href="gunforma-build-detail.html?id='+encodeURIComponent(LINKED_BUILD.id)+'" target="_blank" rel="noopener">View your build →</a>'+
+        '</div>'+
+      '</div>';
+  }
+
+  document.getElementById('card').innerHTML =
+    '<div class="global-error" id="global-error"></div>'+
+    buildPreviewHtml +
+    '<div class="signed-in-as">Signed in as <strong>'+escH(email)+'</strong></div>'+
+    '<div class="field">'+
+      '<label class="field-label">Pick your username <span class="username-status" id="username-status"></span></label>'+
+      '<input class="field-input" id="username" type="text" placeholder="e.g. jmiller_tx" autocomplete="username" oninput="onUsernameInput()"/>'+
+      '<div class="field-help neutral" id="username-help">Letters, numbers, and underscores only. This shows on your public builds.</div>'+
+    '</div>'+
+    '<div class="checkbox-row">'+
+      '<input type="checkbox" id="consent" onchange="refreshSubmitState()"/>'+
+      '<label for="consent">I agree to Gunforma\'s <a href="#" target="_blank" rel="noopener">Terms of Service</a> and confirm that my build may be displayed publicly on Gunforma.</label>'+
+    '</div>'+
+    '<div class="cf-turnstile" id="ts-claim" data-theme="light"></div>'+
+    '<button class="btn-submit" id="submit-btn" onclick="handleClaim()" disabled>'+
+      '<div class="spinner" id="spinner"></div>'+
+      '<span id="btn-text">Claim My Account →</span>'+
+    '</button>'+
+    '<div class="card-footer">Wrong account? <a href="#" onclick="signOutAndBounce();return false;">Sign out and start over</a></div>';
+
+  // Turnstile might have already loaded before we injected the widget div.
+  // If so, render it explicitly now (the onload callback checks widgetId to
+  // avoid double-rendering when both paths race).
+  if (window.turnstile) {
+    var el = document.getElementById('ts-claim');
+    if (el && !el.dataset.widgetId) {
+      el.dataset.widgetId = turnstile.render(el, { sitekey: TURNSTILE_SITE_KEY, theme: 'light' });
+    }
+  }
+}
+
+// ============================================================
+// USERNAME AVAILABILITY (mirror of signup.html)
+// ============================================================
+function onUsernameInput() {
+  var val = document.getElementById('username').value.trim();
+  var status = document.getElementById('username-status');
+  var help   = document.getElementById('username-help');
+  var input  = document.getElementById('username');
+  clearTimeout(usernameTimer);
+  usernameValid = false;
+  refreshSubmitState();
+
+  if (!val) {
+    status.textContent = '';
+    input.className = 'field-input';
+    help.textContent = 'Letters, numbers, and underscores only. This shows on your public builds.';
+    help.className = 'field-help neutral';
+    return;
+  }
+  if (!/^[a-zA-Z0-9_]{3,24}$/.test(val)) {
+    status.textContent = 'Invalid';
+    status.className = 'username-status taken';
+    input.className = 'field-input error';
+    help.textContent = '3–24 characters, letters/numbers/underscores only.';
+    help.className = 'field-help error';
+    return;
+  }
+  status.textContent = 'Checking…';
+  status.className = 'username-status checking';
+  input.className = 'field-input';
+
+  usernameTimer = setTimeout(async function() {
+    // Exclude the current user from the uniqueness check — otherwise a
+    // signed-in user editing their own username sees "Taken" on their own row.
+    var res = await sb.from('profiles')
+      .select('id, username')
+      .eq('username', val)
+      .maybeSingle();
+    var takenBySomeoneElse = !!(res.data && res.data.id !== CURRENT_USER.id);
+    if (takenBySomeoneElse) {
+      status.textContent = 'Taken';
+      status.className = 'username-status taken';
+      input.className = 'field-input error';
+      help.textContent = 'That username is already in use. Try another.';
+      help.className = 'field-help error';
+      usernameValid = false;
+    } else {
+      status.textContent = 'Available ✓';
+      status.className = 'username-status available';
+      input.className = 'field-input success';
+      help.textContent = '';
+      usernameValid = true;
+    }
+    refreshSubmitState();
+  }, 500);
+}
+
+function refreshSubmitState() {
+  var consent = !!document.getElementById('consent')?.checked;
+  var btn = document.getElementById('submit-btn');
+  if (btn) btn.disabled = !(usernameValid && consent);
+}
+
+// ============================================================
+// CLAIM — one atomic update to profiles
+// ============================================================
+async function handleClaim() {
+  showError('');
+
+  var turnstileToken = getTurnstileToken('ts-claim');
+  if (!turnstileToken) { showError('Please complete the verification.'); return; }
+
+  var username = document.getElementById('username').value.trim();
+  var consent  = document.getElementById('consent').checked;
+
+  if (!username || !usernameValid) { showError('Choose an available username first.'); return; }
+  if (!consent) { showError('Please accept the terms to claim your account.'); return; }
+
+  setLoading(true);
+  var { error } = await sb
+    .from('profiles')
+    .update({
+      username: username,
+      onboarding_complete: true,
+      builder_agreement_accepted: true,
+      builder_agreement_version: 'pre-launch-v1',
+      builder_agreement_accepted_at: new Date().toISOString(),
+    })
+    .eq('id', CURRENT_USER.id);
+  setLoading(false);
+
+  if (error) {
+    resetTurnstileWidget('ts-claim');
+    // Uniqueness race: someone else grabbed the same username in the last
+    // few hundred ms between the availability check and the submit.
+    if (error.code === '23505' || /duplicate|unique/i.test(error.message)) {
+      showError('That username was just taken. Try another.');
+      usernameValid = false;
+      refreshSubmitState();
+      return;
+    }
+    if (/expired|session/i.test(error.message)) {
+      showError('Your invite session expired mid-flow. Reload this page from the invite email and try again.');
+      return;
+    }
+    showError(error.message || 'Could not claim your account. Please try again.');
+    return;
+  }
+
+  // Success — send them straight to their build if we found one, otherwise home.
+  if (LINKED_BUILD && LINKED_BUILD.id) {
+    window.location.href = 'gunforma-build-detail.html?id=' + encodeURIComponent(LINKED_BUILD.id);
+  } else {
+    window.location.href = 'index.html';
+  }
+}
+
+async function signOutAndBounce() {
+  await sb.auth.signOut();
+  // onAuthStateChange also fires; either wins, both go to signin.
+  window.location.href = 'gunforma-signin.html';
+}
+
+// ============================================================
+// UI helpers
+// ============================================================
+function showError(msg) {
+  var el = document.getElementById('global-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle('show', !!msg);
+}
+function setLoading(on) {
+  var btn = document.getElementById('submit-btn');
+  var sp  = document.getElementById('spinner');
+  var tx  = document.getElementById('btn-text');
+  if (!btn) return;
+  btn.disabled = on || !usernameValid || !document.getElementById('consent').checked;
+  sp.classList.toggle('show', on);
+  tx.textContent = on ? 'Claiming…' : 'Claim My Account →';
+}
+</script>
+</body>
+</html>

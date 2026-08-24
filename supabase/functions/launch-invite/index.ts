@@ -125,7 +125,10 @@ Deno.serve(async (req) => {
   // onboarding_complete=false), and emails the invite link. The click-through
   // confirms the email AND opens a session on gunforma-complete-profile.html,
   // where the existing onboarding UI picks up.
-  const redirectTo = 'https://gunforma.com/gunforma-complete-profile.html';
+  // The launch cohort lands on the dedicated claim page (not the generic
+  // onboarding page). Ordinary post-launch invites via invite-builder still
+  // use gunforma-complete-profile.html.
+  const redirectTo = 'https://gunforma.com/gunforma-claim.html';
   const { data: inviteData, error: inviteError } =
     await supabase.auth.admin.inviteUserByEmail(email, { redirectTo });
 
