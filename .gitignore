@@ -2,3 +2,12 @@
 .env.secrets
 node_modules/
 .DS_Store
+
+# Local Netlify folder
+.netlify
+
+# PII — real builder emails, never commit
+scripts/builders.json
+
+# Claude Code local scratch state
+.claude/
