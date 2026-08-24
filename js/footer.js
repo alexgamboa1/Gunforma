@@ -20,10 +20,10 @@
   var LINKS_ROW =
     '<span class="footer-txt">© 2026 Gunforma · All rights reserved</span>' +
     '<span class="footer-txt">' +
-      '<a href="#">Legal</a> · ' +
-      '<a href="#">Affiliate disclosure</a> · ' +
-      '<a href="#">Community guidelines</a> · ' +
-      '<a href="#">Contact</a>' +
+      '<a href="gunforma-legal.html#legal">Legal</a> · ' +
+      '<a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · ' +
+      '<a href="gunforma-legal.html#guidelines">Community guidelines</a> · ' +
+      '<a href="gunforma-legal.html#contact">Contact</a>' +
     '</span>';
 
   var LEGAL_TEXT =

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Legal, affiliate, guidelines & contact — Gunforma</title>
+<meta name="description" content="Gunforma legal disclaimer, affiliate disclosure, community guidelines, and contact information." />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-link.active, .nav-link:hover { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 12px; }
+.nav-btn { font-size: 11px; padding: 6px 14px; border: 0.5px solid #4a9edd; color: #4a9edd; border-radius: 4px; text-decoration: none; font-weight: 600; letter-spacing: 0.02em; }
+.nav-btn.cta { background: #4a9edd; color: #0e0f11; border-color: #4a9edd; }
+.nav-btn:hover { filter: brightness(1.1); }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 640px; line-height: 1.6; }
+
+.wrap { max-width: 720px; margin: 0 auto; padding: 32px 28px 80px; }
+
+/* Section-nav chips at the top of the page */
+.toc { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+.toc a { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; padding: 7px 12px; border: 0.5px solid #d9d6cc; border-radius: 4px; color: #444; background: #fafaf8; text-decoration: none; }
+.toc a:hover { border-color: #4a9edd; color: #2a7bbd; }
+
+.doc-section {
+  border: 0.5px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 24px 28px;
+  background: #fff;
+  margin-bottom: 20px;
+  scroll-margin-top: 64px;  /* anchor jumps sit below the sticky nav */
+}
+.doc-section h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.005em; }
+.doc-section .section-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+.doc-section p { font-size: 13px; line-height: 1.7; color: #333; margin-top: 12px; }
+.doc-section ul { margin: 12px 0 4px 20px; }
+.doc-section li { font-size: 13px; line-height: 1.7; color: #333; margin-bottom: 6px; }
+.doc-section strong { color: #1a1a1a; }
+.doc-section a.contact-mail { color: #2a7bbd; font-weight: 600; text-decoration: none; }
+.doc-section a.contact-mail:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .page-header { padding: 22px 18px 16px; }
+  .wrap { padding: 22px 16px 60px; }
+  .doc-section { padding: 20px 18px; }
+}
+</style>
+</head>
+<body>
+
+<div id="nav-mount" data-nav="full"></div>
+
+<div class="page-header">
+  <p class="page-eyebrow">Site policies</p>
+  <h1 class="page-title">Legal, affiliate, guidelines & contact</h1>
+  <p class="page-sub">Everything on one page — what Gunforma is (and isn't), how we make money on links, what belongs in a build post, and how to reach us.</p>
+</div>
+
+<div class="wrap">
+
+  <nav class="toc" aria-label="On this page">
+    <a href="#legal">Legal</a>
+    <a href="#affiliate">Affiliate disclosure</a>
+    <a href="#guidelines">Community guidelines</a>
+    <a href="#contact">Contact</a>
+  </nav>
+
+  <section id="legal" class="doc-section">
+    <div class="section-eyebrow">Legal</div>
+    <h2>Informational platform, not an FFL</h2>
+    <p>Gunforma is an informational and community platform. We are <strong>not a Federal Firearms Licensee (FFL)</strong>. We do not sell, ship, transfer, or facilitate the transfer of firearms, firearm frames, receivers, or restricted parts. Everything on this site is user-submitted content and product reference material — not an offer to sell.</p>
+    <p>Firearm laws — including restrictions on magazine capacity, barrel and overall length, optics and light mounting, suppressors, short-barreled configurations, and dealer transfer requirements — vary by federal, state, and local jurisdiction, and change often. A build shown here may not be legal to own, buy, ship, or configure the same way where you live.</p>
+    <p><strong>You are solely responsible for compliance with all applicable federal, state, and local laws</strong> before purchasing, assembling, shipping, or modifying anything referenced on this site. When in doubt, consult your local FFL or an attorney.</p>
+  </section>
+
+  <section id="affiliate" class="doc-section">
+    <div class="section-eyebrow">Affiliate disclosure</div>
+    <h2>Some links pay us a commission</h2>
+    <p>Some product links on Gunforma are affiliate links. If you click one and make a purchase, Gunforma may earn a commission from the retailer — at <strong>no additional cost to you</strong>. This helps fund the site. Affiliate relationships never determine which parts appear in a build or how a product is described; users pick the parts, and the commission (if any) is a byproduct of showing you where to buy them.</p>
+  </section>
+
+  <section id="guidelines" class="doc-section">
+    <div class="section-eyebrow">Community guidelines</div>
+    <h2>What belongs in a build post</h2>
+    <ul>
+      <li><strong>Builds must be real.</strong> Photos of your actual pistol — not renders, mockups, or CAD screenshots.</li>
+      <li><strong>No illegal modifications.</strong> No auto sears, no unregistered SBRs, no unregistered suppressors, no anything that would land you in federal court. Not on this platform.</li>
+      <li><strong>No serial numbers in photos.</strong> Cover, blur, or angle around them before uploading. Protect your own OPSEC.</li>
+      <li><strong>Accurate parts.</strong> List what's actually on the gun. Don't tag a part you didn't use to farm affiliate clicks or to get a build past review faster.</li>
+      <li><strong>Respect the community.</strong> Disagree with a build choice? Fine. Attack the builder? Not fine. Keep comments constructive, keep it civil.</li>
+      <li><strong>Yours to share.</strong> Only upload photos you took or have the right to use. Don't repost other people's builds as your own.</li>
+    </ul>
+  </section>
+
+  <section id="contact" class="doc-section">
+    <div class="section-eyebrow">Contact</div>
+    <h2>Reach us</h2>
+    <p>Questions, takedown requests, partnership inquiries, or something else — reach us at <a class="contact-mail" href="mailto:contact@gunforma.com">contact@gunforma.com</a>.</p>
+  </section>
+
+</div>
+
+<div id="footer-mount" data-footer="default"></div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
+
+</body>
+</html>
