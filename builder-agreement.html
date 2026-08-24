@@ -76,13 +76,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </head>
 <body>
 
-<nav class="nav">
-  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
-  <div class="nav-links">
-    <a href="index.html" class="nav-link">Home</a>
-    <a href="gunforma-post-build-v6.html" class="nav-link">Post a build</a>
-  </div>
-</nav>
+<div id="nav-mount" data-nav="full"></div>
 
 <div class="page-header">
   <p class="page-eyebrow">Legal · Builder Program</p>
@@ -149,12 +143,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 </div>
 
-<div class="footer-bar">
-  <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
-  <span class="footer-txt"><a href="#">Terms</a> · <a href="#">Privacy</a> · <a href="#">Contact</a></span>
-</div>
+<div id="footer-mount" data-footer="default"></div>
 
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
 <script>
+var sb = window.sb;
 // ============================================================
 // This page reads acceptance status off the logged-in user's
 // own profile row — no separate signature record is created.
@@ -167,10 +162,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 //                                                 never trust client clock)
 //   builder_agreement_version     text
 // ============================================================
-const SUPABASE_URL  = 'https://wcrkktxkvkvmfvbgqrbz.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndjcmtrdHhrdmt2bWZ2YmdxcmJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA1MzQ0NjIsImV4cCI6MjA5NjExMDQ2Mn0.66ZBMaQPle_j8e5bLcu6lsTusVcxmL8-SSQ9Ou8-AqM';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
 const AGREEMENT_VERSION = 'v1-2026-01';
 
 async function init() {
