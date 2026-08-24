@@ -139,19 +139,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </head>
 <body>
 
-<div class="nav">
-  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
-  <div class="nav-links">
-    <a class="nav-link" href="index.html">Home</a>
-    <a class="nav-link" href="gunforma-builds.html">Builds</a>
-    <a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>
-    <a class="nav-link" href="#">Armory</a>
-  </div>
-  <div class="nav-right">
-    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
-    <a class="nav-btn cta" href="gunforma-post-build-v6.html">Post your build</a>
-  </div>
-</div>
+<div id="nav-mount" data-nav="full"></div>
 
 <div class="page">
   <div class="page-eyebrow">Free tool</div>
@@ -216,28 +204,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 </div>
 
-<div class="footer-bar">
-  <div class="footer-txt">© 2026 Gunforma · <a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a></div>
-</div>
+<div id="footer-mount" data-footer="default"></div>
 
 <div class="toast" id="toast"></div>
 
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
 <script>
-// ============================================================
-// SUPABASE
-// ============================================================
-const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+var sb = window.sb;
 
-// Session watchdog: public page — refresh nav state, don't redirect.
-// Supabase can fire SIGNED_OUT during the initial auth check for anon
-// users; redirecting would bounce visitors off the configurator.
-// (Also: location.reload() here would infinite-loop because the reloaded
-//  page fires the same INITIAL_SESSION event that triggered the reload.)
+// Public page — refresh CURRENT_USER on auth changes so save-to-account works
+// after sign-in. nav.js runs its own onAuthStateChange for the header.
 sb.auth.onAuthStateChange(function(event, session) {
   CURRENT_USER = session ? session.user : null;
-  updateSignInLink();
 });
 
 function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -301,40 +281,9 @@ function loadLocal() {
 async function init() {
   const { data: sess } = await sb.auth.getSession();
   CURRENT_USER = sess?.session?.user || null;
-  updateSignInLink();
   await loadPlatforms();
   await hydrateFromLocalStorage();
   render();
-}
-
-async function updateSignInLink() {
-  const link = document.getElementById('nav-signin');
-  if (!link) return;
-  // Remove any previously injected Sign out button so re-runs are idempotent.
-  var prev = document.getElementById('nav-signout');
-  if (prev) prev.remove();
-
-  if (!CURRENT_USER) return;
-
-  // Show username in place of "Sign in", drop a "Sign out" button before it.
-  const { data: profile } = await sb.from('profiles').select('username').eq('id', CURRENT_USER.id).maybeSingle();
-  const displayName = (profile && profile.username) || CURRENT_USER.email || 'Signed in';
-  link.textContent = displayName;
-  link.removeAttribute('href');
-  link.style.cursor = 'default';
-  link.onclick = null;
-
-  const signOutBtn = document.createElement('a');
-  signOutBtn.id = 'nav-signout';
-  signOutBtn.href = '#';
-  signOutBtn.className = link.className;
-  signOutBtn.textContent = 'Sign out';
-  signOutBtn.onclick = async function(e) {
-    e.preventDefault();
-    await sb.auth.signOut();
-    location.reload();
-  };
-  link.parentNode.insertBefore(signOutBtn, link);
 }
 
 async function loadPlatforms() {

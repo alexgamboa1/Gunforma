@@ -131,10 +131,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </head>
 <body>
 
-<nav class="nav">
-  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
-  <a href="gunforma-signin.html" class="nav-link">Sign in instead →</a>
-</nav>
+<div id="nav-mount" data-nav="auth-signup"></div>
 
 <div class="hero-strip">
   <div class="hero-eyebrow">Join Gunforma</div>
@@ -240,14 +237,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 </div>
 
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
 <script>
-// ============================================================
-// SUPABASE CONFIG — replace PASTE_YOUR_ANON_KEY_HERE
-// Find it: Supabase Dashboard → Settings → API → anon public
-// ============================================================
-const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co'; // Gunforma-v2
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+var sb = window.sb;
 
 // Origin used when we hand Supabase a URL to email the user (email
 // confirmation, magic links). Detects local dev by hostname so the same file

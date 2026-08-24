@@ -212,16 +212,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </head>
 <body>
 
-<nav class="nav">
-  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
-  <div class="nav-links">
-    <a href="index.html" class="nav-link">Home</a>
-    <a href="gunforma-builds.html" class="nav-link">Builds</a>
-    <a href="gunforma-parts-catalog.html" class="nav-link">Parts catalog</a>
-    <a href="#" class="nav-link">Armory</a>
-  </div>
-  <div class="nav-right"><span class="nav-user" id="nav-user">…</span></div>
-</nav>
+<div id="nav-mount" data-nav="full-authed"></div>
 
 <div class="page-header">
   <div class="page-eyebrow">New build</div>
@@ -360,23 +351,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 </div>
 
-<div class="footer-bar">
-  <div class="footer-legal">Gunforma is for information and inspiration only and does not provide legal advice. Firearms, magazines, optics, barrels, suppressors, and other parts shown here may be restricted or illegal depending on your federal, state, and local laws. You are solely responsible for knowing and following all laws that apply to you before buying, owning, shipping, assembling, or modifying anything referenced on this site.</div>
-  <div class="footer-links-row">
-    <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
-    <span class="footer-txt"><a href="index.html">Home</a> · <a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
-  </div>
-</div>
+<div id="footer-mount" data-footer="legal"></div>
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
 <script>
-// ============================================================
-// SUPABASE CONFIG
-// ============================================================
-const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+var sb = window.sb;
+var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
 
 // Session watchdog: catches sign-outs (from another tab, or here) and
 // silent token-refresh failures so the user doesn't sit on a stale UI.
@@ -1049,7 +1033,7 @@ async function requireAuthAndLoadUser() {
     return false;
   }
 
-  document.getElementById('nav-user').textContent = (profile && profile.username) || currentUser.email;
+  // Username populated by nav.js updateNavAuth via #nav-signin.
   hasAcceptedBuilderAgreement = !!(profile && profile.builder_agreement_accepted);
   return true;
 }

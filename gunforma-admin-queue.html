@@ -218,13 +218,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><div class="toast-dot green" id="toast-dot"></div><span id="toast-msg">Done</span></div>
 
+<script src="js/supabase-client.js"></script>
 <script>
-// ============================================================
-// SUPABASE CONFIG
-// ============================================================
-const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+// admin nav is intentionally NOT the shared nav (distinct admin-only links +
+// Admin tag) so nav.js is not loaded here. Same for the footer: admin has none.
+var sb = window.sb;
+var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
 
 // Session watchdog: catches sign-outs (from another tab, or here) and
 // silent token-refresh failures so the user doesn't sit on a stale UI.

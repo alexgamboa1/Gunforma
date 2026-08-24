@@ -127,19 +127,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </head>
 <body>
 
-<div class="nav">
-  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
-  <div class="nav-links">
-    <a class="nav-link" href="index.html">Home</a>
-    <a class="nav-link" href="gunforma-builds.html">Builds</a>
-    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
-    <a class="nav-link" href="#">Armory</a>
-  </div>
-  <div class="nav-right">
-    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
-    <a class="nav-btn cta" href="gunforma-post-build-v6.html">Post your build</a>
-  </div>
-</div>
+<div id="nav-mount" data-nav="full"></div>
 
 <div class="page">
   <div class="page-header">
@@ -167,52 +155,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 </div>
 
-<div class="footer-bar">
-  <div class="footer-txt">© 2026 Gunforma · <a href="#">Affiliate disclosure</a> · <a href="#">Legal</a></div>
-</div>
+<div id="footer-mount" data-footer="default"></div>
 
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
 <script>
-// ============================================================
-// SUPABASE
-// ============================================================
-const SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-
-// Session watchdog: public page — update nav state, don't redirect.
-// Supabase can fire SIGNED_OUT during the initial auth check for anon
-// users; redirecting would bounce visitors off the P365 builder.
-sb.auth.onAuthStateChange(function(event, session) {
-  updateNavAuth();
-});
-
-// Session-aware nav: signed-in users see their username + a Sign out button
-// in place of the default "Sign in" link. Anon users see the default nav.
-async function updateNavAuth() {
-  var signInEl = document.getElementById('nav-signin');
-  if (!signInEl) return;
-  var { data: sess } = await sb.auth.getSession();
-  var user = sess && sess.session && sess.session.user;
-  if (!user) return;
-
-  var { data: profile } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle();
-  var displayName = (profile && profile.username) || user.email || 'Signed in';
-  signInEl.textContent = displayName;
-  signInEl.removeAttribute('href');
-  signInEl.style.cursor = 'default';
-
-  var signOut = document.createElement('a');
-  signOut.href = '#';
-  signOut.className = signInEl.className;
-  signOut.textContent = 'Sign out';
-  signOut.onclick = async function(e) {
-    e.preventDefault();
-    await sb.auth.signOut();
-    location.reload();
-  };
-  signInEl.parentNode.insertBefore(signOut, signInEl);
-}
-updateNavAuth();
+var sb = window.sb;
 
 // ============================================================
 // CONFIG

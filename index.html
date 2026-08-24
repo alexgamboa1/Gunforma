@@ -95,20 +95,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="page">
   <h2 style="position:absolute;left:-9999px;">Gunforma — pistol parts and owner builds</h2>
 
-  <!-- ── NAV ── -->
-  <nav class="nav">
-    <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
-    <div class="nav-links">
-      <a href="index.html" class="nav-link active">Home</a>
-      <a href="gunforma-builds.html" class="nav-link">Builds</a>
-      <a href="gunforma-parts-catalog.html" class="nav-link">Parts catalog</a>
-      <a href="#" class="nav-link">Armory</a>
-    </div>
-    <div class="nav-right">
-      <a href="gunforma-signin.html" class="nav-btn" id="nav-signin">Sign in</a>
-      <a href="gunforma-post-build-v6.html" class="nav-btn cta">+ Post your build</a>
-    </div>
-  </nav>
+  <!-- ── NAV ── injected by js/nav.js -->
+  <div id="nav-mount" data-nav="full"></div>
 
   <!-- ══════════════════════════════════════════
        SECTION 1 — HERO
@@ -168,57 +156,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     </div>
   </div>
 
-  <!-- ── FOOTER ── -->
-  <div class="footer-bar">
-    <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
-    <span class="footer-txt"><a href="#">Legal</a> · <a href="#">Affiliate disclosure</a> · <a href="#">Community guidelines</a> · <a href="#">Contact</a></span>
-  </div>
+  <!-- ── FOOTER ── injected by js/footer.js -->
+  <div id="footer-mount" data-footer="default"></div>
 </div>
 
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
 <script>
-// Featured builds + session-aware nav + session watchdog.
-// Wrapped in one IIFE so nothing leaks to the global scope.
+// Featured builds fetch. Supabase client (window.sb) + nav/footer come from
+// the shared includes above; only page-specific logic lives here.
 (function() {
-  const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-  const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
-  const sb = supabase.createClient(SB_URL, SB_ANON);
-
-  // Session watchdog: public page — update nav state, don't redirect.
-  // Supabase can fire SIGNED_OUT during the initial auth check for anon
-  // users, which would bounce them off the home page before they see it.
-  sb.auth.onAuthStateChange(function(event, session) {
-    updateNavAuth();
-  });
+  var sb = window.sb;
+  if (!sb) return;
+  var SB_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 
   function photoUrl(path) { return SB_URL + '/storage/v1/object/public/build-photos/' + path; }
   function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-
-  // Swap the "Sign in" button for `<username> · Sign out` when a session exists.
-  async function updateNavAuth() {
-    var signInEl = document.getElementById('nav-signin');
-    if (!signInEl) return;
-    var { data: sess } = await sb.auth.getSession();
-    var user = sess && sess.session && sess.session.user;
-    if (!user) return;
-
-    var { data: profile } = await sb.from('profiles').select('username').eq('id', user.id).maybeSingle();
-    var displayName = (profile && profile.username) || user.email || 'Signed in';
-    signInEl.textContent = displayName;
-    signInEl.removeAttribute('href');
-    signInEl.style.cursor = 'default';
-
-    var signOut = document.createElement('a');
-    signOut.href = '#';
-    signOut.className = signInEl.className;
-    signOut.textContent = 'Sign out';
-    signOut.onclick = async function(e) {
-      e.preventDefault();
-      await sb.auth.signOut();
-      location.reload();
-    };
-    signInEl.parentNode.insertBefore(signOut, signInEl);
-  }
-  updateNavAuth();
 
   // Load the newest 3 approved builds — RLS allows anon SELECT on approved.
   async function loadFeatured() {
