@@ -71,6 +71,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .btn-google { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px; background: #fff; border: 1px solid #e5e5e5; border-radius: 6px; font-family: inherit; font-size: 14px; font-weight: 600; color: #1a1a1a; cursor: pointer; transition: border-color 0.15s; }
 .btn-google:hover { border-color: #4a9edd; }
 .btn-google svg { flex-shrink: 0; }
+
+/* MOBILE — under 640px */
+@media (max-width: 640px) {
+  .card-wrap { padding: 0 12px 40px; }
+  .card { padding: 20px 18px; max-width: none; box-shadow: none; }
+}
 </style>
 <script>
   // Turnstile site key — swap in Cloudflare's always-passes test key for

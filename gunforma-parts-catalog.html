@@ -133,6 +133,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* TOAST */
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; font-size: 12.5px; padding: 12px 18px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; z-index: 200; pointer-events: none; max-width: 480px; text-align: center; }
+
+/* MOBILE — under 640px */
+@media (max-width: 640px) {
+  .page { padding: 20px 16px 48px; }
+  .stats-strip { grid-template-columns: 1fr; }
+  .part-cards-grid { grid-template-columns: 1fr; }
+  .custom-part-grid { grid-template-columns: 1fr; }
+  .cta-strip { flex-direction: column; align-items: stretch; padding: 20px; }
+  .cta-strip-copy { max-width: none; }
+  .cta-strip-actions { flex-direction: column; }
+  .cta-strip-actions .cta-btn { width: 100%; text-align: center; }
+  .platform-grid { flex-direction: column; align-items: stretch; }
+}
 .toast.show { opacity: 1; pointer-events: auto; }
 .toast a { color: #6fb4e8; margin-left: 6px; text-decoration: none; font-weight: 600; }
 .toast a:hover { text-decoration: underline; }
