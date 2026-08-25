@@ -72,6 +72,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .photo-slot-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
 .photo-slot.filled .photo-slot-preview { display: block; }
 .photo-slot.filled .photo-slot-icon, .photo-slot.filled .photo-slot-label { text-shadow: 0 1px 3px rgba(0,0,0,0.6); color: #fff; }
+/* Hero-badge + hover actions + drag-over target state */
+.photo-slot-hero-badge { position: absolute; top: 6px; left: 6px; z-index: 3; display: none; background: #f9b860; color: #4a3c14; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.1em; text-transform: uppercase; pointer-events: none; }
+.photo-slot.filled[data-slot="hero"] .photo-slot-hero-badge { display: block; }
+.photo-slot-actions { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: flex; gap: 6px; padding: 6px 8px; background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0) 100%); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
+.photo-slot.filled .photo-slot-actions { pointer-events: auto; }
+.photo-slot.filled:hover .photo-slot-actions { opacity: 1; }
+.photo-slot-action-btn { background: rgba(255,255,255,0.94); border: none; color: #1a1a1a; font-size: 10px; font-weight: 700; padding: 5px 9px; border-radius: 4px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; }
+.photo-slot-action-btn:hover { background: #fff; }
+.photo-slot-action-btn.danger:hover { color: #c25d3a; }
+.photo-slot[data-slot="hero"] .photo-slot-set-main-btn { display: none; }
+.photo-slot.drag-over { border-style: dashed !important; border-color: #d4a853 !important; background: #fdf6e6 !important; transform: scale(1.02); transition: transform 0.1s, border-color 0.1s, background 0.1s; }
+/* Touch devices can't hover — always show actions on filled slots */
+@media (hover: none) { .photo-slot.filled .photo-slot-actions { opacity: 1; } }
 
 /* FORM */
 .field { margin-bottom: 16px; }
@@ -249,21 +262,57 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <span class="card-hint">Builds with photos get saved 3× more</span>
     </div>
     <div class="photo-grid">
-      <div class="photo-slot" data-slot="hero" id="slot-hero" onclick="onSlotClick('hero')">
+      <div class="photo-slot" data-slot="hero" id="slot-hero"
+           onclick="onSlotClick('hero')"
+           ondragover="onSlotDragOver(event,'hero')"
+           ondragleave="onSlotDragLeave(event,'hero')"
+           ondrop="onSlotDrop(event,'hero')">
         <img class="photo-slot-preview" id="preview-hero" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add hero photo</div>
+        <div class="photo-slot-hero-badge">★ Main</div>
+        <div class="photo-slot-actions">
+          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('hero')">★ Set as main</button>
+          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('hero')">✕ Remove</button>
+        </div>
       </div>
-      <div class="photo-slot" data-slot="g1" id="slot-g1" onclick="onSlotClick('g1')">
+      <div class="photo-slot" data-slot="g1" id="slot-g1"
+           onclick="onSlotClick('g1')"
+           ondragover="onSlotDragOver(event,'g1')"
+           ondragleave="onSlotDragLeave(event,'g1')"
+           ondrop="onSlotDrop(event,'g1')">
         <img class="photo-slot-preview" id="preview-g1" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
+        <div class="photo-slot-hero-badge">★ Main</div>
+        <div class="photo-slot-actions">
+          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g1')">★ Set as main</button>
+          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g1')">✕ Remove</button>
+        </div>
       </div>
-      <div class="photo-slot" data-slot="g2" id="slot-g2" onclick="onSlotClick('g2')">
+      <div class="photo-slot" data-slot="g2" id="slot-g2"
+           onclick="onSlotClick('g2')"
+           ondragover="onSlotDragOver(event,'g2')"
+           ondragleave="onSlotDragLeave(event,'g2')"
+           ondrop="onSlotDrop(event,'g2')">
         <img class="photo-slot-preview" id="preview-g2" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
+        <div class="photo-slot-hero-badge">★ Main</div>
+        <div class="photo-slot-actions">
+          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g2')">★ Set as main</button>
+          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g2')">✕ Remove</button>
+        </div>
       </div>
-      <div class="photo-slot" data-slot="g3" id="slot-g3" onclick="onSlotClick('g3')">
+      <div class="photo-slot" data-slot="g3" id="slot-g3"
+           onclick="onSlotClick('g3')"
+           ondragover="onSlotDragOver(event,'g3')"
+           ondragleave="onSlotDragLeave(event,'g3')"
+           ondrop="onSlotDrop(event,'g3')">
         <img class="photo-slot-preview" id="preview-g3" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
+        <div class="photo-slot-hero-badge">★ Main</div>
+        <div class="photo-slot-actions">
+          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g3')">★ Set as main</button>
+          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g3')">✕ Remove</button>
+        </div>
       </div>
     </div>
     <div class="field-sub" id="photo-error" style="color:#c25d3a;display:none;"></div>
@@ -368,6 +417,14 @@ sb.auth.onAuthStateChange(function(event, session) {
   if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
     window.location.href = 'gunforma-signin.html';
   }
+});
+
+// Prevent the browser from navigating to a photo file the user
+// accidentally drops outside a photo slot. The slot's own ondrop still
+// gets its event and handles the upload — this only fires on misses.
+window.addEventListener('dragover', function(e) { e.preventDefault(); });
+window.addEventListener('drop', function(e) {
+  if (!e.target.closest('.photo-slot')) e.preventDefault();
 });
 
 // Version shown to the builder via the Builder Agreement link next to
@@ -556,10 +613,65 @@ let activeSlot = null;
 
 function onSlotClick(slot) {
   const cur = state.photos[slot];
-  if (cur && cur.uploading) return;             // ignore clicks mid-upload
-  if (cur) { removePhoto(slot); return; }        // filled -> click removes
+  if (cur) return;                               // filled slots use the action buttons
   activeSlot = slot;
   document.getElementById('photo-file-input').click();
+}
+
+// Drag-and-drop from Finder/desktop straight onto a slot. The drop path
+// runs the same validation + normalize + upload pipeline as the click path
+// via processFile — file input just supplies the File a different way.
+function onSlotDragOver(e, slot) {
+  e.preventDefault();
+  const cur = state.photos[slot];
+  if (cur && cur.uploading) { e.dataTransfer.dropEffect = 'none'; return; }
+  e.dataTransfer.dropEffect = 'copy';
+  document.getElementById('slot-' + slot).classList.add('drag-over');
+}
+function onSlotDragLeave(e, slot) {
+  document.getElementById('slot-' + slot).classList.remove('drag-over');
+}
+async function onSlotDrop(e, slot) {
+  e.preventDefault();
+  document.getElementById('slot-' + slot).classList.remove('drag-over');
+  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!file) return;
+  const cur = state.photos[slot];
+  if (cur && cur.uploading) return;
+  if (cur) { await removePhoto(slot); }         // drop replaces existing photo
+  activeSlot = slot;
+  await processFile(file);
+}
+
+// Set any filled non-hero slot as the hero by swapping photo objects in
+// state — the hero slot key stays canonical (the DB insert reads
+// slot==='hero' → is_hero:true), so nothing changes about how photo rows
+// are written; only which photo occupies the "hero" seat.
+function setAsHero(slot) {
+  if (slot === 'hero') return;
+  const incoming = state.photos[slot];
+  if (!incoming || incoming.uploading) return;
+  const heroCur = state.photos.hero;
+  state.photos.hero = incoming;
+  state.photos[slot] = heroCur;
+  syncSlotUI('hero');
+  syncSlotUI(slot);
+  renderSidebar();
+}
+
+// Repaint one slot's UI from its current state.photos entry — used after a
+// hero swap where the slot key doesn't move but its underlying photo does.
+function syncSlotUI(slot) {
+  const el = document.getElementById('slot-' + slot);
+  const img = document.getElementById('preview-' + slot);
+  const data = state.photos[slot];
+  if (!data) { clearSlot(slot); return; }
+  if (data.uploading) { setSlotUploading(slot); return; }
+  el.classList.remove('uploading','error','drag-over');
+  el.classList.add('filled');
+  el.querySelector('.photo-slot-icon').textContent = '✓';
+  el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Hero photo set' : 'Photo added';
+  if (data.previewUrl) img.src = data.previewUrl;
 }
 
 function photoError(msg) {
@@ -571,6 +683,13 @@ function photoError(msg) {
 async function onFileSelected(event) {
   const file = event.target.files[0];
   event.target.value = '';                       // allow re-selecting the same file later
+  await processFile(file);
+}
+
+// Shared upload pipeline — the click path (onFileSelected) and the drop
+// path (onSlotDrop) both funnel through here so validation, normalize,
+// and upload are guaranteed identical.
+async function processFile(file) {
   const slot = activeSlot;
   if (!file || !slot) return;
   photoError('');
