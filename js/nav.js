@@ -101,14 +101,14 @@ async function updateNavAuth() {
   var signInEl = document.getElementById('nav-signin');
   if (!signInEl || !window.sb) return;
 
-  // Idempotent: drop any previously injected Sign out before re-rendering.
-  var prev = document.getElementById('nav-signout');
-  if (prev) prev.remove();
-
   var sess = await window.sb.auth.getSession();
   var user = sess && sess.data && sess.data.session && sess.data.session.user;
 
+  // Anon branch — clear any stale Sign out (querySelectorAll, not
+  // getElementById, because concurrent invocations can duplicate the id
+  // and getElementById only ever returns the first match).
   if (!user) {
+    document.querySelectorAll('#nav-signout').forEach(function (el) { el.remove(); });
     signInEl.textContent = 'Sign in';
     signInEl.setAttribute('href', 'gunforma-signin.html');
     signInEl.style.cursor = '';
@@ -127,6 +127,16 @@ async function updateNavAuth() {
   signInEl.removeAttribute('href');
   signInEl.style.cursor = 'default';
   signInEl.onclick = null;
+
+  // Cleanup must happen HERE, after all awaits — updateNavAuth runs
+  // concurrently on page load (the mount script calls it, and
+  // onAuthStateChange fires INITIAL_SESSION which calls it again). If we
+  // checked before the awaits, every concurrent caller would see an empty
+  // DOM and each insert its own Sign out — you end up with a stack of
+  // them. Sweeping right before insertion, with querySelectorAll (not
+  // getElementById, which stops at the first match), is what keeps this
+  // idempotent under the race.
+  document.querySelectorAll('#nav-signout').forEach(function (el) { el.remove(); });
 
   var signOut = document.createElement('a');
   signOut.id = 'nav-signout';
