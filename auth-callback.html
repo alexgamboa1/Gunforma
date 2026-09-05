@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Signing you in… — Gunforma</title>
+<meta name="description" content="Auth landing page for Gunforma magic-link and admin-generated sign-in flows." />
+<meta name="robots" content="noindex, nofollow" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
+
+.nav { display: flex; align-items: center; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+
+.hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.hero-title { font-size: 22px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; margin-bottom: 8px; }
+.hero-sub { font-size: 13px; color: #888780; line-height: 1.6; max-width: 440px; margin: 0 auto; }
+
+.card-wrap { display: flex; justify-content: center; padding: 0 20px 60px; margin-top: -24px; flex: 1; }
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 32px 28px; width: 100%; max-width: 420px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); text-align: center; }
+
+.spinner { width: 22px; height: 22px; border: 2px solid #d9d6cc; border-top-color: #4a9edd; border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto 14px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.state-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+.state-sub { font-size: 13px; color: #666; line-height: 1.6; }
+.state-icon { font-size: 30px; margin-bottom: 10px; line-height: 1; }
+.state-icon.ok { color: #22a06b; }
+.state-icon.err { color: #c25d3a; }
+.state-link { display: inline-block; margin-top: 16px; font-size: 12px; color: #2a7bbd; font-weight: 700; text-decoration: none; padding: 8px 16px; border: 0.5px solid #a7cdec; border-radius: 4px; }
+.state-link:hover { background: #eaf4fc; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+</nav>
+
+<div class="hero-strip">
+  <div class="hero-eyebrow">Auth</div>
+  <div class="hero-title" id="hero-title">Signing you in…</div>
+  <p class="hero-sub" id="hero-sub">One moment.</p>
+</div>
+
+<div class="card-wrap">
+  <div class="card" id="card">
+    <div class="spinner"></div>
+    <div class="state-title">Signing you in…</div>
+    <div class="state-sub">Verifying your link.</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// auth-callback.html — shared landing for Supabase hash-token
+// flows: admin-generated magic sign-in links, password recovery,
+// or any generic "here's a session-establishing URL" case.
+//
+// This page instantiates ITS OWN Supabase client with
+// detectSessionInUrl: false so the client library does NOT
+// auto-consume the hash on load. All token handling is manual
+// (parse → setSession → redirect) so error UI can surface and
+// the destination can be validated against an allowlist.
+//
+// The shared js/supabase-client.js is INTENTIONALLY NOT loaded
+// here — its default detectSessionInUrl: true would race the
+// manual handler and defeat the whole point of this page.
+// Same reason js/nav.js isn't loaded (it depends on window.sb
+// from the shared client). A minimal logo-only nav is inlined
+// above, matching the pattern used by claim / complete-profile.
+// ============================================================
+var SUPABASE_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+var SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
+  auth: { detectSessionInUrl: false, persistSession: true, autoRefreshToken: true },
+});
+
+// Allowlisted redirect targets. `next` from the query string is matched
+// EXACTLY against this list — no prefix match, no absolute URLs. Anything
+// unrecognized silently falls back to '/'. This is the only defense
+// preventing this page from becoming an open redirect.
+var ALLOWED_NEXT = [
+  '/',
+  '/gunforma-admin-queue.html',
+  '/gunforma-admin-post.html',
+  '/gunforma-post-build-v6.html',
+  '/gunforma-parts-builder.html',
+  '/gunforma-complete-profile.html',
+];
+
+function validateNext(raw) {
+  if (!raw) return '/';
+  if (raw.indexOf('://') !== -1) return '/';   // absolute URL → reject
+  return ALLOWED_NEXT.indexOf(raw) !== -1 ? raw : '/';
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function renderError(title, detail) {
+  document.getElementById('hero-title').textContent = 'Link problem';
+  document.getElementById('hero-sub').textContent = 'Try signing in with your password or requesting a new link.';
+  document.getElementById('card').innerHTML =
+    '<div class="state-icon err">⚠</div>' +
+    '<div class="state-title">' + esc(title) + '</div>' +
+    '<div class="state-sub">' + esc(detail) + '</div>' +
+    '<a class="state-link" href="gunforma-signin.html">Go to sign in →</a>';
+}
+
+function renderSuccess(nextPath) {
+  document.getElementById('hero-title').textContent = 'Signed in';
+  document.getElementById('hero-sub').textContent = 'One moment.';
+  document.getElementById('card').innerHTML =
+    '<div class="state-icon ok">✓</div>' +
+    '<div class="state-title">Signed in. Redirecting…</div>' +
+    '<div class="state-sub">Taking you where you were headed.</div>';
+  // Brief hold so the success state is visible instead of flashing past.
+  setTimeout(function () { window.location.replace(nextPath); }, 450);
+}
+
+(async function main() {
+  var query = new URLSearchParams(window.location.search);
+  var hash  = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+
+  // Supabase surfaces auth failures via ?error= or #error= depending on flow.
+  var errCode = query.get('error') || hash.get('error');
+  var errDesc = query.get('error_description') || hash.get('error_description');
+  if (errCode) {
+    renderError('This link is not valid', errDesc || errCode);
+    return;
+  }
+
+  var accessToken  = hash.get('access_token');
+  var refreshToken = hash.get('refresh_token');
+  if (!accessToken || !refreshToken) {
+    renderError('No sign-in token on this link', 'The link may already have been used or opened in a different browser.');
+    return;
+  }
+
+  var res = await sb.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+  if (res.error || !res.data || !res.data.session) {
+    renderError('This link expired or is invalid', (res.error && res.error.message) || 'Please request a new link.');
+    return;
+  }
+
+  // Scrub tokens from the address bar + history — same defense claim.html uses.
+  history.replaceState({}, '', window.location.pathname);
+
+  renderSuccess(validateNext(query.get('next')));
+})();
+</script>
+
+</body>
+</html>
