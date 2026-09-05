@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Privacy Policy — Gunforma</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-link:hover { color: #e8e6e1; }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 640px; line-height: 1.6; }
+
+.wrap { max-width: 720px; margin: 0 auto; padding: 32px 28px 80px; }
+
+.agreement { border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px 32px; background: #fff; }
+.agreement h2 { font-size: 15px; font-weight: 700; margin: 24px 0 8px; letter-spacing: -0.005em; }
+.agreement h2:first-child { margin-top: 0; }
+.agreement p { font-size: 13px; line-height: 1.7; color: #333; margin-bottom: 10px; }
+.agreement p.lede { font-size: 13px; line-height: 1.7; color: #555; padding-bottom: 16px; border-bottom: 0.5px solid #efece3; margin-bottom: 16px; }
+.agreement ul { margin: 8px 0 12px 20px; }
+.agreement li { font-size: 13px; line-height: 1.7; color: #333; margin-bottom: 4px; }
+.agreement strong { color: #1a1a1a; }
+.agreement a { color: #2a7bbd; font-weight: 600; }
+
+.data-table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 12px; }
+.data-table th { text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #888; padding: 8px 10px; border-bottom: 1px solid #e5e5e5; background: #fafaf8; }
+.data-table td { padding: 10px; border-bottom: 0.5px solid #f0ede5; color: #333; line-height: 1.5; vertical-align: top; }
+.data-table tr:last-child td { border-bottom: none; }
+
+.effective-date { font-size: 11px; color: #888; margin-top: 20px; padding-top: 16px; border-top: 0.5px solid #efece3; }
+
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafaf8; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a href="index.html" class="nav-link">Home</a>
+    <a href="gunforma-builds.html" class="nav-link">Builds</a>
+    <a href="gunforma-parts-catalog.html" class="nav-link">Parts catalog</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <p class="page-eyebrow">Legal</p>
+  <h1 class="page-title">Privacy Policy</h1>
+  <p class="page-sub">What data Gunforma collects, why, who can see it, and how to delete it. No legalese filler — if we don't collect it, it's not listed here.</p>
+</div>
+
+<div class="wrap">
+  <div class="agreement">
+
+    <p class="lede">Gunforma is a small, independently operated platform. We collect the minimum data needed to run the site. We don't run ads, we don't sell your data, and we don't use third-party analytics trackers.</p>
+
+    <h2>1. Who we are</h2>
+    <p>Gunforma is operated by a sole proprietor based in Texas. "Gunforma," "we," "us," and "our" refer to this operator and any future legal entity that assumes operation of the platform. For privacy-related questions, contact us at <strong>privacy@gunforma.com</strong>.</p>
+
+    <h2>2. What we collect and why</h2>
+
+    <table class="data-table">
+      <thead>
+        <tr><th>Data</th><th>Why we collect it</th><th>Stored where</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Email address</strong></td>
+          <td>Account creation, login, password resets, and (if you opt in) marketing emails about new builds and platform updates</td>
+          <td>Supabase Auth</td>
+        </tr>
+        <tr>
+          <td><strong>Password</strong></td>
+          <td>Authentication — stored as a one-way hash, never in plain text</td>
+          <td>Supabase Auth</td>
+        </tr>
+        <tr>
+          <td><strong>Username</strong></td>
+          <td>Displayed publicly on your builds and profile</td>
+          <td>Supabase database</td>
+        </tr>
+        <tr>
+          <td><strong>Build content</strong> (photos, parts lists, descriptions)</td>
+          <td>Core platform functionality — displaying your builds to the community</td>
+          <td>Supabase database and storage</td>
+        </tr>
+        <tr>
+          <td><strong>Builder Agreement acceptance</strong></td>
+          <td>Recording that you agreed to the content license, including which version and when</td>
+          <td>Supabase database</td>
+        </tr>
+        <tr>
+          <td><strong>Marketing opt-in preference</strong></td>
+          <td>Respecting your choice about whether to receive promotional emails</td>
+          <td>Supabase database</td>
+        </tr>
+        <tr>
+          <td><strong>Cloudflare Turnstile token</strong></td>
+          <td>Bot detection on sign-in, sign-up, and claim forms — prevents automated abuse</td>
+          <td>Processed by Cloudflare, not stored by Gunforma</td>
+        </tr>
+        <tr>
+          <td><strong>Server logs</strong> (IP address, browser, timestamps)</td>
+          <td>Netlify (our hosting provider) collects standard server access logs for security and uptime monitoring</td>
+          <td>Netlify infrastructure</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>That's the complete list. We do not collect phone numbers, physical addresses, payment information, social media profiles, device fingerprints, or location data.</p>
+
+    <h2>3. What we don't do</h2>
+    <p>We don't sell, rent, or trade your personal data to anyone. We don't run Google Analytics or any other third-party analytics tracker. We don't serve ads or share data with ad networks. We don't use tracking pixels in emails (if we add email marketing in the future, we'll update this section).</p>
+
+    <h2>4. Cookies and local storage</h2>
+    <p>Gunforma uses cookies and browser local storage only for authentication — keeping you signed in between visits. These are set by the Supabase JavaScript client and contain your session token. We don't use cookies for tracking, advertising, or analytics. Cloudflare Turnstile may set a cookie (<code>cf_clearance</code>) as part of its bot detection; this is managed by Cloudflare under their own <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">privacy policy</a>.</p>
+
+    <h2>5. Third-party services</h2>
+    <p>Gunforma relies on the following third-party services that may process some of your data:</p>
+    <ul>
+      <li><strong>Supabase</strong> — authentication, database, and file storage (hosts your account data, builds, and photos)</li>
+      <li><strong>Netlify</strong> — web hosting (processes server access logs including IP addresses)</li>
+      <li><strong>Cloudflare Turnstile</strong> — bot detection on forms (processes a challenge token, does not store personal data on our behalf)</li>
+    </ul>
+    <p>Each service operates under its own privacy policy. We've selected providers that offer reasonable data protection practices, but we encourage you to review their policies directly if you have concerns.</p>
+
+    <h2>6. Affiliate links</h2>
+    <p>When you click an affiliate link on Gunforma, you leave our platform and interact with a third-party retailer's site. That retailer may collect data about your visit under their own privacy policy. The affiliate network may set cookies to track the referral. Gunforma receives only a commission notification (product, amount) — we do not receive your name, payment info, or purchase details from these transactions.</p>
+
+    <h2>7. Public content</h2>
+    <p>Builds you post on Gunforma — including your username, photos, parts lists, and descriptions — are <strong>publicly visible</strong> to anyone who visits the site, including users without accounts and search engines. Do not include personal information in your builds that you don't want publicly associated with your username. Review our guidance on not including serial numbers in photos (see <a href="gunforma-legal.html#guidelines">Community Guidelines</a>).</p>
+
+    <h2>8. Email communications</h2>
+    <p>If you opt into marketing emails at signup, we may send you updates about new builds, platform features, parts releases, and community highlights. You can unsubscribe at any time by clicking the unsubscribe link in any email, or by contacting us directly. Transactional emails (password resets, account confirmations, moderation notifications) are sent regardless of your marketing preference — they're required for your account to function.</p>
+
+    <h2>9. Data retention</h2>
+    <p>We keep your account data for as long as your account is active. Build content that has been published and distributed (including content shared with partners under the <a href="builder-agreement.html">Builder Agreement</a>) may persist after account deletion, as described in that agreement. Server logs held by Netlify are retained according to Netlify's data retention policies.</p>
+
+    <h2>10. Your rights</h2>
+    <p>You can:</p>
+    <ul>
+      <li><strong>Access your data</strong> — email us and we'll provide what we have on your account</li>
+      <li><strong>Correct your data</strong> — update your username or email through your account settings</li>
+      <li><strong>Delete your account</strong> — contact us and we'll delete your account and associated personal data, subject to the retention terms in Section 9</li>
+      <li><strong>Opt out of marketing emails</strong> — unsubscribe link in every email, or contact us</li>
+    </ul>
+    <p>If you're a California resident, you have additional rights under the CCPA, including the right to know what personal information we've collected, the right to request deletion, and the right not to be discriminated against for exercising these rights. We do not sell personal information as defined by the CCPA. To exercise any of these rights, contact <strong>privacy@gunforma.com</strong>.</p>
+
+    <h2>11. Children's privacy</h2>
+    <p>Gunforma is not intended for anyone under 18. We do not knowingly collect data from minors. If you believe a minor has created an account, contact us and we will delete it.</p>
+
+    <h2>12. Data security</h2>
+    <p>We use Supabase's built-in authentication security (hashed passwords, encrypted connections, row-level security policies) and serve the site over HTTPS via Netlify. No platform can guarantee absolute security, but we take reasonable measures to protect your data and will notify affected users promptly if a breach occurs.</p>
+
+    <h2>13. Changes to this policy</h2>
+    <p>We may update this policy as the platform evolves. When we do, we'll update the effective date below and, for material changes, notify registered users by email. Continued use of Gunforma after a change constitutes acceptance.</p>
+
+    <h2>14. Contact</h2>
+    <p>Privacy questions, data requests, or concerns: <strong>privacy@gunforma.com</strong>.</p>
+
+    <div class="effective-date">Effective date: September 5, 2026</div>
+
+  </div>
+</div>
+
+<div class="footer-bar">
+  <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
+  <span class="footer-txt"><a href="index.html">Home</a> · <a href="terms-of-service.html">Terms</a> · <a href="privacy-policy.html">Privacy</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="mailto:contact@gunforma.com">Contact</a></span>
+</div>
+
+</body>
+</html>
