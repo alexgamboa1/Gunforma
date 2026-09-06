@@ -8,6 +8,8 @@ node_modules/
 
 # PII — real builder emails, never commit
 scripts/builders.json
+scripts/seed-emails.txt
+scripts/seed-state.json
 
 # Claude Code local scratch state
 .claude/
