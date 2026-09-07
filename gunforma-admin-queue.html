@@ -335,7 +335,7 @@ async function loadProductImages() {
 async function loadBuilds() {
   const { data, error } = await sb
     .from('builds')
-    .select('id,name,tier,status,activities,description,legal_confirmed,content_license_confirmed,builder_agreement_version,created_at,reviewed_at,rejection_reason,parts_snapshot,edit_history,platforms(name),profiles(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .select('id,name,tier,status,activities,description,legal_confirmed,content_license_confirmed,builder_agreement_version,created_at,reviewed_at,rejection_reason,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
     .order('created_at', { ascending: false });
 
   if (error) {
