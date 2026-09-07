@@ -704,16 +704,18 @@ window.addSelection = function(catKey, productId) {
   const product = PRODUCT_BY_ID[productId];
   if (!product) return;
   if (SMALL_PART_KEY_SET.has(catKey)) {
+    // Small parts (mag release, basepad, slide release, etc.) live under
+    // a single "__small" accordion. Leave it open so the user can pick
+    // several in a row without the panel closing on them after each add.
     STATE.smallParts[catKey] = product;
   } else {
     STATE.selections[catKey] = product;
     // Cascade: any downstream selection that is now incompatible gets wiped.
     cascadeInvalidate();
+    // Collapse the just-used main-category accordion so the chip is visible
+    // and the user can move on to the next category.
+    STATE.openCategory = null;
   }
-  // Collapse whichever accordion was open — renderAccordionShell reads
-  // isOpen from STATE.openCategory, so without this the panel would stay
-  // expanded after picking a part.
-  STATE.openCategory = null;
   renderAll();
 };
 
