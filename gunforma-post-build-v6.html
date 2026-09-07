@@ -1087,13 +1087,19 @@ async function submitBuild(status) {
 async function publishBuild() {
   const btn = document.getElementById('publish-btn');
   if (btn.disabled) return;
+  const originalLabel = btn.textContent;
   btn.disabled = true;
+  btn.textContent = 'Submitting…';
 
   const result = await submitBuild('pending');
-  btn.disabled = false;
 
   if (result.error) {
+    // Only re-enable on failure so the user can retry. On success the button
+    // stays disabled through the redirect window — a fast second click during
+    // that window otherwise POSTs a duplicate build.
     console.error(result.error);
+    btn.disabled = false;
+    btn.textContent = originalLabel;
     showToast('Something went wrong — try again');
     return;
   }
@@ -1104,7 +1110,17 @@ async function publishBuild() {
   hasAcceptedBuilderAgreement = hasAcceptedBuilderAgreement || document.getElementById('content-license-confirm').checked;
   renderFirstPostNote();
 
-  showToast(state.parts.length ? 'Submitted — pending review before going live' : 'Submitted — add parts to get your build live');
+  showToast(state.parts.length ? 'Submitted — pending review' : 'Submitted — add parts to get it live');
+  btn.textContent = 'Submitted — redirecting…';
+
+  // Send them to the just-submitted build's detail page. RLS lets owners
+  // see their own build regardless of status (auth.uid() = user_id), so
+  // a pending build renders fine here — and this is where they'll come
+  // back to check on status as it moves pending → approved.
+  // location.replace so Back doesn't return them to the submit form.
+  setTimeout(function () {
+    window.location.replace('gunforma-build-detail.html?id=' + encodeURIComponent(result.buildId));
+  }, 700);
 }
 
 function renderFirstPostNote() {
