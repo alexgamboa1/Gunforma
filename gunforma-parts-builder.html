@@ -710,6 +710,10 @@ window.addSelection = function(catKey, productId) {
     // Cascade: any downstream selection that is now incompatible gets wiped.
     cascadeInvalidate();
   }
+  // Collapse whichever accordion was open — renderAccordionShell reads
+  // isOpen from STATE.openCategory, so without this the panel would stay
+  // expanded after picking a part.
+  STATE.openCategory = null;
   renderAll();
 };
 
