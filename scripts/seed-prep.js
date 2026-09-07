@@ -142,9 +142,12 @@ async function adminFindUserByEmail(email) {
 }
 
 // POST /auth/v1/admin/generate_link — mint a magic sign-in link without
-// sending an email. Response shape:
-//   { user, properties: { action_link, email_otp, hashed_token,
-//                         redirect_to, verification_type } }
+// sending an email. GoTrue's HTTP response shape is:
+//   { action_link, email_otp, hashed_token, redirect_to,
+//     verification_type, user }
+// The properties are INLINED at the top level — the `{ properties: {...} }`
+// nesting you see in the supabase-js return type is added by the SDK
+// wrapper, not the raw endpoint. Read both, prefer the raw shape.
 // The link's actual expiry is set by the project's Auth OTP-expiry config
 // (default 3600s / 1h; adjustable in Dashboard → Auth → Configuration).
 // The response itself contains NO explicit expiry field.
@@ -281,11 +284,20 @@ async function cmdLink() {
 
   try {
     const { status, body } = await adminGenerateLink(entry.email);
-    const props = body && body.properties;
-    const link  = props && props.action_link;
+    // Prefer the raw HTTP shape (top-level action_link); fall back to the
+    // SDK-nested shape if some future version or proxy re-wraps it.
+    const link = (body && body.action_link)
+              || (body && body.properties && body.properties.action_link)
+              || null;
     if (!link) {
-      const msg = (body && (body.msg || body.message || body.error)) || `HTTP ${status}`;
+      // Real HTTP failure → surface Supabase's own error text. Also dump
+      // the raw body so a future shape change is diagnosable on first run
+      // instead of showing up as an opaque "HTTP 200".
+      const msg = (body && (body.msg || body.message || body.error_description || body.error))
+               || `HTTP ${status} with no action_link in response`;
       console.error(c('red', `generateLink failed: ${msg}`));
+      console.error(c('grey', 'raw response body:'));
+      console.error(c('grey', JSON.stringify(body, null, 2)));
       process.exit(1);
     }
 
