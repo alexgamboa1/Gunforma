@@ -226,6 +226,75 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .photo-grid { grid-template-columns: repeat(2, 1fr); }
   .part-cards-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== REDACT MODAL — pre-upload photo redaction ===== */
+.redact-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(14, 15, 17, 0.88);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.redact-overlay.open { display: flex; }
+.redact-panel {
+  background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  width: 100%; max-width: 1200px; max-height: calc(100vh - 40px);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.redact-header {
+  padding: 14px 18px; border-bottom: 0.5px solid #e5e5e5;
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.redact-title { font-size: 13px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.04em; }
+.redact-hint { font-size: 11px; color: #666; line-height: 1.5; }
+.redact-hint strong { color: #1a1a1a; }
+
+.redact-canvas-wrap {
+  flex: 1; min-height: 200px; background: #fafaf8;
+  display: flex; align-items: center; justify-content: center;
+  overflow: auto; padding: 16px; position: relative;
+}
+.redact-canvas {
+  display: block; max-width: 100%; max-height: calc(100vh - 220px);
+  cursor: crosshair; touch-action: none;
+  background: #efece5;
+  border: 0.5px solid #e5e5e5;
+  /* Live drag overlay is drawn on top of the canvas by JS — see .redact-drag-box */
+}
+.redact-loading {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; color: #888; letter-spacing: 0.04em; background: #fafaf8;
+}
+.redact-drag-box {
+  position: absolute; border: 1.5px dashed #d4a853; background: rgba(212, 168, 83, 0.18);
+  pointer-events: none; display: none;
+}
+.redact-drag-box.active { display: block; }
+
+.redact-toolbar {
+  padding: 12px 18px; border-top: 0.5px solid #e5e5e5; background: #fafaf8;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.redact-count {
+  font-size: 11px; color: #666; margin-right: auto; padding: 6px 10px;
+  background: #fff; border: 0.5px solid #e5e5e5; border-radius: 4px;
+}
+.redact-btn {
+  font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 8px 14px; border-radius: 4px; cursor: pointer; border: 0.5px solid;
+  transition: filter 0.15s;
+}
+.redact-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.redact-btn:not(:disabled):hover { filter: brightness(1.08); }
+.redact-btn.ghost   { background: #fff; color: #444;      border-color: #d9d6cc; }
+.redact-btn.skip    { background: transparent; color: #888; border-color: transparent; text-decoration: underline; }
+.redact-btn.primary { background: #4a9edd; color: #fff;   border-color: #4a9edd; }
+.redact-btn.primary:disabled { background: #d9e6f2; color: #6a97be; border-color: #d9e6f2; }
+
+@media (max-width: 640px) {
+  .redact-overlay { padding: 0; }
+  .redact-panel { max-width: none; max-height: 100vh; height: 100vh; border-radius: 0; }
+  .redact-canvas { max-height: calc(100vh - 200px); }
+}
 </style>
 </head>
 <body>
@@ -406,6 +475,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <div id="footer-mount" data-footer="legal"></div>
+
+<!-- REDACT MODAL — pre-upload pixelation of sensitive regions (serials, faces, addresses).
+     Opened by openRedactModal(file) after validation, before normalizeImage(). Nothing
+     unredacted ever reaches storage: the canvas here is the only place the file
+     materializes before the same pipeline that always runs (normalize → upload). -->
+<div class="redact-overlay" id="redact-overlay" role="dialog" aria-modal="true" aria-label="Blur sensitive parts of the photo">
+  <div class="redact-panel">
+    <div class="redact-header">
+      <div>
+        <div class="redact-title">Blur anything you want to hide before uploading</div>
+        <div class="redact-hint"><strong>Drag on the image</strong> to blur serial numbers, license plates, addresses on mail, faces — anything you don't want public. This runs before upload.</div>
+      </div>
+    </div>
+    <div class="redact-canvas-wrap" id="redact-canvas-wrap">
+      <canvas class="redact-canvas" id="redact-canvas"></canvas>
+      <div class="redact-drag-box" id="redact-drag-box"></div>
+      <div class="redact-loading" id="redact-loading">Loading photo…</div>
+    </div>
+    <div class="redact-toolbar">
+      <span class="redact-count" id="redact-count">0 blurred regions</span>
+      <button type="button" class="redact-btn ghost"    id="redact-undo"  disabled>Undo</button>
+      <button type="button" class="redact-btn ghost"    id="redact-clear" disabled>Clear all</button>
+      <button type="button" class="redact-btn skip"     id="redact-skip">Skip — nothing to blur</button>
+      <button type="button" class="redact-btn primary"  id="redact-done"  disabled>Done</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
@@ -709,6 +805,16 @@ async function processFile(file) {
     return;
   }
 
+  // Redact-before-upload gate. Opens a modal where the user can pixelate
+  // sensitive regions (serial numbers, faces, addresses) at full resolution.
+  // The resulting File is what continues down the pipeline — nothing
+  // unredacted ever reaches normalizeImage/upload/preview.
+  //   - resolves(File) → user hit Done (with boxes) or Skip
+  //   - resolves(null) → user cancelled (Escape / outside click)
+  const redactedFile = await openRedactModal(file);
+  if (!redactedFile) return;
+  file = redactedFile;
+
   setSlotUploading(slot);
 
   let displayBlob, thumbBlob;
@@ -787,6 +893,247 @@ function normalizeImage(file) {
       }).catch(reject);
     };
     img.onerror = function() { URL.revokeObjectURL(objectUrl); reject(new Error('Unsupported image')); };
+    img.src = objectUrl;
+  });
+}
+
+// ─── REDACTION ────────────────────────────────────────────────────────────
+// Cap the working canvas at 2400px long edge — normalizeImage downsamples to
+// 1600px right after, so full-resolution 12MP redaction is pointless per-pixel
+// work. Pixelation is destructive (per-block averaging via getImageData /
+// putImageData), so information in redacted regions is genuinely gone before
+// the canvas produces a Blob — not a CSS/filter overlay.
+const REDACT_MAX_DIMENSION = 2400;
+
+function pixelateRegion(ctx, x, y, w, h, blockSize) {
+  // Clip to canvas bounds so a box dragged partially off-image doesn't throw.
+  const cw = ctx.canvas.width, ch = ctx.canvas.height;
+  x = Math.max(0, Math.min(x, cw - 1));
+  y = Math.max(0, Math.min(y, ch - 1));
+  w = Math.max(1, Math.min(w, cw - x));
+  h = Math.max(1, Math.min(h, ch - y));
+
+  const imgData = ctx.getImageData(x, y, w, h);
+  const data = imgData.data;    // Uint8ClampedArray, RGBA per pixel
+  for (let by = 0; by < h; by += blockSize) {
+    for (let bx = 0; bx < w; bx += blockSize) {
+      const bw = Math.min(blockSize, w - bx);
+      const bh = Math.min(blockSize, h - by);
+      // Average this block's RGB values (ignore alpha — for a JPEG source
+      // alpha is always 255; for a PNG with transparency this preserves
+      // whatever alpha was there per pixel rather than tinting the block).
+      let rSum = 0, gSum = 0, bSum = 0, n = 0;
+      for (let py = 0; py < bh; py++) {
+        for (let px = 0; px < bw; px++) {
+          const idx = ((by + py) * w + (bx + px)) * 4;
+          rSum += data[idx];
+          gSum += data[idx + 1];
+          bSum += data[idx + 2];
+          n++;
+        }
+      }
+      const rAvg = (rSum / n) | 0, gAvg = (gSum / n) | 0, bAvg = (bSum / n) | 0;
+      for (let py = 0; py < bh; py++) {
+        for (let px = 0; px < bw; px++) {
+          const idx = ((by + py) * w + (bx + px)) * 4;
+          data[idx]     = rAvg;
+          data[idx + 1] = gAvg;
+          data[idx + 2] = bAvg;
+          // data[idx+3] (alpha) intentionally untouched
+        }
+      }
+    }
+  }
+  ctx.putImageData(imgData, x, y);
+}
+
+// Opens a redaction modal, returns a Promise<File | null>.
+//   File → user hit Done (with boxes) or Skip (returns the original file back)
+//   null → user cancelled (Escape or clicked the backdrop)
+function openRedactModal(file) {
+  return new Promise(function (resolve) {
+    const overlay   = document.getElementById('redact-overlay');
+    const wrap      = document.getElementById('redact-canvas-wrap');
+    const canvas    = document.getElementById('redact-canvas');
+    const dragBox   = document.getElementById('redact-drag-box');
+    const loading   = document.getElementById('redact-loading');
+    const countEl   = document.getElementById('redact-count');
+    const undoBtn   = document.getElementById('redact-undo');
+    const clearBtn  = document.getElementById('redact-clear');
+    const skipBtn   = document.getElementById('redact-skip');
+    const doneBtn   = document.getElementById('redact-done');
+
+    const ctx = canvas.getContext('2d');
+    let originalImageData = null;   // pre-redaction snapshot (for undo/replay)
+    let boxes = [];                 // {x,y,w,h} in canvas-natural pixels
+    let dragging = false;
+    // startCanvas: natural-pixel coords (for the box we save + pixelate).
+    // startWrap:   wrap-local px coords (for positioning the visual overlay).
+    // Storing both at pointerdown avoids re-deriving one from the other on
+    // every pointermove — that reverse conversion is fragile under padding
+    // and centering changes on the wrapper.
+    let startCanvas = { x: 0, y: 0 };
+    let startWrap   = { x: 0, y: 0 };
+    let activePointerId = null;
+
+    function setCount() {
+      countEl.textContent = boxes.length + ' blurred region' + (boxes.length === 1 ? '' : 's');
+      undoBtn.disabled  = boxes.length === 0;
+      clearBtn.disabled = boxes.length === 0;
+      doneBtn.disabled  = boxes.length === 0;   // Done requires at least one box; skip button covers "nothing to blur"
+    }
+
+    // Rebuild the canvas from the untouched snapshot + replay every box.
+    // Cheaper than tracking per-box "before" pixels, simple, correct.
+    function repaintAllBoxes() {
+      if (!originalImageData) return;
+      ctx.putImageData(originalImageData, 0, 0);
+      boxes.forEach(function (b) {
+        const block = Math.max(8, Math.round(Math.min(b.w, b.h) / 10));
+        pixelateRegion(ctx, b.x, b.y, b.w, b.h, block);
+      });
+    }
+
+    // Convert a pointer event's viewport coordinates to canvas-natural pixels.
+    function toCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = canvas.width  / rect.width;
+      const scaleY = canvas.height / rect.height;
+      return {
+        x: Math.max(0, Math.min(canvas.width  - 1, (e.clientX - rect.left) * scaleX)),
+        y: Math.max(0, Math.min(canvas.height - 1, (e.clientY - rect.top)  * scaleY)),
+      };
+    }
+    // Same, but returning viewport-local coords for positioning the visual drag box.
+    function toWrapCoords(e) {
+      const rect = wrap.getBoundingClientRect();
+      return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    }
+
+    function onPointerDown(e) {
+      if (!originalImageData) return;
+      if (activePointerId !== null) return;   // ignore multi-touch second finger
+      canvas.setPointerCapture(e.pointerId);
+      activePointerId = e.pointerId;
+      dragging = true;
+      startCanvas = toCanvasCoords(e);
+      startWrap   = toWrapCoords(e);
+      dragBox.style.left   = startWrap.x + 'px';
+      dragBox.style.top    = startWrap.y + 'px';
+      dragBox.style.width  = '0px';
+      dragBox.style.height = '0px';
+      dragBox.classList.add('active');
+      e.preventDefault();
+    }
+    function onPointerMove(e) {
+      if (!dragging || e.pointerId !== activePointerId) return;
+      const w = toWrapCoords(e);
+      dragBox.style.left   = Math.min(startWrap.x, w.x) + 'px';
+      dragBox.style.top    = Math.min(startWrap.y, w.y) + 'px';
+      dragBox.style.width  = Math.abs(w.x - startWrap.x) + 'px';
+      dragBox.style.height = Math.abs(w.y - startWrap.y) + 'px';
+    }
+    function onPointerUp(e) {
+      if (!dragging || e.pointerId !== activePointerId) return;
+      dragging = false;
+      activePointerId = null;
+      dragBox.classList.remove('active');
+      const p = toCanvasCoords(e);
+      const x = Math.round(Math.min(startCanvas.x, p.x));
+      const y = Math.round(Math.min(startCanvas.y, p.y));
+      const w = Math.round(Math.abs(p.x - startCanvas.x));
+      const h = Math.round(Math.abs(p.y - startCanvas.y));
+      // Ignore taps / tiny drags — they usually mean "I meant to scroll" or a stray click.
+      if (w < 8 || h < 8) return;
+      boxes.push({ x: x, y: y, w: w, h: h });
+      const block = Math.max(8, Math.round(Math.min(w, h) / 10));
+      pixelateRegion(ctx, x, y, w, h, block);
+      setCount();
+    }
+    function onPointerCancel() {
+      dragging = false;
+      activePointerId = null;
+      dragBox.classList.remove('active');
+    }
+
+    function onUndo() { boxes.pop(); repaintAllBoxes(); setCount(); }
+    function onClear() { boxes = []; repaintAllBoxes(); setCount(); }
+
+    function cleanup() {
+      overlay.classList.remove('open');
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerup', onPointerUp);
+      canvas.removeEventListener('pointercancel', onPointerCancel);
+      undoBtn.onclick = null; clearBtn.onclick = null;
+      skipBtn.onclick = null; doneBtn.onclick = null;
+      overlay.removeEventListener('click', onBackdropClick);
+      document.removeEventListener('keydown', onKeydown);
+      // Free the canvas backing store so a very large photo doesn't linger.
+      canvas.width = 0; canvas.height = 0;
+      dragBox.classList.remove('active');
+      originalImageData = null;
+      boxes = [];
+    }
+    function finishAsSkip()   { cleanup(); resolve(file); }
+    function finishAsCancel() { cleanup(); resolve(null); }
+    function finishAsDone() {
+      if (boxes.length === 0) { finishAsSkip(); return; }   // guard — button *should* be disabled
+      // Same MIME as input so JPEG stays JPEG (avoids double lossy re-encode
+      // when normalizeImage does its own JPEG re-encode later); PNG stays PNG.
+      const mime = (file.type === 'image/png' || file.type === 'image/webp') ? file.type : 'image/jpeg';
+      const quality = mime === 'image/jpeg' ? 0.95 : undefined;
+      canvas.toBlob(function (blob) {
+        if (!blob) { cleanup(); resolve(file); return; }   // fall back to original if encoding fails
+        const outFile = new File([blob], file.name, { type: mime });
+        cleanup();
+        resolve(outFile);
+      }, mime, quality);
+    }
+    function onBackdropClick(e) { if (e.target === overlay) finishAsCancel(); }
+    function onKeydown(e) { if (e.key === 'Escape') finishAsCancel(); }
+
+    // Show shell + loading state before we decode — large phone photos take a beat.
+    overlay.classList.add('open');
+    loading.style.display = '';
+    setCount();
+
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    img.onload = function () {
+      URL.revokeObjectURL(objectUrl);
+      const w0 = img.naturalWidth, h0 = img.naturalHeight;
+      if (!w0 || !h0) {
+        // Can't redact something with no dimensions — treat as skip so the
+        // upstream pipeline can decide what to do (normalizeImage will fail
+        // there and surface a proper error).
+        finishAsSkip();
+        return;
+      }
+      const scale = Math.min(1, REDACT_MAX_DIMENSION / Math.max(w0, h0));
+      const cw = Math.round(w0 * scale), ch = Math.round(h0 * scale);
+      canvas.width = cw; canvas.height = ch;
+      ctx.drawImage(img, 0, 0, cw, ch);
+      originalImageData = ctx.getImageData(0, 0, cw, ch);
+      loading.style.display = 'none';
+
+      canvas.addEventListener('pointerdown', onPointerDown);
+      canvas.addEventListener('pointermove', onPointerMove);
+      canvas.addEventListener('pointerup', onPointerUp);
+      canvas.addEventListener('pointercancel', onPointerCancel);
+      undoBtn.onclick  = onUndo;
+      clearBtn.onclick = onClear;
+      skipBtn.onclick  = finishAsSkip;
+      doneBtn.onclick  = finishAsDone;
+      overlay.addEventListener('click', onBackdropClick);
+      document.addEventListener('keydown', onKeydown);
+    };
+    img.onerror = function () {
+      URL.revokeObjectURL(objectUrl);
+      // Same fallthrough as no-dimensions — let the downstream pipeline
+      // fail loudly rather than swallowing here.
+      finishAsSkip();
+    };
     img.src = objectUrl;
   });
 }
