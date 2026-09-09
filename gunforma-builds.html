@@ -61,6 +61,39 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-card-meta { display: flex; flex-direction: column; gap: 2px; }
 .build-card-total { font-size: 13px; font-weight: 700; color: #1a1a1a; }
 .build-card-parts { font-size: 10.5px; color: #888; }
+
+/* "Post your build" tile — sits inside .builds-grid as the first item so
+   the CTA is inline with the browsable content rather than hovering in
+   a banner. Border-radius / bg family / spacing match .build-card so it
+   reads as part of the grid, but the dashed border + muted fill mark it
+   as an action tile, not a real build. */
+.post-tile {
+  background: #fafaf8;
+  border: 1px dashed #d9d6cc;
+  border-radius: 6px;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+  padding: 28px 20px; gap: 10px;
+  text-decoration: none; color: inherit;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 240px;   /* fallback when the tile is the only item in a wrap-row */
+}
+.post-tile:hover { border-color: #4a9edd; background: #f0f6fc; }
+.post-tile-icon {
+  width: 44px; height: 44px; border-radius: 50%;
+  border: 1px dashed #cfcdc4;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; line-height: 1; color: #888; font-weight: 400;
+  transition: color 0.15s, border-color 0.15s;
+}
+.post-tile:hover .post-tile-icon { color: #4a9edd; border-color: #4a9edd; }
+.post-tile-title { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+.post-tile-sub   { font-size: 11.5px; color: #888; line-height: 1.5; max-width: 220px; }
+
+/* Hide the shared nav's "+ Post your build" CTA on this page only — the
+   grid tile above IS the primary CTA here, so the nav button is redundant
+   noise. Scoped by class so a future .nav-btn (without .cta) is untouched. */
+.nav-right .nav-btn.cta { display: none; }
 .fire-btn { display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #fafaf8; border: 0.5px solid #d5d3ca; border-radius: 20px; color: #666; cursor: pointer; transition: all 0.15s; }
 .fire-btn:hover { border-color: #d85a30; color: #d85a30; }
 .fire-btn.fired { background: #faece7; border-color: #d85a30; color: #a25334; }
@@ -335,7 +368,16 @@ function renderGrid() {
       '</div>';
     return;
   }
-  container.innerHTML = '<div class="builds-grid">'+list.map(renderCard).join('')+'</div>';
+  // "Post your build" tile lives inline with the browsable content as the
+  // first grid item — deliberately NOT rendered in the two empty-state
+  // branches above, which have their own contextual CTA.
+  const postTile =
+    '<a class="post-tile" href="gunforma-post-build-v6.html">' +
+      '<div class="post-tile-icon">+</div>' +
+      '<div class="post-tile-title">Post your build</div>' +
+      '<div class="post-tile-sub">Show off your setup and parts list</div>' +
+    '</a>';
+  container.innerHTML = '<div class="builds-grid">' + postTile + list.map(renderCard).join('') + '</div>';
 }
 
 function renderCard(b) {
