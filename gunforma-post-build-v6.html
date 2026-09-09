@@ -300,6 +300,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .redact-btn.primary { background: #4a9edd; color: #fff;   border-color: #4a9edd; }
 .redact-btn.primary:disabled { background: #d9e6f2; color: #6a97be; border-color: #d9e6f2; }
 
+/* Shape-mode segmented toggle — Box (default) / Circle. Same visual pattern
+   as an iOS-style segmented control; the active option gets the blue fill. */
+.redact-shape-toggle { display: inline-flex; border: 0.5px solid #d9d6cc; border-radius: 4px; overflow: hidden; }
+.redact-shape-toggle button {
+  font-family: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  padding: 7px 12px; background: #fff; border: none; cursor: pointer; color: #666;
+  border-right: 0.5px solid #d9d6cc; transition: background 0.15s, color 0.15s;
+}
+.redact-shape-toggle button:last-child { border-right: none; }
+.redact-shape-toggle button:hover:not(.active) { background: #fafaf8; color: #1a1a1a; }
+.redact-shape-toggle button.active { background: #4a9edd; color: #fff; }
+
 @media (max-width: 640px) {
   .redact-overlay { padding: 0; }
   .redact-panel { max-width: none; max-height: 100vh; height: 100vh; border-radius: 0; }
@@ -504,6 +516,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="redact-loading" id="redact-loading">Loading photo…</div>
     </div>
     <div class="redact-toolbar">
+      <div class="redact-shape-toggle" role="group" aria-label="Selection shape">
+        <button type="button" id="redact-shape-rect"   class="active" aria-pressed="true"  title="Rectangle selection">▭ Box</button>
+        <button type="button" id="redact-shape-circle"                aria-pressed="false" title="Circle selection (drag from center)">◯ Circle</button>
+      </div>
       <span class="redact-count" id="redact-count">0 blurred regions</span>
       <button type="button" class="redact-btn ghost"    id="redact-undo"  disabled>Undo</button>
       <button type="button" class="redact-btn ghost"    id="redact-clear" disabled>Clear all</button>
@@ -957,6 +973,89 @@ function pixelateRegion(ctx, x, y, w, h, blockSize) {
   ctx.putImageData(imgData, x, y);
 }
 
+// A reusable scratch canvas for circle-shaped redaction (see below).
+// One per modal session, resized per-shape as needed.
+let _redactScratch = null;
+
+// Apply a redaction shape to ctx. Handles both rect and circle.
+//   shape.type === 'rect'   → { x, y, w, h }
+//   shape.type === 'circle' → { cx, cy, r }
+// Rects: run pixelateRegion in place — same as before.
+// Circles: naive "pixelateRegion(boundingRect) + ctx.clip(arc)" DOES NOT
+// work — putImageData ignores canvas clip regions per the Canvas 2D spec.
+// So we snapshot the bounding rect of the CURRENT canvas onto a scratch
+// canvas (which preserves prior redactions in that area — sampling from
+// origCanvas would silently un-mask overlapping earlier boxes), pixelate
+// the scratch in place, then drawImage the scratch back onto ctx clipped
+// to the arc. Only the circular interior is committed; corners outside
+// the circle are untouched.
+function pixelateShape(ctx, shape) {
+  if (shape.type === 'circle') {
+    const cx = shape.cx, cy = shape.cy, r = Math.max(1, shape.r);
+    const bx = Math.max(0, Math.floor(cx - r));
+    const by = Math.max(0, Math.floor(cy - r));
+    const bw = Math.min(ctx.canvas.width  - bx, Math.ceil(r * 2));
+    const bh = Math.min(ctx.canvas.height - by, Math.ceil(r * 2));
+    if (bw <= 0 || bh <= 0) return;
+    const block = Math.max(8, Math.round(r / 5));
+
+    if (!_redactScratch) _redactScratch = document.createElement('canvas');
+    if (_redactScratch.width !== bw)  _redactScratch.width  = bw;
+    if (_redactScratch.height !== bh) _redactScratch.height = bh;
+    const sctx = _redactScratch.getContext('2d');
+    sctx.clearRect(0, 0, bw, bh);
+    sctx.drawImage(ctx.canvas, bx, by, bw, bh, 0, 0, bw, bh);
+    pixelateRegion(sctx, 0, 0, bw, bh, block);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.clip();
+    ctx.drawImage(_redactScratch, bx, by);
+    ctx.restore();
+    return;
+  }
+  // rect (default)
+  const block = Math.max(8, Math.round(Math.min(shape.w, shape.h) / 10));
+  pixelateRegion(ctx, shape.x, shape.y, shape.w, shape.h, block);
+}
+
+// Double-stroke marching-ants outline for the in-progress selection.
+// Thin white dashed line on top of a slightly wider black solid line —
+// standard trick that reads on any background. The white line's dash
+// offset is driven from outside so the caller can animate marching.
+function drawSelectionOutline(ctx, shape, dashOffset) {
+  const cw = ctx.canvas.width;
+  const inner = Math.max(2, Math.round(cw / 800));
+  const outer = inner + 2;
+
+  function pathShape() {
+    ctx.beginPath();
+    if (shape.type === 'circle') {
+      ctx.arc(shape.cx, shape.cy, Math.max(0.5, shape.r), 0, Math.PI * 2);
+    } else {
+      // half-pixel offset so a 1-px stroke sits sharp on the pixel grid
+      ctx.rect(shape.x + 0.5, shape.y + 0.5, Math.max(0, shape.w - 1), Math.max(0, shape.h - 1));
+    }
+  }
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.lineWidth = outer;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  pathShape();
+  ctx.stroke();
+
+  ctx.lineWidth = inner;
+  ctx.strokeStyle = 'rgba(255,255,255,0.98)';
+  // Pronounced dash so ants read as active, not a decorative border.
+  ctx.setLineDash([inner * 3, inner * 2]);
+  ctx.lineDashOffset = -dashOffset;
+  pathShape();
+  ctx.stroke();
+  ctx.restore();
+}
+
 // Opens a redaction modal, returns a Promise<File | null>.
 //   File → user hit Done (with boxes) or Skip (returns the original file back)
 //   null → user cancelled (Escape or clicked the backdrop)
@@ -972,9 +1071,18 @@ function openRedactModal(file) {
     const clearBtn  = document.getElementById('redact-clear');
     const skipBtn   = document.getElementById('redact-skip');
     const doneBtn   = document.getElementById('redact-done');
+    const shapeRectBtn   = document.getElementById('redact-shape-rect');
+    const shapeCircleBtn = document.getElementById('redact-shape-circle');
 
     const ctx = canvas.getContext('2d');
     const loupeCtx = loupe.getContext('2d');
+
+    // Selection shape mode — 'rect' | 'circle'. Rect = corner-to-corner drag;
+    // circle = center-out drag (pointerdown sets center, distance sets radius).
+    let shapeMode = 'rect';
+    // Marching-ants dash offset, incremented every animation frame while
+    // dragging so the outline visibly moves and reads as "active".
+    let dashOffset = 0;
     // Offscreen copy of the untouched original image at canvas resolution.
     // Two uses: (1) fast repaint base — ctx.drawImage(origCanvas,0,0) replaces
     // the earlier putImageData(originalImageData) approach and is faster
@@ -1004,38 +1112,44 @@ function openRedactModal(file) {
       doneBtn.disabled  = boxes.length === 0;   // Done requires at least one box; skip covers "nothing to blur"
     }
 
-    // Base repaint: original image + every committed box pixelated on top.
-    // Does NOT draw the live drag rect — that's layered by renderDragFrame.
+    // Base repaint: original image + every committed shape pixelated on top.
+    // pixelateShape handles both rect and circle (circles pixelate a rect
+    // scratch then clip to the arc — see helper above). Does NOT draw the
+    // live drag shape; that's layered by renderDragFrame.
     function repaintAllBoxes() {
       if (!origCanvas) return;
       ctx.drawImage(origCanvas, 0, 0);
-      boxes.forEach(function (b) {
-        const block = Math.max(8, Math.round(Math.min(b.w, b.h) / 10));
-        pixelateRegion(ctx, b.x, b.y, b.w, b.h, block);
-      });
+      boxes.forEach(function (b) { pixelateShape(ctx, b); });
     }
 
-    // Render one drag-frame: base + committed boxes + LIVE-pixelated drag
-    // rect + a thin border on top (so a very small in-progress drag is still
-    // visible before the pixelation is perceptible). Same pixelation algorithm
-    // + coordinates as onPointerUp uses to commit — so the preview matches
-    // the final result exactly.
+    function shapeHasArea(s) {
+      if (!s) return false;
+      return s.type === 'circle' ? s.r > 0 : (s.w > 0 && s.h > 0);
+    }
+
+    // Render one drag frame: base + committed shapes + live-pixelated
+    // in-progress shape (rect or circle, whichever mode) + subtle white
+    // highlight overlay + double-stroke marching-ants outline on top. Uses
+    // pixelateShape so the circle preview is clipped to the arc — matches
+    // the final committed result exactly.
     function renderDragFrame() {
       repaintAllBoxes();
-      if (currentDrag && currentDrag.w >= 1 && currentDrag.h >= 1) {
-        const d = currentDrag;
-        const block = Math.max(8, Math.round(Math.min(d.w, d.h) / 10));
-        pixelateRegion(ctx, d.x, d.y, d.w, d.h, block);
-        // Thin dashed border for edge affordance during drag. Scales with
-        // canvas resolution so it reads at all sizes. Not committed — the
-        // next repaintAllBoxes call wipes it.
-        const lineW = Math.max(1, Math.round(canvas.width / 800));
+      if (shapeHasArea(currentDrag)) {
+        pixelateShape(ctx, currentDrag);
+        // 10% white fill highlight — reads as "in-progress selection" vs
+        // the plain pixelation of already-committed shapes. Subtle so it
+        // doesn't wash out the pixelation preview underneath.
         ctx.save();
-        ctx.strokeStyle = 'rgba(212, 168, 83, 0.95)';
-        ctx.lineWidth = lineW;
-        ctx.setLineDash([lineW * 4, lineW * 3]);
-        ctx.strokeRect(d.x + 0.5, d.y + 0.5, Math.max(0, d.w - 1), Math.max(0, d.h - 1));
+        ctx.fillStyle = 'rgba(255,255,255,0.10)';
+        ctx.beginPath();
+        if (currentDrag.type === 'circle') {
+          ctx.arc(currentDrag.cx, currentDrag.cy, currentDrag.r, 0, Math.PI * 2);
+        } else {
+          ctx.rect(currentDrag.x, currentDrag.y, currentDrag.w, currentDrag.h);
+        }
+        ctx.fill();
         ctx.restore();
+        drawSelectionOutline(ctx, currentDrag, dashOffset);
       }
       if (currentTouch) {
         drawLoupe(currentTouch.canvas);
@@ -1082,12 +1196,23 @@ function openRedactModal(file) {
     function showLoupe() { loupe.classList.add('active'); }
     function hideLoupe() { loupe.classList.remove('active'); }
 
-    function scheduleFrame() {
+    // Continuous rAF loop while dragging — pointermove no longer triggers a
+    // one-shot frame. This is required for the marching-ants animation: the
+    // dash offset needs to advance every frame regardless of whether the
+    // pointer is moving, otherwise the outline visibly freezes the moment
+    // the user holds their finger still, which reads as broken.
+    function loopFrame() {
+      if (!dragging) return;
+      dashOffset = (dashOffset + 1) % 1000000;
+      renderDragFrame();
+      requestAnimationFrame(loopFrame);
+    }
+    function startLoop() {
       if (rafScheduled) return;
       rafScheduled = true;
       requestAnimationFrame(function () {
         rafScheduled = false;
-        renderDragFrame();
+        loopFrame();
       });
     }
 
@@ -1107,6 +1232,28 @@ function openRedactModal(file) {
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }
 
+    // Build the current drag shape from the pointer position, respecting mode.
+    // rect:   startCanvas is one corner; drag extends the opposite corner.
+    // circle: startCanvas IS the center; drag distance sets the radius.
+    function makeDragShape(p) {
+      if (shapeMode === 'circle') {
+        const dx = p.x - startCanvas.x, dy = p.y - startCanvas.y;
+        return {
+          type: 'circle',
+          cx: Math.round(startCanvas.x),
+          cy: Math.round(startCanvas.y),
+          r:  Math.round(Math.sqrt(dx * dx + dy * dy)),
+        };
+      }
+      return {
+        type: 'rect',
+        x: Math.round(Math.min(startCanvas.x, p.x)),
+        y: Math.round(Math.min(startCanvas.y, p.y)),
+        w: Math.round(Math.abs(p.x - startCanvas.x)),
+        h: Math.round(Math.abs(p.y - startCanvas.y)),
+      };
+    }
+
     function onPointerDown(e) {
       if (!origCanvas) return;
       if (activePointerId !== null) return;   // ignore multi-touch second finger
@@ -1116,46 +1263,39 @@ function openRedactModal(file) {
       dragging = true;
       startCanvas = toCanvasCoords(e);
       startWrap   = toWrapCoords(e);
-      currentDrag = { x: startCanvas.x, y: startCanvas.y, w: 0, h: 0 };
+      dashOffset = 0;
+      currentDrag = makeDragShape(startCanvas);
       if (activePointerType === 'touch') {
         currentTouch = { canvas: startCanvas, wrap: startWrap };
         showLoupe();
       }
-      scheduleFrame();
+      startLoop();
       e.preventDefault();
     }
     function onPointerMove(e) {
       if (!dragging || e.pointerId !== activePointerId) return;
       const p = toCanvasCoords(e);
-      currentDrag = {
-        x: Math.round(Math.min(startCanvas.x, p.x)),
-        y: Math.round(Math.min(startCanvas.y, p.y)),
-        w: Math.round(Math.abs(p.x - startCanvas.x)),
-        h: Math.round(Math.abs(p.y - startCanvas.y)),
-      };
+      currentDrag = makeDragShape(p);
       if (activePointerType === 'touch') {
         currentTouch = { canvas: p, wrap: toWrapCoords(e) };
       }
-      scheduleFrame();
+      // No scheduling needed — the rAF loop is already running.
     }
     function onPointerUp(e) {
       if (!dragging || e.pointerId !== activePointerId) return;
-      dragging = false;
+      dragging = false;                            // stops the loop
       activePointerId = null;
       const wasTouch = activePointerType === 'touch';
       activePointerType = null;
       currentTouch = null;
       if (wasTouch) hideLoupe();
-      const p = toCanvasCoords(e);
-      const x = Math.round(Math.min(startCanvas.x, p.x));
-      const y = Math.round(Math.min(startCanvas.y, p.y));
-      const w = Math.round(Math.abs(p.x - startCanvas.x));
-      const h = Math.round(Math.abs(p.y - startCanvas.y));
+      const shape = makeDragShape(toCanvasCoords(e));
       currentDrag = null;
-      // Ignore taps / tiny drags — they usually mean "I meant to scroll" or a stray click.
-      if (w < 8 || h < 8) { repaintAllBoxes(); return; }
-      boxes.push({ x: x, y: y, w: w, h: h });
-      repaintAllBoxes();    // final commit; wipes the in-progress border
+      // Below-threshold drag — treat as "meant to scroll / stray click".
+      const tooSmall = shape.type === 'circle' ? shape.r < 8 : (shape.w < 8 || shape.h < 8);
+      if (tooSmall) { repaintAllBoxes(); return; }
+      boxes.push(shape);
+      repaintAllBoxes();                            // wipes fill + outline; commits pixelation
       setCount();
     }
     function onPointerCancel() {
@@ -1179,6 +1319,10 @@ function openRedactModal(file) {
       canvas.removeEventListener('pointercancel', onPointerCancel);
       undoBtn.onclick = null; clearBtn.onclick = null;
       skipBtn.onclick = null; doneBtn.onclick = null;
+      shapeRectBtn.onclick = null; shapeCircleBtn.onclick = null;
+      // Reset toggle to default (Box) so the next modal open doesn't inherit
+      // the previous session's circle mode.
+      setShapeMode('rect');
       overlay.removeEventListener('click', onBackdropClick);
       document.removeEventListener('keydown', onKeydown);
       // Free the canvas backing store so a very large photo doesn't linger.
@@ -1243,9 +1387,23 @@ function openRedactModal(file) {
       clearBtn.onclick = onClear;
       skipBtn.onclick  = finishAsSkip;
       doneBtn.onclick  = finishAsDone;
+      shapeRectBtn.onclick   = function () { setShapeMode('rect');   };
+      shapeCircleBtn.onclick = function () { setShapeMode('circle'); };
       overlay.addEventListener('click', onBackdropClick);
       document.addEventListener('keydown', onKeydown);
     };
+
+    // Toggle helper — flips the segmented-control active state and updates
+    // aria-pressed for screen readers. The shapeMode variable is what the
+    // pointer handlers consult on each drag.
+    function setShapeMode(mode) {
+      shapeMode = mode;
+      const isRect = mode === 'rect';
+      shapeRectBtn.classList.toggle('active', isRect);
+      shapeCircleBtn.classList.toggle('active', !isRect);
+      shapeRectBtn.setAttribute('aria-pressed', String(isRect));
+      shapeCircleBtn.setAttribute('aria-pressed', String(!isRect));
+    }
     img.onerror = function () {
       URL.revokeObjectURL(objectUrl);
       // Same fallthrough as no-dimensions — let the downstream pipeline
