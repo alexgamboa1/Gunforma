@@ -1195,14 +1195,32 @@ function readSpec(product, source, key) {
 function specStateKey(schema) { return schema.source + ':' + schema.key; }
 function schemaLabel(schema) { return schema.label || specLabel(schema.key); }
 
+// Reverse lookup — schema for a given composite state key. Used by the
+// change handler so we don't have to pre-seed F.specs (which caused a
+// crash: optionCount runs matchesSpecFilter over hollow pre-seeded
+// entries whose .values Set doesn't exist yet).
+function schemaForStateKey(stateKey) {
+  var all = SPEC_UNIVERSAL_FILTERS.slice();
+  Object.keys(SPEC_FILTERS_BY_CATEGORY).forEach(function (cat) {
+    all = all.concat(SPEC_FILTERS_BY_CATEGORY[cat]);
+  });
+  for (var i = 0; i < all.length; i++) {
+    if (specStateKey(all[i]) === stateKey) return all[i];
+  }
+  return null;
+}
+
 // Predicate for one active spec filter against one product. Called by
 // matchesAllExcept for every entry in F.specs.
 function matchesSpecFilter(product, state) {
+  if (!state || !state.schema) return true;   // hollow entry = no constraint (defensive)
   var s = state.schema;
   var actual = readSpec(product, s.source, s.key);
   if (state.type === 'strings') {
+    // Empty or missing values Set means the user hasn't ticked anything —
+    // treat as unconstrained rather than as "match nothing".
+    if (!(state.values instanceof Set) || state.values.size === 0) return true;
     if (s.source === 'variant') {
-      // Set of variant values — pass if ANY overlap with the checked values.
       if (!(actual instanceof Set) || !actual.size) return false;
       var hit = false;
       actual.forEach(function (v) { if (state.values.has(String(v))) hit = true; });
@@ -1211,10 +1229,11 @@ function matchesSpecFilter(product, state) {
     return actual != null && state.values.has(String(actual));
   }
   if (state.type === 'boolean') {
-    if (!state.on) return true;   // unchecked = no constraint
+    if (!state.on) return true;
     return actual === true;
   }
   if (state.type === 'numeric') {
+    if (state.min == null && state.max == null) return true;
     var n = typeof actual === 'number' ? actual : (actual == null ? null : Number(actual));
     if (n == null || Number.isNaN(n)) return false;
     if (state.min != null && n < state.min) return false;
@@ -1294,10 +1313,11 @@ function specsSectionHtml() {
         '</label>';
       }).join('');
     }
-    // Cache the schema on the state entry so matchesSpecFilter has all it
-    // needs without re-deriving it from the composite key on every check.
-    if (!state) state = F.specs[stateKey] = { schema: schema, type: schema.type };
-    else       state.schema = schema;
+    // Only refresh the schema on an EXISTING state entry — never seed a
+    // hollow one. A hollow entry (type but no values/on/min/max) would be
+    // picked up by matchesSpecFilter mid-render (through optionCount) and
+    // crash when it dereferences .values.has on undefined.
+    if (state) state.schema = schema;
     blocks.push('<div class="spec-block" data-spec-block="' + escAttr(stateKey) + '"><div class="filter-title">' + esc(schemaLabel(schema)) + '</div>' + body + '</div>');
   });
   return blocks.join('');
@@ -1329,7 +1349,14 @@ function attachFilterHandlers() {
       var stateKey = el.getAttribute('data-spec-composite');
       var widget = el.getAttribute('data-spec-widget');
       var state = F.specs[stateKey];
-      if (!state) return;   // schema wasn't seeded — should not happen after renderFilters
+      if (!state) {
+        // First user interaction on this key — resolve schema from the
+        // composite key and construct the state entry on the fly.
+        var sch = schemaForStateKey(stateKey);
+        if (!sch) return;
+        state = F.specs[stateKey] = { schema: sch, type: sch.type };
+        if (sch.type === 'strings') state.values = new Set();
+      }
       if (widget === 'str') {
         state.values = state.values || new Set();
         var v = el.getAttribute('data-spec-val');
