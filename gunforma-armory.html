@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Armory — Gunforma</title>
+<meta name="description" content="Gunforma Armory — assemble a build from the parts catalog, save drafts, and remix curated guides." />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafaf8; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV — shared nav.js */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+
+/* PAGE HEADER */
+.page-header { max-width: 1400px; margin: 0 auto; padding: 28px 32px 0; }
+.page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+.page-sub { font-size: 12.5px; color: #666; margin-top: 4px; }
+
+/* TABS */
+.tab-row { max-width: 1400px; margin: 18px auto 0; padding: 0 32px; display: flex; gap: 4px; border-bottom: 0.5px solid #e5e5e5; }
+.tab-btn { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+           padding: 10px 14px; background: transparent; border: none; cursor: pointer; color: #888;
+           border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: color 0.15s, border-color 0.15s; }
+.tab-btn:hover { color: #1a1a1a; }
+.tab-btn.active { color: #1a1a1a; border-bottom-color: #4a9edd; }
+
+/* LAYOUT */
+.armory { max-width: 1400px; margin: 0 auto; padding: 22px 32px 64px; }
+.build-layout { display: grid; grid-template-columns: 1fr 320px; gap: 28px; align-items: start; }
+.build-main { display: flex; flex-direction: column; gap: 16px; }
+.build-side { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; }
+
+/* CARD SURFACES */
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 18px; }
+.card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1a1a1a; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-hint { font-size: 11px; color: #999; font-weight: 500; letter-spacing: 0; text-transform: none; }
+
+/* PLATFORM PICKER */
+.platform-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.platform-btn { font-family: inherit; font-size: 13px; font-weight: 600; padding: 10px 14px; border: 0.5px solid #d5d3ca; background: #fff; color: #333; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
+.platform-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
+.platform-btn.active { border-color: #4a9edd; background: #eaf4fc; color: #1d6fb8; }
+.platform-note { font-size: 11.5px; color: #999; margin-top: 8px; }
+
+/* CATEGORY ACCORDION — mirrors parts-builder / post-build-v6 pattern */
+.category-block { border: 0.5px solid #e8e8e8; border-radius: 6px; overflow: hidden; background: #fff; transition: box-shadow 0.15s; }
+.category-block.open { box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-color: #4a9edd; }
+.category-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; user-select: none; background: #fff; transition: background 0.15s; }
+.category-block.open .category-head { background: #0e0f11; }
+.category-name-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.category-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.category-block.open .category-name { color: #e8e6e1; }
+.category-added-count { font-size: 10px; background: #22a06b; color: #fff; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
+.category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.category-block.open .category-toggle { color: #6fb4e8; border-color: #3a3b3e; background: rgba(255,255,255,0.06); }
+
+.added-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fafaf8; }
+.added-chip { display: flex; align-items: center; gap: 6px; background: #eaf5ee; border: 0.5px solid #86cfad; border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #166534; }
+.added-chip-x { background: none; border: none; cursor: pointer; color: #86a292; font-size: 14px; line-height: 1; padding: 0; font-family: inherit; }
+.added-chip-x:hover { color: #c25d3a; }
+
+.picker-panel { display: none; background: #fafaf8; }
+.category-block.open .picker-panel { display: block; }
+.picker-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #888; padding: 12px 16px 6px; display: flex; align-items: center; gap: 6px; }
+.picker-section-label.favs { color: #b06a1a; }
+.picker-section-label .fav-icon { color: #d85a30; font-size: 12px; }
+
+.part-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; padding: 8px 16px 16px; }
+.part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s; position: relative; }
+.part-card:hover { border-color: #cfcdc4; }
+.part-card.added { border-color: #22a06b; background: #f6fdf9; }
+.part-card.favorited { border-color: #d85a30; }
+.part-card.favorited.added { border-color: #22a06b; }
+.part-card-photo { position: relative; aspect-ratio: 4/3; background: #f4f3ee; overflow: hidden; }
+.part-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.part-card-nophoto { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 10px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
+.part-card-fav-badge { position: absolute; top: 6px; right: 6px; font-size: 10px; color: #d85a30; background: rgba(255,255,255,0.94); border: 0.5px solid #d85a30; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.04em; }
+.part-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
+.part-card-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.part-card-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
+.part-card-price { font-size: 12.5px; font-weight: 700; color: #1a1a1a; }
+.part-card-price.na { color: #bbb; font-weight: 500; }
+.part-card-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; margin-top: auto; }
+.part-card-btn { flex: 1; font-family: inherit; font-size: 11px; font-weight: 700; padding: 6px 8px; border-radius: 4px; cursor: pointer; border: 0.5px solid; text-align: center; text-decoration: none; letter-spacing: 0.02em; transition: all 0.15s; }
+.part-card-btn.add { background: #4a9edd; color: #fff; border-color: #4a9edd; }
+.part-card-btn.add:hover { background: #2a7bbd; }
+.part-card-btn.remove { background: #fff; color: #888; border-color: #d5d3ca; }
+.part-card-btn.remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
+.part-card-btn.buy { background: #fff; color: #333; border-color: #d5d3ca; }
+.part-card-btn.buy:hover { background: #fafaf8; color: #1a1a1a; border-color: #4a9edd; }
+
+.picker-empty { padding: 20px 16px; font-size: 12px; color: #888; text-align: center; }
+
+/* SIDEBAR SUMMARY */
+.summary-row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; border-bottom: 0.5px solid #efece3; font-size: 12.5px; }
+.summary-row:last-child { border-bottom: none; }
+.summary-label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.summary-value { font-weight: 700; color: #1a1a1a; }
+.summary-total { font-size: 18px; font-weight: 700; color: #1a1a1a; }
+.summary-total-label { font-size: 11px; color: #666; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
+.summary-total-wrap { padding: 12px 0; border-top: 0.5px solid #efece3; margin-top: 4px; }
+
+.btn-block { width: 100%; font-family: inherit; font-size: 12px; padding: 11px 16px; border-radius: 4px; cursor: pointer; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border: none; margin-top: 8px; }
+.btn-block:disabled { background: #e5e5e5!important; color: #bbb!important; cursor: not-allowed; }
+.btn-block.primary { background: #4a9edd; color: #fff; }
+.btn-block.primary:hover:not(:disabled) { background: #2a7bbd; }
+.btn-block.ghost { background: #fff; color: #1a1a1a; border: 0.5px solid #d5d3ca; }
+.btn-block.ghost:hover:not(:disabled) { background: #fafaf8; border-color: #4a9edd; color: #2a7bbd; }
+
+/* GUIDES */
+.guide-filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+.guide-chip { font-family: inherit; font-size: 12px; font-weight: 600; padding: 8px 14px; border: 0.5px solid #d5d3ca; background: #fff; color: #333; border-radius: 20px; cursor: pointer; transition: all 0.15s; }
+.guide-chip:hover { border-color: #4a9edd; color: #2a7bbd; }
+.guide-chip.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.guides-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px; }
+.guide-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+.guide-hero { aspect-ratio: 16/8; background: linear-gradient(135deg, #1a2432 0%, #0e0f11 100%); position: relative; display: flex; align-items: flex-end; padding: 16px; overflow: hidden; }
+.guide-hero-cat { position: absolute; top: 12px; left: 12px; font-size: 9.5px; color: #4a9edd; background: rgba(74,158,221,0.14); border: 0.5px solid #4a9edd; padding: 3px 9px; border-radius: 3px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.guide-hero-title { font-size: 18px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; line-height: 1.25; }
+.guide-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.guide-desc { font-size: 12.5px; color: #555; line-height: 1.6; }
+.guide-parts-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: #fafaf8; border: 0.5px solid #efece3; border-radius: 4px; }
+.guide-part { display: grid; grid-template-columns: 60px 1fr auto auto; gap: 10px; align-items: center; font-size: 11.5px; padding: 4px 0; }
+.guide-part-cat { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.guide-part-name { color: #1a1a1a; }
+.guide-part-name strong { color: #2a7bbd; font-weight: 700; }
+.guide-part-price { color: #1a1a1a; font-weight: 700; font-size: 12px; text-align: right; }
+.guide-part-price.na { color: #bbb; font-weight: 500; }
+.guide-part-buy { font-size: 10.5px; color: #2a7bbd; text-decoration: none; padding: 3px 8px; border: 0.5px solid #a7cdec; border-radius: 3px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.guide-part-buy:hover { background: #eaf4fc; }
+.guide-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
+.guide-total { font-size: 15px; font-weight: 700; color: #1a1a1a; }
+.guide-total-label { font-size: 10px; color: #888; margin-right: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
+.guide-remix-btn { font-family: inherit; font-size: 12px; font-weight: 700; padding: 9px 16px; border-radius: 4px; cursor: pointer; border: none; background: #4a9edd; color: #fff; letter-spacing: 0.04em; text-transform: uppercase; transition: background 0.15s; }
+.guide-remix-btn:hover { background: #2a7bbd; }
+
+.empty { padding: 60px 20px; text-align: center; font-size: 13px; color: #888; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; }
+.empty-title { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
+
+/* TOAST */
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; font-size: 12px; padding: 10px 16px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; z-index: 200; pointer-events: none; }
+.toast.show { opacity: 1; pointer-events: auto; }
+.toast a { color: #6fb4e8; margin-left: 6px; text-decoration: underline; }
+
+/* MOBILE */
+@media (max-width: 900px) {
+  .armory { padding: 18px 16px 48px; }
+  .page-header { padding: 22px 16px 0; }
+  .tab-row { padding: 0 16px; }
+  .build-layout { grid-template-columns: 1fr; }
+  .build-side { position: static; }
+  .guides-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="nav-mount" data-nav="full"></div>
+
+<div class="page-header">
+  <div class="page-title">Armory</div>
+  <div class="page-sub">Assemble a build from the parts catalog, save drafts, or remix a curated guide.</div>
+</div>
+
+<div class="tab-row" role="tablist">
+  <button type="button" class="tab-btn active" id="tab-build"  role="tab" aria-selected="true">My Build</button>
+  <button type="button" class="tab-btn"        id="tab-guides" role="tab" aria-selected="false">Guides</button>
+</div>
+
+<div class="armory">
+  <div id="tab-build-panel">
+    <div class="build-layout">
+      <div class="build-main">
+        <div class="card">
+          <div class="card-title">Pistol <span class="card-hint" id="platform-note"></span></div>
+          <div class="platform-row" id="platform-row"><span style="font-size:12px;color:#888;">Loading platforms…</span></div>
+        </div>
+        <div id="parts-container">
+          <div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Select a pistol to see compatible parts.</div></div>
+        </div>
+      </div>
+      <aside class="build-side">
+        <div class="card">
+          <div class="card-title">Build</div>
+          <div class="summary-row"><span class="summary-label">Pistol</span><span class="summary-value" id="s-platform">—</span></div>
+          <div class="summary-row"><span class="summary-label">Parts</span><span class="summary-value" id="s-parts">0</span></div>
+          <div class="summary-row"><span class="summary-label">Favorited</span><span class="summary-value" id="s-favs">—</span></div>
+          <div class="summary-total-wrap">
+            <div class="summary-total-label">Running total (MSRP)</div>
+            <div class="summary-total" id="s-total">$0</div>
+          </div>
+          <button type="button" class="btn-block primary" id="btn-post"       disabled>Post this build →</button>
+          <button type="button" class="btn-block ghost"   id="btn-save-draft" disabled>Save as draft</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div id="tab-guides-panel" hidden>
+    <div class="guide-filter-row" id="guide-filter-row"></div>
+    <div id="guides-container">
+      <div class="empty"><div class="empty-title">Loading guides…</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg"></span><span id="toast-link-wrap"></span></div>
+
+<div id="footer-mount" data-footer="default"></div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
+<script>
+// ============================================================
+// gunforma-armory.html — build-assembly + curated guides.
+//
+// My Build tab: platform picker → category accordions → add parts.
+// Within each category, the user's favorited parts (from part_favorites)
+// are shown FIRST under a "Your favorites" section, then the rest of
+// the compatible catalog. Running MSRP + Save-draft (writes to builds
+// with status='draft') + Post (hands off to gunforma-post-build-v6.html
+// with pre-fill via localStorage).
+//
+// Guides tab: 4 category chips + curated build recipes from the guides
+// table. Each guide's parts_snapshot uses the same shape as
+// builds.parts_snapshot, so rendering piggybacks on the same product
+// lookup. "Remix this build" clones a guide into the My Build state
+// (does not mutate the original) and switches tabs.
+//
+// Buy links: every part card links to products.url (semantically the
+// buy-at-retailer URL — samples confirmed retailer domains). Rendered
+// with rel="sponsored noopener" + target="_blank". If more than 20% of
+// visible cards have no URL, a console.warn fires so catalog gaps show
+// up during QA.
+// ============================================================
+var sb = window.sb;
+
+// ─── STATE ────────────────────────────────────────────────
+var CURRENT_USER = null;
+var PLATFORMS = [];             // [{id,name,slug}]
+var PLATFORMS_BY_ID = {};
+var PRODUCTS = [];              // denormalized flat rows
+var PRODUCTS_BY_ID = {};        // {id: product}
+var PRODUCTS_BY_CATEGORY = {};  // {category: [product, ...]} for the current platform's catalog
+var CATALOG_PLATFORM = null;    // which platform_id PRODUCTS_BY_CATEGORY is scoped to
+var FAVORITES = new Set();      // product_ids
+var GUIDES = [];                // [{id,title,category,platform_id,description,parts_snapshot,...}]
+
+var STATE = {
+  tab: 'build',                 // 'build' | 'guides'
+  platform: null,               // {id,name,slug} or null
+  parts: [],                    // [{uid, refId, category, brand, name, pending, price}]
+  openCategory: null,
+  guideCategory: 'all',         // 'all' | 'home_defense' | 'concealed_carry' | ...
+};
+var partUid = 1;
+
+var CATEGORY_LABELS = {
+  slide: 'Slides', barrel: 'Barrels', compensator: 'Compensators',
+  frame: 'Frame Modules', trigger: 'Triggers', light: 'Weapon Lights', optic: 'Optics',
+  mag_release: 'Magazine Releases', magwell: 'Magwells',
+  basepad: 'Basepads', slide_release: 'Slide Releases',
+  safety_selector: 'Safety Selectors', takedown_lever: 'Takedown Levers',
+  slide_plate: 'Slide Plates',
+};
+function catLabel(c) { return CATEGORY_LABELS[c] || (c || '').replace(/_/g, ' ').replace(/\b\w/g, function(m){return m.toUpperCase();}); }
+
+var GUIDE_CATEGORIES = [
+  { key: 'all',                label: 'All' },
+  { key: 'concealed_carry',    label: 'Concealed Carry' },
+  { key: 'home_defense',       label: 'Home Defense' },
+  { key: 'range_competition',  label: 'Range / Competition' },
+  { key: 'duty',               label: 'Duty' },
+];
+
+var LS_ARMORY_POST_KEY = 'armory.postDraft';   // handshake to post-build-v6.html
+
+// ─── AUTH ─────────────────────────────────────────────────
+sb.auth.onAuthStateChange(function (event, session) {
+  var newUser = session ? session.user : null;
+  var flipped = (!newUser) !== (!CURRENT_USER);
+  CURRENT_USER = newUser;
+  if (!newUser) FAVORITES = new Set();
+  if (flipped) loadFavoritesAndRepaint();
+});
+
+// ─── INIT ─────────────────────────────────────────────────
+async function init() {
+  var sess = await sb.auth.getSession();
+  CURRENT_USER = sess && sess.data && sess.data.session && sess.data.session.user || null;
+  await loadAll();
+  wireControls();
+  renderPlatformRow();
+  renderPartsSection();
+  renderSummary();
+  renderGuidesFilterRow();
+  renderGuides();
+  updateActionButtons();
+}
+
+async function loadAll() {
+  var platQ = sb.from('platforms').select('id, name, slug').order('name');
+  var prodQ = sb.from('products')
+    .select(
+      'id, name, description, category, brand_id, url, lowest_price,' +
+      'brands:manufacturers(id, name),' +
+      'product_platforms(platform_id),' +
+      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
+    )
+    .eq('is_discontinued', false);
+  var guideQ = sb.from('guides').select('*').eq('is_published', true).order('title');
+
+  var results = await Promise.all([platQ, prodQ, guideQ]);
+  var platRes = results[0], prodRes = results[1], guideRes = results[2];
+  if (platRes.error)  return fatalErr('platforms', platRes.error);
+  if (prodRes.error)  return fatalErr('products',  prodRes.error);
+  if (guideRes.error) return fatalErr('guides',    guideRes.error);
+
+  PLATFORMS = platRes.data || [];
+  PLATFORMS.forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
+
+  PRODUCTS = (prodRes.data || []).map(function (r) {
+    var variants = r.product_variants || [];
+    var dv = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
+    var price = dv && dv.msrp != null ? Number(dv.msrp)
+              : (r.lowest_price != null ? Number(r.lowest_price) : null);
+    return {
+      id: r.id, name: r.name || '',
+      category: r.category, brand_id: r.brand_id,
+      brand: (r.brands && r.brands.name) || 'Unknown',
+      price: price,
+      image: (dv && dv.primary_image_url) || null,
+      buy_url: r.url || null,
+      platform_ids: (r.product_platforms || []).map(function (pp) { return pp.platform_id; }),
+    };
+  });
+  PRODUCTS.forEach(function (p) { PRODUCTS_BY_ID[p.id] = p; });
+
+  GUIDES = guideRes.data || [];
+
+  await loadFavoritesAndRepaint(/*skipRepaint*/ true);
+}
+
+async function loadFavoritesAndRepaint(skipRepaint) {
+  if (!CURRENT_USER) { FAVORITES = new Set(); }
+  else {
+    var res = await sb.from('part_favorites').select('product_id').eq('user_id', CURRENT_USER.id);
+    if (res.error) { console.error(res.error); }
+    else { FAVORITES = new Set((res.data || []).map(function (r) { return r.product_id; })); }
+  }
+  if (!skipRepaint) {
+    renderPartsSection();
+    renderSummary();
+    updateActionButtons();
+  }
+}
+
+// ─── CONTROLS ─────────────────────────────────────────────
+function wireControls() {
+  document.getElementById('tab-build').onclick  = function () { setTab('build'); };
+  document.getElementById('tab-guides').onclick = function () { setTab('guides'); };
+  document.getElementById('btn-save-draft').onclick = saveDraft;
+  document.getElementById('btn-post').onclick       = postThisBuild;
+}
+
+function setTab(tab) {
+  STATE.tab = tab;
+  var isBuild = tab === 'build';
+  document.getElementById('tab-build').classList.toggle('active', isBuild);
+  document.getElementById('tab-guides').classList.toggle('active', !isBuild);
+  document.getElementById('tab-build').setAttribute('aria-selected', String(isBuild));
+  document.getElementById('tab-guides').setAttribute('aria-selected', String(!isBuild));
+  document.getElementById('tab-build-panel').hidden  = !isBuild;
+  document.getElementById('tab-guides-panel').hidden =  isBuild;
+}
+
+// ─── PLATFORM PICKER ──────────────────────────────────────
+function renderPlatformRow() {
+  var row = document.getElementById('platform-row');
+  var note = document.getElementById('platform-note');
+  if (!PLATFORMS.length) { row.innerHTML = '<span style="font-size:12px;color:#c25d3a;">No platforms available.</span>'; return; }
+  row.innerHTML = PLATFORMS.map(function (p) {
+    var isActive = STATE.platform && STATE.platform.id === p.id;
+    return '<button type="button" class="platform-btn' + (isActive ? ' active' : '') + '" data-id="' + p.id + '">' + esc(p.name) + '</button>';
+  }).join('');
+  row.querySelectorAll('.platform-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () { selectPlatform(btn.dataset.id); });
+  });
+  // Empty-catalog nudge — visible if the selected platform has zero products.
+  if (STATE.platform) {
+    var count = productsForPlatform(STATE.platform.id).length;
+    note.textContent = count ? '' : '— catalog coming soon';
+  } else {
+    note.textContent = '';
+  }
+}
+
+function productsForPlatform(platformId) {
+  return PRODUCTS.filter(function (p) { return p.platform_ids.indexOf(platformId) !== -1; });
+}
+
+function selectPlatform(id) {
+  var next = PLATFORMS_BY_ID[id];
+  if (!next) return;
+  // Changing platform: catalog picks likely don't fit the new one, drop them.
+  // Pending (custom) parts survive since they aren't tied to catalog IDs.
+  if (STATE.platform && STATE.platform.id !== id) {
+    STATE.parts = STATE.parts.filter(function (pt) { return pt.pending; });
+  }
+  STATE.platform = next;
+  STATE.openCategory = null;
+  rebuildCatalogForPlatform();
+  renderPlatformRow();
+  renderPartsSection();
+  renderSummary();
+  updateActionButtons();
+}
+
+function rebuildCatalogForPlatform() {
+  PRODUCTS_BY_CATEGORY = {};
+  if (!STATE.platform) { CATALOG_PLATFORM = null; return; }
+  var pid = STATE.platform.id;
+  PRODUCTS.forEach(function (p) {
+    if (p.platform_ids.indexOf(pid) === -1) return;
+    (PRODUCTS_BY_CATEGORY[p.category] = PRODUCTS_BY_CATEGORY[p.category] || []).push(p);
+  });
+  CATALOG_PLATFORM = pid;
+}
+
+// ─── PARTS SECTION (accordion) ────────────────────────────
+function renderPartsSection() {
+  var container = document.getElementById('parts-container');
+  if (!STATE.platform) {
+    container.innerHTML = '<div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Select a pistol to see compatible parts.</div></div>';
+    return;
+  }
+  var cats = Object.keys(PRODUCTS_BY_CATEGORY).sort(function (a, b) { return catLabel(a).localeCompare(catLabel(b)); });
+  if (!cats.length) {
+    container.innerHTML = '<div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">No parts in the catalog for ' + esc(STATE.platform.name) + ' yet.</div></div>';
+    return;
+  }
+  container.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
+    cats.map(function (c) { return renderCategoryBlock(c); }).join('') +
+  '</div>';
+  wireCategoryHandlers();
+  runBuyUrlAudit();
+}
+
+function renderCategoryBlock(cat) {
+  var isOpen = STATE.openCategory === cat;
+  var addedInCat = STATE.parts.filter(function (p) { return p.category === cat; });
+  var allInCat = PRODUCTS_BY_CATEGORY[cat] || [];
+  var favIds = new Set();
+  var favs = [];
+  var rest = [];
+  allInCat.forEach(function (p) {
+    if (FAVORITES.has(p.id)) { favIds.add(p.id); favs.push(p); }
+    else rest.push(p);
+  });
+
+  var chipsHtml = addedInCat.length
+    ? '<div class="added-strip">' + addedInCat.map(function (p) {
+        return '<div class="added-chip">' + esc(p.brand + ' ' + p.name) +
+          '<button class="added-chip-x" data-uid="' + p.uid + '" title="Remove">×</button></div>';
+      }).join('') + '</div>'
+    : '';
+
+  var picker = '';
+  if (isOpen) {
+    picker = '<div class="picker-panel">';
+    if (favs.length) {
+      picker +=
+        '<div class="picker-section-label favs"><span class="fav-icon">♥</span> Your favorites in this category</div>' +
+        '<div class="part-grid">' + favs.map(function (p) { return renderPartCard(p, cat, /*isFav*/ true); }).join('') + '</div>';
+    }
+    if (rest.length) {
+      picker +=
+        (favs.length ? '<div class="picker-section-label">All ' + esc(catLabel(cat).toLowerCase()) + '</div>' : '') +
+        '<div class="part-grid">' + rest.map(function (p) { return renderPartCard(p, cat, /*isFav*/ false); }).join('') + '</div>';
+    }
+    if (!favs.length && !rest.length) picker += '<div class="picker-empty">No products in this category for this platform.</div>';
+    picker += '</div>';
+  }
+
+  return '<div class="category-block' + (isOpen ? ' open' : '') + '" data-cat="' + cat + '">' +
+    '<div class="category-head" data-cat-head="' + cat + '">' +
+      '<div class="category-name-wrap">' +
+        '<span class="category-name">' + esc(catLabel(cat)) + '</span>' +
+        (addedInCat.length ? '<span class="category-added-count">' + addedInCat.length + '</span>' : '') +
+      '</div>' +
+      '<button class="category-toggle">' + (isOpen ? 'Close ✕' : '+ Add part') + '</button>' +
+    '</div>' +
+    chipsHtml + picker +
+  '</div>';
+}
+
+function renderPartCard(p, cat, isFav) {
+  var isAdded = STATE.parts.some(function (pt) { return pt.refId === p.id; });
+  var priceHtml = p.price != null
+    ? '<div class="part-card-price">$' + p.price.toFixed(p.price < 100 ? 2 : 0) + '</div>'
+    : '<div class="part-card-price na">Price N/A</div>';
+  var photoHtml = p.image
+    ? '<img src="' + escAttr(p.image) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-nophoto&quot;>No photo</div>\'"/>'
+    : '<div class="part-card-nophoto">No photo</div>';
+  var addBtn = isAdded
+    ? '<button type="button" class="part-card-btn remove" data-remove-ref="' + p.id + '">Remove</button>'
+    : '<button type="button" class="part-card-btn add"    data-add-ref="'    + p.id + '" data-add-cat="' + cat + '">+ Add</button>';
+  var buyBtn = p.buy_url
+    ? '<a class="part-card-btn buy" href="' + escAttr(p.buy_url) + '" target="_blank" rel="sponsored noopener">Buy →</a>'
+    : '';
+  return '<div class="part-card' + (isAdded ? ' added' : '') + (isFav ? ' favorited' : '') + '">' +
+    '<div class="part-card-photo">' + photoHtml +
+      (isFav ? '<div class="part-card-fav-badge">★ FAV</div>' : '') +
+    '</div>' +
+    '<div class="part-card-body">' +
+      '<div class="part-card-brand">' + esc(p.brand) + '</div>' +
+      '<div class="part-card-name">'  + esc(p.name)  + '</div>' +
+      priceHtml +
+    '</div>' +
+    '<div class="part-card-actions">' + addBtn + buyBtn + '</div>' +
+  '</div>';
+}
+
+function wireCategoryHandlers() {
+  document.querySelectorAll('[data-cat-head]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var cat = el.dataset.catHead;
+      STATE.openCategory = (STATE.openCategory === cat) ? null : cat;
+      renderPartsSection();
+    });
+  });
+  document.querySelectorAll('[data-add-ref]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      addPartByRefId(el.dataset.addRef, el.dataset.addCat);
+    });
+  });
+  document.querySelectorAll('[data-remove-ref]').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      removePartByRefId(el.dataset.removeRef);
+    });
+  });
+  document.querySelectorAll('.added-chip-x').forEach(function (el) {
+    el.addEventListener('click', function (e) {
+      e.stopPropagation();
+      removePartByUid(el.dataset.uid);
+    });
+  });
+}
+
+function addPartByRefId(refId, cat) {
+  var product = PRODUCTS_BY_ID[refId];
+  if (!product) return;
+  // Silently ignore duplicate adds (belt-and-braces — the UI hides Add and
+  // shows Remove when the item is present, but a fast double click could race).
+  if (STATE.parts.some(function (p) { return p.refId === refId; })) return;
+  STATE.parts.push({
+    uid: 'p' + (partUid++), refId: refId, category: cat || product.category,
+    brand: product.brand, name: product.name, pending: false, price: product.price,
+  });
+  renderPartsSection();
+  renderSummary();
+  updateActionButtons();
+}
+function removePartByRefId(refId) {
+  STATE.parts = STATE.parts.filter(function (p) { return p.refId !== refId; });
+  renderPartsSection();
+  renderSummary();
+  updateActionButtons();
+}
+function removePartByUid(uid) {
+  STATE.parts = STATE.parts.filter(function (p) { return p.uid !== uid; });
+  renderPartsSection();
+  renderSummary();
+  updateActionButtons();
+}
+
+// ─── SUMMARY + ACTIONS ─────────────────────────────────────
+function totalMsrp() {
+  return STATE.parts.reduce(function (sum, p) { return p.price != null ? sum + p.price : sum; }, 0);
+}
+function renderSummary() {
+  document.getElementById('s-platform').textContent = STATE.platform ? STATE.platform.name : '—';
+  document.getElementById('s-parts').textContent    = String(STATE.parts.length);
+  document.getElementById('s-favs').textContent     = CURRENT_USER ? String(FAVORITES.size) : 'Sign in';
+  var t = totalMsrp();
+  document.getElementById('s-total').textContent = '$' + Math.round(t).toLocaleString();
+}
+function updateActionButtons() {
+  var canSubmit = !!STATE.platform && STATE.parts.length > 0;
+  document.getElementById('btn-save-draft').disabled = !canSubmit;
+  document.getElementById('btn-post').disabled       = !canSubmit;
+}
+
+function buildPartsSnapshot() {
+  return STATE.parts.map(function (p) {
+    return { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+  });
+}
+
+async function saveDraft() {
+  if (!CURRENT_USER) { toast('Sign in to save drafts', 'gunforma-signin.html', 'Sign in'); return; }
+  if (!STATE.platform || STATE.parts.length === 0) return;
+  var btn = document.getElementById('btn-save-draft');
+  btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Saving…';
+  var payload = {
+    user_id: CURRENT_USER.id,
+    platform_id: STATE.platform.id,
+    name: 'Armory draft — ' + new Date().toLocaleDateString(),
+    tier: 'full',
+    status: 'draft',
+    activities: [],
+    parts_snapshot: buildPartsSnapshot(),
+    // Draft: no consent flags. The stamp_build_consent trigger leaves
+    // confirmed_at null in that case, and the row can be picked up later
+    // in post-build-v6 for real submission.
+    legal_confirmed: false,
+    content_license_confirmed: false,
+  };
+  var res = await sb.from('builds').insert(payload).select('id').single();
+  btn.disabled = false; btn.textContent = orig;
+  if (res.error) { console.error(res.error); toast('Save failed — ' + (res.error.message || 'try again')); return; }
+  toast('Draft saved');
+}
+
+function postThisBuild() {
+  if (!CURRENT_USER) { toast('Sign in to post a build', 'gunforma-signin.html', 'Sign in'); return; }
+  if (!STATE.platform || STATE.parts.length === 0) return;
+  // Handshake: post-build-v6.html reads this on load and pre-fills its
+  // platform + parts, then removes the key. Localstorage — same origin,
+  // survives the redirect, no size concerns for this shape.
+  try {
+    localStorage.setItem(LS_ARMORY_POST_KEY, JSON.stringify({
+      v: 1,
+      platform_id: STATE.platform.id,
+      parts_snapshot: buildPartsSnapshot(),
+      handed_off_at: new Date().toISOString(),
+    }));
+  } catch (e) { console.error('localStorage set failed', e); toast('Couldn\'t hand off — try again'); return; }
+  window.location.href = 'gunforma-post-build-v6.html';
+}
+
+// ─── GUIDES TAB ────────────────────────────────────────────
+function renderGuidesFilterRow() {
+  var row = document.getElementById('guide-filter-row');
+  row.innerHTML = GUIDE_CATEGORIES.map(function (c) {
+    return '<button type="button" class="guide-chip' + (STATE.guideCategory === c.key ? ' active' : '') + '" data-cat="' + c.key + '">' + esc(c.label) + '</button>';
+  }).join('');
+  row.querySelectorAll('.guide-chip').forEach(function (el) {
+    el.addEventListener('click', function () {
+      STATE.guideCategory = el.dataset.cat;
+      renderGuidesFilterRow();
+      renderGuides();
+    });
+  });
+}
+
+function renderGuides() {
+  var container = document.getElementById('guides-container');
+  var list = STATE.guideCategory === 'all'
+    ? GUIDES
+    : GUIDES.filter(function (g) { return g.category === STATE.guideCategory; });
+  if (!list.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-title">No guides in this category yet</div><div>Try a different tab, or check back soon.</div></div>';
+    return;
+  }
+  container.innerHTML = '<div class="guides-grid">' + list.map(renderGuideCard).join('') + '</div>';
+  container.querySelectorAll('.guide-remix-btn').forEach(function (el) {
+    el.addEventListener('click', function () { remixGuide(el.dataset.guideId); });
+  });
+  runBuyUrlAudit();
+}
+
+function renderGuideCard(g) {
+  var platName = PLATFORMS_BY_ID[g.platform_id] ? PLATFORMS_BY_ID[g.platform_id].name : '';
+  var snap = Array.isArray(g.parts_snapshot) ? g.parts_snapshot : [];
+  var total = 0;
+  var partsHtml = snap.map(function (part) {
+    var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
+    var price = live && live.price != null ? live.price : null;
+    if (price != null) total += price;
+    var priceCell = price != null
+      ? '<div class="guide-part-price">$' + price.toFixed(price < 100 ? 2 : 0) + '</div>'
+      : '<div class="guide-part-price na">—</div>';
+    var buyCell = live && live.buy_url
+      ? '<a class="guide-part-buy" href="' + escAttr(live.buy_url) + '" target="_blank" rel="sponsored noopener">Buy</a>'
+      : '<span></span>';
+    return '<div class="guide-part">' +
+      '<span class="guide-part-cat">' + esc(catLabel(part.category)) + '</span>' +
+      '<span class="guide-part-name"><strong>' + esc(part.brand || '') + '</strong> ' + esc(part.name || '') + '</span>' +
+      priceCell + buyCell +
+    '</div>';
+  }).join('');
+  return '<div class="guide-card">' +
+    '<div class="guide-hero">' +
+      '<div class="guide-hero-cat">' + esc(guideCatLabel(g.category)) + '</div>' +
+      '<div class="guide-hero-title">' + esc(g.title) + '</div>' +
+    '</div>' +
+    '<div class="guide-body">' +
+      (g.description ? '<div class="guide-desc">' + esc(g.description) + '</div>' : '') +
+      '<div style="font-size:11px;color:#888;">' + esc(platName) + ' · ' + snap.length + ' part' + (snap.length !== 1 ? 's' : '') + '</div>' +
+      (snap.length ? '<div class="guide-parts-list">' + partsHtml + '</div>' : '') +
+      '<div class="guide-footer">' +
+        '<div><span class="guide-total-label">Total</span><span class="guide-total">$' + Math.round(total).toLocaleString() + '</span></div>' +
+        '<button type="button" class="guide-remix-btn" data-guide-id="' + g.id + '">Remix this build</button>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+}
+function guideCatLabel(k) { var m = GUIDE_CATEGORIES.find(function (c) { return c.key === k; }); return m ? m.label : k; }
+
+function remixGuide(guideId) {
+  if (!CURRENT_USER) { toast('Sign in to remix a build', 'gunforma-signin.html', 'Sign in'); return; }
+  var g = GUIDES.find(function (x) { return x.id === guideId; });
+  if (!g) return;
+  var plat = PLATFORMS_BY_ID[g.platform_id];
+  if (!plat) { toast('Guide platform unavailable'); return; }
+  // Clone into user's My Build state — never mutate the guide row itself.
+  STATE.platform = plat;
+  rebuildCatalogForPlatform();
+  var snap = Array.isArray(g.parts_snapshot) ? g.parts_snapshot : [];
+  STATE.parts = snap.map(function (part) {
+    var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
+    return {
+      uid: 'p' + (partUid++), refId: part.refId || null, category: part.category,
+      brand: part.brand || (live ? live.brand : 'Unknown'),
+      name:  part.name  || (live ? live.name  : ''),
+      pending: !!part.pending,
+      price: live ? live.price : null,
+    };
+  });
+  STATE.openCategory = null;
+  setTab('build');
+  renderPlatformRow();
+  renderPartsSection();
+  renderSummary();
+  updateActionButtons();
+  toast('Remixed — customize your build below');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ─── BUY-URL AUDIT ─────────────────────────────────────────
+// User spec: console.warn when > 20% of currently-visible parts have no
+// buy_url, so gaps show up during QA. Runs on any render that produces
+// cards (parts section + guides tab).
+function runBuyUrlAudit() {
+  var visibleProducts = [];
+  // Parts pickers (currently open category only, since that's what the user sees)
+  if (STATE.tab === 'build' && STATE.openCategory && PRODUCTS_BY_CATEGORY[STATE.openCategory]) {
+    visibleProducts = visibleProducts.concat(PRODUCTS_BY_CATEGORY[STATE.openCategory]);
+  }
+  // Guides tab visible cards
+  if (STATE.tab === 'guides') {
+    var list = STATE.guideCategory === 'all' ? GUIDES : GUIDES.filter(function (g) { return g.category === STATE.guideCategory; });
+    list.forEach(function (g) {
+      (g.parts_snapshot || []).forEach(function (part) {
+        if (part.refId && PRODUCTS_BY_ID[part.refId]) visibleProducts.push(PRODUCTS_BY_ID[part.refId]);
+      });
+    });
+  }
+  if (visibleProducts.length < 5) return;   // don't warn on tiny samples
+  var missing = visibleProducts.filter(function (p) { return !p.buy_url; }).length;
+  var pct = missing / visibleProducts.length;
+  if (pct > 0.2) {
+    console.warn('[armory] buy_url gap: ' + missing + '/' + visibleProducts.length + ' visible parts (' + Math.round(pct * 100) + '%) have no buy URL. Backfill products.url for these.');
+  }
+}
+
+// ─── UTILITIES ─────────────────────────────────────────────
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function escAttr(s) { return esc(s); }
+
+function fatalErr(what, err) {
+  console.error('[armory]', what, err);
+  document.getElementById('parts-container').innerHTML = '<div class="empty"><div class="empty-title">Couldn\'t load ' + what + '</div><div>' + esc(err.message || 'unknown error') + '</div></div>';
+}
+
+var _toastTimer = null;
+function toast(msg, href, linkText) {
+  var el = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  document.getElementById('toast-link-wrap').innerHTML = href ? '<a href="' + escAttr(href) + '">' + esc(linkText || 'Go') + '</a>' : '';
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3500);
+}
+
+init();
+</script>
+
+</body>
+</html>

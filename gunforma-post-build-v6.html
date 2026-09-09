@@ -1802,13 +1802,51 @@ async function requireAuthAndLoadUser() {
   return true;
 }
 
+// Armory handshake: gunforma-armory.html's "Post this build" writes the
+// selected platform + parts_snapshot to localStorage under this key, then
+// redirects here. We pop it and pre-fill state.platform + state.parts.
+// One-shot: the key is removed on read so a refresh doesn't re-hydrate.
+const ARMORY_POST_KEY = 'armory.postDraft';
+
+async function hydrateFromArmoryHandoff() {
+  let raw;
+  try { raw = localStorage.getItem(ARMORY_POST_KEY); } catch (_) { return false; }
+  if (!raw) return false;
+  try { localStorage.removeItem(ARMORY_POST_KEY); } catch (_) { /* private mode etc. */ }
+  let payload;
+  try { payload = JSON.parse(raw); } catch (_) { return false; }
+  if (!payload || !payload.platform_id) return false;
+
+  // loadPlatforms() must have finished so PLATFORMS is populated before
+  // we try to match. Callers ensure that order.
+  const p = PLATFORMS.find(x => x.id === payload.platform_id);
+  if (!p) { showToast('Couldn\'t restore that platform'); return false; }
+  state.platform = p;
+  document.getElementById('platform-picker').style.display = 'none';
+  document.getElementById('platform-selected').classList.add('show');
+  document.getElementById('platform-selected-name').textContent = p.name;
+  renderParts(); renderSidebar();
+  await loadCatalog(p.id);
+
+  (payload.parts_snapshot || []).forEach(function (part) {
+    state.parts.push({
+      uid: 'p' + (uid++), refId: part.refId || null, category: part.category,
+      brand: part.brand || 'Unknown', name: part.name || '', pending: !!part.pending,
+    });
+  });
+  renderParts(); renderSidebar();
+  showToast('Loaded from Armory — add photos + a name to post');
+  return true;
+}
+
 (async function init() {
   renderParts(); renderSidebar(); renderFirstPostNote();
   const ok = await requireAuthAndLoadUser();
   if (!ok) return;
   renderFirstPostNote();
   renderPlatformGrid();
-  loadPlatforms();
+  await loadPlatforms();
+  await hydrateFromArmoryHandoff();
 })();
 </script>
 </body>
