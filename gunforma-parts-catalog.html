@@ -147,7 +147,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .setup-chip-x { background: none; border: none; color: #7ba189; font-size: 15px; line-height: 1; cursor: pointer; font-family: inherit; padding: 0; }
 .setup-chip-x:hover { color: #c25d3a; }
 
-/* Fitment info banner — visible when a rule from FITMENT_RULES is
+/* Fitment info banner — visible when pinned setup components actively
    actively narrowing a downstream category. Dismissable per session (the
    filter itself stays active — dismiss just hides the explanation). */
 .fitment-banner { display: flex; align-items: center; gap: 12px; background: #eaf4fc; border: 0.5px solid #a7cdec; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #1d6fb8; line-height: 1.5; }
@@ -383,14 +383,46 @@ var FAVORITES = new Set();      // product_ids the signed-in user has favorited
 var SETUP = {};                 // { category: product } — user's owned components; drives fitment-chain filtering
 var LS_SETUP_KEY = 'catalog.mySetup.v1';
 var LS_BANNER_DISMISSED_KEY = 'catalog.fitmentBannerDismissed';  // per-tab; sessionStorage
-// Cross-category compatibility rules. Reads: "if a slide is pinned, then
-// filter optics to those whose specs.footprint matches the slide's
-// specs.optic_cut." Add rules for barrel/frame/etc. as spec data lands.
-var FITMENT_RULES = {
-  slide: { optic: { from: 'optic_cut', to: 'footprint' } },
-  // barrel: { compensator: { from: 'threaded', to: 'requires_threaded' } },  // future
-  // frame:  { magwell:     { from: 'model',    to: 'fits_model' } },          // future
+// Cross-category compatibility whitelists (populated in loadEverything).
+var BSR_BY_BARREL = {}, BSR_BY_SLIDE = {};
+var MFR_BY_MAGWELL = {}, MFR_BY_FRAME = {};
+var GUNS = [];
+
+// Spec-filter schema per category — points at real spec-table columns or
+// per-variant fields. `source` is either a spec-table name (single flattened
+// row per product) or the literal string 'variant' (union across the
+// product's variants). `type` decides the widget: strings=checkboxes with
+// facet counts, boolean=single "Yes" toggle, numeric=min/max range.
+// Labels default to specLabel(key); override with `label` when the raw key
+// reads awkwardly (e.g. 'optic_cut' on an OPTIC is really its "Footprint",
+// not the slide's cut).
+var SPEC_FILTERS_BY_CATEGORY = {
+  slide: [
+    { source: 'slide_specs',       key: 'optic_cut',                 type: 'strings' },
+    { source: 'slide_specs',       key: 'barrel_length_in',          type: 'numeric', suffix: '"' },
+    { source: 'slide_specs',       key: 'integrated_comp',           type: 'boolean' },
+  ],
+  barrel: [
+    { source: 'barrel_specs',      key: 'barrel_length_in',          type: 'numeric', suffix: '"' },
+    { source: 'barrel_specs',      key: 'barrel_type',               type: 'strings' },
+    { source: 'barrel_specs',      key: 'thread_pitch',              type: 'strings' },
+  ],
+  compensator: [
+    { source: 'compensator_specs', key: 'thread_pitch',              type: 'strings' },
+    { source: 'compensator_specs', key: 'requires_threaded_barrel',  type: 'boolean' },
+  ],
+  frame: [
+    { source: 'frame_specs',       key: 'housing_class',             type: 'strings' },
+  ],
+  optic: [
+    { source: 'variant',           key: 'optic_cut',                 type: 'strings', label: 'Footprint' },
+  ],
 };
+// Filters shown for every category (in addition to the per-category set).
+var SPEC_UNIVERSAL_FILTERS = [
+  { source: 'variant', key: 'color',  type: 'strings' },
+  { source: 'variant', key: 'finish', type: 'strings' },
+];
 
 // Filter state — everything the sidebar controls.
 var F = {
@@ -437,32 +469,74 @@ async function init() {
 }
 
 async function loadEverything() {
-  // brand_id → manufacturer join; product_platforms → junction to platforms;
-  // product_variants → source of price + image (default variant preferred).
+  // Full-fidelity query — joins every spec table + the variant fields the
+  // fitment logic and detail panel need + brand + platforms. Explicit FK
+  // names on the spec tables because a composite (id,category) FK also
+  // exists and PostgREST refuses to guess between the two.
   var productsQ = sb
     .from('products')
     .select(
-      'id, name, description, category, brand_id, url, lowest_price, specs, created_at,' +
+      'id, name, description, category, brand_id, url, lowest_price, created_at,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
-      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
+      'product_variants!product_variants_product_id_fkey(' +
+        'id, msrp, is_default, color, finish, optic_cut, bundle, clamp, ' +
+        'manual_safety_variant, sku, primary_image_url' +
+      '),' +
+      'slide_specs!slide_specs_product_id_fkey(*),' +
+      'barrel_specs!barrel_specs_product_id_fkey(*),' +
+      'compensator_specs!compensator_specs_product_id_fkey(*),' +
+      'frame_specs!frame_specs_product_id_fkey(*),' +
+      'magwell_specs(*)'
     )
     .eq('is_discontinued', false);
   var platformsQ = sb.from('platforms').select('id, name, slug').order('name');
+  // Compatibility whitelists — populated pairs mean "only these fit".
+  var bsrQ = sb.from('barrel_slide_requirements')
+    .select('barrel_product_id, slide_product_id, compatibility_note');
+  var mfrQ = sb.from('magwell_frame_requirements')
+    .select('magwell_product_id, frame_product_id, compatibility_note');
+  // Sub-model table (P365 vs P365XL vs FUSE etc.). Loaded now; not surfaced
+  // as a filter yet — reserved for a future sub-model UI.
+  var gunsQ = sb.from('guns')
+    .select('id, slug, name, platform_id, housing_class, integrated_comp, ' +
+            'barrel_length_in, slide_length_in, oem_capacity');
 
-  var results = await Promise.all([productsQ, platformsQ]);
-  var prodRes = results[0], platRes = results[1];
-  if (prodRes.error)  { console.error(prodRes.error);  return showFatal(prodRes.error.message); }
-  if (platRes.error)  { console.error(platRes.error);  return showFatal(platRes.error.message); }
+  var results = await Promise.all([productsQ, platformsQ, bsrQ, mfrQ, gunsQ]);
+  var prodRes = results[0], platRes = results[1], bsrRes = results[2], mfrRes = results[3], gunsRes = results[4];
+  if (prodRes.error) { console.error(prodRes.error); return showFatal(prodRes.error.message); }
+  if (platRes.error) { console.error(platRes.error); return showFatal(platRes.error.message); }
+  // BSR/MFR/guns are non-fatal — the catalog still works with empty
+  // whitelists, just without cross-category fitment enforcement.
+  if (bsrRes.error)  { console.warn('[catalog] BSR load failed', bsrRes.error); }
+  if (mfrRes.error)  { console.warn('[catalog] MFR load failed', mfrRes.error); }
+  if (gunsRes.error) { console.warn('[catalog] guns load failed', gunsRes.error); }
 
   (platRes.data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
+  GUNS = gunsRes.data || [];
 
+  BSR_BY_BARREL = {};
+  BSR_BY_SLIDE  = {};
+  (bsrRes.data || []).forEach(function (r) {
+    (BSR_BY_BARREL[r.barrel_product_id] = BSR_BY_BARREL[r.barrel_product_id] || []).push(r);
+    (BSR_BY_SLIDE[r.slide_product_id]   = BSR_BY_SLIDE[r.slide_product_id]   || []).push(r);
+  });
+  MFR_BY_MAGWELL = {};
+  MFR_BY_FRAME   = {};
+  (mfrRes.data || []).forEach(function (r) {
+    (MFR_BY_MAGWELL[r.magwell_product_id] = MFR_BY_MAGWELL[r.magwell_product_id] || []).push(r);
+    (MFR_BY_FRAME[r.frame_product_id]     = MFR_BY_FRAME[r.frame_product_id]     || []).push(r);
+  });
+
+  // Flatten single-row spec embeds ([{...}] -> {...} or null) so downstream
+  // reads are `product.slide_specs.optic_cut`, not `[0].optic_cut`.
+  var SPEC_KEYS = ['slide_specs','barrel_specs','compensator_specs','frame_specs','magwell_specs'];
   PRODUCTS = (prodRes.data || []).map(function (r) {
     var variants = r.product_variants || [];
     var dv = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
     var price = dv && dv.msrp != null ? Number(dv.msrp)
               : (r.lowest_price != null ? Number(r.lowest_price) : null);
-    return {
+    var product = {
       id: r.id,
       name: r.name || '',
       description: r.description || '',
@@ -472,13 +546,16 @@ async function loadEverything() {
       price: price,
       image: (dv && dv.primary_image_url) || null,
       buy_url: r.url || null,
-      specs: r.specs || null,          // { key: value } | null
-      variants: variants,              // kept intact for the detail panel thumb row
-      created_at: r.created_at,        // sort=newest
+      variants: variants,
+      created_at: r.created_at,
       platform_ids: (r.product_platforms || []).map(function (pp) { return pp.platform_id; }),
-      // Pre-lowercased search haystack — avoid rebuilding on every keystroke.
       _search: ((r.brands && r.brands.name ? r.brands.name : '') + ' ' + (r.name || '') + ' ' + (r.description || '')).toLowerCase(),
     };
+    SPEC_KEYS.forEach(function (k) {
+      var v = r[k];
+      product[k] = Array.isArray(v) ? (v[0] || null) : (v || null);
+    });
+    return product;
   });
 
   await loadFavoritesAndRender(/*skipRender*/ true);
@@ -651,50 +728,124 @@ function removeFromMine(category) {
   applyFiltersAndRender();
 }
 
-// For a product `r`, returns true if it matches every active fitment rule.
-// A fitment rule is active when a SOURCE-category product is pinned and
-// r's category is a TARGET in that rule. Products with no spec value on
-// the "to" key fail the check — better to hide unknowns than falsely
-// claim compatibility.
-function matchesFitment(r) {
-  var srcCats = Object.keys(SETUP);
-  for (var i = 0; i < srcCats.length; i++) {
-    var srcCat = srcCats[i];
-    var rules = FITMENT_RULES[srcCat];
-    if (!rules) continue;
-    var rule = rules[r.category];
-    if (!rule) continue;
-    var srcSpec = SETUP[srcCat].specs || {};
-    var expected = srcSpec[rule.from];
-    if (expected == null) continue;   // pinned product lacks the source spec — no constraint
-    if (!r.specs || String(r.specs[rule.to]) !== String(expected)) return false;
+// ─── FITMENT — lifted from parts-builder's compatibility logic and adapted
+// to run off SETUP (pinned components) instead of an in-progress build's
+// selections. Rules encoded here are the real ones the DB supports:
+//   1. Slide ↔ Barrel — matching barrel_length_in + BSR whitelist (if any)
+//   2. Slide ↔ Compensator — Rule 4: no comp on integrated_comp slides
+//   3. Barrel ↔ Compensator — thread_pitch match + Rule 5: no comp on
+//      ported barrels + comp with requires_threaded_barrel needs a
+//      threaded/threaded-and-ported barrel type
+//   4. Frame ↔ Magwell — MFR whitelist
+// Categories not touched by any rule (trigger / optic / light / small parts)
+// pass through unrestricted regardless of what's pinned. ────────────────
+function isThreadedBarrelType(t) { return t === 'threaded' || t === 'threaded-and-ported'; }
+
+function barrelFitsSlide(barrel, slide) {
+  // BSR is a whitelist: empty for a given barrel = universal fit; populated =
+  // only listed slide/barrel pairs work. Rule mirrored on both sides so
+  // pinning either narrows the other.
+  var wl = BSR_BY_BARREL[barrel.id] || [];
+  if (!wl.length) return true;
+  return wl.some(function (r) { return r.slide_product_id === slide.id; });
+}
+
+function slideOk(slide, sel) {
+  if (sel.barrel) {
+    if (slide.slide_specs && sel.barrel.barrel_specs &&
+        slide.slide_specs.barrel_length_in !== sel.barrel.barrel_specs.barrel_length_in) return false;
+    if (!barrelFitsSlide(sel.barrel, slide)) return false;
+  }
+  if (sel.compensator && slide.slide_specs && slide.slide_specs.integrated_comp) return false;
+  return true;
+}
+function barrelOk(barrel, sel) {
+  if (sel.slide) {
+    if (barrel.barrel_specs && sel.slide.slide_specs &&
+        barrel.barrel_specs.barrel_length_in !== sel.slide.slide_specs.barrel_length_in) return false;
+    if (!barrelFitsSlide(barrel, sel.slide)) return false;
+  }
+  if (sel.compensator && barrel.barrel_specs && barrel.barrel_specs.barrel_type === 'ported') return false;
+  if (sel.compensator) {
+    var c = sel.compensator.compensator_specs || {};
+    var bt = barrel.barrel_specs ? barrel.barrel_specs.barrel_type : null;
+    if (c.requires_threaded_barrel && !c.comes_with_barrel && !isThreadedBarrelType(bt)) return false;
+    if (c.thread_pitch && barrel.barrel_specs && barrel.barrel_specs.thread_pitch !== c.thread_pitch) return false;
+  }
+  return true;
+}
+function compensatorOk(comp, sel) {
+  var cs = comp.compensator_specs || {};
+  if (sel.slide  && sel.slide.slide_specs   && sel.slide.slide_specs.integrated_comp) return false;
+  if (sel.barrel && sel.barrel.barrel_specs && sel.barrel.barrel_specs.barrel_type === 'ported') return false;
+  if (sel.barrel) {
+    var bt = sel.barrel.barrel_specs ? sel.barrel.barrel_specs.barrel_type : null;
+    if (cs.requires_threaded_barrel && !cs.comes_with_barrel && !isThreadedBarrelType(bt)) return false;
+    if (cs.thread_pitch && sel.barrel.barrel_specs && sel.barrel.barrel_specs.thread_pitch !== cs.thread_pitch) return false;
+  }
+  return true;
+}
+function frameOk(frame, sel) {
+  // A gun/sub-model selector isn't in the catalog UX yet — the housing_class
+  // check against a target gun is deferred. Once we add sub-model UI here,
+  // pull STATE.targetGun in and reinstate the check.
+  if (sel.magwell) {
+    var wl = MFR_BY_MAGWELL[sel.magwell.id] || [];
+    if (!wl.length || !wl.some(function (r) { return r.frame_product_id === frame.id; })) return false;
+  }
+  return true;
+}
+function magwellOk(magwell, sel) {
+  if (sel.frame) {
+    var wl = MFR_BY_MAGWELL[magwell.id] || [];
+    if (!wl.length) return true;   // universal
+    return wl.some(function (r) { return r.frame_product_id === sel.frame.id; });
   }
   return true;
 }
 
-// Which active-category the fitment banner is talking about. Returns the
-// most-relevant active rule for the current view, or null.
-function activeFitmentDescription() {
-  if (F.categories.size !== 1) return null;   // banner only speaks about a single category view
-  var viewingCat = Array.from(F.categories)[0];
-  var srcCats = Object.keys(SETUP);
-  for (var i = 0; i < srcCats.length; i++) {
-    var srcCat = srcCats[i];
-    var rules = FITMENT_RULES[srcCat];
-    if (!rules) continue;
-    var rule = rules[viewingCat];
-    if (!rule) continue;
-    var src = SETUP[srcCat];
-    var expected = src.specs ? src.specs[rule.from] : null;
-    if (expected == null) continue;
-    return {
-      viewingCat: viewingCat,
-      srcCat: srcCat, src: src,
-      specKey: rule.to, specValue: expected,
-    };
+// Cross-category compat check for a product against the pinned SETUP.
+// Returns true when unrestricted (trigger/optic/light/etc.) or when every
+// applicable rule accepts.
+function matchesFitment(r) {
+  switch (r.category) {
+    case 'slide':       return slideOk(r, SETUP);
+    case 'barrel':      return barrelOk(r, SETUP);
+    case 'compensator': return compensatorOk(r, SETUP);
+    case 'frame':       return frameOk(r, SETUP);
+    case 'magwell':     return magwellOk(r, SETUP);
+    default:            return true;
   }
-  return null;
 }
+
+// Which pinned components are actively constraining the currently-viewed
+// category? Returns [] when nothing is pinned in a related category. Used
+// only by the banner — matchesFitment above enforces the actual filter.
+function fitmentAffectorsFor(viewCat) {
+  var affects = {
+    slide:       ['barrel','compensator'],
+    barrel:      ['slide','compensator'],
+    compensator: ['slide','barrel'],
+    frame:       ['magwell'],
+    magwell:     ['frame'],
+  };
+  var out = [];
+  Object.keys(SETUP).forEach(function (srcCat) {
+    var targets = affects[srcCat] || [];
+    if (targets.indexOf(viewCat) !== -1) out.push({ srcCat: srcCat, src: SETUP[srcCat] });
+  });
+  return out;
+}
+
+// Pick one representative spec value per category to show on the setup
+// chip — the spec that's most relevant to downstream fitment.
+var SETUP_CHIP_HINT = {
+  slide:       { source: 'slide_specs',       key: 'optic_cut',        prefix: 'Cut ' },
+  barrel:      { source: 'barrel_specs',      key: 'barrel_length_in', suffix: '"' },
+  compensator: { source: 'compensator_specs', key: 'thread_pitch',     prefix: 'Thread ' },
+  frame:       { source: 'frame_specs',       key: 'housing_class',    prefix: 'Housing ' },
+  magwell:     { source: 'magwell_specs',     key: 'model',            prefix: '' },
+};
 
 function renderSetupStrip() {
   var wrap = document.getElementById('setup-strip-wrap');
@@ -703,14 +854,17 @@ function renderSetupStrip() {
   if (!cats.length) { wrap.innerHTML = ''; return; }
   var chips = cats.sort().map(function (cat) {
     var p = SETUP[cat];
-    // Pick one representative spec value to show alongside the name.
-    var rules = FITMENT_RULES[cat];
-    var specKey = null;
-    if (rules) { var tKeys = Object.keys(rules); if (tKeys.length) specKey = rules[tKeys[0]].from; }
-    var specVal = specKey && p.specs ? p.specs[specKey] : null;
+    var hint = SETUP_CHIP_HINT[cat];
+    var specStr = null;
+    if (hint) {
+      var v = readSpec(p, hint.source, hint.key);
+      if (v != null && v !== '' && !(v instanceof Set && !v.size)) {
+        specStr = (hint.prefix || '') + String(v) + (hint.suffix || '');
+      }
+    }
     return '<div class="setup-chip" title="' + escAttr(catLabel(cat)) + '">' +
       '<strong>' + esc(p.brand) + '</strong> ' + esc(p.name) +
-      (specVal != null ? ' <span class="setup-chip-spec">— ' + esc(String(specVal)) + '</span>' : '') +
+      (specStr ? ' <span class="setup-chip-spec">— ' + esc(specStr) + '</span>' : '') +
       '<button type="button" class="setup-chip-x" data-remove-mine="' + escAttr(cat) + '" aria-label="Remove">×</button>' +
     '</div>';
   }).join('');
@@ -720,20 +874,28 @@ function renderSetupStrip() {
   });
 }
 
+// Banner surfaces when the currently-viewed category (single-select) has
+// pinned components that actively narrow it via fitment rules. Wording
+// lists every pinned component that affects the view — real fitment
+// applies more than one spec at a time, so a single-key description
+// would understate what's happening.
 function renderFitmentBanner() {
   var wrap = document.getElementById('fitment-banner-wrap');
   if (!wrap) return;
-  var desc = activeFitmentDescription();
+  if (F.categories.size !== 1) { wrap.innerHTML = ''; return; }
+  var viewCat = Array.from(F.categories)[0];
+  var affectors = fitmentAffectorsFor(viewCat);
+  if (!affectors.length) { wrap.innerHTML = ''; return; }
   var dismissed = false;
   try { dismissed = sessionStorage.getItem(LS_BANNER_DISMISSED_KEY) === '1'; } catch (_) {}
-  if (!desc || dismissed) { wrap.innerHTML = ''; return; }
+  if (dismissed) { wrap.innerHTML = ''; return; }
+  var names = affectors.map(function (a) {
+    return '<strong>' + esc(a.src.brand + ' ' + a.src.name) + '</strong> (' + esc(catLabel(a.srcCat).toLowerCase()) + ')';
+  }).join(', ');
   wrap.innerHTML =
     '<div class="fitment-banner">' +
       '<span class="fitment-banner-icon">ℹ</span>' +
-      '<div class="fitment-banner-body">Showing ' + esc(catLabel(desc.viewingCat).toLowerCase()) +
-        ' compatible with your <strong>' + esc(desc.src.brand + ' ' + desc.src.name) + '</strong>' +
-        ' (<strong>' + esc(specLabel(desc.specKey)) + ': ' + esc(String(desc.specValue)) + '</strong>).' +
-      '</div>' +
+      '<div class="fitment-banner-body">Showing ' + esc(catLabel(viewCat).toLowerCase()) + ' compatible with your ' + names + '.</div>' +
       '<button type="button" class="fitment-banner-close" id="fitment-banner-dismiss" aria-label="Dismiss">×</button>' +
     '</div>';
   document.getElementById('fitment-banner-dismiss').addEventListener('click', function () {
@@ -825,75 +987,147 @@ function specLabel(key) {
   }).join(' ');
 }
 
-// The pool of products whose specs feed the dynamic Specifications section.
-// Scoped by category + platform (the user's spec: "only show spec keys that
-// exist in the currently active category"). Everything else is left alone —
-// we don't want price/brand/search narrowing the spec key vocabulary because
-// then toggling a spec value could hide the option itself.
+// The pool of products whose specs feed the Specifications section. Scoped
+// by category + platform ONLY (per spec: "only show spec keys relevant to
+// the active category"). Not narrowed by brand/price/search or the spec
+// filters themselves — otherwise toggling a spec could collapse its own
+// option list.
 function productsForSpecScope() {
   return PRODUCTS.filter(function (r) {
     if (F.platforms.size  && !r.platform_ids.some(function (id) { return F.platforms.has(id); })) return false;
     if (F.categories.size && !F.categories.has(r.category)) return false;
-    return r.specs && typeof r.specs === 'object';
+    return true;
   });
 }
 
-// Discovers the spec-key/value shape from the scoped product pool and
-// renders per-key filter subgroups. Returns empty string when there are no
-// specced products in scope (so the whole Specifications section can be
-// hidden by the caller).
+// Read one product's value for a given schema entry.
+//   source === 'variant': return a Set of unique values across the product's
+//     variants — a product with two colors is legitimately in both buckets.
+//   otherwise: read the flattened spec-table row directly. Missing = null.
+function readSpec(product, source, key) {
+  if (source === 'variant') {
+    var out = new Set();
+    (product.variants || []).forEach(function (v) {
+      if (v && v[key] != null && v[key] !== '') out.add(v[key]);
+    });
+    return out;
+  }
+  var row = product[source];
+  return row ? row[key] : null;
+}
+
+// Composite key used for both DOM data-attrs and F.specs so multiple sources
+// can share a raw key name (e.g. slide_specs:optic_cut vs variant:optic_cut)
+// without colliding — even though the sidebar only shows one at a time.
+function specStateKey(schema) { return schema.source + ':' + schema.key; }
+function schemaLabel(schema) { return schema.label || specLabel(schema.key); }
+
+// Predicate for one active spec filter against one product. Called by
+// matchesAllExcept for every entry in F.specs.
+function matchesSpecFilter(product, state) {
+  var s = state.schema;
+  var actual = readSpec(product, s.source, s.key);
+  if (state.type === 'strings') {
+    if (s.source === 'variant') {
+      // Set of variant values — pass if ANY overlap with the checked values.
+      if (!(actual instanceof Set) || !actual.size) return false;
+      var hit = false;
+      actual.forEach(function (v) { if (state.values.has(String(v))) hit = true; });
+      return hit;
+    }
+    return actual != null && state.values.has(String(actual));
+  }
+  if (state.type === 'boolean') {
+    if (!state.on) return true;   // unchecked = no constraint
+    return actual === true;
+  }
+  if (state.type === 'numeric') {
+    var n = typeof actual === 'number' ? actual : (actual == null ? null : Number(actual));
+    if (n == null || Number.isNaN(n)) return false;
+    if (state.min != null && n < state.min) return false;
+    if (state.max != null && n > state.max) return false;
+    return true;
+  }
+  return true;
+}
+
+// Builds one filter subgroup per schema entry that has data in the pool.
+// Empty return = no Specifications section rendered at all.
 function specsSectionHtml() {
+  var cat = F.categories.size === 1 ? Array.from(F.categories)[0] : null;
+  var schemas = [];
+  if (cat && SPEC_FILTERS_BY_CATEGORY[cat]) schemas = schemas.concat(SPEC_FILTERS_BY_CATEGORY[cat]);
+  schemas = schemas.concat(SPEC_UNIVERSAL_FILTERS);
+  if (!schemas.length) return '';
   var pool = productsForSpecScope();
   if (!pool.length) return '';
-  // key -> { type, values (Set|null), numeric (min/max sample) }
-  var summary = {};
-  pool.forEach(function (r) {
-    Object.keys(r.specs).forEach(function (k) {
-      var v = r.specs[k];
-      var s = summary[k] || (summary[k] = { key: k, type: null, values: new Set(), min: Infinity, max: -Infinity, boolTrue: 0, boolFalse: 0 });
-      if (typeof v === 'boolean') { s.type = s.type || 'boolean'; if (v) s.boolTrue++; else s.boolFalse++; }
-      else if (typeof v === 'number' && !Number.isNaN(v)) { s.type = 'numeric'; s.min = Math.min(s.min, v); s.max = Math.max(s.max, v); }
-      else if (v != null) { s.type = s.type || 'strings'; s.values.add(String(v)); }
+
+  var blocks = [];
+  schemas.forEach(function (schema) {
+    var stateKey = specStateKey(schema);
+    var state = F.specs[stateKey];
+    // Discover this key's value shape across the pool.
+    var summary = { hasAny: false, values: new Set(), boolTrue: 0, min: Infinity, max: -Infinity };
+    pool.forEach(function (r) {
+      var v = readSpec(r, schema.source, schema.key);
+      if (schema.source === 'variant') {
+        if (v && v.size) { summary.hasAny = true; v.forEach(function (x) { summary.values.add(x); }); }
+        return;
+      }
+      if (v == null || v === '') return;
+      summary.hasAny = true;
+      if (schema.type === 'boolean') { if (v === true) summary.boolTrue++; }
+      else if (schema.type === 'numeric') {
+        var n = typeof v === 'number' ? v : Number(v);
+        if (!Number.isNaN(n)) { summary.min = Math.min(summary.min, n); summary.max = Math.max(summary.max, n); }
+      } else {
+        summary.values.add(v);
+      }
     });
-  });
-  var keys = Object.keys(summary).sort(function (a, b) { return specLabel(a).localeCompare(specLabel(b)); });
-  if (!keys.length) return '';
-  return keys.map(function (k) {
-    var s = summary[k];
+    if (!summary.hasAny) return;
+
     var body;
-    if (s.type === 'boolean') {
-      // Only render "Yes" as a filter — checking it narrows to rows where
-      // the spec is true. Leaving it unchecked = no constraint (matches all).
-      var checked = !!(F.specs[k] && F.specs[k].on);
+    if (schema.type === 'boolean') {
+      var checked = !!(state && state.on);
       body = '<label class="filter-option">' +
-        '<input type="checkbox" data-spec-bool="' + escAttr(k) + '"' + (checked ? ' checked' : '') + '/>' +
-        '<span>Yes</span><span class="filter-option-count">' + s.boolTrue + '</span>' +
+        '<input type="checkbox" data-spec-composite="' + escAttr(stateKey) + '" data-spec-widget="boolean"' + (checked ? ' checked' : '') + '/>' +
+        '<span>Yes</span><span class="filter-option-count">' + summary.boolTrue + '</span>' +
       '</label>';
-    } else if (s.type === 'numeric') {
-      var st = F.specs[k] || { type: 'numeric' };
+    } else if (schema.type === 'numeric') {
+      var suf = schema.suffix || '';
       body = '<div class="price-range">' +
-        '<input type="number" step="any" placeholder="' + s.min + '" data-spec-num-min="' + escAttr(k) + '" value="' + (st.min != null ? st.min : '') + '"/>' +
+        '<input type="number" step="any" placeholder="' + summary.min + suf + '" ' +
+          'data-spec-composite="' + escAttr(stateKey) + '" data-spec-widget="num-min" value="' + (state && state.min != null ? state.min : '') + '"/>' +
         '<span class="price-dash">–</span>' +
-        '<input type="number" step="any" placeholder="' + s.max + '" data-spec-num-max="' + escAttr(k) + '" value="' + (st.max != null ? st.max : '') + '"/>' +
+        '<input type="number" step="any" placeholder="' + summary.max + suf + '" ' +
+          'data-spec-composite="' + escAttr(stateKey) + '" data-spec-widget="num-max" value="' + (state && state.max != null ? state.max : '') + '"/>' +
       '</div>';
     } else {
-      // strings — checkbox per unique value, facet-counted against everything
-      // else (excludeKey='__spec__'+k so THIS key's own filter doesn't
-      // collapse its option list).
-      var vals = Array.from(s.values).sort();
+      var vals = Array.from(summary.values).sort(function (a, b) { return String(a).localeCompare(String(b)); });
       body = vals.map(function (v) {
-        var checkedS = !!(F.specs[k] && F.specs[k].values && F.specs[k].values.has(v));
+        var vStr = String(v);
+        var checkedS = !!(state && state.values && state.values.has(vStr));
+        // Facet counts: match every OTHER filter but this key, so counts
+        // stay accurate even when the user has already ticked something
+        // else in the same group.
         var n = optionCount(function (r) {
-          return r.specs && String(r.specs[k]) === v;
-        }, '__spec__' + k);
+          var actual = readSpec(r, schema.source, schema.key);
+          if (schema.source === 'variant') return actual instanceof Set && actual.has(v);
+          return String(actual) === vStr;
+        }, '__spec__' + stateKey);
         return '<label class="filter-option">' +
-          '<input type="checkbox" data-spec-str-key="' + escAttr(k) + '" data-spec-str-val="' + escAttr(v) + '"' + (checkedS ? ' checked' : '') + '/>' +
-          '<span>' + esc(v) + '</span><span class="filter-option-count">' + n + '</span>' +
+          '<input type="checkbox" data-spec-composite="' + escAttr(stateKey) + '" data-spec-widget="str" data-spec-val="' + escAttr(vStr) + '"' + (checkedS ? ' checked' : '') + '/>' +
+          '<span>' + esc(vStr) + '</span><span class="filter-option-count">' + n + '</span>' +
         '</label>';
       }).join('');
     }
-    return '<div class="spec-block"><div class="filter-title">' + esc(specLabel(k)) + '</div>' + body + '</div>';
-  }).join('');
+    // Cache the schema on the state entry so matchesSpecFilter has all it
+    // needs without re-deriving it from the composite key on every check.
+    if (!state) state = F.specs[stateKey] = { schema: schema, type: schema.type };
+    else       state.schema = schema;
+    blocks.push('<div class="spec-block" data-spec-block="' + escAttr(stateKey) + '"><div class="filter-title">' + esc(schemaLabel(schema)) + '</div>' + body + '</div>');
+  });
+  return blocks.join('');
 }
 
 function attachFilterHandlers() {
@@ -914,33 +1148,28 @@ function attachFilterHandlers() {
   if (mn) mn.addEventListener('change', function () { F.priceMin = mn.value === '' ? null : Number(mn.value); renderFilters(); applyFiltersAndRender(); });
   if (mx) mx.addEventListener('change', function () { F.priceMax = mx.value === '' ? null : Number(mx.value); renderFilters(); applyFiltersAndRender(); });
 
-  // Spec filters — string checkboxes, boolean toggles, numeric min/max.
-  document.querySelectorAll('[data-spec-str-key]').forEach(function (el) {
+  // Spec filters — composite key "source:key". Reading the schema off the
+  // pre-populated F.specs[compositeKey].schema lets the change handler stay
+  // shape-agnostic.
+  document.querySelectorAll('[data-spec-composite]').forEach(function (el) {
     el.addEventListener('change', function () {
-      var k = el.getAttribute('data-spec-str-key');
-      var v = el.getAttribute('data-spec-str-val');
-      var state = F.specs[k] || (F.specs[k] = { type: 'strings', values: new Set() });
-      if (el.checked) state.values.add(v); else state.values.delete(v);
-      if (state.values.size === 0) delete F.specs[k];
-      renderFilters(); applyFiltersAndRender();
-    });
-  });
-  document.querySelectorAll('[data-spec-bool]').forEach(function (el) {
-    el.addEventListener('change', function () {
-      var k = el.getAttribute('data-spec-bool');
-      if (el.checked) F.specs[k] = { type: 'boolean', on: true };
-      else            delete F.specs[k];
-      renderFilters(); applyFiltersAndRender();
-    });
-  });
-  document.querySelectorAll('[data-spec-num-min],[data-spec-num-max]').forEach(function (el) {
-    el.addEventListener('change', function () {
-      var k = el.getAttribute('data-spec-num-min') || el.getAttribute('data-spec-num-max');
-      var side = el.hasAttribute('data-spec-num-min') ? 'min' : 'max';
-      var val = el.value === '' ? null : Number(el.value);
-      var state = F.specs[k] || (F.specs[k] = { type: 'numeric' });
-      state[side] = val;
-      if (state.min == null && state.max == null) delete F.specs[k];
+      var stateKey = el.getAttribute('data-spec-composite');
+      var widget = el.getAttribute('data-spec-widget');
+      var state = F.specs[stateKey];
+      if (!state) return;   // schema wasn't seeded — should not happen after renderFilters
+      if (widget === 'str') {
+        state.values = state.values || new Set();
+        var v = el.getAttribute('data-spec-val');
+        if (el.checked) state.values.add(v); else state.values.delete(v);
+        if (!state.values.size) delete F.specs[stateKey];
+      } else if (widget === 'boolean') {
+        if (el.checked) state.on = true;
+        else delete F.specs[stateKey];
+      } else if (widget === 'num-min' || widget === 'num-max') {
+        var side = widget === 'num-min' ? 'min' : 'max';
+        state[side] = el.value === '' ? null : Number(el.value);
+        if (state.min == null && state.max == null) delete F.specs[stateKey];
+      }
       renderFilters(); applyFiltersAndRender();
     });
   });
@@ -954,23 +1183,14 @@ function matchesAllExcept(r, excludeKey) {
   if (excludeKey !== 'price'      && F.priceMin != null && (r.price == null || r.price < F.priceMin)) return false;
   if (excludeKey !== 'price'      && F.priceMax != null && (r.price == null || r.price > F.priceMax)) return false;
   if (excludeKey !== 'search'     && F.search          && r._search.indexOf(F.search) === -1) return false;
-  // Per-spec-key filters. excludeKey '__spec__<k>' skips only that one key's
-  // constraint so the sidebar's own facet count for that key stays correct.
+  // Per-spec-key filters. excludeKey '__spec__<compositeKey>' skips only
+  // that one key's own constraint so the sidebar's facet count for that
+  // key stays accurate even when partly ticked.
   var specKeys = Object.keys(F.specs || {});
   for (var i = 0; i < specKeys.length; i++) {
-    var k = specKeys[i];
-    if (excludeKey === '__spec__' + k) continue;
-    var state = F.specs[k];
-    var v = r.specs ? r.specs[k] : undefined;
-    if (state.type === 'strings') {
-      if (v == null || !state.values.has(String(v))) return false;
-    } else if (state.type === 'boolean') {
-      if (state.on && v !== true) return false;
-    } else if (state.type === 'numeric') {
-      if (typeof v !== 'number') return false;
-      if (state.min != null && v < state.min) return false;
-      if (state.max != null && v > state.max) return false;
-    }
+    var stateKey = specKeys[i];
+    if (excludeKey === '__spec__' + stateKey) continue;
+    if (!matchesSpecFilter(r, F.specs[stateKey])) return false;
   }
   // Fitment-chain: pinned setup narrows other categories. Always applied
   // (not gated by excludeKey — the fitment rules don't have their own
@@ -1133,15 +1353,13 @@ function renderDetail(p) {
     thumbsEl.innerHTML = '';
   }
 
-  // Specs table — hide the whole section if specs is null/empty.
+  // Specs table — pulled from the real spec tables + default variant.
   var specsWrap = document.getElementById('detail-specs-wrap');
   var specsBody = document.getElementById('detail-specs-body');
-  if (p.specs && typeof p.specs === 'object' && Object.keys(p.specs).length) {
-    var keys = Object.keys(p.specs).sort();
-    specsBody.innerHTML = keys.map(function (k) {
-      var v = p.specs[k];
-      var vDisplay = typeof v === 'boolean' ? (v ? 'Yes' : 'No') : esc(String(v));
-      return '<tr><th>' + esc(specLabel(k)) + '</th><td>' + vDisplay + '</td></tr>';
+  var rows = detailSpecRows(p);
+  if (rows.length) {
+    specsBody.innerHTML = rows.map(function (r) {
+      return '<tr><th>' + esc(r.label) + '</th><td>' + esc(String(r.value)) + '</td></tr>';
     }).join('');
     specsWrap.hidden = false;
   } else {
@@ -1201,6 +1419,73 @@ function renderDetail(p) {
     else              { setAsMine(p); toast('Marked as mine — related categories now filter to compatible parts'); }
     renderDetail(p);  // repaint button label
   };
+}
+
+// Build the detail panel's specs table from the flattened spec tables and
+// the default variant. `push(label, val, opts)` skips null/empty values,
+// and formats booleans as Yes/No. Numeric suffixes ("$", "\"") are baked
+// per row rather than derived from the schema — this table is a display
+// grid, not a filter surface, so hard-coded rendering is clearer than a
+// data-driven pass.
+function detailSpecRows(p) {
+  var out = [];
+  function push(label, v, opts) {
+    if (v == null || v === '') return;
+    opts = opts || {};
+    var display = typeof v === 'boolean' ? (v ? 'Yes' : 'No')
+                : (opts.suffix ? String(v) + opts.suffix : String(v));
+    out.push({ label: label, value: display });
+  }
+  if (p.slide_specs) {
+    push('Optic cut',        p.slide_specs.optic_cut);
+    push('Barrel length',    p.slide_specs.barrel_length_in, { suffix: '"' });
+    push('Slide length',     p.slide_specs.slide_length_in,  { suffix: '"' });
+    push('Integrated comp',  p.slide_specs.integrated_comp);
+    push('Window cuts',      p.slide_specs.window_cuts);
+    push('Serrations',       p.slide_specs.serrations);
+    push('Weight (oz)',      p.slide_specs.weight_oz);
+  }
+  if (p.barrel_specs) {
+    push('Barrel length',    p.barrel_specs.barrel_length_in, { suffix: '"' });
+    push('Barrel type',      p.barrel_specs.barrel_type);
+    push('Thread pitch',     p.barrel_specs.thread_pitch);
+    push('Twist rate',       p.barrel_specs.twist_rate);
+    push('Material',         p.barrel_specs.material);
+  }
+  if (p.compensator_specs) {
+    push('Thread pitch',     p.compensator_specs.thread_pitch);
+    push('Requires threaded barrel', p.compensator_specs.requires_threaded_barrel);
+    push('Comes with barrel',        p.compensator_specs.comes_with_barrel);
+    push('Chambers',         p.compensator_specs.chambers);
+    push('Material',         p.compensator_specs.material);
+  }
+  if (p.frame_specs) {
+    push('Housing class',    p.frame_specs.housing_class);
+    push('Grip length',      p.frame_specs.grip_length);
+    push('Texture',          p.frame_specs.texture);
+    push('Material',         p.frame_specs.material);
+    push('Undercut',         p.frame_specs.trigger_guard_undercut);
+  }
+  if (p.magwell_specs) {
+    push('Fits model',       p.magwell_specs.fits_model);
+    push('Material',         p.magwell_specs.material);
+    push('Flared',           p.magwell_specs.flared);
+  }
+  // Variant-level attributes (default variant, or first available). Only
+  // surface fields that actually vary meaningfully across catalog products.
+  var dv = (p.variants || []).find(function (v) { return v.is_default; }) || (p.variants || [])[0];
+  if (dv) {
+    push('Color',            dv.color);
+    push('Finish',           dv.finish);
+    // Optic-cut on variants is meaningful for OPTICS (their footprint);
+    // for slides the cut lives on slide_specs, so this row is
+    // redundant — only render if the product's category is optic.
+    if (p.category === 'optic') push('Footprint', dv.optic_cut);
+    push('Manual safety',    dv.manual_safety_variant);
+    push('Bundle',           dv.bundle);
+    push('SKU',              dv.sku);
+  }
+  return out;
 }
 
 // Separate wrapper so the detail-panel's fav button re-renders the detail's
