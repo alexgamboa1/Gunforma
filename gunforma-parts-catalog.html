@@ -114,6 +114,144 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .tab-row { padding: 0 16px; }
   .filter-scroll { max-height: 180px; }
 }
+
+/* Spec-filter groups (nested inside the sidebar). Each spec key is its own
+   small filter block so the sidebar stays readable when 5+ spec keys are
+   in play for a category. */
+.spec-block { border-top: 0.5px solid #efece3; padding-top: 10px; margin-top: 10px; }
+.spec-block:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.spec-block .filter-title { font-size: 10.5px; margin-bottom: 6px; color: #444; }
+.spec-block .filter-option { font-size: 12px; }
+
+/* Horizontal category selector — primary way to narrow by category, above
+   the grid. Single-select (contrast with the sidebar's other multi-select
+   filters); the sidebar Category multi-select was removed to avoid two
+   controls competing for the same job. */
+.cat-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 14px; }
+.cat-tab { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 8px 14px; border-radius: 20px; border: 0.5px solid #d5d3ca; background: #fff; color: #666; cursor: pointer; transition: color .15s, background .15s, border-color .15s; }
+.cat-tab:hover { color: #1a1a1a; border-color: #4a9edd; }
+.cat-tab.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+
+/* Sort dropdown — sits inside the .search-row on the right. */
+.sort-wrap { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; }
+.sort-select { font-family: inherit; font-size: 12px; padding: 6px 10px; border: 0.5px solid #d5d3ca; background: #fafaf8; border-radius: 4px; color: #333; cursor: pointer; }
+.sort-select:focus { outline: none; border-color: #4a9edd; background: #fff; }
+
+/* "My Setup" strip — pinned owned components + a chip per category.
+   Absent (fully hidden) when nothing is pinned so it doesn't take space. */
+.setup-strip { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.setup-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.setup-chip { display: inline-flex; align-items: center; gap: 8px; background: #eaf5ee; border: 0.5px solid #86cfad; border-radius: 20px; padding: 5px 10px 5px 12px; font-size: 11.5px; color: #166534; font-weight: 600; }
+.setup-chip strong { font-weight: 700; }
+.setup-chip .setup-chip-spec { color: #4a704f; font-weight: 500; }
+.setup-chip-x { background: none; border: none; color: #7ba189; font-size: 15px; line-height: 1; cursor: pointer; font-family: inherit; padding: 0; }
+.setup-chip-x:hover { color: #c25d3a; }
+
+/* Fitment info banner — visible when a rule from FITMENT_RULES is
+   actively narrowing a downstream category. Dismissable per session (the
+   filter itself stays active — dismiss just hides the explanation). */
+.fitment-banner { display: flex; align-items: center; gap: 12px; background: #eaf4fc; border: 0.5px solid #a7cdec; border-radius: 6px; padding: 10px 14px; margin-bottom: 12px; font-size: 12px; color: #1d6fb8; line-height: 1.5; }
+.fitment-banner-icon { font-size: 14px; }
+.fitment-banner-body { flex: 1; }
+.fitment-banner-body strong { color: #0e3f68; }
+.fitment-banner-close { background: none; border: none; color: #1d6fb8; font-size: 16px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 4px; }
+.fitment-banner-close:hover { background: rgba(29,111,184,0.14); }
+
+/* Grid-card MINE badge — surfaces which product is currently pinned as
+   the user's own so it's visible from the browse view without opening detail. */
+.part-card-mine-badge { position: absolute; top: 8px; left: 8px; z-index: 2;
+  font-size: 9.5px; color: #166534; background: #eaf5ee; border: 0.5px solid #86cfad;
+  padding: 3px 8px; border-radius: 3px; font-weight: 700; letter-spacing: 0.06em; }
+
+/* Detail panel: extra "Set as mine" secondary action. Visually smaller
+   than the Buy CTA — this is a bookkeeping action, not a conversion. */
+.detail-mine-btn { display: block; width: 100%; margin-top: 8px; padding: 9px 12px;
+  background: #fafaf8; color: #444; border: 0.5px solid #d5d3ca; border-radius: 4px;
+  font-family: inherit; font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; cursor: pointer; transition: all .15s; }
+.detail-mine-btn:hover { border-color: #86cfad; background: #eaf5ee; color: #166534; }
+.detail-mine-btn.active { border-color: #86cfad; background: #eaf5ee; color: #166534; }
+
+/* Bump the Buy CTA one more notch — largest text + padding on the page. */
+.detail-btn.buy { font-size: 14px; padding: 14px 18px; letter-spacing: 0.05em; }
+
+/* Cards now click into the detail panel; add a subtle affordance so it
+   reads as clickable. */
+.part-card { cursor: pointer; }
+
+/* ─── DETAIL SLIDE-OVER PANEL ─── */
+.detail-scrim {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(14,15,17,0.55);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.detail-scrim.open { opacity: 1; pointer-events: auto; }
+
+.detail-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; z-index: 301;
+  width: 100%; max-width: 520px;
+  background: #fff; box-shadow: -8px 0 32px rgba(0,0,0,0.18);
+  transform: translateX(100%);
+  transition: transform 0.22s ease;
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.detail-panel.open { transform: translateX(0); }
+
+.detail-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; border-bottom: 0.5px solid #e5e5e5; background: #fff; z-index: 2; }
+.detail-header-eyebrow { font-size: 10px; color: #888; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; }
+.detail-close-btn { background: none; border: none; font-family: inherit; font-size: 22px; line-height: 1; color: #666; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.detail-close-btn:hover { background: #f4f3ee; color: #1a1a1a; }
+
+.detail-body { flex: 1; overflow-y: auto; padding: 20px 22px 28px; display: flex; flex-direction: column; gap: 18px; }
+
+.detail-hero { aspect-ratio: 4/3; background: #f4f3ee; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.detail-hero img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+.detail-hero-nophoto { font-size: 11px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
+
+.detail-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
+.detail-thumb { width: 56px; height: 56px; border: 0.5px solid #e5e5e5; border-radius: 4px; overflow: hidden; padding: 0; background: #f4f3ee; cursor: pointer; transition: border-color 0.15s; }
+.detail-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.detail-thumb:hover { border-color: #4a9edd; }
+.detail-thumb.active { border-color: #4a9edd; box-shadow: 0 0 0 1px #4a9edd; }
+
+.detail-brand { font-size: 10.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.detail-title { font-size: 20px; font-weight: 700; line-height: 1.25; color: #1a1a1a; letter-spacing: -0.005em; }
+.detail-cat-badge { display: inline-block; font-size: 10px; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 3px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 6px; }
+.detail-price { font-size: 26px; font-weight: 700; color: #1a1a1a; }
+.detail-price.na { font-size: 15px; color: #999; font-weight: 500; }
+
+.detail-desc { font-size: 13.5px; color: #333; line-height: 1.65; }
+.detail-desc p { margin-bottom: 10px; }
+.detail-desc p:last-child { margin-bottom: 0; }
+
+.detail-section-title { font-size: 10.5px; color: #888; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; }
+.detail-specs-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.detail-specs-table tr { border-top: 0.5px solid #efece3; }
+.detail-specs-table tr:first-child { border-top: none; }
+.detail-specs-table th { text-align: left; color: #666; font-weight: 500; padding: 8px 12px 8px 0; white-space: nowrap; width: 35%; }
+.detail-specs-table td { color: #1a1a1a; font-weight: 600; padding: 8px 0; }
+
+.detail-platform-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.detail-platform-chip { font-size: 10.5px; padding: 4px 10px; border: 0.5px solid #d5d3ca; border-radius: 20px; background: #fafaf8; color: #444; font-weight: 600; letter-spacing: 0.02em; }
+
+/* Actions — Buy is the primary conversion, deliberately visually dominant */
+.detail-actions { position: sticky; bottom: 0; background: #fff; border-top: 0.5px solid #e5e5e5; padding: 14px 22px; display: flex; gap: 10px; align-items: center; box-shadow: 0 -8px 20px rgba(255,255,255,0.9); }
+.detail-fav-btn { flex-shrink: 0; width: 44px; height: 44px; border-radius: 50%; background: #fff; border: 1px solid #d5d3ca; font-family: inherit; font-size: 18px; color: #888; cursor: pointer; transition: all 0.15s; }
+.detail-fav-btn:hover, .detail-fav-btn.active { color: #d85a30; border-color: #d85a30; }
+.detail-btn { flex: 1; font-family: inherit; font-size: 13px; font-weight: 700; padding: 12px 16px; border-radius: 5px; text-align: center; text-decoration: none; letter-spacing: 0.04em; text-transform: uppercase; border: none; cursor: pointer; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.detail-btn.buy     { background: #4a9edd; color: #fff; }
+.detail-btn.buy:hover { background: #2a7bbd; }
+.detail-btn.buy.disabled { background: #efece3; color: #999; cursor: not-allowed; pointer-events: none; }
+.detail-btn.armory  { background: #fff; color: #1a1a1a; border: 1px solid #d5d3ca; padding: 11px 16px; }
+.detail-btn.armory:hover { border-color: #4a9edd; color: #2a7bbd; }
+
+@media (max-width: 600px) {
+  .detail-panel { max-width: none; }
+  .detail-actions { padding: 12px 16px; }
+  .detail-body { padding: 16px 16px 24px; }
+}
 </style>
 </head>
 <body>
@@ -138,16 +276,73 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
          accurate as the underlying product list changes. -->
   </aside>
   <div class="main">
+    <!-- Category selector — single-select, sits above search/sort so it
+         reads as the primary way to slice the catalog. -->
+    <div class="cat-tabs" id="cat-tabs"></div>
+
     <div class="search-row">
       <input class="search-input" id="search" type="search" placeholder="Search brand, part name, description…" autocomplete="off" />
       <span class="result-count" id="result-count">Loading…</span>
+      <div class="sort-wrap">
+        <label for="sort-select" style="font-weight:600;">Sort</label>
+        <select class="sort-select" id="sort-select">
+          <option value="newest">Newest</option>
+          <option value="price_asc">Price low → high</option>
+          <option value="price_desc">Price high → low</option>
+          <option value="brand">Brand A → Z</option>
+        </select>
+      </div>
       <button type="button" class="clear-filters" id="clear-filters" disabled>Clear filters</button>
     </div>
+
+    <!-- Pinned setup + fitment info banner. Both render nothing when empty. -->
+    <div id="setup-strip-wrap"></div>
+    <div id="fitment-banner-wrap"></div>
+
     <div id="grid-container">
       <div class="loading">Loading parts…</div>
     </div>
   </div>
 </div>
+
+<!-- Detail slide-over: opens on part-card click. Kept in the DOM (hidden via
+     transform) so open/close is a class toggle, no re-mount cost per click. -->
+<div class="detail-scrim" id="detail-scrim" hidden></div>
+<aside class="detail-panel" id="detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-title" hidden>
+  <div class="detail-header">
+    <div class="detail-header-eyebrow" id="detail-eyebrow">Product</div>
+    <button type="button" class="detail-close-btn" id="detail-close" aria-label="Close">×</button>
+  </div>
+  <div class="detail-body">
+    <div class="detail-hero" id="detail-hero"></div>
+    <div class="detail-thumbs" id="detail-thumbs"></div>
+    <div>
+      <div class="detail-brand" id="detail-brand"></div>
+      <div class="detail-title" id="detail-title"></div>
+      <div id="detail-cat-badge-wrap"></div>
+    </div>
+    <div class="detail-price" id="detail-price"></div>
+    <div class="detail-desc" id="detail-desc"></div>
+    <div id="detail-specs-wrap" hidden>
+      <div class="detail-section-title">Specifications</div>
+      <table class="detail-specs-table"><tbody id="detail-specs-body"></tbody></table>
+    </div>
+    <div id="detail-platforms-wrap" hidden>
+      <div class="detail-section-title">Compatible with</div>
+      <div class="detail-platform-chips" id="detail-platform-chips"></div>
+    </div>
+  </div>
+  <div class="detail-actions" style="flex-direction:column; align-items:stretch;">
+    <div style="display:flex; gap:10px; align-items:center; width:100%;">
+      <button type="button" class="detail-fav-btn" id="detail-fav" aria-label="Favorite" aria-pressed="false">♡</button>
+      <a class="detail-btn buy" id="detail-buy" href="#" target="_blank" rel="sponsored noopener">Buy at retailer →</a>
+      <button type="button" class="detail-btn armory" id="detail-armory">Add to Armory build</button>
+    </div>
+    <!-- Bookkeeping action — pins this product as the user's own in this
+         category, so fitment rules downstream can filter compatibles. -->
+    <button type="button" class="detail-mine-btn" id="detail-mine">☐ Set as mine (mark as owned)</button>
+  </div>
+</aside>
 
 <div class="toast" id="toast"><span id="toast-msg"></span><span id="toast-link-wrap"></span></div>
 
@@ -185,6 +380,17 @@ var CURRENT_USER = null;
 var PRODUCTS = [];              // denormalized flat rows (see loadEverything)
 var PLATFORMS_BY_ID = {};       // {id: {id,name,slug}}
 var FAVORITES = new Set();      // product_ids the signed-in user has favorited
+var SETUP = {};                 // { category: product } — user's owned components; drives fitment-chain filtering
+var LS_SETUP_KEY = 'catalog.mySetup.v1';
+var LS_BANNER_DISMISSED_KEY = 'catalog.fitmentBannerDismissed';  // per-tab; sessionStorage
+// Cross-category compatibility rules. Reads: "if a slide is pinned, then
+// filter optics to those whose specs.footprint matches the slide's
+// specs.optic_cut." Add rules for barrel/frame/etc. as spec data lands.
+var FITMENT_RULES = {
+  slide: { optic: { from: 'optic_cut', to: 'footprint' } },
+  // barrel: { compensator: { from: 'threaded', to: 'requires_threaded' } },  // future
+  // frame:  { magwell:     { from: 'model',    to: 'fits_model' } },          // future
+};
 
 // Filter state — everything the sidebar controls.
 var F = {
@@ -195,6 +401,13 @@ var F = {
   priceMax:   null,
   search:     '',
   favsOnly:   false,            // tab-controlled, not a sidebar filter
+  sort:       'newest',         // 'newest' | 'price_asc' | 'price_desc' | 'brand'
+  // Dynamic per-spec-key filter state. Shape per key:
+  //   { type: 'strings',  values: Set<string> }
+  //   { type: 'boolean',  on: bool }         // only meaningful when true
+  //   { type: 'numeric',  min, max }
+  // Only kept for keys the user actually toggled — cleared on category change.
+  specs: {},
 };
 
 // ─── AUTH ────────────────────────────────────────────────
@@ -214,7 +427,11 @@ async function init() {
   var sess = await sb.auth.getSession();
   CURRENT_USER = sess && sess.data && sess.data.session && sess.data.session.user || null;
   await loadEverything();
+  loadSetupFromStorage();   // must run AFTER PRODUCTS is populated
   wireControls();
+  // Sync the sort dropdown to whatever's in F.sort (default: 'newest').
+  var sortEl = document.getElementById('sort-select');
+  if (sortEl) sortEl.value = F.sort;
   renderFilters();
   applyFiltersAndRender();
 }
@@ -225,7 +442,7 @@ async function loadEverything() {
   var productsQ = sb
     .from('products')
     .select(
-      'id, name, description, category, brand_id, lowest_price,' +
+      'id, name, description, category, brand_id, url, lowest_price, specs, created_at,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
@@ -254,6 +471,10 @@ async function loadEverything() {
       brand: (r.brands && r.brands.name) || 'Unknown',
       price: price,
       image: (dv && dv.primary_image_url) || null,
+      buy_url: r.url || null,
+      specs: r.specs || null,          // { key: value } | null
+      variants: variants,              // kept intact for the detail panel thumb row
+      created_at: r.created_at,        // sort=newest
       platform_ids: (r.product_platforms || []).map(function (pp) { return pp.platform_id; }),
       // Pre-lowercased search haystack — avoid rebuilding on every keystroke.
       _search: ((r.brands && r.brands.name ? r.brands.name : '') + ' ' + (r.name || '') + ' ' + (r.description || '')).toLowerCase(),
@@ -280,6 +501,9 @@ function wireControls() {
     F.search = (e.target.value || '').trim().toLowerCase();
     applyFiltersAndRender();
   });
+  document.getElementById('sort-select').addEventListener('change', function (e) {
+    F.sort = e.target.value; applyFiltersAndRender();
+  });
   document.getElementById('clear-filters').addEventListener('click', clearAllFilters);
   document.getElementById('tab-all').addEventListener('click', function () { setTab(false); });
   document.getElementById('tab-favs').addEventListener('click', function () {
@@ -305,6 +529,7 @@ function updateTabCounts() {
 function clearAllFilters() {
   F.platforms.clear(); F.categories.clear(); F.brands.clear();
   F.priceMin = null; F.priceMax = null; F.search = '';
+  F.specs = {};
   document.getElementById('search').value = '';
   renderFilters();
   applyFiltersAndRender();
@@ -312,7 +537,8 @@ function clearAllFilters() {
 
 function hasActiveFilters() {
   return F.platforms.size || F.categories.size || F.brands.size
-      || F.priceMin != null || F.priceMax != null || F.search;
+      || F.priceMin != null || F.priceMax != null || F.search
+      || Object.keys(F.specs || {}).length > 0;
 }
 
 // ─── FILTERS ────────────────────────────────────────────
@@ -332,6 +558,7 @@ function catLabel(c) { return CATEGORY_LABELS[c] || (c || '').replace(/_/g, ' ')
 
 function renderFilters() {
   var s = document.getElementById('sidebar');
+  var specsHtml = specsSectionHtml();
   s.innerHTML =
     filterGroupHtml('platform',  'Platform',  platformOptions()) +
     filterGroupHtml('sub_model', 'Sub-model / Variant',
@@ -340,10 +567,179 @@ function renderFilters() {
       // TODO: wire this once real sub-model data lands (e.g. P365 vs
       // P365 XMACRO vs P365 X-9, Glock 19 Gen 4 vs Gen 5).
       '<div class="filter-note">Coming soon — currently only stubbed. Filter by Platform for now.</div>') +
-    filterGroupHtml('category',  'Category',  categoryOptions()) +
+    // Category filter moved out of the sidebar into the horizontal .cat-tabs
+    // strip above the grid — the primary way to slice the catalog. Keeping
+    // both was two controls competing for the same job.
     filterGroupHtml('brand',     'Brand',     brandOptions(), /*scroll*/ true) +
-    filterGroupHtml('price',     'Price',     priceHtml());
+    filterGroupHtml('price',     'Price',     priceHtml()) +
+    (specsHtml ? filterGroupHtml('specs', 'Specifications', specsHtml) : '');
   attachFilterHandlers();
+  renderCategoryTabs();
+  renderSetupStrip();
+  renderFitmentBanner();
+}
+
+// Horizontal category tabs — single-select. "All" clears the category
+// filter entirely; picking a category clears then adds one entry to
+// F.categories (kept as a Set so no other code has to change shape).
+function renderCategoryTabs() {
+  var el = document.getElementById('cat-tabs');
+  if (!el) return;
+  // Categories in the current catalog, sorted by human label.
+  var cats = {};
+  PRODUCTS.forEach(function (r) { if (r.category) cats[r.category] = true; });
+  var list = Object.keys(cats).sort(function (a, b) { return catLabel(a).localeCompare(catLabel(b)); });
+  var activeCat = F.categories.size === 1 ? Array.from(F.categories)[0] : null;
+  var buttons = ['<button type="button" class="cat-tab' + (activeCat == null ? ' active' : '') + '" data-cat="__all">All</button>']
+    .concat(list.map(function (c) {
+      return '<button type="button" class="cat-tab' + (activeCat === c ? ' active' : '') + '" data-cat="' + escAttr(c) + '">' + esc(catLabel(c)) + '</button>';
+    }));
+  el.innerHTML = buttons.join('');
+  el.querySelectorAll('[data-cat]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.getAttribute('data-cat');
+      F.categories.clear();
+      if (v !== '__all') F.categories.add(v);
+      renderFilters(); applyFiltersAndRender();
+    });
+  });
+}
+
+// ─── SETUP / FITMENT ──────────────────────────────────────
+function loadSetupFromStorage() {
+  try {
+    var raw = localStorage.getItem(LS_SETUP_KEY);
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') {
+      Object.keys(parsed).forEach(function (cat) {
+        // Rehydrate against current PRODUCTS in case a pinned product was
+        // discontinued or removed since the last visit.
+        var p = PRODUCTS.find(function (r) { return r.id === parsed[cat]; });
+        if (p) SETUP[cat] = p;
+      });
+    }
+  } catch (_) { /* private-mode or corrupt payload — silently start fresh */ }
+}
+function saveSetupToStorage() {
+  try {
+    var out = {};
+    Object.keys(SETUP).forEach(function (cat) { out[cat] = SETUP[cat].id; });
+    localStorage.setItem(LS_SETUP_KEY, JSON.stringify(out));
+  } catch (_) {}
+}
+function isMine(productId) {
+  var keys = Object.keys(SETUP);
+  for (var i = 0; i < keys.length; i++) if (SETUP[keys[i]].id === productId) return true;
+  return false;
+}
+function setAsMine(product) {
+  // Max one per category — replaces any prior entry in this category.
+  SETUP[product.category] = product;
+  saveSetupToStorage();
+  // Re-show the dismissed banner if fitment just became active on a
+  // category we're currently viewing — user needs to see WHY the filter
+  // changed after their action.
+  try { sessionStorage.removeItem(LS_BANNER_DISMISSED_KEY); } catch (_) {}
+  renderFilters();
+  applyFiltersAndRender();
+}
+function removeFromMine(category) {
+  delete SETUP[category];
+  saveSetupToStorage();
+  renderFilters();
+  applyFiltersAndRender();
+}
+
+// For a product `r`, returns true if it matches every active fitment rule.
+// A fitment rule is active when a SOURCE-category product is pinned and
+// r's category is a TARGET in that rule. Products with no spec value on
+// the "to" key fail the check — better to hide unknowns than falsely
+// claim compatibility.
+function matchesFitment(r) {
+  var srcCats = Object.keys(SETUP);
+  for (var i = 0; i < srcCats.length; i++) {
+    var srcCat = srcCats[i];
+    var rules = FITMENT_RULES[srcCat];
+    if (!rules) continue;
+    var rule = rules[r.category];
+    if (!rule) continue;
+    var srcSpec = SETUP[srcCat].specs || {};
+    var expected = srcSpec[rule.from];
+    if (expected == null) continue;   // pinned product lacks the source spec — no constraint
+    if (!r.specs || String(r.specs[rule.to]) !== String(expected)) return false;
+  }
+  return true;
+}
+
+// Which active-category the fitment banner is talking about. Returns the
+// most-relevant active rule for the current view, or null.
+function activeFitmentDescription() {
+  if (F.categories.size !== 1) return null;   // banner only speaks about a single category view
+  var viewingCat = Array.from(F.categories)[0];
+  var srcCats = Object.keys(SETUP);
+  for (var i = 0; i < srcCats.length; i++) {
+    var srcCat = srcCats[i];
+    var rules = FITMENT_RULES[srcCat];
+    if (!rules) continue;
+    var rule = rules[viewingCat];
+    if (!rule) continue;
+    var src = SETUP[srcCat];
+    var expected = src.specs ? src.specs[rule.from] : null;
+    if (expected == null) continue;
+    return {
+      viewingCat: viewingCat,
+      srcCat: srcCat, src: src,
+      specKey: rule.to, specValue: expected,
+    };
+  }
+  return null;
+}
+
+function renderSetupStrip() {
+  var wrap = document.getElementById('setup-strip-wrap');
+  if (!wrap) return;
+  var cats = Object.keys(SETUP);
+  if (!cats.length) { wrap.innerHTML = ''; return; }
+  var chips = cats.sort().map(function (cat) {
+    var p = SETUP[cat];
+    // Pick one representative spec value to show alongside the name.
+    var rules = FITMENT_RULES[cat];
+    var specKey = null;
+    if (rules) { var tKeys = Object.keys(rules); if (tKeys.length) specKey = rules[tKeys[0]].from; }
+    var specVal = specKey && p.specs ? p.specs[specKey] : null;
+    return '<div class="setup-chip" title="' + escAttr(catLabel(cat)) + '">' +
+      '<strong>' + esc(p.brand) + '</strong> ' + esc(p.name) +
+      (specVal != null ? ' <span class="setup-chip-spec">— ' + esc(String(specVal)) + '</span>' : '') +
+      '<button type="button" class="setup-chip-x" data-remove-mine="' + escAttr(cat) + '" aria-label="Remove">×</button>' +
+    '</div>';
+  }).join('');
+  wrap.innerHTML = '<div class="setup-strip"><span class="setup-label">My setup</span>' + chips + '</div>';
+  wrap.querySelectorAll('[data-remove-mine]').forEach(function (btn) {
+    btn.addEventListener('click', function () { removeFromMine(btn.getAttribute('data-remove-mine')); });
+  });
+}
+
+function renderFitmentBanner() {
+  var wrap = document.getElementById('fitment-banner-wrap');
+  if (!wrap) return;
+  var desc = activeFitmentDescription();
+  var dismissed = false;
+  try { dismissed = sessionStorage.getItem(LS_BANNER_DISMISSED_KEY) === '1'; } catch (_) {}
+  if (!desc || dismissed) { wrap.innerHTML = ''; return; }
+  wrap.innerHTML =
+    '<div class="fitment-banner">' +
+      '<span class="fitment-banner-icon">ℹ</span>' +
+      '<div class="fitment-banner-body">Showing ' + esc(catLabel(desc.viewingCat).toLowerCase()) +
+        ' compatible with your <strong>' + esc(desc.src.brand + ' ' + desc.src.name) + '</strong>' +
+        ' (<strong>' + esc(specLabel(desc.specKey)) + ': ' + esc(String(desc.specValue)) + '</strong>).' +
+      '</div>' +
+      '<button type="button" class="fitment-banner-close" id="fitment-banner-dismiss" aria-label="Dismiss">×</button>' +
+    '</div>';
+  document.getElementById('fitment-banner-dismiss').addEventListener('click', function () {
+    try { sessionStorage.setItem(LS_BANNER_DISMISSED_KEY, '1'); } catch (_) {}
+    renderFitmentBanner();
+  });
 }
 
 function filterGroupHtml(id, title, body, scroll) {
@@ -416,6 +812,90 @@ function priceHtml() {
   '</div>';
 }
 
+// Well-known abbreviations to preserve verbatim after title-case-splitting a
+// snake_case key. Anything not in this map gets first-letter-capitalized.
+var SPEC_ABBREV = { moa: 'MOA', dlc: 'DLC', tin: 'TiN', fde: 'FDE', usb: 'USB', ir: 'IR',
+                    led: 'LED', rmr: 'RMR', rmsc: 'RMSc', acro: 'ACRO', mrds: 'MRDS',
+                    ccw: 'CCW', edc: 'EDC', xl: 'XL' };
+function specLabel(key) {
+  return String(key || '').split('_').map(function (w) {
+    var lo = w.toLowerCase();
+    if (SPEC_ABBREV[lo]) return SPEC_ABBREV[lo];
+    return w.charAt(0).toUpperCase() + w.slice(1);
+  }).join(' ');
+}
+
+// The pool of products whose specs feed the dynamic Specifications section.
+// Scoped by category + platform (the user's spec: "only show spec keys that
+// exist in the currently active category"). Everything else is left alone —
+// we don't want price/brand/search narrowing the spec key vocabulary because
+// then toggling a spec value could hide the option itself.
+function productsForSpecScope() {
+  return PRODUCTS.filter(function (r) {
+    if (F.platforms.size  && !r.platform_ids.some(function (id) { return F.platforms.has(id); })) return false;
+    if (F.categories.size && !F.categories.has(r.category)) return false;
+    return r.specs && typeof r.specs === 'object';
+  });
+}
+
+// Discovers the spec-key/value shape from the scoped product pool and
+// renders per-key filter subgroups. Returns empty string when there are no
+// specced products in scope (so the whole Specifications section can be
+// hidden by the caller).
+function specsSectionHtml() {
+  var pool = productsForSpecScope();
+  if (!pool.length) return '';
+  // key -> { type, values (Set|null), numeric (min/max sample) }
+  var summary = {};
+  pool.forEach(function (r) {
+    Object.keys(r.specs).forEach(function (k) {
+      var v = r.specs[k];
+      var s = summary[k] || (summary[k] = { key: k, type: null, values: new Set(), min: Infinity, max: -Infinity, boolTrue: 0, boolFalse: 0 });
+      if (typeof v === 'boolean') { s.type = s.type || 'boolean'; if (v) s.boolTrue++; else s.boolFalse++; }
+      else if (typeof v === 'number' && !Number.isNaN(v)) { s.type = 'numeric'; s.min = Math.min(s.min, v); s.max = Math.max(s.max, v); }
+      else if (v != null) { s.type = s.type || 'strings'; s.values.add(String(v)); }
+    });
+  });
+  var keys = Object.keys(summary).sort(function (a, b) { return specLabel(a).localeCompare(specLabel(b)); });
+  if (!keys.length) return '';
+  return keys.map(function (k) {
+    var s = summary[k];
+    var body;
+    if (s.type === 'boolean') {
+      // Only render "Yes" as a filter — checking it narrows to rows where
+      // the spec is true. Leaving it unchecked = no constraint (matches all).
+      var checked = !!(F.specs[k] && F.specs[k].on);
+      body = '<label class="filter-option">' +
+        '<input type="checkbox" data-spec-bool="' + escAttr(k) + '"' + (checked ? ' checked' : '') + '/>' +
+        '<span>Yes</span><span class="filter-option-count">' + s.boolTrue + '</span>' +
+      '</label>';
+    } else if (s.type === 'numeric') {
+      var st = F.specs[k] || { type: 'numeric' };
+      body = '<div class="price-range">' +
+        '<input type="number" step="any" placeholder="' + s.min + '" data-spec-num-min="' + escAttr(k) + '" value="' + (st.min != null ? st.min : '') + '"/>' +
+        '<span class="price-dash">–</span>' +
+        '<input type="number" step="any" placeholder="' + s.max + '" data-spec-num-max="' + escAttr(k) + '" value="' + (st.max != null ? st.max : '') + '"/>' +
+      '</div>';
+    } else {
+      // strings — checkbox per unique value, facet-counted against everything
+      // else (excludeKey='__spec__'+k so THIS key's own filter doesn't
+      // collapse its option list).
+      var vals = Array.from(s.values).sort();
+      body = vals.map(function (v) {
+        var checkedS = !!(F.specs[k] && F.specs[k].values && F.specs[k].values.has(v));
+        var n = optionCount(function (r) {
+          return r.specs && String(r.specs[k]) === v;
+        }, '__spec__' + k);
+        return '<label class="filter-option">' +
+          '<input type="checkbox" data-spec-str-key="' + escAttr(k) + '" data-spec-str-val="' + escAttr(v) + '"' + (checkedS ? ' checked' : '') + '/>' +
+          '<span>' + esc(v) + '</span><span class="filter-option-count">' + n + '</span>' +
+        '</label>';
+      }).join('');
+    }
+    return '<div class="spec-block"><div class="filter-title">' + esc(specLabel(k)) + '</div>' + body + '</div>';
+  }).join('');
+}
+
 function attachFilterHandlers() {
   document.querySelectorAll('#sidebar input[type="checkbox"]').forEach(function (el) {
     el.addEventListener('change', function () {
@@ -433,6 +913,37 @@ function attachFilterHandlers() {
   var mx = document.getElementById('price-max');
   if (mn) mn.addEventListener('change', function () { F.priceMin = mn.value === '' ? null : Number(mn.value); renderFilters(); applyFiltersAndRender(); });
   if (mx) mx.addEventListener('change', function () { F.priceMax = mx.value === '' ? null : Number(mx.value); renderFilters(); applyFiltersAndRender(); });
+
+  // Spec filters — string checkboxes, boolean toggles, numeric min/max.
+  document.querySelectorAll('[data-spec-str-key]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      var k = el.getAttribute('data-spec-str-key');
+      var v = el.getAttribute('data-spec-str-val');
+      var state = F.specs[k] || (F.specs[k] = { type: 'strings', values: new Set() });
+      if (el.checked) state.values.add(v); else state.values.delete(v);
+      if (state.values.size === 0) delete F.specs[k];
+      renderFilters(); applyFiltersAndRender();
+    });
+  });
+  document.querySelectorAll('[data-spec-bool]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      var k = el.getAttribute('data-spec-bool');
+      if (el.checked) F.specs[k] = { type: 'boolean', on: true };
+      else            delete F.specs[k];
+      renderFilters(); applyFiltersAndRender();
+    });
+  });
+  document.querySelectorAll('[data-spec-num-min],[data-spec-num-max]').forEach(function (el) {
+    el.addEventListener('change', function () {
+      var k = el.getAttribute('data-spec-num-min') || el.getAttribute('data-spec-num-max');
+      var side = el.hasAttribute('data-spec-num-min') ? 'min' : 'max';
+      var val = el.value === '' ? null : Number(el.value);
+      var state = F.specs[k] || (F.specs[k] = { type: 'numeric' });
+      state[side] = val;
+      if (state.min == null && state.max == null) delete F.specs[k];
+      renderFilters(); applyFiltersAndRender();
+    });
+  });
 }
 
 // ─── FILTER PREDICATES ───────────────────────────────────
@@ -443,6 +954,28 @@ function matchesAllExcept(r, excludeKey) {
   if (excludeKey !== 'price'      && F.priceMin != null && (r.price == null || r.price < F.priceMin)) return false;
   if (excludeKey !== 'price'      && F.priceMax != null && (r.price == null || r.price > F.priceMax)) return false;
   if (excludeKey !== 'search'     && F.search          && r._search.indexOf(F.search) === -1) return false;
+  // Per-spec-key filters. excludeKey '__spec__<k>' skips only that one key's
+  // constraint so the sidebar's own facet count for that key stays correct.
+  var specKeys = Object.keys(F.specs || {});
+  for (var i = 0; i < specKeys.length; i++) {
+    var k = specKeys[i];
+    if (excludeKey === '__spec__' + k) continue;
+    var state = F.specs[k];
+    var v = r.specs ? r.specs[k] : undefined;
+    if (state.type === 'strings') {
+      if (v == null || !state.values.has(String(v))) return false;
+    } else if (state.type === 'boolean') {
+      if (state.on && v !== true) return false;
+    } else if (state.type === 'numeric') {
+      if (typeof v !== 'number') return false;
+      if (state.min != null && v < state.min) return false;
+      if (state.max != null && v > state.max) return false;
+    }
+  }
+  // Fitment-chain: pinned setup narrows other categories. Always applied
+  // (not gated by excludeKey — the fitment rules don't have their own
+  // sidebar option list to keep alive).
+  if (!matchesFitment(r)) return false;
   // The favorites-only view is a tab, not a sidebar filter — always apply.
   if (F.favsOnly && !FAVORITES.has(r.id)) return false;
   return true;
@@ -452,9 +985,17 @@ function matchesAll(r) { return matchesAllExcept(r, null); }
 // ─── RENDER GRID ───────────────────────────────────────────
 function applyFiltersAndRender() {
   var list = PRODUCTS.filter(matchesAll);
+  // Sort — cheap on ≤hundreds of rows; server-side sorting would just add
+  // a round-trip for no benefit at this scale.
+  if (F.sort === 'price_asc')       list.sort(function (a, b) { return (a.price == null ? Infinity : a.price) - (b.price == null ? Infinity : b.price); });
+  else if (F.sort === 'price_desc') list.sort(function (a, b) { return (b.price == null ? -Infinity : b.price) - (a.price == null ? -Infinity : a.price); });
+  else if (F.sort === 'brand')      list.sort(function (a, b) { return a.brand.localeCompare(b.brand) || a.name.localeCompare(b.name); });
+  else                              list.sort(function (a, b) { return String(b.created_at || '').localeCompare(String(a.created_at || '')); });   // newest
   document.getElementById('result-count').textContent =
     list.length + ' part' + (list.length !== 1 ? 's' : '');
   document.getElementById('clear-filters').disabled = !hasActiveFilters();
+  // Fitment banner + setup strip depend on current filter state.
+  renderFitmentBanner();
 
   var container = document.getElementById('grid-container');
   if (!list.length) {
@@ -484,8 +1025,13 @@ function renderCard(r) {
   var photoHtml = r.image
     ? '<img src="' + escAttr(r.image) + '" alt="' + escAttr(r.brand + ' ' + r.name) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-nophoto&quot;>No photo</div>\'"/>'
     : '<div class="part-card-nophoto">No photo</div>';
-  return '<div class="part-card" data-id="' + r.id + '">' +
-    '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
+  // Whole card is clickable; the heart button stopPropagation's so favoriting
+  // doesn't open the detail panel. openDetail is delegated (see below) rather
+  // than inline so we don't accidentally trigger on the fav-btn click.
+  var mineBadge = isMine(r.id) ? '<div class="part-card-mine-badge">MINE</div>' : '';
+  return '<div class="part-card" data-id="' + r.id + '" data-open-detail="1">' +
+    '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
+    mineBadge +
     '<div class="part-card-photo">' + photoHtml +
       (r.category ? '<div class="part-card-cat">' + esc(catLabel(r.category)) + '</div>' : '') +
     '</div>' +
@@ -496,6 +1042,185 @@ function renderCard(r) {
       '<div class="part-card-footer">' + priceHtml + '</div>' +
     '</div>' +
   '</div>';
+}
+
+// Event delegation: any card click that didn't originate from an interactive
+// child (fav button) opens the detail panel. Single listener on the grid
+// container survives re-renders (renderCard replaces innerHTML).
+document.getElementById('grid-container').addEventListener('click', function (e) {
+  var card = e.target.closest('[data-open-detail]');
+  if (!card) return;
+  openDetail(card.getAttribute('data-id'));
+});
+
+// ─── DETAIL SLIDE-OVER ────────────────────────────────────
+var DETAIL_STATE = { productId: null, activeVariantIdx: 0 };
+
+function openDetail(productId) {
+  var p = PRODUCTS.find(function (x) { return x.id === productId; });
+  if (!p) return;
+  DETAIL_STATE.productId = productId;
+  DETAIL_STATE.activeVariantIdx = 0;
+  renderDetail(p);
+  var scrim = document.getElementById('detail-scrim');
+  var panel = document.getElementById('detail-panel');
+  scrim.hidden = false; panel.hidden = false;
+  // rAF so the class transition actually plays (browsers coalesce hidden→open
+  // in the same frame otherwise and skip the transform animation).
+  requestAnimationFrame(function () {
+    scrim.classList.add('open');
+    panel.classList.add('open');
+  });
+  document.body.style.overflow = 'hidden';
+}
+function closeDetail() {
+  var scrim = document.getElementById('detail-scrim');
+  var panel = document.getElementById('detail-panel');
+  scrim.classList.remove('open'); panel.classList.remove('open');
+  // Wait for the transform out before setting hidden — otherwise it snaps.
+  setTimeout(function () {
+    scrim.hidden = true; panel.hidden = true;
+    document.body.style.overflow = '';
+  }, 220);
+  DETAIL_STATE.productId = null;
+}
+document.getElementById('detail-close').addEventListener('click', closeDetail);
+document.getElementById('detail-scrim').addEventListener('click', closeDetail);
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && DETAIL_STATE.productId) closeDetail();
+});
+
+function renderDetail(p) {
+  document.getElementById('detail-eyebrow').textContent = p.category ? catLabel(p.category) : 'Product';
+  document.getElementById('detail-brand').textContent = p.brand;
+  document.getElementById('detail-title').textContent = p.name;
+  document.getElementById('detail-cat-badge-wrap').innerHTML = p.category
+    ? '<div class="detail-cat-badge">' + esc(catLabel(p.category)) + '</div>' : '';
+  var priceEl = document.getElementById('detail-price');
+  if (p.price != null) { priceEl.textContent = '$' + p.price.toFixed(p.price < 100 ? 2 : 0); priceEl.classList.remove('na'); }
+  else                  { priceEl.textContent = 'Price N/A';                                  priceEl.classList.add('na'); }
+  // Description: keep it simple — split on double-newline into paragraphs.
+  var descEl = document.getElementById('detail-desc');
+  if (p.description) {
+    descEl.innerHTML = String(p.description).split(/\n\n+/).map(function (para) {
+      return '<p>' + esc(para.trim()) + '</p>';
+    }).join('');
+  } else {
+    descEl.innerHTML = '<p style="color:#999;">No description available.</p>';
+  }
+
+  // Variant image thumbs: only variants that actually have images. Hero
+  // starts on the first-image variant (usually the default).
+  var variantsWithImg = (p.variants || []).filter(function (v) { return v.primary_image_url; });
+  var heroSrc = variantsWithImg[DETAIL_STATE.activeVariantIdx] ? variantsWithImg[DETAIL_STATE.activeVariantIdx].primary_image_url : p.image;
+  var heroEl = document.getElementById('detail-hero');
+  heroEl.innerHTML = heroSrc
+    ? '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '"/>'
+    : '<div class="detail-hero-nophoto">No photo</div>';
+  var thumbsEl = document.getElementById('detail-thumbs');
+  if (variantsWithImg.length > 1) {
+    thumbsEl.innerHTML = variantsWithImg.map(function (v, i) {
+      return '<button type="button" class="detail-thumb' + (i === DETAIL_STATE.activeVariantIdx ? ' active' : '') + '" data-variant-idx="' + i + '">' +
+        '<img src="' + escAttr(v.primary_image_url) + '" alt=""/></button>';
+    }).join('');
+    thumbsEl.querySelectorAll('[data-variant-idx]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        DETAIL_STATE.activeVariantIdx = Number(btn.getAttribute('data-variant-idx')) || 0;
+        renderDetail(p);
+      });
+    });
+  } else {
+    thumbsEl.innerHTML = '';
+  }
+
+  // Specs table — hide the whole section if specs is null/empty.
+  var specsWrap = document.getElementById('detail-specs-wrap');
+  var specsBody = document.getElementById('detail-specs-body');
+  if (p.specs && typeof p.specs === 'object' && Object.keys(p.specs).length) {
+    var keys = Object.keys(p.specs).sort();
+    specsBody.innerHTML = keys.map(function (k) {
+      var v = p.specs[k];
+      var vDisplay = typeof v === 'boolean' ? (v ? 'Yes' : 'No') : esc(String(v));
+      return '<tr><th>' + esc(specLabel(k)) + '</th><td>' + vDisplay + '</td></tr>';
+    }).join('');
+    specsWrap.hidden = false;
+  } else {
+    specsWrap.hidden = true;
+  }
+
+  // Compatible-with chips
+  var platWrap = document.getElementById('detail-platforms-wrap');
+  var platChipsEl = document.getElementById('detail-platform-chips');
+  var platNames = (p.platform_ids || [])
+    .map(function (id) { return PLATFORMS_BY_ID[id] && PLATFORMS_BY_ID[id].name; })
+    .filter(Boolean);
+  if (platNames.length) {
+    platChipsEl.innerHTML = platNames.map(function (n) { return '<span class="detail-platform-chip">' + esc(n) + '</span>'; }).join('');
+    platWrap.hidden = false;
+  } else {
+    platWrap.hidden = true;
+  }
+
+  // Buy: prominent CTA; if url is null, disable + tell the user why.
+  var buyEl = document.getElementById('detail-buy');
+  if (p.buy_url) {
+    buyEl.href = p.buy_url;
+    buyEl.textContent = 'Buy at retailer →';
+    buyEl.classList.remove('disabled');
+    buyEl.removeAttribute('aria-disabled');
+  } else {
+    buyEl.href = '#';
+    buyEl.textContent = 'Not available online';
+    buyEl.classList.add('disabled');
+    buyEl.setAttribute('aria-disabled', 'true');
+  }
+
+  // Favorite button
+  var favEl = document.getElementById('detail-fav');
+  var isFav = FAVORITES.has(p.id);
+  favEl.textContent = isFav ? '♥' : '♡';
+  favEl.classList.toggle('active', isFav);
+  favEl.setAttribute('aria-pressed', String(isFav));
+  favEl.onclick = function () { toggleFavoriteFromDetail(p.id); };
+
+  // Add-to-Armory hands the product id off via a URL param; Armory reads
+  // ?prefill=<uuid> on load, auto-selects the platform, and adds the part.
+  var armoryEl = document.getElementById('detail-armory');
+  armoryEl.onclick = function () {
+    if (!CURRENT_USER) { toast('Sign in to add parts to a build', 'gunforma-signin.html', 'Sign in'); return; }
+    window.location.href = 'gunforma-armory.html?prefill=' + encodeURIComponent(p.id);
+  };
+
+  // Set-as-mine — toggles the pinned setup for this category.
+  var mineEl = document.getElementById('detail-mine');
+  var mine = isMine(p.id);
+  mineEl.textContent = mine ? '✓ Marked as mine — click to unset' : '☐ Set as mine (mark as owned)';
+  mineEl.classList.toggle('active', mine);
+  mineEl.onclick = function () {
+    if (isMine(p.id)) { removeFromMine(p.category); toast('Removed from your setup'); }
+    else              { setAsMine(p); toast('Marked as mine — related categories now filter to compatible parts'); }
+    renderDetail(p);  // repaint button label
+  };
+}
+
+// Separate wrapper so the detail-panel's fav button re-renders the detail's
+// own heart state in addition to the card + tab counts the shared handler
+// already touches.
+async function toggleFavoriteFromDetail(productId) {
+  var favEl = document.getElementById('detail-fav');
+  // Re-use the grid-card handler to keep insert/delete + revert logic in
+  // one place. Pass a dummy element so paintFavButton has a target.
+  var wasFav = FAVORITES.has(productId);
+  await toggleFavorite(productId, favEl);
+  // Re-paint the ♥/♡ + aria on the detail button after the handler resolved.
+  var nowFav = FAVORITES.has(productId);
+  favEl.textContent = nowFav ? '♥' : '♡';
+  favEl.classList.toggle('active', nowFav);
+  favEl.setAttribute('aria-pressed', String(nowFav));
+  // Repaint the card in the grid too (its heart may still show stale state
+  // if a re-render didn't fire — the toggle handler does re-paint via the
+  // grid path, so this is mostly belt-and-suspenders).
+  if (nowFav !== wasFav) applyFiltersAndRender();
 }
 
 // ─── FAVORITES ─────────────────────────────────────────────

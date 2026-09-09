@@ -312,6 +312,26 @@ async function init() {
   renderGuidesFilterRow();
   renderGuides();
   updateActionButtons();
+  // Handshake: gunforma-parts-catalog.html's "Add to Armory build" button
+  // opens this page with ?prefill=<product_id>. Auto-select the product's
+  // first platform and add the part, then scrub the URL so refresh doesn't
+  // re-add it.
+  applyPrefillFromUrl();
+}
+
+function applyPrefillFromUrl() {
+  var params = new URLSearchParams(window.location.search);
+  var prefillId = params.get('prefill');
+  if (!prefillId) return;
+  var product = PRODUCTS_BY_ID[prefillId];
+  if (!product) { toast('That part isn\'t in the catalog anymore'); return; }
+  var platformId = (product.platform_ids || [])[0];
+  if (!platformId) { toast('That part has no compatible platform on file'); return; }
+  selectPlatform(platformId);
+  addPartByRefId(product.id, product.category);
+  toast('Added ' + product.brand + ' ' + product.name + ' to your build');
+  // Scrub the query so a refresh doesn't re-add the same part.
+  try { history.replaceState({}, '', window.location.pathname); } catch (_) {}
 }
 
 async function loadAll() {
