@@ -104,6 +104,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-btn.buy { background: #fff; color: #333; border-color: #d5d3ca; }
 .part-card-btn.buy:hover { background: #fafaf8; color: #1a1a1a; border-color: #4a9edd; }
 
+/* Affiliate row — same class set as build-detail so buy-link markup
+   stays visually consistent across the site. Compact form only on this
+   page — the full expanded variant list lives in parts-catalog's
+   detail panel. */
+.part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 0.5px solid #eee; background: #fafaf8; border-radius: 4px; margin-top: 4px; }
+.part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-price { font-size: 13px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
+.part-affiliate-partner { font-size: 10.5px; color: #888; }
+.part-affiliate-partner strong { color: #444; font-weight: 600; }
+.part-affiliate-stock { display: inline-block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
+.part-affiliate-stock.in { color: #2f7a3d; background: #eaf5ec; border: 0.5px solid #b7dcbe; }
+.part-affiliate-stock.out { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
+.part-affiliate-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; padding: 6px 10px; border-radius: 4px; text-decoration: none; transition: background 0.15s; letter-spacing: 0.02em; }
+.part-affiliate-btn:hover { background: #1e63a0; }
+.part-affiliate-range { font-size: 11px; color: #666; font-weight: 500; margin-left: 6px; }
+/* Guide-context adjustment — smaller since guide part rows are already dense */
+.guide-parts-list .part-affiliate { padding: 6px 8px; margin-top: 0; }
+.guide-parts-list .part-affiliate-price { font-size: 12px; }
+.guide-parts-list .part-affiliate-btn { font-size: 10px; padding: 5px 9px; }
+
 .picker-empty { padding: 20px 16px; font-size: 12px; color: #888; text-align: center; }
 
 /* SIDEBAR SUMMARY */
@@ -226,6 +246,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
+<script src="js/affiliate.js"></script>
 <script>
 // ============================================================
 // gunforma-armory.html — build-assembly + curated guides.
@@ -243,11 +264,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // lookup. "Remix this build" clones a guide into the My Build state
 // (does not mutate the original) and switches tabs.
 //
-// Buy links: every part card links to products.url (semantically the
-// buy-at-retailer URL — samples confirmed retailer domains). Rendered
-// with rel="sponsored noopener" + target="_blank". If more than 20% of
-// visible cards have no URL, a console.warn fires so catalog gaps show
-// up during QA.
+// Buy links: routed through the shared js/affiliate.js module, which
+// pulls tracked listings from affiliate_links → partners (see
+// build-detail for the reference implementation this was extracted from).
+// products.url is intentionally NOT used as a buy link — it's an
+// untracked manufacturer page. affiliate.renderHero is called per card
+// and returns '' when the product has no listing yet; a console.warn
+// fires from runBuyUrlAudit when >20% of visible parts lack listings.
 // ============================================================
 var sb = window.sb;
 
@@ -375,6 +398,20 @@ async function loadAll() {
   GUIDES = guideRes.data || [];
 
   await loadFavoritesAndRepaint(/*skipRepaint*/ true);
+
+  // Affiliate listings for every catalog product + any product referenced
+  // by a guide's parts_snapshot. One query, non-fatal on failure.
+  try {
+    if (window.affiliate) {
+      var ids = PRODUCTS.map(function (p) { return p.id; });
+      GUIDES.forEach(function (g) {
+        (g.parts_snapshot || []).forEach(function (part) {
+          if (part.refId) ids.push(part.refId);
+        });
+      });
+      await window.affiliate.loadFor(sb, ids);
+    }
+  } catch (e) { console.warn('[armory] affiliate load failed', e); }
 }
 
 async function loadFavoritesAndRepaint(skipRepaint) {
@@ -541,9 +578,10 @@ function renderPartCard(p, cat, isFav) {
   var addBtn = isAdded
     ? '<button type="button" class="part-card-btn remove" data-remove-ref="' + p.id + '">Remove</button>'
     : '<button type="button" class="part-card-btn add"    data-add-ref="'    + p.id + '" data-add-cat="' + cat + '">+ Add</button>';
-  var buyBtn = p.buy_url
-    ? '<a class="part-card-btn buy" href="' + escAttr(p.buy_url) + '" target="_blank" rel="sponsored noopener">Buy →</a>'
-    : '';
+  // Compact affiliate hero — real street price + retailer + Buy button.
+  // Renders nothing when the product has no affiliate listings (no
+  // untracked fallback link — products.url is not used as a buy link).
+  var affHtml = (window.affiliate ? window.affiliate.renderHero(p.id) : '') || '';
   return '<div class="part-card' + (isAdded ? ' added' : '') + (isFav ? ' favorited' : '') + '">' +
     '<div class="part-card-photo">' + photoHtml +
       (isFav ? '<div class="part-card-fav-badge">★ FAV</div>' : '') +
@@ -552,8 +590,9 @@ function renderPartCard(p, cat, isFav) {
       '<div class="part-card-brand">' + esc(p.brand) + '</div>' +
       '<div class="part-card-name">'  + esc(p.name)  + '</div>' +
       priceHtml +
+      affHtml +
     '</div>' +
-    '<div class="part-card-actions">' + addBtn + buyBtn + '</div>' +
+    '<div class="part-card-actions">' + addBtn + '</div>' +
   '</div>';
 }
 
@@ -714,13 +753,20 @@ function renderGuideCard(g) {
   var total = 0;
   var partsHtml = snap.map(function (part) {
     var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
-    var price = live && live.price != null ? live.price : null;
+    // Prefer real-world street price from the affiliate hero when we have
+    // it; otherwise fall back to the product's MSRP.
+    var aff = (window.affiliate && part.refId) ? window.affiliate.get(part.refId) : null;
+    var streetPrice = aff && aff.hero && aff.hero.price != null ? aff.hero.price : null;
+    var price = streetPrice != null ? streetPrice : (live && live.price != null ? live.price : null);
     if (price != null) total += price;
     var priceCell = price != null
       ? '<div class="guide-part-price">$' + price.toFixed(price < 100 ? 2 : 0) + '</div>'
       : '<div class="guide-part-price na">—</div>';
-    var buyCell = live && live.buy_url
-      ? '<a class="guide-part-buy" href="' + escAttr(live.buy_url) + '" target="_blank" rel="sponsored noopener">Buy</a>'
+    // Affiliate buy — hero URL from affiliate_links (tracked). No untracked
+    // fallback to products.url. Renders as an empty span when no listing
+    // exists so the 4-column grid layout stays intact.
+    var buyCell = aff && aff.hero
+      ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.url) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>'
       : '<span></span>';
     return '<div class="guide-part">' +
       '<span class="guide-part-cat">' + esc(catLabel(part.category)) + '</span>' +
@@ -776,30 +822,31 @@ function remixGuide(guideId) {
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-// ─── BUY-URL AUDIT ─────────────────────────────────────────
-// User spec: console.warn when > 20% of currently-visible parts have no
-// buy_url, so gaps show up during QA. Runs on any render that produces
-// cards (parts section + guides tab).
+// ─── AFFILIATE COVERAGE AUDIT ──────────────────────────────
+// Was: buy_url audit against the untracked products.url column. Now that
+// every buy link goes through affiliate_links (tracked commission), the
+// same gap warning fires against affiliate coverage — a product with no
+// affiliate listing surfaces nothing to click, which is a catalog-
+// completeness issue we want visible during QA.
 function runBuyUrlAudit() {
-  var visibleProducts = [];
-  // Parts pickers (currently open category only, since that's what the user sees)
+  if (!window.affiliate) return;
+  var visibleProductIds = [];
   if (STATE.tab === 'build' && STATE.openCategory && PRODUCTS_BY_CATEGORY[STATE.openCategory]) {
-    visibleProducts = visibleProducts.concat(PRODUCTS_BY_CATEGORY[STATE.openCategory]);
+    (PRODUCTS_BY_CATEGORY[STATE.openCategory] || []).forEach(function (p) { visibleProductIds.push(p.id); });
   }
-  // Guides tab visible cards
   if (STATE.tab === 'guides') {
     var list = STATE.guideCategory === 'all' ? GUIDES : GUIDES.filter(function (g) { return g.category === STATE.guideCategory; });
     list.forEach(function (g) {
       (g.parts_snapshot || []).forEach(function (part) {
-        if (part.refId && PRODUCTS_BY_ID[part.refId]) visibleProducts.push(PRODUCTS_BY_ID[part.refId]);
+        if (part.refId) visibleProductIds.push(part.refId);
       });
     });
   }
-  if (visibleProducts.length < 5) return;   // don't warn on tiny samples
-  var missing = visibleProducts.filter(function (p) { return !p.buy_url; }).length;
-  var pct = missing / visibleProducts.length;
+  if (visibleProductIds.length < 5) return;
+  var missing = visibleProductIds.filter(function (id) { return !window.affiliate.get(id); }).length;
+  var pct = missing / visibleProductIds.length;
   if (pct > 0.2) {
-    console.warn('[armory] buy_url gap: ' + missing + '/' + visibleProducts.length + ' visible parts (' + Math.round(pct * 100) + '%) have no buy URL. Backfill products.url for these.');
+    console.warn('[armory] affiliate coverage gap: ' + missing + '/' + visibleProductIds.length + ' visible parts (' + Math.round(pct * 100) + '%) have no affiliate listing. Add rows to affiliate_links for these.');
   }
 }
 

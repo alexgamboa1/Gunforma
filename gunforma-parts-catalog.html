@@ -191,6 +191,53 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* Bump the Buy CTA one more notch — largest text + padding on the page. */
 .detail-btn.buy { font-size: 14px; padding: 14px 18px; letter-spacing: 0.05em; }
 
+/* ─── AFFILIATE — classes ported verbatim from gunforma-build-detail.html
+   so buy-link markup is visually identical across every page. ─── */
+.part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 0.5px solid #eee; background: #fafaf8; border-radius: 6px; }
+.part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-price { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
+.part-affiliate-partner { font-size: 11px; color: #888; }
+.part-affiliate-partner strong { color: #444; font-weight: 600; }
+.part-affiliate-stock { display: inline-block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
+.part-affiliate-stock.in { color: #2f7a3d; background: #eaf5ec; border: 0.5px solid #b7dcbe; }
+.part-affiliate-stock.out { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
+.part-affiliate-btn { flex-shrink: 0; font-size: 11px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; padding: 8px 14px; border-radius: 4px; text-decoration: none; transition: background 0.15s; letter-spacing: 0.02em; }
+.part-affiliate-btn:hover { background: #1e63a0; }
+.part-affiliate-disclosure { font-size: 10px; color: #a8a5a0; padding: 8px 4px 0; }
+.part-affiliate-range { font-size: 11px; color: #666; font-weight: 500; margin-left: 6px; }
+.part-affiliate-options { border-top: 0.5px solid #eee; padding: 0; margin-top: 4px; }
+.part-affiliate-options-summary { list-style: none; cursor: pointer; padding: 10px 4px; font-size: 11px; color: #2a7bbd; font-weight: 600; user-select: none; }
+.part-affiliate-options-summary::-webkit-details-marker { display: none; }
+.part-affiliate-options-summary::after { content: ' ▾'; }
+.part-affiliate-options[open] .part-affiliate-options-summary::after { content: ' ▴'; }
+.part-affiliate-variant-list { display: flex; flex-direction: column; padding: 0 0 6px; background: #f4f3ee; border-radius: 6px; }
+.part-affiliate-variant-header { padding: 10px 14px 8px; border-bottom: 0.5px solid #dcdbd3; }
+.part-affiliate-variant-header-label { font-size: 10.5px; color: #555; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.part-affiliate-variant-header-note { font-size: 11.5px; color: #6b6a63; font-style: italic; margin-top: 5px; letter-spacing: 0; text-transform: none; font-weight: 400; line-height: 1.45; }
+.part-affiliate-variant-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; border-top: 0.5px solid #e8e6df; }
+.part-affiliate-variant-row:first-child { border-top: none; }
+.part-affiliate-variant-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-variant-label { font-size: 12px; color: #333; font-weight: 600; }
+.part-affiliate-variant-sub { font-size: 11px; color: #888; }
+.part-affiliate-variant-sub strong { color: #444; font-weight: 600; }
+.part-affiliate-variant-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; padding: 6px 12px; border-radius: 4px; text-decoration: none; transition: background 0.15s; }
+.part-affiliate-variant-btn:hover { background: #eaf4fc; }
+
+/* Compact per-card variant of the affiliate row — sits below the MSRP on
+   grid cards. Same class inheritance, tighter padding/font so the card
+   stays proportioned. */
+.part-card .part-affiliate { padding: 8px 10px; margin-top: 6px; }
+.part-card .part-affiliate-price { font-size: 13px; }
+.part-card .part-affiliate-btn { font-size: 10px; padding: 6px 10px; }
+
+/* Detail panel: promote the affiliate block visually — biggest interactive
+   element in the panel, since the user's spec: "highest-intent moment on
+   the entire site". */
+.detail-affiliate-wrap { padding: 0; }
+.detail-affiliate-wrap .part-affiliate { padding: 14px 16px; border-width: 1px; border-color: #cfe0f0; background: #f5fbff; }
+.detail-affiliate-wrap .part-affiliate-price { font-size: 20px; }
+.detail-affiliate-wrap .part-affiliate-btn { font-size: 14px; padding: 12px 18px; letter-spacing: 0.05em; }
+
 /* Cards now click into the detail panel; add a subtle affordance so it
    reads as clickable. */
 .part-card { cursor: pointer; }
@@ -344,6 +391,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div id="detail-compat-badge-wrap"></div>
     </div>
     <div class="detail-price" id="detail-price"></div>
+    <!-- Affiliate block: hero row + expandable variants + disclosure.
+         Populated from js/affiliate.js in renderDetail. -->
+    <div class="detail-affiliate-wrap" id="detail-affiliate-wrap"></div>
     <div class="detail-desc" id="detail-desc"></div>
     <div id="detail-specs-wrap" hidden>
       <div class="detail-section-title">Specifications</div>
@@ -354,14 +404,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="detail-platform-chips" id="detail-platform-chips"></div>
     </div>
   </div>
+  <!-- Footer actions are secondary now — the primary Buy CTA lives in the
+       affiliate block up in detail-body. Kept: favorite, Armory hand-off,
+       and the "set as mine" bookkeeping toggle. -->
   <div class="detail-actions" style="flex-direction:column; align-items:stretch;">
     <div style="display:flex; gap:10px; align-items:center; width:100%;">
       <button type="button" class="detail-fav-btn" id="detail-fav" aria-label="Favorite" aria-pressed="false">♡</button>
-      <a class="detail-btn buy" id="detail-buy" href="#" target="_blank" rel="sponsored noopener">Buy at retailer →</a>
       <button type="button" class="detail-btn armory" id="detail-armory">Add to Armory build</button>
     </div>
-    <!-- Bookkeeping action — pins this product as the user's own in this
-         category, so fitment rules downstream can filter compatibles. -->
     <button type="button" class="detail-mine-btn" id="detail-mine">☐ Set as mine (mark as owned)</button>
   </div>
 </aside>
@@ -373,6 +423,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
+<script src="js/affiliate.js"></script>
 <script>
 // ============================================================
 // gunforma-parts-catalog.html — searchable parts DATABASE.
@@ -590,6 +641,13 @@ async function loadEverything() {
   });
 
   await loadFavoritesAndRender(/*skipRender*/ true);
+  // Affiliate listings for every visible product (one query, ~233 ids).
+  // Never fatal — renderers handle missing entries by hiding the block.
+  try {
+    if (window.affiliate) {
+      await window.affiliate.loadFor(sb, PRODUCTS.map(function (p) { return p.id; }));
+    }
+  } catch (e) { console.warn('[catalog] affiliate load failed', e); }
 }
 
 async function loadFavoritesAndRender(skipRender) {
@@ -1449,6 +1507,10 @@ function renderCard(r) {
   // doesn't open the detail panel. openDetail is delegated (see below) rather
   // than inline so we don't accidentally trigger on the fav-btn click.
   var mineBadge = isMine(r.id) ? '<div class="part-card-mine-badge">MINE</div>' : '';
+  // Compact affiliate hero — real street price + retailer + Buy button.
+  // Rendered on top of any card that has affiliate data. Skipped silently
+  // when the product isn't listed anywhere (no dead untracked link).
+  var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
   return '<div class="part-card" data-id="' + r.id + '" data-open-detail="1">' +
     '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
     mineBadge +
@@ -1460,6 +1522,7 @@ function renderCard(r) {
       '<div class="part-card-name">'  + esc(r.name)  + '</div>' +
       (r.description ? '<div class="part-card-desc">' + esc(r.description) + '</div>' : '') +
       '<div class="part-card-footer">' + priceHtml + '</div>' +
+      (affHtml ? '<div onclick="event.stopPropagation();">' + affHtml + '</div>' : '') +
     '</div>' +
   '</div>';
 }
@@ -1600,18 +1663,17 @@ function renderDetail(p) {
     platWrap.hidden = true;
   }
 
-  // Buy: prominent CTA; if url is null, disable + tell the user why.
-  var buyEl = document.getElementById('detail-buy');
-  if (p.buy_url) {
-    buyEl.href = p.buy_url;
-    buyEl.textContent = 'Buy at retailer →';
-    buyEl.classList.remove('disabled');
-    buyEl.removeAttribute('aria-disabled');
+  // Affiliate block (hero row + optional variants list + disclosure).
+  // Falls back to a muted "No retailer listings" message so the panel
+  // never shows a dead untracked link (products.url is deliberately
+  // NOT used as a buy link anywhere — it's an untracked manufacturer
+  // page that earns zero commission).
+  var affWrap = document.getElementById('detail-affiliate-wrap');
+  if (window.affiliate) {
+    var block = window.affiliate.renderBlock(p.id);
+    affWrap.innerHTML = block || window.affiliate.renderEmpty();
   } else {
-    buyEl.href = '#';
-    buyEl.textContent = 'Not available online';
-    buyEl.classList.add('disabled');
-    buyEl.setAttribute('aria-disabled', 'true');
+    affWrap.innerHTML = '';
   }
 
   // Favorite button
