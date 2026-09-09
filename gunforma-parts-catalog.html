@@ -123,6 +123,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .spec-block .filter-title { font-size: 10.5px; margin-bottom: 6px; color: #444; }
 .spec-block .filter-option { font-size: 12px; }
 
+/* Sub-model selector strip — appears above the category tabs when exactly
+   one platform is active. "All models" is the default; specific sub-model
+   selection is optional and layers on top of My Setup pin-based fitment. */
+.submodel-strip { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; padding: 10px 12px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; }
+.submodel-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.submodel-chip { font-family: inherit; font-size: 11.5px; font-weight: 700; padding: 6px 12px; border-radius: 20px; border: 0.5px solid #d5d3ca; background: #fff; color: #444; cursor: pointer; letter-spacing: 0.02em; transition: color .15s, background .15s, border-color .15s; }
+.submodel-chip:hover { border-color: #4a9edd; color: #2a7bbd; }
+.submodel-chip.active { background: #4a9edd; color: #fff; border-color: #4a9edd; }
+
+/* Detail-panel compatibility badge — shown when a sub-model is selected
+   and this product is either compatible ✓ or explicitly not ✗. */
+.detail-compat-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; margin-top: 6px; }
+.detail-compat-badge.ok  { background: #eaf5ee; color: #166534; border: 0.5px solid #86cfad; }
+.detail-compat-badge.no  { background: #fde8e2; color: #9b1c1c; border: 0.5px solid #f5b4a1; }
+.detail-compat-badge.na  { background: #fafaf8; color: #888;    border: 0.5px solid #d9d6cc; }
+
 /* Horizontal category selector — primary way to narrow by category, above
    the grid. Single-select (contrast with the sidebar's other multi-select
    filters); the sidebar Category multi-select was removed to avoid two
@@ -276,6 +292,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
          accurate as the underlying product list changes. -->
   </aside>
   <div class="main">
+    <!-- Sub-model selector — only renders when exactly one platform is
+         active (sub-models are platform-specific). Populated from the
+         guns table. -->
+    <div id="sub-model-wrap"></div>
+
     <!-- Category selector — single-select, sits above search/sort so it
          reads as the primary way to slice the catalog. -->
     <div class="cat-tabs" id="cat-tabs"></div>
@@ -320,6 +341,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="detail-brand" id="detail-brand"></div>
       <div class="detail-title" id="detail-title"></div>
       <div id="detail-cat-badge-wrap"></div>
+      <div id="detail-compat-badge-wrap"></div>
     </div>
     <div class="detail-price" id="detail-price"></div>
     <div class="detail-desc" id="detail-desc"></div>
@@ -383,6 +405,14 @@ var FAVORITES = new Set();      // product_ids the signed-in user has favorited
 var SETUP = {};                 // { category: product } — user's owned components; drives fitment-chain filtering
 var LS_SETUP_KEY = 'catalog.mySetup.v1';
 var LS_BANNER_DISMISSED_KEY = 'catalog.fitmentBannerDismissed';  // per-tab; sessionStorage
+
+// Sub-model context — user's specific pistol variant (e.g. P365XL vs
+// P365 vs FUSE). Layered ON TOP of My Setup: sub-model contributes
+// factory-spec constraints (housing_class, barrel_length_in) while SETUP
+// contributes constraints from actual aftermarket parts. Both narrow
+// additively.
+var SELECTED_SUBMODEL = null;   // one row from GUNS, or null
+var LS_SUBMODEL_KEY = 'catalog.subModel.v1';
 // Cross-category compatibility whitelists (populated in loadEverything).
 var BSR_BY_BARREL = {}, BSR_BY_SLIDE = {};
 var MFR_BY_MAGWELL = {}, MFR_BY_FRAME = {};
@@ -459,7 +489,8 @@ async function init() {
   var sess = await sb.auth.getSession();
   CURRENT_USER = sess && sess.data && sess.data.session && sess.data.session.user || null;
   await loadEverything();
-  loadSetupFromStorage();   // must run AFTER PRODUCTS is populated
+  loadSetupFromStorage();      // must run AFTER PRODUCTS is populated
+  loadSubModelFromStorage();   // must run AFTER GUNS is populated
   wireControls();
   // Sync the sort dropdown to whatever's in F.sort (default: 'newest').
   var sortEl = document.getElementById('sort-select');
@@ -651,6 +682,7 @@ function renderFilters() {
     filterGroupHtml('price',     'Price',     priceHtml()) +
     (specsHtml ? filterGroupHtml('specs', 'Specifications', specsHtml) : '');
   attachFilterHandlers();
+  renderSubModelStrip();
   renderCategoryTabs();
   renderSetupStrip();
   renderFitmentBanner();
@@ -659,13 +691,20 @@ function renderFilters() {
 // Horizontal category tabs — single-select. "All" clears the category
 // filter entirely; picking a category clears then adds one entry to
 // F.categories (kept as a Set so no other code has to change shape).
+// Compensators tab is suppressed when the selected sub-model has an
+// integrated comp (no aftermarket comp fits), and if that tab was the
+// current selection we shift it back to All to avoid a dead view.
 function renderCategoryTabs() {
   var el = document.getElementById('cat-tabs');
   if (!el) return;
-  // Categories in the current catalog, sorted by human label.
   var cats = {};
   PRODUCTS.forEach(function (r) { if (r.category) cats[r.category] = true; });
   var list = Object.keys(cats).sort(function (a, b) { return catLabel(a).localeCompare(catLabel(b)); });
+  var hideComp = !!(SELECTED_SUBMODEL && SELECTED_SUBMODEL.integrated_comp);
+  if (hideComp) {
+    list = list.filter(function (c) { return c !== 'compensator'; });
+    if (F.categories.has('compensator')) F.categories.delete('compensator');
+  }
   var activeCat = F.categories.size === 1 ? Array.from(F.categories)[0] : null;
   var buttons = ['<button type="button" class="cat-tab' + (activeCat == null ? ' active' : '') + '" data-cat="__all">All</button>']
     .concat(list.map(function (c) {
@@ -683,6 +722,68 @@ function renderCategoryTabs() {
 }
 
 // ─── SETUP / FITMENT ──────────────────────────────────────
+// ─── SUB-MODEL ────────────────────────────────────────────
+function loadSubModelFromStorage() {
+  try {
+    var id = localStorage.getItem(LS_SUBMODEL_KEY);
+    if (!id) return;
+    var g = GUNS.find(function (x) { return x.id === id; });
+    if (g) SELECTED_SUBMODEL = g;
+  } catch (_) {}
+}
+function saveSubModelToStorage() {
+  try {
+    if (SELECTED_SUBMODEL) localStorage.setItem(LS_SUBMODEL_KEY, SELECTED_SUBMODEL.id);
+    else                   localStorage.removeItem(LS_SUBMODEL_KEY);
+  } catch (_) {}
+}
+function setSubModel(gunOrNull) {
+  SELECTED_SUBMODEL = gunOrNull || null;
+  saveSubModelToStorage();
+  // Show the fitment banner again — user just changed the constraint,
+  // needs to see WHY the grid changed.
+  try { sessionStorage.removeItem(LS_BANNER_DISMISSED_KEY); } catch (_) {}
+  renderFilters();
+  applyFiltersAndRender();
+}
+
+// Render the sub-model strip. Silent when zero or multiple platforms are
+// active — sub-models are platform-scoped and ambiguous otherwise. Also
+// clears a stale SELECTED_SUBMODEL if its platform is no longer active.
+function renderSubModelStrip() {
+  var wrap = document.getElementById('sub-model-wrap');
+  if (!wrap) return;
+  if (F.platforms.size !== 1) {
+    // Multi-platform or no-platform view: drop any stale sub-model to
+    // avoid an invisible constraint on the grid.
+    if (SELECTED_SUBMODEL) { SELECTED_SUBMODEL = null; saveSubModelToStorage(); }
+    wrap.innerHTML = '';
+    return;
+  }
+  var pid = Array.from(F.platforms)[0];
+  var platform = PLATFORMS_BY_ID[pid];
+  var models = GUNS.filter(function (g) { return g.platform_id === pid; })
+                   .sort(function (a, b) { return String(a.name).localeCompare(String(b.name)); });
+  if (!models.length) { wrap.innerHTML = ''; return; }
+  // If a sub-model is set but its platform no longer matches, clear it.
+  if (SELECTED_SUBMODEL && SELECTED_SUBMODEL.platform_id !== pid) {
+    SELECTED_SUBMODEL = null; saveSubModelToStorage();
+  }
+  var activeId = SELECTED_SUBMODEL ? SELECTED_SUBMODEL.id : null;
+  var chips = ['<button type="button" class="submodel-chip' + (activeId == null ? ' active' : '') + '" data-submodel="__all">All ' + esc(platform ? platform.name : 'platform') + ' models</button>']
+    .concat(models.map(function (g) {
+      return '<button type="button" class="submodel-chip' + (activeId === g.id ? ' active' : '') + '" data-submodel="' + escAttr(g.id) + '">' + esc(g.name) + '</button>';
+    }));
+  wrap.innerHTML = '<div class="submodel-strip"><span class="submodel-label">Sub-model</span>' + chips.join('') + '</div>';
+  wrap.querySelectorAll('[data-submodel]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.getAttribute('data-submodel');
+      if (id === '__all') setSubModel(null);
+      else                setSubModel(GUNS.find(function (g) { return g.id === id; }) || null);
+    });
+  });
+}
+
 function loadSetupFromStorage() {
   try {
     var raw = localStorage.getItem(LS_SETUP_KEY);
@@ -757,6 +858,15 @@ function slideOk(slide, sel) {
     if (!barrelFitsSlide(sel.barrel, slide)) return false;
   }
   if (sel.compensator && slide.slide_specs && slide.slide_specs.integrated_comp) return false;
+  // Sub-model constraints: OEM barrel + slide dimensions must match.
+  // Slides missing the spec fail closed (safer to hide than lie).
+  if (SELECTED_SUBMODEL) {
+    var s = slide.slide_specs;
+    if (SELECTED_SUBMODEL.barrel_length_in != null && s && s.barrel_length_in != null &&
+        s.barrel_length_in !== SELECTED_SUBMODEL.barrel_length_in) return false;
+    if (SELECTED_SUBMODEL.slide_length_in != null && s && s.slide_length_in != null &&
+        s.slide_length_in !== SELECTED_SUBMODEL.slide_length_in) return false;
+  }
   return true;
 }
 function barrelOk(barrel, sel) {
@@ -772,6 +882,9 @@ function barrelOk(barrel, sel) {
     if (c.requires_threaded_barrel && !c.comes_with_barrel && !isThreadedBarrelType(bt)) return false;
     if (c.thread_pitch && barrel.barrel_specs && barrel.barrel_specs.thread_pitch !== c.thread_pitch) return false;
   }
+  if (SELECTED_SUBMODEL && SELECTED_SUBMODEL.barrel_length_in != null &&
+      barrel.barrel_specs && barrel.barrel_specs.barrel_length_in != null &&
+      barrel.barrel_specs.barrel_length_in !== SELECTED_SUBMODEL.barrel_length_in) return false;
   return true;
 }
 function compensatorOk(comp, sel) {
@@ -786,12 +899,53 @@ function compensatorOk(comp, sel) {
   return true;
 }
 function frameOk(frame, sel) {
-  // A gun/sub-model selector isn't in the catalog UX yet — the housing_class
-  // check against a target gun is deferred. Once we add sub-model UI here,
-  // pull STATE.targetGun in and reinstate the check.
   if (sel.magwell) {
     var wl = MFR_BY_MAGWELL[sel.magwell.id] || [];
     if (!wl.length || !wl.some(function (r) { return r.frame_product_id === frame.id; })) return false;
+  }
+  // Sub-model constraint: housing_class must match. Frames without a
+  // spec fail closed — frames are one of the most fitment-critical
+  // categories, so a missing spec is treated as unknown-not-safe.
+  if (SELECTED_SUBMODEL && SELECTED_SUBMODEL.housing_class) {
+    var fs = frame.frame_specs;
+    if (!fs || fs.housing_class !== SELECTED_SUBMODEL.housing_class) return false;
+  }
+  return true;
+}
+function compensatorOkSubmodel(comp) {
+  // Standalone: sub-model with integrated_comp rejects every compensator,
+  // regardless of pinned setup. Called from matchesFitment's compensator
+  // arm and used to hide the Compensators tab entirely.
+  if (SELECTED_SUBMODEL && SELECTED_SUBMODEL.integrated_comp) return false;
+  return true;
+}
+
+// SETUP-free sub-model compat check for the detail-panel badge. Runs the
+// same dimensional rules used inside slideOk/barrelOk/frameOk but without
+// any of the SETUP-based constraints — the badge is a "does this fit my
+// gun" answer, not "does this fit my gun given every other choice I've
+// made", so it stays legible when SETUP is empty and doesn't change
+// as pins come and go.
+function subModelCompat(product, gun) {
+  if (!gun) return true;
+  var cat = product.category;
+  if (cat === 'compensator') return !gun.integrated_comp;
+  if (cat === 'frame') {
+    if (!gun.housing_class) return true;
+    var fs = product.frame_specs;
+    return !!(fs && fs.housing_class === gun.housing_class);
+  }
+  if (cat === 'slide') {
+    var s = product.slide_specs;
+    if (gun.barrel_length_in != null && s && s.barrel_length_in != null && s.barrel_length_in !== gun.barrel_length_in) return false;
+    if (gun.slide_length_in  != null && s && s.slide_length_in  != null && s.slide_length_in  !== gun.slide_length_in)  return false;
+    return true;
+  }
+  if (cat === 'barrel') {
+    if (gun.barrel_length_in == null) return true;
+    var b = product.barrel_specs;
+    if (!b || b.barrel_length_in == null) return true;
+    return b.barrel_length_in === gun.barrel_length_in;
   }
   return true;
 }
@@ -811,7 +965,7 @@ function matchesFitment(r) {
   switch (r.category) {
     case 'slide':       return slideOk(r, SETUP);
     case 'barrel':      return barrelOk(r, SETUP);
-    case 'compensator': return compensatorOk(r, SETUP);
+    case 'compensator': return compensatorOkSubmodel(r) && compensatorOk(r, SETUP);
     case 'frame':       return frameOk(r, SETUP);
     case 'magwell':     return magwellOk(r, SETUP);
     default:            return true;
@@ -884,18 +1038,37 @@ function renderFitmentBanner() {
   if (!wrap) return;
   if (F.categories.size !== 1) { wrap.innerHTML = ''; return; }
   var viewCat = Array.from(F.categories)[0];
+
+  // Integrated-comp trump card: if the sub-model has integrated_comp and
+  // the user is viewing Compensators (which shouldn't be possible via the
+  // tabs, but might be via URL restore), explain the empty grid.
+  var intCompMsg = null;
+  if (viewCat === 'compensator' && SELECTED_SUBMODEL && SELECTED_SUBMODEL.integrated_comp) {
+    intCompMsg = 'The <strong>' + esc(SELECTED_SUBMODEL.name) + '</strong> has an integrated compensator — no aftermarket comp will fit.';
+  }
+
+  // Sub-model always adds its own constraint on frame/slide/barrel views
+  // even without any pinned Setup component.
+  var subModelAffects = SELECTED_SUBMODEL && ['frame','slide','barrel','compensator'].indexOf(viewCat) !== -1;
   var affectors = fitmentAffectorsFor(viewCat);
-  if (!affectors.length) { wrap.innerHTML = ''; return; }
+  if (!intCompMsg && !subModelAffects && !affectors.length) { wrap.innerHTML = ''; return; }
   var dismissed = false;
   try { dismissed = sessionStorage.getItem(LS_BANNER_DISMISSED_KEY) === '1'; } catch (_) {}
   if (dismissed) { wrap.innerHTML = ''; return; }
-  var names = affectors.map(function (a) {
-    return '<strong>' + esc(a.src.brand + ' ' + a.src.name) + '</strong> (' + esc(catLabel(a.srcCat).toLowerCase()) + ')';
-  }).join(', ');
+
+  var parts = [];
+  if (subModelAffects) parts.push('your <strong>' + esc(SELECTED_SUBMODEL.name) + '</strong>');
+  affectors.forEach(function (a) {
+    parts.push('your <strong>' + esc(a.src.brand + ' ' + a.src.name) + '</strong> (' + esc(catLabel(a.srcCat).toLowerCase()) + ')');
+  });
+  var body = intCompMsg
+    ? intCompMsg
+    : ('Showing ' + esc(catLabel(viewCat).toLowerCase()) + ' compatible with ' + parts.join(' + ') + '.');
+
   wrap.innerHTML =
     '<div class="fitment-banner">' +
       '<span class="fitment-banner-icon">ℹ</span>' +
-      '<div class="fitment-banner-body">Showing ' + esc(catLabel(viewCat).toLowerCase()) + ' compatible with your ' + names + '.</div>' +
+      '<div class="fitment-banner-body">' + body + '</div>' +
       '<button type="button" class="fitment-banner-close" id="fitment-banner-dismiss" aria-label="Dismiss">×</button>' +
     '</div>';
   document.getElementById('fitment-banner-dismiss').addEventListener('click', function () {
@@ -1316,6 +1489,27 @@ function renderDetail(p) {
   document.getElementById('detail-title').textContent = p.name;
   document.getElementById('detail-cat-badge-wrap').innerHTML = p.category
     ? '<div class="detail-cat-badge">' + esc(catLabel(p.category)) + '</div>' : '';
+
+  // Sub-model compat badge — only rendered when a sub-model is selected.
+  // Recomputes the fitment rules against SELECTED_SUBMODEL in isolation
+  // (SETUP is deliberately ignored here — this badge answers "does this
+  // fit MY GUN", not "does this fit my gun + all my other parts").
+  var compatWrap = document.getElementById('detail-compat-badge-wrap');
+  if (SELECTED_SUBMODEL) {
+    var applies = ['frame','slide','barrel','compensator'].indexOf(p.category) !== -1;
+    if (applies) {
+      var ok = subModelCompat(p, SELECTED_SUBMODEL);
+      compatWrap.innerHTML = ok
+        ? '<div class="detail-compat-badge ok">✓ Compatible with ' + esc(SELECTED_SUBMODEL.name) + '</div>'
+        : '<div class="detail-compat-badge no">✗ May not fit '   + esc(SELECTED_SUBMODEL.name) + '</div>';
+    } else {
+      // Universal-fit categories (trigger, optic, light, small parts) —
+      // sub-model doesn't rule on them.
+      compatWrap.innerHTML = '<div class="detail-compat-badge na">Universal fit — no ' + esc(SELECTED_SUBMODEL.name) + ' constraint</div>';
+    }
+  } else {
+    compatWrap.innerHTML = '';
+  }
   var priceEl = document.getElementById('detail-price');
   if (p.price != null) { priceEl.textContent = '$' + p.price.toFixed(p.price < 100 ? 2 : 0); priceEl.classList.remove('na'); }
   else                  { priceEl.textContent = 'Price N/A';                                  priceEl.classList.add('na'); }
