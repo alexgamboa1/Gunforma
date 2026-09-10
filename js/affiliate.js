@@ -139,7 +139,12 @@
   // Shared hero-row markup used by both renderHero and renderBlock. Uses
   // the .part-affiliate* classes that build-detail already ships — pages
   // adopting this module inherit build-detail's visual treatment.
-  function heroRowHtml(aff) {
+  //
+  // opts.compact (renderHero on grid cards): drops the "at Partner" text
+  // and the in-stock badge, since the partner name is already in the CTA
+  // label and stock lives in the detail view. Keeps price + Buy button.
+  function heroRowHtml(aff, opts) {
+    opts = opts || {};
     var hero = aff.hero;
     var multi = aff.listings.length > 1;
     var priceHtml;
@@ -153,17 +158,23 @@
     } else {
       priceHtml = '<span class="part-affiliate-price">See price</span>';
     }
-    var stockHtml = aff.anyInStock
-      ? '<span class="part-affiliate-stock in">In stock</span>'
-      : (aff.listings.every(function (l) { return l.in_stock === false; })
-          ? '<span class="part-affiliate-stock out">Out of stock</span>'
-          : '');
-    var partnerHtml = hero.partnerName
-      ? '<span class="part-affiliate-partner">at <strong>' + esc(hero.partnerName) + '</strong>' + stockHtml + '</span>'
-      : (stockHtml ? '<span class="part-affiliate-partner">' + stockHtml + '</span>' : '');
+    var infoHtml;
+    if (opts.compact) {
+      infoHtml = priceHtml;
+    } else {
+      var stockHtml = aff.anyInStock
+        ? '<span class="part-affiliate-stock in">In stock</span>'
+        : (aff.listings.every(function (l) { return l.in_stock === false; })
+            ? '<span class="part-affiliate-stock out">Out of stock</span>'
+            : '');
+      var partnerHtml = hero.partnerName
+        ? '<span class="part-affiliate-partner">at <strong>' + esc(hero.partnerName) + '</strong>' + stockHtml + '</span>'
+        : (stockHtml ? '<span class="part-affiliate-partner">' + stockHtml + '</span>' : '');
+      infoHtml = priceHtml + partnerHtml;
+    }
     var btnLabel = hero.partnerName ? 'Buy at ' + esc(hero.partnerName) + ' ↗' : 'View listing ↗';
     return '<div class="part-affiliate">' +
-        '<div class="part-affiliate-info">' + priceHtml + partnerHtml + '</div>' +
+        '<div class="part-affiliate-info">' + infoHtml + '</div>' +
         '<a class="part-affiliate-btn" href="' + esc(hero.url) + '" target="_blank" rel="noopener sponsored nofollow">' + btnLabel + '</a>' +
       '</div>';
   }
@@ -171,7 +182,10 @@
   function renderHero(productId) {
     var aff = get(productId);
     if (!aff || !aff.hero) return '';
-    return heroRowHtml(aff);
+    // Inline styles so the hint renders consistently on every consuming
+    // page without requiring each host to define a shared class.
+    var hint = '<div class="part-affiliate-hint" style="font-size:10px;color:#a8a5a0;padding:6px 4px 0;text-align:center;font-style:italic;">Click for more details</div>';
+    return heroRowHtml(aff, { compact: true }) + hint;
   }
 
   function renderBlock(productId) {
