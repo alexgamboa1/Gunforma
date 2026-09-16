@@ -316,7 +316,7 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))')
+    .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))')
     .in('product_id', refIds);
 
   if (error) { console.error('loadAffiliates', error); return; }
@@ -343,6 +343,7 @@ async function loadAffiliates(build) {
         variantId:   v.id,
         axes:        axes,
         customLabel: v.variant_label,
+        category:    v.products ? v.products.category : null,
         isDefault:   !!v.is_default,
         url:         l.affiliate_url || l.url,
         price:       l.street_price != null ? Number(l.street_price) : null,
@@ -413,11 +414,16 @@ function extractVariantAxes(v) {
 
 // An axis is "active" for a product only if at least two of its listings
 // disagree on it — an axis every variant shares carries no information for
-// the shopper and just clutters the header + rows.
+// the shopper and just clutters the header + rows. Exception: reticle on
+// optics always shows — it's key purchase info even when every variant
+// shares it.
 function computeActiveAxes(listings) {
+  var isOptic = listings.some(function(l) { return l.category === 'optic'; });
   return VARIANT_AXES.filter(function(axis) {
     var seen = new Set();
     listings.forEach(function(l) { seen.add(l.axes[axis.key]); });
+    if (axis.key === 'reticle' && isOptic &&
+        listings.some(function(l) { return l.axes.reticle; })) return true;
     return seen.size > 1;
   });
 }

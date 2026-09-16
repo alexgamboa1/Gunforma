@@ -48,10 +48,15 @@
                            : null,
     };
   }
+  // An axis shows only when listings disagree on it — except reticle on
+  // optics, which is key purchase info even when every variant shares it.
   function computeActiveAxes(listings) {
+    var isOptic = listings.some(function (l) { return l.category === 'optic'; });
     return VARIANT_AXES.filter(function (axis) {
       var seen = new Set();
       listings.forEach(function (l) { seen.add(l.axes[axis.key]); });
+      if (axis.key === 'reticle' && isOptic &&
+          listings.some(function (l) { return l.axes.reticle; })) return true;
       return seen.size > 1;
     });
   }
@@ -86,8 +91,9 @@
     if (!ids.length) return;
 
     var res = await sb.from('product_variants')
-      .select('id, product_id, variant_label, reticle, reticle_color, color, finish,optic_cut, bundle, clamp, ' +
+      .select('id, product_id, variant_label, reticle, reticle_color, color, finish, optic_cut, bundle, clamp, ' +
               'manual_safety_variant, is_default, primary_image_url, ' +
+              'products!product_variants_product_id_fkey(category), ' +
               'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, partners(name))')
       .in('product_id', ids);
     if (res.error) { console.error('[affiliate] load failed', res.error); return; }
@@ -104,6 +110,7 @@
           variantId:   v.id,
           axes:        axes,
           customLabel: v.variant_label,
+          category:    v.products ? v.products.category : null,
           isDefault:   !!v.is_default,
           url:         l.affiliate_url || l.url,
           price:       l.street_price != null ? Number(l.street_price) : null,
