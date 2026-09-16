@@ -70,8 +70,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .existing-photos-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
 .existing-photos-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .existing-photo { position: relative; aspect-ratio: 1/1; border-radius: 6px; overflow: hidden; background: #f4f3ee; border: 0.5px solid #e5e5e5; }
-.existing-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.existing-photo-hero { position: absolute; top: 4px; left: 4px; background: #f9b860; color: #4a3c14; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.1em; text-transform: uppercase; }
+.existing-photo img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.15s; }
+.existing-photo-hero { position: absolute; top: 4px; left: 4px; background: #f9b860; color: #4a3c14; font-size: 8.5px; font-weight: 700; padding: 2px 6px; border-radius: 3px; letter-spacing: 0.1em; text-transform: uppercase; z-index: 2; }
+.existing-photo-del { position: absolute; top: 4px; right: 4px; z-index: 3; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(0,0,0,0.55); color: #fff; font-size: 13px; font-weight: 700; line-height: 1; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; padding: 0; transition: background 0.15s; }
+.existing-photo-del:hover { background: #c25d3a; }
+.existing-photo.marked img { opacity: 0.35; }
+.existing-photo.marked::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top right, transparent calc(50% - 1px), #c25d3a calc(50% - 1px), #c25d3a calc(50% + 1px), transparent calc(50% + 1px)); pointer-events: none; z-index: 1; }
+.existing-photo.marked .existing-photo-del { background: #c25d3a; }
+.existing-photo.marked .existing-photo-del::before { content: '↺'; }
+.existing-photo.marked .existing-photo-del-x { display: none; }
 .existing-photos-hint { font-size: 10.5px; color: #888; margin-top: 6px; }
 .photo-slot { background: #fafaf8; border: 1px dashed #d9d6cc; border-radius: 6px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.15s; text-align: center; padding: 8px; position: relative; overflow: hidden; }
 .photo-slot:hover { border-color: #4a9edd; background: #f0f6fc; }
@@ -631,13 +638,17 @@ const editState = {
   previousStatus: null,   // 'draft' | 'rejected'
   existingPhotos: [],     // rows from build_photos, sorted by position
   nextPosition: 1,        // for new photo inserts
+  markedForDeletion: new Set(),  // build_photos.id values the user X'd out
 };
 
 function photoCount() {
   const staged = Object.values(state.photos).filter(function(p) { return p && !p.uploading; }).length;
   // In edit mode the existing photos count toward the "at least one photo"
-  // gate — the user shouldn't be forced to re-upload just to resubmit.
-  return staged + (editState.active ? editState.existingPhotos.length : 0);
+  // gate, minus any the user has X'd out. Same submit-button gate as the
+  // new-build flow (renderSidebar disables publish when this hits 0).
+  if (!editState.active) return staged;
+  const kept = editState.existingPhotos.filter(function(p) { return !editState.markedForDeletion.has(p.id); }).length;
+  return staged + kept;
 }
 
 // ===== STEP 1 =====
@@ -1745,7 +1756,22 @@ async function submitBuild(status) {
 // columns are frozen server-side by prevent_build_consent_tampering, and
 // edit_history is owned by the DB (only admins can write it directly;
 // stamp_build_review appends the resubmit entry on rejected -> pending).
+//
+// Ordering matters: builds UPDATE first (so a rejected row flips to
+// pending, which the build_photos DELETE/INSERT RLS both require), then
+// deletes, then hero promotion, then inserts. The 4-photo trigger cap is
+// checked BEFORE any writes so we don't leave the row half-updated.
 async function submitBuildEdit(status) {
+  const staged = Object.keys(state.photos)
+    .filter(function(slot) { return state.photos[slot] && !state.photos[slot].uploading; })
+    .map(function(slot) { return { slot: slot, entry: state.photos[slot] }; });
+
+  const survivors = editState.existingPhotos.filter(function(p) { return !editState.markedForDeletion.has(p.id); });
+  const total = survivors.length + staged.length;
+  if (total > 4) {
+    return { error: { message: 'A build can have at most 4 photos — delete one before adding more.' } };
+  }
+
   const payload = {
     platform_id: state.platform.id,
     name: state.name.trim(),
@@ -1762,20 +1788,58 @@ async function submitBuildEdit(status) {
     .eq('user_id', currentUser.id);   // belt-and-suspenders on top of RLS
   if (error) return { error: error };
 
-  const newPhotoRows = Object.keys(state.photos)
-    .filter(function(slot) { return state.photos[slot] && !state.photos[slot].uploading; })
-    .map(function(slot, i) {
-      return {
-        build_id: editState.buildId,
-        user_id: currentUser.id,
-        storage_path: state.photos[slot].path,
-        thumb_path: state.photos[slot].thumbPath,
-        // Existing photos keep their hero. New photos added during edit
-        // are always gallery — the spec is keep-all-plus-add, not swap.
-        is_hero: false,
-        position: editState.nextPosition + i,
-      };
+  // Delete rows first, then storage. build_photos DELETE RLS requires the
+  // parent build's status to be draft/pending — the UPDATE above already
+  // flipped a rejected build over.
+  const toDelete = editState.existingPhotos.filter(function(p) { return editState.markedForDeletion.has(p.id); });
+  if (toDelete.length) {
+    const ids = toDelete.map(function(p) { return p.id; });
+    const { error: delRowErr } = await sb.from('build_photos').delete().in('id', ids);
+    if (delRowErr) return { error: delRowErr, buildId: editState.buildId };
+
+    const paths = [];
+    toDelete.forEach(function(p) {
+      if (p.storage_path) paths.push(p.storage_path);
+      if (p.thumb_path)   paths.push(p.thumb_path);
     });
+    if (paths.length) {
+      // Best-effort — bucket RLS lets the owner delete their own folder,
+      // but a stray failure here shouldn't roll back the row delete the
+      // user just confirmed. Orphaned bytes are cheaper than blocking a
+      // resubmit on transient storage weirdness.
+      const { error: delStorageErr } = await sb.storage.from('build-photos').remove(paths);
+      if (delStorageErr) console.warn('storage delete failed:', delStorageErr);
+    }
+  }
+
+  // Hero promotion. If the current hero survived, nothing to do. Otherwise
+  // pick the earliest surviving existing photo by position; if none, mark
+  // the first newly-added photo as hero at insert time (see below).
+  const heroSurvived = survivors.some(function(p) { return p.is_hero; });
+  let promoteNewFirst = false;
+  if (!heroSurvived) {
+    if (survivors.length) {
+      const promo = survivors.slice().sort(function(a,b){ return (a.position||0) - (b.position||0); })[0];
+      const { error: heroErr } = await sb.from('build_photos').update({ is_hero: true }).eq('id', promo.id);
+      if (heroErr) return { error: heroErr, buildId: editState.buildId };
+    } else if (staged.length) {
+      promoteNewFirst = true;
+    }
+    // If survivors and staged are both empty the total-photos gate above
+    // would have refused (0 photos), so we can't reach a no-hero state
+    // that also has photos.
+  }
+
+  const newPhotoRows = staged.map(function(s, i) {
+    return {
+      build_id: editState.buildId,
+      user_id: currentUser.id,
+      storage_path: s.entry.path,
+      thumb_path: s.entry.thumbPath,
+      is_hero: promoteNewFirst && i === 0,
+      position: editState.nextPosition + i,
+    };
+  });
 
   if (newPhotoRows.length) {
     const { error: photoErr } = await sb.from('build_photos').insert(newPhotoRows);
@@ -1801,7 +1865,7 @@ async function publishBuild() {
     console.error(result.error);
     btn.disabled = false;
     btn.textContent = originalLabel;
-    showToast('Something went wrong — try again');
+    showToast(result.error.message || 'Something went wrong — try again');
     return;
   }
 
@@ -1847,7 +1911,7 @@ async function saveDraft() {
   const result = await submitBuild('draft');
   if (result.error) {
     console.error(result.error);
-    showToast('Something went wrong — try again');
+    showToast(result.error.message || 'Something went wrong — try again');
     return;
   }
   showToast('Draft saved');
@@ -2061,12 +2125,24 @@ function renderExistingPhotos() {
   const storageBase = SUPABASE_URL + '/storage/v1/object/public/build-photos/';
   grid.innerHTML = editState.existingPhotos.map(function(p) {
     const src = storageBase + encodeURI(p.thumb_path || p.storage_path);
-    return '<div class="existing-photo">'+
+    const marked = editState.markedForDeletion.has(p.id);
+    const label = marked ? 'Undo delete' : 'Delete photo';
+    return '<div class="existing-photo'+(marked ? ' marked' : '')+'" data-photo-id="'+p.id+'">'+
       (p.is_hero ? '<div class="existing-photo-hero">★ Main</div>' : '')+
       '<img src="'+src+'" alt="" loading="lazy" />'+
+      '<button type="button" class="existing-photo-del" aria-label="'+label+'" title="'+label+'" onclick="toggleExistingPhotoDelete(\''+p.id+'\')">'+
+        '<span class="existing-photo-del-x">×</span>'+
+      '</button>'+
       '</div>';
   }).join('');
   wrap.classList.add('show');
+}
+
+function toggleExistingPhotoDelete(photoId) {
+  if (editState.markedForDeletion.has(photoId)) editState.markedForDeletion.delete(photoId);
+  else editState.markedForDeletion.add(photoId);
+  renderExistingPhotos();
+  renderSidebar();   // photoCount changed -> re-evaluate the submit gate
 }
 
 (async function init() {
