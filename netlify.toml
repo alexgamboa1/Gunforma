@@ -1,3 +1,23 @@
+[functions]
+  directory = "netlify/functions"
+
+# profile-og server-renders OG meta into the profile page, so it needs the
+# page itself available at runtime.
+[functions."profile-og"]
+  included_files = ["gunforma-profile.html"]
+
+# Shareable profile URLs. status = 200 is a rewrite, not a redirect — the
+# address bar keeps /u/:username, which is what the canonical tag points at.
+[[redirects]]
+  from = "/u/:username"
+  to = "/.netlify/functions/profile-og?username=:username"
+  status = 200
+
+[[redirects]]
+  from = "/u/:username/"
+  to = "/.netlify/functions/profile-og?username=:username"
+  status = 200
+
 [[redirects]]
   from = "/field-notes"
   to = "/field-notes.html"

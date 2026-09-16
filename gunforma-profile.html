@@ -154,9 +154,9 @@ const SB_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 
 sb.auth.onAuthStateChange(function(event, session) {
   if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
-    // Only bounce off the *private* dashboard — a public ?u= view should
-    // survive someone else's session hiccups.
-    if (!new URLSearchParams(location.search).get('u')) window.location.href = 'gunforma-signin.html';
+    // Only bounce off the *private* dashboard — a public /u/<username> or
+    // ?u= view should survive someone else's session hiccups.
+    if (!viewedUsername()) window.location.href = 'gunforma-signin.html';
   }
 });
 
@@ -181,6 +181,16 @@ let MY_BUILDS = [];
 let SAVED_BUILDS = [];
 let FAVORITE_PARTS = [];
 
+// Which profile is being viewed. /u/<username> is the canonical public URL
+// (rewritten to the profile-og function, which injects OG meta and serves
+// this same page); ?u=<username> is still honored so older links keep working.
+// Neither present = the signed-in user's own private dashboard.
+function viewedUsername() {
+  const m = location.pathname.match(/^\/u\/([^/]+)\/?$/);
+  if (m) return decodeURIComponent(m[1]);
+  return new URLSearchParams(location.search).get('u');
+}
+
 // ============================================================
 // BOOTSTRAP — nav.js owns the nav (username, sign-out, auth-state
 // refresh); this page only needs the session to decide whether it's
@@ -190,7 +200,7 @@ async function init() {
   const { data: sess } = await sb.auth.getSession();
   CURRENT_USER = (sess && sess.session && sess.session.user) || null;
 
-  const qsUsername = new URLSearchParams(location.search).get('u');
+  const qsUsername = viewedUsername();
   IS_OWN_PROFILE = !qsUsername;
 
   if (IS_OWN_PROFILE && !CURRENT_USER) {
