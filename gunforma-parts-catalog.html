@@ -63,6 +63,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .filter-option input { accent-color: #4a9edd; cursor: pointer; margin: 0; }
 .filter-option .filter-option-count { margin-left: auto; font-size: 10.5px; color: #999; }
 .filter-note { font-size: 10.5px; color: #999; margin-top: 6px; line-height: 1.5; }
+.filter-search { width: 100%; box-sizing: border-box; font-family: inherit; font-size: 11.5px; padding: 6px 8px; border: 0.5px solid #e5e5e5; border-radius: 4px; background: #fafaf8; color: #333; margin-bottom: 8px; }
+.filter-search:focus { outline: none; border-color: #4a9edd; background: #fff; }
+.filter-search::placeholder { color: #b0aea6; }
+.filter-list { max-height: 240px; overflow-y: auto; padding-right: 4px; }
+.filter-list::-webkit-scrollbar { width: 6px; }
+.filter-list::-webkit-scrollbar-thumb { background: #d9d6cc; border-radius: 3px; }
 
 .price-range { display: flex; align-items: center; gap: 6px; }
 .price-range input { width: 100%; min-width: 0; font-family: inherit; font-size: 12.5px; padding: 6px 8px; border: 0.5px solid #e5e5e5; border-radius: 4px; }
@@ -697,6 +703,7 @@ function clearAllFilters() {
   F.platforms.clear(); F.categories.clear(); F.brands.clear();
   F.priceMin = null; F.priceMax = null; F.search = '';
   F.specs = {};
+  FILTER_SEARCH_STATE = {};
   document.getElementById('search').value = '';
   renderFilters();
   applyFiltersAndRender();
@@ -1139,12 +1146,27 @@ function renderFitmentBanner() {
 function filterGroupHtml(id, title, body) {
   return '<div class="filter-group" id="fg-' + id + '">' +
     '<div class="filter-title">' + title + '</div>' +
-    body +
+    wrapOptionsListIfLong(title, body) +
   '</div>';
 }
 
+// When a group has more than 10 checkbox options, prepend a search input
+// and cap the list at ~240px so long lists (Brand, Color, etc.) stay
+// compact inside the sidebar's own scroll. Detection is based on the
+// number of .filter-option elements in the body HTML.
+function wrapOptionsListIfLong(title, body) {
+  // Count only the <label class="filter-option"> option rows — the trailing
+  // `"` character disambiguates against .filter-option-count spans inside
+  // each option.
+  var count = (body.match(/class="filter-option"/g) || []).length;
+  if (count <= 10) return body;
+  var ph = 'Search ' + String(title).toLowerCase() + '...';
+  return '<input type="text" class="filter-search" placeholder="' + escAttr(ph) + '" aria-label="' + escAttr(ph) + '"/>' +
+    '<div class="filter-list">' + body + '</div>';
+}
+
 function checkboxOption(name, value, label, count, checked) {
-  return '<label class="filter-option">' +
+  return '<label class="filter-option" data-search="' + escAttr(String(label).toLowerCase()) + '">' +
     '<input type="checkbox" name="' + name + '" value="' + escAttr(value) + '"' + (checked ? ' checked' : '') + '/>' +
     '<span>' + esc(label) + '</span>' +
     '<span class="filter-option-count">' + count + '</span>' +
@@ -1366,7 +1388,7 @@ function specsSectionHtml() {
           if (schema.source === 'variant') return actual instanceof Set && actual.has(v);
           return String(actual) === vStr;
         }, '__spec__' + stateKey);
-        return '<label class="filter-option">' +
+        return '<label class="filter-option" data-search="' + escAttr(vStr.toLowerCase()) + '">' +
           '<input type="checkbox" data-spec-composite="' + escAttr(stateKey) + '" data-spec-widget="str" data-spec-val="' + escAttr(vStr) + '"' + (checkedS ? ' checked' : '') + '/>' +
           '<span>' + esc(vStr) + '</span><span class="filter-option-count">' + n + '</span>' +
         '</label>';
@@ -1377,12 +1399,46 @@ function specsSectionHtml() {
     // picked up by matchesSpecFilter mid-render (through optionCount) and
     // crash when it dereferences .values.has on undefined.
     if (state) state.schema = schema;
-    blocks.push('<div class="spec-block" data-spec-block="' + escAttr(stateKey) + '"><div class="filter-title">' + esc(schemaLabel(schema)) + '</div>' + body + '</div>');
+    blocks.push('<div class="spec-block" data-spec-block="' + escAttr(stateKey) + '"><div class="filter-title">' + esc(schemaLabel(schema)) + '</div>' + wrapOptionsListIfLong(schemaLabel(schema), body) + '</div>');
   });
   return blocks.join('');
 }
 
+// Per-group search-input queries, preserved across the full-sidebar
+// re-renders that other filter changes trigger. Keyed by the enclosing
+// .filter-group id or .spec-block data-spec-block, so the value survives
+// even when the DOM nodes don't.
+var FILTER_SEARCH_STATE = {};
+
+function filterSearchKey(el) {
+  var group = el.closest ? el.closest('.filter-group, .spec-block') : null;
+  if (!group) return '';
+  return group.id || group.getAttribute('data-spec-block') || '';
+}
+
+function applyFilterSearch(el) {
+  var q = (el.value || '').toLowerCase();
+  var list = el.nextElementSibling;
+  if (!list || !list.classList.contains('filter-list')) return;
+  list.querySelectorAll('.filter-option').forEach(function (opt) {
+    var lbl = opt.getAttribute('data-search') || '';
+    opt.hidden = q !== '' && lbl.indexOf(q) === -1;
+  });
+}
+
 function attachFilterHandlers() {
+  document.querySelectorAll('#sidebar .filter-search').forEach(function (el) {
+    var key = filterSearchKey(el);
+    if (key && FILTER_SEARCH_STATE[key]) {
+      el.value = FILTER_SEARCH_STATE[key];
+      applyFilterSearch(el);
+    }
+    el.addEventListener('input', function () {
+      if (key) FILTER_SEARCH_STATE[key] = el.value;
+      applyFilterSearch(el);
+    });
+  });
+
   document.querySelectorAll('#sidebar input[type="checkbox"]').forEach(function (el) {
     el.addEventListener('change', function () {
       var group = el.name;    // 'platform' | 'category' | 'brand'
