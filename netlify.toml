@@ -8,14 +8,14 @@
 
 # Shareable profile URLs. status = 200 is a rewrite, not a redirect — the
 # address bar keeps /u/:username, which is what the canonical tag points at.
+#
+# :splat rather than a named :username placeholder — production does not
+# substitute named placeholders into a rewrite target's query string (netlify
+# dev does, which hides it locally). The function also falls back to parsing
+# the path and x-nf-original-path, so routing changes can't silently break it.
 [[redirects]]
-  from = "/u/:username"
-  to = "/.netlify/functions/profile-og?username=:username"
-  status = 200
-
-[[redirects]]
-  from = "/u/:username/"
-  to = "/.netlify/functions/profile-og?username=:username"
+  from = "/u/*"
+  to = "/.netlify/functions/profile-og?username=:splat"
   status = 200
 
 [[redirects]]

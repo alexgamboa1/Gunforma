@@ -106,8 +106,29 @@ function notFound(username) {
   );
 }
 
+// Netlify's production edge does not substitute :username into a rewrite
+// target's query string the way `netlify dev` does — the function gets an
+// empty param and every profile 404s. Rather than depend on one mechanism,
+// read whichever source actually carries it.
+function extractUsername(req) {
+  const url = new URL(req.url);
+
+  const fromQuery = url.searchParams.get('username') || url.searchParams.get('splat');
+  if (fromQuery) return fromQuery;
+
+  const fromPath = url.pathname.match(/^\/u\/([^/]+)\/?$/);
+  if (fromPath) return decodeURIComponent(fromPath[1]);
+
+  // Set by Netlify to the pre-rewrite path.
+  const original = req.headers.get('x-nf-original-path') || '';
+  const fromHeader = original.match(/^\/u\/([^/?#]+)/);
+  if (fromHeader) return decodeURIComponent(fromHeader[1]);
+
+  return '';
+}
+
 export default async (req) => {
-  const requested = new URL(req.url).searchParams.get('username') || '';
+  const requested = extractUsername(req);
 
   if (!USERNAME_RE.test(requested)) return notFound(requested);
 
