@@ -25,8 +25,9 @@
   var AFFILIATE_BY_PRODUCT_ID = {};
 
   var VARIANT_AXES = [
+    { key: 'reticle',               label: 'Reticle'       },
+    { key: 'reticle_color',         label: 'Reticle Color' },
     { key: 'color',                 label: 'Color'         },
-    { key: 'finish',                label: 'Finish'        },
     { key: 'optic_cut',             label: 'Optic Cut'     },
     { key: 'bundle',                label: 'Bundle'        },
     { key: 'clamp',                 label: 'Clamp'         },
@@ -35,6 +36,8 @@
 
   function extractVariantAxes(v) {
     return {
+      reticle:               v.reticle || null,
+      reticle_color:         v.reticle_color || null,
       color:                 v.color || null,
       finish:                v.finish || null,
       optic_cut:             v.optic_cut || null,
@@ -52,7 +55,11 @@
       return seen.size > 1;
     });
   }
-  function formatVariantLabel(axes, activeAxes) {
+  // variant_label is a hand-set override (e.g. "2 MOA Red Dot") for variants
+  // that differ on things the axis columns don't capture. Axis logic is the
+  // fallback; "Standard" is the last resort.
+  function formatVariantLabel(axes, activeAxes, customLabel) {
+    if (typeof customLabel === 'string' && customLabel.trim()) return customLabel.trim();
     if (!activeAxes.length) return 'Standard';
     return activeAxes.map(function (a) {
       var val = axes[a.key];
@@ -79,7 +86,7 @@
     if (!ids.length) return;
 
     var res = await sb.from('product_variants')
-      .select('id, product_id, color, finish, optic_cut, bundle, clamp, ' +
+      .select('id, product_id, variant_label, reticle, reticle_color, color, finish,optic_cut, bundle, clamp, ' +
               'manual_safety_variant, is_default, primary_image_url, ' +
               'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, partners(name))')
       .in('product_id', ids);
@@ -96,6 +103,7 @@
         byProduct[v.product_id].push({
           variantId:   v.id,
           axes:        axes,
+          customLabel: v.variant_label,
           isDefault:   !!v.is_default,
           url:         l.affiliate_url || l.url,
           price:       l.street_price != null ? Number(l.street_price) : null,
@@ -109,7 +117,7 @@
     Object.keys(byProduct).forEach(function (productId) {
       var listings = byProduct[productId];
       var activeAxes = computeActiveAxes(listings);
-      listings.forEach(function (l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes); });
+      listings.forEach(function (l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes, l.customLabel); });
       // Primary listings first, then in-stock, then price ascending (nulls last).
       listings.sort(function (a, b) {
         if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
