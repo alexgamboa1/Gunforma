@@ -42,7 +42,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* LAYOUT — sidebar + main */
 .catalog { max-width: 1400px; margin: 0 auto; padding: 22px 32px 64px; display: grid; grid-template-columns: 240px 1fr; gap: 28px; align-items: start; }
-.sidebar { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 18px; }
+.sidebar { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 18px; max-height: calc(100vh - 72px); overflow-y: auto; padding-right: 6px; }
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-thumb { background: #d9d6cc; border-radius: 3px; }
 .main { display: flex; flex-direction: column; gap: 18px; }
 
 /* SEARCH + META BAR */
@@ -60,9 +62,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .filter-option { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12.5px; color: #333; cursor: pointer; user-select: none; }
 .filter-option input { accent-color: #4a9edd; cursor: pointer; margin: 0; }
 .filter-option .filter-option-count { margin-left: auto; font-size: 10.5px; color: #999; }
-.filter-scroll { max-height: 220px; overflow-y: auto; padding-right: 4px; }
-.filter-scroll::-webkit-scrollbar { width: 6px; }
-.filter-scroll::-webkit-scrollbar-thumb { background: #d9d6cc; border-radius: 3px; }
 .filter-note { font-size: 10.5px; color: #999; margin-top: 6px; line-height: 1.5; }
 
 .price-range { display: flex; align-items: center; gap: 6px; }
@@ -109,10 +108,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* MOBILE */
 @media (max-width: 900px) {
   .catalog { grid-template-columns: 1fr; padding: 18px 16px 48px; gap: 18px; }
-  .sidebar { position: static; }
+  .sidebar { position: static; max-height: none; overflow-y: visible; padding-right: 0; }
   .page-header { padding: 22px 16px 0; }
   .tab-row { padding: 0 16px; }
-  .filter-scroll { max-height: 180px; }
 }
 
 /* Spec-filter groups (nested inside the sidebar). Each spec key is its own
@@ -739,7 +737,7 @@ function renderFilters() {
     // Category filter moved out of the sidebar into the horizontal .cat-tabs
     // strip above the grid — the primary way to slice the catalog. Keeping
     // both was two controls competing for the same job.
-    filterGroupHtml('brand',     'Brand',     brandOptions(), /*scroll*/ true) +
+    filterGroupHtml('brand',     'Brand',     brandOptions()) +
     filterGroupHtml('price',     'Price',     priceHtml()) +
     (specsHtml ? filterGroupHtml('specs', 'Specifications', specsHtml) : '');
   attachFilterHandlers();
@@ -1138,10 +1136,10 @@ function renderFitmentBanner() {
   });
 }
 
-function filterGroupHtml(id, title, body, scroll) {
+function filterGroupHtml(id, title, body) {
   return '<div class="filter-group" id="fg-' + id + '">' +
     '<div class="filter-title">' + title + '</div>' +
-    (scroll ? '<div class="filter-scroll">' + body + '</div>' : body) +
+    body +
   '</div>';
 }
 
