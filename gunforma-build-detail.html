@@ -316,7 +316,7 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))')
+    .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))')
     .in('product_id', refIds);
 
   if (error) { console.error('loadAffiliates', error); return; }
@@ -387,7 +387,9 @@ async function loadAffiliates(build) {
 // Distinguishing axes a product's variants can differ on. Order here is
 // the order columns show in the expanded list header + row values.
 var VARIANT_AXES = [
-  { key: 'color',                 label: 'Color'         },
+  { key: 'reticle',               label: 'Reticle'       },
+  { key: 'reticle_color',         label: 'Reticle Color' },
+  { key: 'color',                label: 'Color'         },
   { key: 'finish',                label: 'Finish'        },
   { key: 'optic_cut',             label: 'Optic Cut'     },
   { key: 'bundle',                label: 'Bundle'        },
@@ -397,6 +399,8 @@ var VARIANT_AXES = [
 
 function extractVariantAxes(v) {
   return {
+    reticle:               v.reticle || null,
+    reticle_color:         v.reticle_color || null,
     color:                 v.color || null,
     finish:                v.finish || null,
     optic_cut:             v.optic_cut || null,

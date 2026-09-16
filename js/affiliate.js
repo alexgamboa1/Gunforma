@@ -25,7 +25,9 @@
   var AFFILIATE_BY_PRODUCT_ID = {};
 
   var VARIANT_AXES = [
-    { key: 'color',                 label: 'Color'         },
+    { key: 'reticle',               label: 'Reticle'       },
+    { key: 'reticle_color',         label: 'Reticle Color' },
+    { key: 'color',                label: 'Color'         },
     { key: 'finish',                label: 'Finish'        },
     { key: 'optic_cut',             label: 'Optic Cut'     },
     { key: 'bundle',                label: 'Bundle'        },
@@ -35,6 +37,8 @@
 
   function extractVariantAxes(v) {
     return {
+      reticle:               v.reticle || null,
+      reticle_color:         v.reticle_color || null,
       color:                 v.color || null,
       finish:                v.finish || null,
       optic_cut:             v.optic_cut || null,
@@ -83,7 +87,7 @@
     if (!ids.length) return;
 
     var res = await sb.from('product_variants')
-      .select('id, product_id, variant_label, color, finish, optic_cut, bundle, clamp, ' +
+      .select('id, product_id, variant_label, reticle, reticle_color, color, finish,optic_cut, bundle, clamp, ' +
               'manual_safety_variant, is_default, primary_image_url, ' +
               'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, partners(name))')
       .in('product_id', ids);
