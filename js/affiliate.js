@@ -27,8 +27,7 @@
   var VARIANT_AXES = [
     { key: 'reticle',               label: 'Reticle'       },
     { key: 'reticle_color',         label: 'Reticle Color' },
-    { key: 'color',                label: 'Color'         },
-    { key: 'finish',                label: 'Finish'        },
+    { key: 'color',                 label: 'Color'         },
     { key: 'optic_cut',             label: 'Optic Cut'     },
     { key: 'bundle',                label: 'Bundle'        },
     { key: 'clamp',                 label: 'Clamp'         },
