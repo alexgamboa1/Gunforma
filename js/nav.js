@@ -50,7 +50,8 @@
     // No "Post your build" CTA (avoids self-links from auth-required flows
     // like post-build-v6 that would blow away in-progress form state) and no
     // "Sign in" link (the page's watchdog guarantees a session). Username
-    // still populated by updateNavAuth below via the same #nav-signin hook.
+    // still populated by updateNavAuth below via the same #nav-signin hook,
+    // which also gives it its href — hence an <a> with no initial href.
     html =
       '<nav class="nav">' +
         '<a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>' +
@@ -61,7 +62,7 @@
           '<a class="nav-link' + activeIf('gunforma-armory.html')        + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
-          '<span class="nav-btn" id="nav-signin">…</span>' +
+          '<a class="nav-btn" id="nav-signin">…</a>' +
         '</div>' +
       '</nav>';
   } else {
@@ -126,8 +127,8 @@ async function updateNavAuth() {
   } catch (e) { /* nav degrades gracefully to email */ }
   var displayName = (profile && profile.username) || user.email || 'Signed in';
   signInEl.textContent = displayName;
-  signInEl.removeAttribute('href');
-  signInEl.style.cursor = 'default';
+  signInEl.setAttribute('href', 'gunforma-profile.html');
+  signInEl.style.cursor = 'pointer';
   signInEl.onclick = null;
 
   // Cleanup must happen HERE, after all awaits — updateNavAuth runs
