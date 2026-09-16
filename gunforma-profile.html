@@ -84,6 +84,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .build-card-name { font-size: 13.5px; font-weight: 700; line-height: 1.25; }
 .build-card-sub { font-size: 11px; color: #888; }
+.build-card-rejection { font-size: 11px; color: #9b1c1c; line-height: 1.4; }
+.build-card-rejection-meta { font-size: 10.5px; color: #b46a5e; }
 .build-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 8px; border-top: 0.5px solid #eee; }
 .build-card-total { font-size: 12px; font-weight: 700; }
 .remove-btn { font-family: inherit; font-size: 10px; color: #a25334; background: #fafaf8; border: 0.5px solid #eec2ae; padding: 4px 9px; border-radius: 20px; cursor: pointer; }
@@ -470,7 +472,7 @@ function renderMiniBuildCard(b) {
 async function loadMyBuilds() {
   const panel = document.getElementById('panel-my-builds');
   let q = sb.from('builds')
-    .select('id,name,status,activities,parts_snapshot,platforms(name),build_photos(storage_path,thumb_path,is_hero)')
+    .select('id,name,status,activities,parts_snapshot,rejection_reason,reviewed_at,platforms(name),build_photos(storage_path,thumb_path,is_hero)')
     .eq('user_id', VIEW_PROFILE.id)
     .order('created_at', { ascending: false });
   if (!IS_OWN_PROFILE) q = q.eq('status', 'approved');
@@ -500,16 +502,40 @@ function renderStatusBuildCard(b) {
   const platform = b.platforms ? b.platforms.name : '';
   const partsCount = Array.isArray(b.parts_snapshot) ? b.parts_snapshot.length : 0;
   const statusLabel = { approved: 'Live', pending: 'In review', draft: 'Draft', rejected: 'Needs changes' }[b.status] || b.status;
-  const clickable = b.status === 'approved';
+  // Draft and rejected are owner-editable; approved routes to the public
+  // detail page; only pending stays locked while the admin queue works it.
+  const editable = b.status === 'draft' || b.status === 'rejected';
+  const clickable = b.status === 'approved' || editable;
+  const rejectionHtml = b.status === 'rejected'
+    ? '<div class="build-card-rejection">'+escH(b.rejection_reason || 'Needs changes — open to edit and resubmit')+'</div>'+
+      '<div class="build-card-rejection-meta">Reviewed '+escH(relTime(b.reviewed_at))+'</div>'
+    : '';
   const inner =
       '<div class="build-card-photo">'+photoHtml+'<div class="status-badge '+escH(b.status)+'">'+escH(statusLabel)+'</div></div>'+
       '<div class="build-card-body">'+
         '<div class="build-card-name">'+escH(b.name)+'</div>'+
+        rejectionHtml+
         '<div class="build-card-sub">'+escH(platform)+' · '+partsCount+' part'+(partsCount!==1?'s':'')+'</div>'+
       '</div>';
+  const href = b.status === 'approved'
+    ? 'gunforma-build-detail.html?id='+encodeURIComponent(b.id)
+    : 'gunforma-post-build-v6.html?id='+encodeURIComponent(b.id)+'&mode=edit';
   return clickable
-    ? '<a class="build-card" href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'">'+inner+'</a>'
+    ? '<a class="build-card" href="'+href+'">'+inner+'</a>'
     : '<div class="build-card disabled">'+inner+'</div>';
+}
+
+// Cheap relative-time formatter for owner-facing "Reviewed X ago" copy.
+function relTime(iso) {
+  if (!iso) return '—';
+  var diffMs = Date.now() - new Date(iso).getTime();
+  var mins = Math.max(0, Math.round(diffMs/60000));
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins + ' min ago';
+  var hrs = Math.round(mins/60);
+  if (hrs < 24)  return hrs + ' hr ago';
+  var days = Math.round(hrs/24);
+  return days + ' day' + (days!==1?'s':'') + ' ago';
 }
 
 // ============================================================
