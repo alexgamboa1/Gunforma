@@ -57,7 +57,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .clear-filters:disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* FILTER GROUPS */
-.filter-group { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 14px 12px; }
+.filter-group { flex-shrink: 0; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 14px 12px; }
 .filter-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1a1a1a; margin-bottom: 10px; }
 .filter-option { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12.5px; color: #333; cursor: pointer; user-select: none; }
 .filter-option input { accent-color: #4a9edd; cursor: pointer; margin: 0; }
@@ -119,13 +119,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .tab-row { padding: 0 16px; }
 }
 
-/* Spec-filter groups (nested inside the sidebar). Each spec key is its own
-   small filter block so the sidebar stays readable when 5+ spec keys are
-   in play for a category. */
-.spec-block { border-top: 0.5px solid #efece3; padding-top: 10px; margin-top: 10px; }
-.spec-block:first-child { border-top: none; padding-top: 0; margin-top: 0; }
-.spec-block .filter-title { font-size: 10.5px; margin-bottom: 6px; color: #444; }
-.spec-block .filter-option { font-size: 12px; }
+/* Spec-filter groups. Each spec key (Color, Finish, ...) renders as its own
+   top-level .filter-group card in the sidebar — same container treatment as
+   Platform/Brand/Price — so adjacent spec groups never visually merge. */
 
 /* Sub-model selector strip — appears above the category tabs when exactly
    one platform is active. "All models" is the default; specific sub-model
@@ -746,7 +742,9 @@ function renderFilters() {
     // both was two controls competing for the same job.
     filterGroupHtml('brand',     'Brand',     brandOptions()) +
     filterGroupHtml('price',     'Price',     priceHtml()) +
-    (specsHtml ? filterGroupHtml('specs', 'Specifications', specsHtml) : '');
+    // Each spec group is already its own .filter-group card — no shared
+    // "Specifications" wrapper, which made the groups run together.
+    specsHtml;
   attachFilterHandlers();
   renderSubModelStrip();
   renderCategoryTabs();
@@ -1399,7 +1397,7 @@ function specsSectionHtml() {
     // picked up by matchesSpecFilter mid-render (through optionCount) and
     // crash when it dereferences .values.has on undefined.
     if (state) state.schema = schema;
-    blocks.push('<div class="spec-block" data-spec-block="' + escAttr(stateKey) + '"><div class="filter-title">' + esc(schemaLabel(schema)) + '</div>' + wrapOptionsListIfLong(schemaLabel(schema), body) + '</div>');
+    blocks.push('<div class="filter-group spec-block" data-spec-block="' + escAttr(stateKey) + '"><div class="filter-title">' + esc(schemaLabel(schema)) + '</div>' + wrapOptionsListIfLong(schemaLabel(schema), body) + '</div>');
   });
   return blocks.join('');
 }
