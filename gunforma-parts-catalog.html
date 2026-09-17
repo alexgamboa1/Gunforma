@@ -561,7 +561,7 @@ async function loadEverything() {
   var productsQ = sb
     .from('products')
     .select(
-      'id, name, description, category, brand_id, url, lowest_price, created_at,' +
+      'id, name, description, category, brand_id, url, lowest_price, created_at, specs,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(' +
@@ -626,6 +626,7 @@ async function loadEverything() {
       name: r.name || '',
       description: r.description || '',
       category: r.category,
+      specs: r.specs || null,
       brand_id: r.brand_id,
       brand: (r.brands && r.brands.name) || 'Unknown',
       price: price,
@@ -1774,6 +1775,17 @@ function detailSpecRows(p) {
                 : (opts.suffix ? String(v) + opts.suffix : String(v));
     out.push({ label: label, value: display });
   }
+  var dv = (p.variants || []).find(function (v) { return v.is_default; }) || (p.variants || [])[0];
+  // Optics: footprint leads — it decides which slide cut / plate the shopper
+  // needs. Prefer products.specs.footprint; fall back to the variant's
+  // optic_cut for optics whose specs JSON isn't filled in yet.
+  if (p.category === 'optic') {
+    var os = p.specs || {};
+    var emitter = os.emitter ? String(os.emitter) : null;
+    push('Footprint', os.footprint || (dv && dv.optic_cut));
+    push('Emitter',   emitter && emitter.charAt(0).toUpperCase() + emitter.slice(1));
+    push('Battery',   os.battery);
+  }
   if (p.slide_specs) {
     push('Optic cut',        p.slide_specs.optic_cut);
     push('Barrel length',    p.slide_specs.barrel_length_in, { suffix: '"' });
@@ -1811,14 +1823,9 @@ function detailSpecRows(p) {
   }
   // Variant-level attributes (default variant, or first available). Only
   // surface fields that actually vary meaningfully across catalog products.
-  var dv = (p.variants || []).find(function (v) { return v.is_default; }) || (p.variants || [])[0];
   if (dv) {
     push('Color',            dv.color);
     push('Finish',           dv.finish);
-    // Optic-cut on variants is meaningful for OPTICS (their footprint);
-    // for slides the cut lives on slide_specs, so this row is
-    // redundant — only render if the product's category is optic.
-    if (p.category === 'optic') push('Footprint', dv.optic_cut);
     push('Manual safety',    dv.manual_safety_variant);
     push('Bundle',           dv.bundle);
     push('SKU',              dv.sku);
