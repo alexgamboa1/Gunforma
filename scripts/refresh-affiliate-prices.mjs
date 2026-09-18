@@ -41,6 +41,7 @@ const SUPABASE_URL     = process.env.SUPABASE_URL || 'https://lagjjcpclvzrjlrswo
 const SERVICE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const DRY_RUN          = process.env.DRY_RUN === 'true';
 const MATCH_RATE_FLOOR = Number(process.env.MATCH_RATE_FLOOR || 0.70);
+const DEBUG_SAMPLES    = Number(process.env.DEBUG_SAMPLES || 0);
 const PARTNER_NAME     = 'OpticsPlanet (Awin)';
 const OP_HOST          = 'opticsplanet.com';
 const CONCURRENCY      = 10;
@@ -72,7 +73,8 @@ function canonicalizeUrl(raw) {
   if (!raw) return null;
   let u;
   try { u = new URL(raw); } catch { return null; }
-  if (!u.hostname.toLowerCase().endsWith(OP_HOST)) return null;
+  const host = u.hostname.toLowerCase().replace(/^www\./, '');
+  if (!host.endsWith(OP_HOST)) return null;
   const kept = new URLSearchParams();
   for (const [k, v] of u.searchParams) {
     if (k.startsWith('_iv_')) kept.append(k, v);
@@ -84,7 +86,7 @@ function canonicalizeUrl(raw) {
   }
   const path = u.pathname.replace(/\/+$/, '');
   const qs   = out.toString();
-  return `${u.hostname.toLowerCase()}${path}${qs ? '?' + qs : ''}`;
+  return `${host}${path}${qs ? '?' + qs : ''}`;
 }
 
 // ─── Supabase PostgREST helpers ─────────────────────────────────────────────
@@ -122,6 +124,7 @@ async function loadExistingRows() {
   );
   const byUrl = new Map();      // canonical URL → [rows]
   const bySku = new Map();      // normalized SKU → row (fallback lookup)
+  const byUpc = new Map();      // normalized UPC → row (fallback lookup)
   for (const r of rows) {
     const canon = canonicalizeUrl(r.url);
     if (!canon) continue;
@@ -129,8 +132,13 @@ async function loadExistingRows() {
     byUrl.get(canon).push(r);
     const sku = normalizeSku(r.product_variants?.sku);
     if (sku) bySku.set(sku, r);
+    const upc = normalizeSku(r.product_variants?.upc);
+    if (upc) byUpc.set(upc, r);
+    // Some sku values are actually UPCs (like "791617481527") — index
+    // those under byUpc too so a feed EAN/UPC hits them.
+    if (sku && /^\d{12,14}$/.test(sku)) byUpc.set(sku, r);
   }
-  return { rows, byUrl, bySku };
+  return { rows, byUrl, bySku, byUpc };
 }
 
 // ─── fetch + stream-parse feed ──────────────────────────────────────────────
@@ -165,7 +173,25 @@ async function* streamOpticsPlanetRows() {
   gunzip  .on('error', e => parser.destroy(e));
   nodeBody.pipe(gunzip).pipe(parser);
 
+  let dumped = 0;
   for await (const row of parser) {
+    if (dumped < DEBUG_SAMPLES) {
+      console.log(c('cyan', `\n[debug feed row ${dumped + 1}/${DEBUG_SAMPLES}]`));
+      // Dump only the fields useful for match-strategy debugging, in a
+      // stable order. Full rows are hundreds of columns and mostly noise.
+      const keys = [
+        'merchant_deep_link', 'deep_link', 'aw_deep_link',
+        'merchant_product_id', 'aw_product_id', 'product_id',
+        'mpn', 'model_number', 'ean', 'upc', 'product_GTIN',
+        'product_name', 'brand_name',
+        'search_price', 'display_price', 'store_price', 'price', 'rrp_price',
+        'in_stock', 'stock_quantity', 'stock_status', 'availability',
+      ];
+      for (const k of keys) {
+        if (row[k] != null && row[k] !== '') console.log(`  ${k}: ${row[k]}`);
+      }
+      dumped++;
+    }
     const link = row.merchant_deep_link || row.deep_link ||
                  row.aw_deep_link       || row.aw_product_link;
     if (!link || !link.toLowerCase().includes(OP_HOST)) continue;
@@ -178,12 +204,13 @@ async function main() {
   const startedAt = Date.now();
 
   log(c('bold', '\nLoading existing OpticsPlanet rows from Supabase…'));
-  const { rows, byUrl, bySku } = await loadExistingRows();
+  const { rows, byUrl, bySku, byUpc } = await loadExistingRows();
   const shared = [...byUrl.entries()].filter(([, list]) => list.length > 1);
-  log(`  rows:                  ${rows.length}`);
+  log(`  rows:                    ${rows.length}`);
   log(`  distinct canonical URLs: ${byUrl.size}`);
-  log(`  with SKU:              ${bySku.size}`);
-  log(`  shared URLs (>1 row):  ${shared.length}   (rows: ${shared.reduce((n, [, l]) => n + l.length, 0)})`);
+  log(`  with SKU:                ${bySku.size}`);
+  log(`  with UPC (or numeric SKU): ${byUpc.size}`);
+  log(`  shared URLs (>1 row):    ${shared.length}   (rows: ${shared.reduce((n, [, l]) => n + l.length, 0)})`);
 
   log(c('bold', '\nFetching + parsing Awin feed…'));
   let feedRowsSeen = 0;
@@ -203,32 +230,49 @@ async function main() {
     const inStock = parseStock(row);
     if (price == null && inStock == null) continue;
 
+    // Pull all the identifiers the feed might use for matching against our
+    // sku/upc columns. Priority reflects what actually matches in practice:
+    //   mpn / model_number → manufacturer part number, matches DB sku
+    //   ean / upc / product_GTIN → GTIN-family, matches DB upc (and DB sku
+    //     when the sku column happens to hold a UPC — 81 of ours do)
+    //   merchant_product_id → OpticsPlanet's internal ID, rarely matches
+    //     anything of ours (kept as last resort)
+    const feedMpn = normalizeSku(row.mpn || row.model_number);
+    const feedGtin = normalizeSku(row.ean || row.upc || row.product_GTIN);
+    const feedMerchantId = normalizeSku(row.merchant_product_id || row.product_id);
+
     let target = null;
     const candidates = byUrl.get(canonicalDest);
     if (candidates && candidates.length === 1) {
       target = candidates[0];
     } else if (candidates && candidates.length > 1) {
-      const feedSku = normalizeSku(row.merchant_product_id || row.mpn || row.product_id);
-      if (feedSku) {
-        target = candidates.find(r => normalizeSku(r.product_variants?.sku) === feedSku) || null;
+      // Disambiguate on any identifier we have, in preference order.
+      for (const [feedId, ourAccessor] of [
+        [feedMpn,        r => normalizeSku(r.product_variants?.sku)],
+        [feedGtin,       r => normalizeSku(r.product_variants?.upc)],
+        [feedGtin,       r => normalizeSku(r.product_variants?.sku)],
+        [feedMerchantId, r => normalizeSku(r.product_variants?.sku)],
+      ]) {
+        if (!feedId) continue;
+        const hit = candidates.find(r => ourAccessor(r) === feedId);
+        if (hit) { target = hit; break; }
       }
       if (!target) {
         unresolvedAmbiguous.push({
           url: canonicalDest,
-          feedSku,
+          feedMpn, feedGtin, feedMerchantId,
           candidateIds: candidates.map(x => x.id),
         });
         continue;
       }
     } else {
-      // Fallback: no URL match, but the feed's SKU might match one of ours
-      // directly. Only accept fallback when the SKU is unique on our side.
-      const feedSku = normalizeSku(row.merchant_product_id || row.mpn || row.product_id);
-      if (feedSku && bySku.has(feedSku)) {
-        target = bySku.get(feedSku);
-      } else {
-        continue;
-      }
+      // No URL match. Try identifier-only match, in preference order. Only
+      // accept when the ID is unique on our side (bySku/byUpc dedupe already).
+      if      (feedMpn        && bySku.has(feedMpn))        target = bySku.get(feedMpn);
+      else if (feedGtin       && byUpc.has(feedGtin))       target = byUpc.get(feedGtin);
+      else if (feedGtin       && bySku.has(feedGtin))       target = bySku.get(feedGtin);
+      else if (feedMerchantId && bySku.has(feedMerchantId)) target = bySku.get(feedMerchantId);
+      else continue;
     }
 
     // Only queue changes if something actually differs.
@@ -256,9 +300,12 @@ async function main() {
     log(c('grey', '    unmatched IDs: ' + unmatched.map(r => r.id).join(', ')));
   }
   if (unresolvedAmbiguous.length) {
-    log(c('grey', '    ambiguous:'));
+    log(c('grey', '    ambiguous (first 10):'));
     for (const a of unresolvedAmbiguous.slice(0, 10)) {
-      log(c('grey', `      ${a.url}  (feed sku: ${a.feedSku || '—'})`));
+      log(c('grey',
+        `      ${a.url}  (mpn: ${a.feedMpn || '—'}, gtin: ${a.feedGtin || '—'}, ` +
+        `mid: ${a.feedMerchantId || '—'})`
+      ));
     }
   }
 

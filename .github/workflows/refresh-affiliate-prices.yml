@@ -19,6 +19,11 @@ on:
         required: false
         type: boolean
         default: true
+      debug_samples:
+        description: 'Dump first N raw feed rows to the log (for debugging column shapes). 0 = off.'
+        required: false
+        type: string
+        default: '0'
 
 jobs:
   refresh:
@@ -29,7 +34,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
           cache-dependency-path: scripts/package-lock.json
 
@@ -44,5 +49,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Scheduled runs always write. Manual runs default to dry-run
           # (the input default is true); flip the checkbox to write.
-          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || (github.event.inputs.dry_run == 'true' && 'true' || 'false') }}
+          DRY_RUN:        ${{ github.event_name == 'schedule' && 'false' || (github.event.inputs.dry_run == 'true' && 'true' || 'false') }}
+          DEBUG_SAMPLES:  ${{ github.event_name == 'schedule' && '0' || github.event.inputs.debug_samples }}
         run: node refresh-affiliate-prices.mjs
