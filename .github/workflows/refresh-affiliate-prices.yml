@@ -1,0 +1,48 @@
+name: Refresh affiliate prices
+
+# Fetches OpticsPlanet's Awin product datafeed and updates street_price,
+# in_stock and last_checked on the matching affiliate_links rows. Never
+# touches other partners, never blanks a row that doesn't match.
+#
+# Failure modes are surfaced by GitHub Actions itself — if this workflow
+# fails, the account owner gets an email; no separate alerting to wire up.
+
+on:
+  schedule:
+    # 08:00 UTC daily = 01:00 Pacific / 04:00 Eastern.
+    # Off-peak for the site and well after Awin's nightly feed refresh.
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run — parse and match but do not write to the database'
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: scripts/package-lock.json
+
+      - name: Install dependencies
+        working-directory: scripts
+        run: npm ci
+
+      - name: Refresh affiliate prices
+        working-directory: scripts
+        env:
+          AWIN_FEED_URL:             ${{ secrets.AWIN_FEED_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # Scheduled runs always write. Manual runs default to dry-run
+          # (the input default is true); flip the checkbox to write.
+          DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || (github.event.inputs.dry_run == 'true' && 'true' || 'false') }}
+        run: node refresh-affiliate-prices.mjs
