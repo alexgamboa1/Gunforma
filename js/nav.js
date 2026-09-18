@@ -1,4 +1,6 @@
 // nav.js — renders the shared top nav into <div id="nav-mount" data-nav="...">
+//          and keeps the signed-in state current on pages that ship a
+//          static <nav> instead of a mount div.
 // -----------------------------------------------------------------------------
 // Variants (data-nav="..."):
 //   full        — logo + Home/Builds/Parts Catalog/Armory + Sign in / Post btn
@@ -21,7 +23,17 @@
 // -----------------------------------------------------------------------------
 (function () {
   var mount = document.getElementById('nav-mount');
-  if (!mount) return;  // page opts out by omitting the mount div
+
+  // No mount div means one of two things:
+  //   1. The page ships its nav as static HTML (the public pages do, so the
+  //      markup is in the crawled source). Nothing to render — but that static
+  //      markup still carries the #nav-signin hook, so the session-aware
+  //      wiring below must run anyway or signed-in users keep seeing "Sign in".
+  //   2. The page genuinely opts out of the nav. No hook, nothing to do.
+  if (!mount) {
+    if (document.getElementById('nav-signin')) wireNavAuth();
+    return;
+  }
 
   var variant = mount.getAttribute('data-nav') || 'full';
 
@@ -88,15 +100,18 @@
   mount.outerHTML = html;
 
   // Session-aware right side (variants that render #nav-signin).
-  if (variant === 'full' || variant === 'full-authed') {
-    updateNavAuth();
-    if (window.sb && window.sb.auth) {
-      // Sign-in from another tab or a fresh INITIAL_SESSION restore both
-      // land here — refresh the nav rather than redirect.
-      window.sb.auth.onAuthStateChange(function () { updateNavAuth(); });
-    }
-  }
+  if (variant === 'full' || variant === 'full-authed') wireNavAuth();
 })();
+
+// Paints the session-aware right side once, then repaints on every auth-state
+// change so sign-outs in another tab propagate. Hoisted, so the IIFE above can
+// call it from either the static-nav path or the rendered-nav path.
+function wireNavAuth() {
+  updateNavAuth();
+  if (window.sb && window.sb.auth) {
+    window.sb.auth.onAuthStateChange(function () { updateNavAuth(); });
+  }
+}
 
 // Exposed globally so pages that need to trigger a nav refresh from their own
 // code (e.g. after an in-app sign-out) can call it.

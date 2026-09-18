@@ -9,6 +9,7 @@
 <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Field Notes — Gunforma</title>
+<link rel="canonical" href="https://gunforma.com/field-notes.html" />
 <meta name="description" content="Field Notes — guides, gear reviews, and range reports from the Gunforma community." />
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,7 +131,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
        appears in the shared nav (it wasn't there for other pages either);
        this page reaches itself via /field-notes/ from the shared footer
        or direct URL, so no in-nav breadcrumb is needed. -->
-  <div id="nav-mount" data-nav="full"></div>
+  <nav class="nav">
+    <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
+    <div class="nav-links">
+      <a class="nav-link" href="index.html">Home</a>
+      <a class="nav-link" href="gunforma-builds.html">Builds</a>
+      <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+      <a class="nav-link" href="gunforma-armory.html">Armory</a>
+    </div>
+    <div class="nav-right">
+      <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+      <a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>
+    </div>
+  </nav>
 
   <div class="page-header">
     <div class="page-header-inner">
@@ -158,7 +171,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     </div>
   </div>
 
-  <div id="footer-mount" data-footer="default"></div>
+  <div class="footer-bar"><span class="footer-txt">© 2026 Gunforma · All rights reserved</span><span class="footer-txt"><a href="gunforma-legal.html#legal">Legal</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="gunforma-legal.html#contact">Contact</a></span></div>
 
 </div>
 

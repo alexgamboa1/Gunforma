@@ -1,3 +1,8 @@
+[build.environment]
+  # No .nvmrc or .node-version in the repo and no UI env var, so without this
+  # the build floats on whatever the Noble image happens to default to.
+  NODE_VERSION = "20"
+
 [functions]
   directory = "netlify/functions"
 
@@ -28,22 +33,9 @@
   to = "/field-notes.html"
   status = 200
 
-[[redirects]]
-  from = "/field-notes/:slug"
-  to = "/field-notes-review.html"
-  status = 200
-
-[[redirects]]
-  from = "/field-notes/:slug/"
-  to = "/field-notes-review.html"
-  status = 200
-
-[[redirects]]
-  from = "/parts/compare/:slug"
-  to = "/field-notes-comparison.html"
-  status = 200
-
-[[redirects]]
-  from = "/parts/compare/:slug/"
-  to = "/field-notes-comparison.html"
-  status = 200
+# Runs on every request so it can branch on Host, which Netlify's redirect
+# conditions can't do. Redirects the production *.netlify.app hostnames to the
+# apex and marks previews noindex; the apex passes through untouched.
+[[edge_functions]]
+  path = "/*"
+  function = "canonical-host"

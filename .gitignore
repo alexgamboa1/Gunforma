@@ -17,3 +17,6 @@ scripts/seed-state.json
 # Draft blog mockups — kept locally, not for public tracking
 holosun-507c-vs-trijicon-rmr-comparison.html
 holosun-507c-x2-review.html
+
+# Cloudflare wrangler local state — pins an account id, not for tracking
+.wrangler/
