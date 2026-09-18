@@ -1,11 +1,16 @@
 // nav.js — renders the shared top nav into <div id="nav-mount" data-nav="...">
+//          and keeps the signed-in state current on pages that ship a
+//          static <nav> instead of a mount div.
 // -----------------------------------------------------------------------------
 // Variants (data-nav="..."):
-//   full        — logo + Home/Builds/Parts Catalog/Armory + Sign in / Post btn
+//   full        — logo + Home/Builds/Parts Catalog/Armory + Sign in / Post btn.
+//                 The nine public pages now ship this variant as static HTML so
+//                 crawlers see the links in-source; nav.js runs anyway to keep
+//                 the #nav-signin hook session-aware (see the no-mount branch).
 //   full-authed — same, but no "Post your build" CTA and no "Sign in" link.
-//                 Used on auth-required workflow pages (post-build-v6,
-//                 admin-queue, complete-profile, claim) where the user is
-//                 always signed in — nav.js just fills in the username.
+//                 Post-build-v6 is the only page still using it — the other
+//                 auth-required workflow pages (admin-queue, complete-profile,
+//                 claim) ship their own static navs and don't load nav.js.
 //   auth-signin — logo + "Create account →"       (used on sign-in page)
 //   auth-signup — logo + "Sign in instead →"      (used on sign-up page)
 //
@@ -21,7 +26,17 @@
 // -----------------------------------------------------------------------------
 (function () {
   var mount = document.getElementById('nav-mount');
-  if (!mount) return;  // page opts out by omitting the mount div
+
+  // No mount div means one of two things:
+  //   1. The page ships its nav as static HTML (the public pages do, so the
+  //      markup is in the crawled source). Nothing to render — but that static
+  //      markup still carries the #nav-signin hook, so the session-aware
+  //      wiring below must run anyway or signed-in users keep seeing "Sign in".
+  //   2. The page genuinely opts out of the nav. No hook, nothing to do.
+  if (!mount) {
+    if (document.getElementById('nav-signin')) wireNavAuth();
+    return;
+  }
 
   var variant = mount.getAttribute('data-nav') || 'full';
 
@@ -88,15 +103,18 @@
   mount.outerHTML = html;
 
   // Session-aware right side (variants that render #nav-signin).
-  if (variant === 'full' || variant === 'full-authed') {
-    updateNavAuth();
-    if (window.sb && window.sb.auth) {
-      // Sign-in from another tab or a fresh INITIAL_SESSION restore both
-      // land here — refresh the nav rather than redirect.
-      window.sb.auth.onAuthStateChange(function () { updateNavAuth(); });
-    }
-  }
+  if (variant === 'full' || variant === 'full-authed') wireNavAuth();
 })();
+
+// Paints the session-aware right side once, then repaints on every auth-state
+// change so sign-outs in another tab propagate. Hoisted, so the IIFE above can
+// call it from either the static-nav path or the rendered-nav path.
+function wireNavAuth() {
+  updateNavAuth();
+  if (window.sb && window.sb.auth) {
+    window.sb.auth.onAuthStateChange(function () { updateNavAuth(); });
+  }
+}
 
 // Exposed globally so pages that need to trigger a nav refresh from their own
 // code (e.g. after an in-app sign-out) can call it.

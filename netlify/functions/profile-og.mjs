@@ -173,7 +173,13 @@ export default async (req) => {
   // Swap the static <title> for the generated title + meta. Single anchored
   // replace so a future edit that drops the title fails loudly in testing
   // rather than silently shipping pages with no OG tags.
-  const html = page.replace('<title>Profile — Gunforma</title>', metaBlock(username));
+  //
+  // The page also ships a static <link rel="canonical"> for its direct URL
+  // (/gunforma-profile.html). At /u/:username the injected canonical must
+  // win, so strip the static one before appending the meta block.
+  const html = page
+    .replace('<link rel="canonical" href="https://gunforma.com/gunforma-profile.html" />\n', '')
+    .replace('<title>Profile — Gunforma</title>', metaBlock(username));
 
   return new Response(html, {
     status: 200,

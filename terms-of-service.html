@@ -4,6 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Terms of Service — Gunforma</title>
+<link rel="canonical" href="https://gunforma.com/terms-of-service.html" />
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; }
@@ -14,6 +15,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nav-links { display: flex; gap: 28px; }
 .nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
 .nav-link:hover { color: #e8e6e1; }
+.nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; text-decoration: none; }
+.nav-btn:hover { color: #e8e6e1; border-color: #4a4b4e; }
+.nav-btn.cta { color: #fff; background: #4a9edd; border-color: #4a9edd; font-weight: 600; letter-spacing: 0.04em; }
+.nav-btn.cta:hover { background: #2a7bbd; border-color: #2a7bbd; }
 
 .page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
 .page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
@@ -43,11 +50,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <body>
 
 <nav class="nav">
-  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
   <div class="nav-links">
-    <a href="index.html" class="nav-link">Home</a>
-    <a href="gunforma-builds.html" class="nav-link">Builds</a>
-    <a href="gunforma-parts-catalog.html" class="nav-link">Parts catalog</a>
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="gunforma-armory.html">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>
   </div>
 </nav>
 
@@ -91,7 +103,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     </ul>
 
     <h2>7. Affiliate links and third-party products</h2>
-    <p>Gunforma may display links to third-party retailers where you can purchase parts shown in builds. Some of these are <strong>affiliate links</strong>, meaning Gunforma earns a commission if you make a purchase through them. These commissions come from the retailer at no additional cost to you. We are not a party to any transaction between you and a third-party retailer. We do not guarantee pricing, availability, stock status, or the accuracy of any product information shown on our platform. You are responsible for verifying compliance with your local laws before purchasing any item through these links. See our <a href="affiliate-disclosure.html">Affiliate Disclosure</a> for more detail.</p>
+    <p>Gunforma may display links to third-party retailers where you can purchase parts shown in builds. Some of these are <strong>affiliate links</strong>, meaning Gunforma earns a commission if you make a purchase through them. These commissions come from the retailer at no additional cost to you. We are not a party to any transaction between you and a third-party retailer. We do not guarantee pricing, availability, stock status, or the accuracy of any product information shown on our platform. You are responsible for verifying compliance with your local laws before purchasing any item through these links. See our <a href="gunforma-legal.html#affiliate">Affiliate Disclosure</a> for more detail.</p>
 
     <h2>8. Firearms disclaimer</h2>
     <p><strong>Gunforma is for information and inspiration only.</strong> Nothing on this platform constitutes legal advice. Firearms, magazines, optics, barrels, suppressors, and other parts shown on Gunforma may be restricted or illegal depending on your federal, state, and local laws. You are solely responsible for knowing and following all laws that apply to you before buying, owning, shipping, assembling, or modifying anything referenced on this site. When in doubt, consult a licensed firearms dealer (FFL) or attorney in your jurisdiction.</p>
@@ -130,8 +142,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="footer-bar">
   <span class="footer-txt">© 2026 Gunforma · All rights reserved</span>
-  <span class="footer-txt"><a href="index.html">Home</a> · <a href="terms-of-service.html">Terms</a> · <a href="privacy-policy.html">Privacy</a> · <a href="affiliate-disclosure.html">Affiliate disclosure</a> · <a href="community-guidelines.html">Community guidelines</a> · <a href="mailto:contact@gunforma.com">Contact</a></span>
+  <span class="footer-txt"><a href="index.html">Home</a> · <a href="terms-of-service.html">Terms</a> · <a href="privacy-policy.html">Privacy</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="mailto:contact@gunforma.com">Contact</a></span>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
 </body>
 </html>
