@@ -1,0 +1,9 @@
+{
+  "name": "gunforma-scripts",
+  "private": true,
+  "version": "1.0.0",
+  "description": "One-off and scheduled scripts for gunforma.com. Kept out of the site's runtime; run from CLI or GitHub Actions.",
+  "dependencies": {
+    "csv-parse": "^5.5.6"
+  }
+}
