@@ -3,11 +3,14 @@
 //          static <nav> instead of a mount div.
 // -----------------------------------------------------------------------------
 // Variants (data-nav="..."):
-//   full        — logo + Home/Builds/Parts Catalog/Armory + Sign in / Post btn
+//   full        — logo + Home/Builds/Parts Catalog/Armory + Sign in / Post btn.
+//                 The nine public pages now ship this variant as static HTML so
+//                 crawlers see the links in-source; nav.js runs anyway to keep
+//                 the #nav-signin hook session-aware (see the no-mount branch).
 //   full-authed — same, but no "Post your build" CTA and no "Sign in" link.
-//                 Used on auth-required workflow pages (post-build-v6,
-//                 admin-queue, complete-profile, claim) where the user is
-//                 always signed in — nav.js just fills in the username.
+//                 Post-build-v6 is the only page still using it — the other
+//                 auth-required workflow pages (admin-queue, complete-profile,
+//                 claim) ship their own static navs and don't load nav.js.
 //   auth-signin — logo + "Create account →"       (used on sign-in page)
 //   auth-signup — logo + "Sign in instead →"      (used on sign-up page)
 //
