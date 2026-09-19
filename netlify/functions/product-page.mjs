@@ -271,7 +271,12 @@ async function fetchProduct(slug) {
     'material', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
     'build_warning', 'fitment_notes', 'lowest_price',
     'manufacturers!products_brand_id_fkey(name,slug,website_url)',
-    'product_variants(id,slug,sku,upc,msrp,is_default,primary_image_url,color,finish,' +
+    // Must name the FK: products has two relationships to product_variants
+    // (product_variants.product_id -> products.id, and
+    // products.lowest_price_variant_id -> product_variants.id), so a bare
+    // product_variants(...) embed is ambiguous and PostgREST rejects the whole
+    // query with PGRST201.
+    'product_variants!product_variants_product_id_fkey(id,slug,sku,upc,msrp,is_default,primary_image_url,color,finish,' +
       'optic_cut,bundle,clamp_style,manual_safety_variant,reticle,reticle_color,variant_label,' +
       'variant_images(url,position,alt_text),' +
       'affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name)))',
