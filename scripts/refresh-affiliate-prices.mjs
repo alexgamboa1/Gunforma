@@ -112,6 +112,15 @@ function canonicalizeUrl(raw) {
   return `${host}${path}${qs ? '?' + qs : ''}`;
 }
 
+// Strip _iv_* params from a canonical URL to get the base product page URL.
+// Feed URLs never carry _iv_* params; 310 of our 466 DB URLs do.
+// This creates a candidate group just like shared URLs, so the same
+// disambiguation tiers (T3-T6) apply.
+function baseUrlOf(canonicalUrl) {
+  const qIdx = canonicalUrl.indexOf('?');
+  return qIdx === -1 ? canonicalUrl : canonicalUrl.slice(0, qIdx);
+}
+
 // ─── Supabase PostgREST helpers ─────────────────────────────────────────────
 async function pgGet(pathAndQuery) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
@@ -146,8 +155,13 @@ async function loadExistingRows() {
     `&select=id,url,street_price,in_stock,op_mpn,op_gtin,op_merchant_product_id,op_last_matched_by,product_variants(sku,upc)`
   );
 
-  // Index 1: canonical URL → [rows]
+  // Index 1: canonical URL (with _iv_* params) → [rows]
   const byUrl = new Map();
+  // Index 1b: base URL (no _iv_* params) → [rows]
+  // Feed URLs never carry _iv_* params. 310 of our DB URLs do. This index
+  // groups those DB rows by their base product page so the same
+  // disambiguation tiers (T3–T6) work on them.
+  const byBaseUrl = new Map();
   // Index 2: strict-normalized SKU → row
   const bySku = new Map();
   // Index 3: GTIN-normalized UPC → row
@@ -164,6 +178,10 @@ async function loadExistingRows() {
 
     if (!byUrl.has(canon)) byUrl.set(canon, []);
     byUrl.get(canon).push(r);
+
+    const base = baseUrlOf(canon);
+    if (!byBaseUrl.has(base)) byBaseUrl.set(base, []);
+    byBaseUrl.get(base).push(r);
 
     const sku = strictNorm(r.product_variants?.sku);
     if (sku) bySku.set(sku, r);
@@ -183,7 +201,7 @@ async function loadExistingRows() {
     if (opGtin) byOpGtin.set(opGtin, r);
   }
 
-  return { rows, byUrl, bySku, byUpc, byOpMpn, byOpGtin };
+  return { rows, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin };
 }
 
 // ─── fetch + stream-parse feed ──────────────────────────────────────────────
@@ -244,7 +262,7 @@ async function main() {
   const startedAt = Date.now();
 
   log(c('bold', '\nLoading existing OpticsPlanet rows from Supabase…'));
-  const { rows, byUrl, bySku, byUpc, byOpMpn, byOpGtin } = await loadExistingRows();
+  const { rows, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin } = await loadExistingRows();
   const shared = [...byUrl.entries()].filter(([, list]) => list.length > 1);
   const storedOp = rows.filter(r => r.op_mpn || r.op_gtin).length;
   log(`  rows:                       ${rows.length}`);
@@ -307,7 +325,12 @@ async function main() {
       tier = 'stored_op_gtin';
     }
 
-    const candidates = !target ? byUrl.get(canonicalDest) : null;
+    // Candidates: try exact canonical URL first, then base URL (without
+    // _iv_* params) as fallback. The feed never carries _iv_* params, so
+    // 310 of our DB rows can only match via the base-URL candidate group.
+    const candidates = !target
+      ? (byUrl.get(canonicalDest) || byBaseUrl.get(baseUrlOf(canonicalDest)) || null)
+      : null;
 
     // ── T3: URL + strict mpn match ─────────────────────────────────────
     if (!target && candidates && feedMpnStrict) {
