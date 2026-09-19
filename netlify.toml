@@ -28,6 +28,18 @@
   to = "/field-notes.html"
   status = 200
 
+# Per-product pages, server-rendered so crawlers see real content instead of
+# the "Loading parts…" shell the client-side catalog shows before Supabase
+# resolves. :splat carries "category/slug" (or just "slug" — the function
+# takes the last path segment either way); status = 200 is a rewrite, not a
+# redirect, so the address bar and the page's own canonical tag both stay on
+# /parts/:category/:slug. Same reasoning as the /u/* rewrite above re: using
+# :splat instead of named placeholders.
+[[redirects]]
+  from = "/parts/*"
+  to = "/.netlify/functions/product-page?splat=:splat"
+  status = 200
+
 [[redirects]]
   from = "/field-notes/"
   to = "/field-notes.html"
