@@ -33,6 +33,13 @@ const SITE = 'https://gunforma.com';
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
 // category -> [URL segment, display label]. Order matches products.category enum.
+//
+// js/category-map.js holds a browser-side mirror of the segment column as
+// window.CATEGORY_URL_SEGMENT, so the catalog and armory cards can build
+// /parts/:category/:slug links that match what this function serves. Same
+// duplication rationale as the variant-label logic above (ESM function vs.
+// plain <script> globals). Add or rename a category in BOTH files — a
+// segment that exists in only one of them ships links that 404.
 const CATEGORY_META = {
   slide:            ['slides',            'Slide'],
   barrel:           ['barrels',           'Barrel'],
