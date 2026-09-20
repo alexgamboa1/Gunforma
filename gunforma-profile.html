@@ -612,7 +612,7 @@ async function loadFavoriteParts() {
   const panel = document.getElementById('panel-favorites');
   const { data, error } = await sb
     .from('part_favorites')
-    .select('product_id, products!inner(id,name,description,manufacturers(name),product_variants(is_default,msrp,primary_image_url))')
+    .select('product_id, products!inner(id,name,description,manufacturers(name),product_variants!product_variants_product_id_fkey(is_default,msrp,primary_image_url))')
     .eq('user_id', CURRENT_USER.id)
     .order('created_at', { ascending: false });
 
