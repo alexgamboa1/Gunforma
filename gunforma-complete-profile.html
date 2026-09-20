@@ -133,6 +133,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <script src="js/supabase-client.js"></script>
+<script src="js/site-url.js"></script>
 <script>
 // Onboarding nav (logo + "Not you? Sign out" only) is intentionally NOT the
 // shared nav — it belongs to the "you're signed in but not yet onboarded"
@@ -151,11 +152,7 @@ sb.auth.onAuthStateChange(function(event, session) {
 // Origin used when we hand Supabase a URL to email the user. Detects local
 // dev by hostname so the same file works on the local static server and in
 // production without a build step.
-function siteBaseUrl() {
-  return window.location.hostname === 'localhost'
-    ? 'http://localhost:8794'
-    : 'https://gunforma.com';
-}
+// siteBaseUrl() comes from js/site-url.js (loaded above).
 
 // Turnstile widget helpers — same pattern used across the auth pages.
 function getTurnstileToken(widgetElId) {
