@@ -61,20 +61,24 @@
   status = 404
   force = true
 
+# Extension wildcards do NOT work here. Netlify only treats "*" as a splat at
+# the END of a path, so "/*.md" matches nothing — verified on deploy preview
+# 13, where both .md files still returned 200 under such a rule. (It does not
+# over-match either: every real route stayed 200.) Root-level files therefore
+# have to be listed individually.
+#
+# Anything with a .sql or .sh extension currently lives under /supabase/ or
+# /scripts/, which the directory rules above already cover. A NEW .md, .sql or
+# .sh added at the repo root will be publicly served until it gets a rule here.
+# Prefer putting such files in an already-blocked directory.
 [[redirects]]
-  from = "/*.md"
+  from = "/CLAUDE.md"
   to = "/404.html"
   status = 404
   force = true
 
 [[redirects]]
-  from = "/*.sql"
-  to = "/404.html"
-  status = 404
-  force = true
-
-[[redirects]]
-  from = "/*.sh"
+  from = "/PARTS_BUILDER_COMPATIBILITY_LOGIC.md"
   to = "/404.html"
   status = 404
   force = true
