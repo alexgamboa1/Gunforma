@@ -96,7 +96,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
 .part-card-price { font-size: 12.5px; font-weight: 700; color: #1a1a1a; }
 .part-card-price.na { color: #bbb; font-weight: 500; }
-.part-card-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; margin-top: auto; }
+/* Whole-card link — see the matching block in gunforma-parts-catalog.html.
+   The anchor sits on the product name for real anchor text and stretches over
+   the card via ::after. Not an <a> around the card: the affiliate hero emits
+   its own <a>, and nested anchors get split by the HTML parser. Add/Remove
+   and the affiliate row sit above the overlay on z-index. */
+.part-card-link { color: inherit; text-decoration: none; }
+.part-card-link:hover { text-decoration: underline; }
+.part-card-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
+.part-card-aff { position: relative; z-index: 2; }
+.part-card-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; margin-top: auto; position: relative; z-index: 2; }
 .part-card-btn { flex: 1; font-family: inherit; font-size: 11px; font-weight: 700; padding: 6px 8px; border-radius: 4px; cursor: pointer; border: 0.5px solid; text-align: center; text-decoration: none; letter-spacing: 0.02em; transition: all 0.15s; }
 .part-card-btn.add { background: #4a9edd; color: #fff; border-color: #4a9edd; }
 .part-card-btn.add:hover { background: #2a7bbd; }
@@ -257,6 +266,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="footer-bar"><span class="footer-txt">© 2026 Gunforma · All rights reserved</span><span class="footer-txt"><a href="gunforma-legal.html#legal">Legal</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="gunforma-legal.html#contact">Contact</a></span></div>
 
 <script src="js/supabase-client.js"></script>
+<script src="js/category-map.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script src="js/affiliate.js"></script>
@@ -374,7 +384,7 @@ async function loadAll() {
   var platQ = sb.from('platforms').select('id, name, slug').order('name');
   var prodQ = sb.from('products')
     .select(
-      'id, name, description, category, brand_id, url, lowest_price,' +
+      'id, slug, name, description, category, brand_id, url, lowest_price,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
@@ -397,7 +407,7 @@ async function loadAll() {
     var price = dv && dv.msrp != null ? Number(dv.msrp)
               : (r.lowest_price != null ? Number(r.lowest_price) : null);
     return {
-      id: r.id, name: r.name || '',
+      id: r.id, slug: r.slug || null, name: r.name || '',
       category: r.category, brand_id: r.brand_id,
       brand: (r.brands && r.brands.name) || 'Unknown',
       price: price,
@@ -595,15 +605,28 @@ function renderPartCard(p, cat, isFav) {
   // Renders nothing when the product has no affiliate listings (no
   // untracked fallback link — products.url is not used as a buy link).
   var affHtml = (window.affiliate ? window.affiliate.renderHero(p.id) : '') || '';
+  // Product-page link. Null when the row has no slug or its category isn't in
+  // the shared map — render the plain name rather than ship a dead href.
+  var href = window.productPath ? window.productPath(p.category, p.slug) : null;
+  if (!href) {
+    console.warn('[armory] no product-page link for ' + p.id + ' (' + p.brand + ' ' + p.name + ') — ' +
+      (p.slug ? 'category "' + p.category + '" not in CATEGORY_URL_SEGMENT' : 'missing slug'));
+  }
+  var nameHtml = href
+    ? '<a class="part-card-link" href="' + escAttr(href) + '">' + esc(p.name) + '</a>'
+    : esc(p.name);
   return '<div class="part-card' + (isAdded ? ' added' : '') + (isFav ? ' favorited' : '') + '">' +
     '<div class="part-card-photo">' + photoHtml +
       (isFav ? '<div class="part-card-fav-badge">★ FAV</div>' : '') +
     '</div>' +
     '<div class="part-card-body">' +
       '<div class="part-card-brand">' + esc(p.brand) + '</div>' +
-      '<div class="part-card-name">'  + esc(p.name)  + '</div>' +
+      '<div class="part-card-name">'  + nameHtml     + '</div>' +
       priceHtml +
-      affHtml +
+      // Wrapped to match the catalog: stops the click bubbling, and the class
+      // lifts it above the stretched card link so Buy never navigates to the
+      // product page. No preventDefault — the Buy button is an <a> itself.
+      (affHtml ? '<div class="part-card-aff" onclick="event.stopPropagation();">' + affHtml + '</div>' : '') +
     '</div>' +
     '<div class="part-card-actions">' + addBtn + '</div>' +
   '</div>';
@@ -619,12 +642,14 @@ function wireCategoryHandlers() {
   });
   document.querySelectorAll('[data-add-ref]').forEach(function (el) {
     el.addEventListener('click', function (e) {
+      e.preventDefault();
       e.stopPropagation();
       addPartByRefId(el.dataset.addRef, el.dataset.addCat);
     });
   });
   document.querySelectorAll('[data-remove-ref]').forEach(function (el) {
     el.addEventListener('click', function (e) {
+      e.preventDefault();
       e.stopPropagation();
       removePartByRefId(el.dataset.removeRef);
     });
