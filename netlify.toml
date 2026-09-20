@@ -1,3 +1,11 @@
+[build]
+  # There is no compile step — the repo root IS the artifact, and publish = "."
+  # reproduces exactly what the site published before this command existed.
+  # The command exists solely to run the PGRST201 embed guard, which exits
+  # non-zero and so fails the deploy. See scripts/check-embeds.sh.
+  command = "bash scripts/check-embeds.sh"
+  publish = "."
+
 [build.environment]
   # No .nvmrc or .node-version in the repo and no UI env var, so without this
   # the build floats on whatever the Noble image happens to default to.
@@ -10,6 +18,66 @@
 # page itself available at runtime.
 [functions."profile-og"]
   included_files = ["gunforma-profile.html"]
+
+# ---------------------------------------------------------------------------
+# Not-the-website paths. publish = "." serves the whole repo root, so source
+# that happens to live next to the pages is reachable over HTTP. None of it is
+# secret — the scripts read SUPABASE_SERVICE_ROLE_KEY from the environment and
+# hold no literals — but none of it is site content either.
+#
+# force = true is required: without it a rule only applies when no file exists
+# at that path, which is precisely the case we need to override.
+#
+# These sit ABOVE every rewrite below because matching is first-match-wins.
+# None of the prefixes can collide with a real route: pages live at the root,
+# /parts/* and /u/* have their own prefixes, and the functions endpoint is
+# /.netlify/ (leading dot) which is a different path from /netlify/.
+# ---------------------------------------------------------------------------
+[[redirects]]
+  from = "/scripts/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/supabase/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+# /netlify/* only — NOT /.netlify/*, which is how functions and edge functions
+# are actually invoked. Blocking that would take the site down.
+[[redirects]]
+  from = "/netlify/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+# _scratch/ is deleted in this same commit; the rule stays so the path cannot
+# quietly become live again.
+[[redirects]]
+  from = "/_scratch/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.md"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.sql"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/*.sh"
+  to = "/404.html"
+  status = 404
+  force = true
 
 # Shareable profile URLs. status = 200 is a rewrite, not a redirect — the
 # address bar keeps /u/:username, which is what the canonical tag points at.
