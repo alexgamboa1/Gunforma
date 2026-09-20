@@ -199,6 +199,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <script src="js/supabase-client.js"></script>
+<script src="js/site-url.js"></script>
 <script src="js/nav.js"></script>
 <script>
 // Page-specific code below. Supabase client (window.sb) + nav come from
@@ -211,11 +212,7 @@ var sb = window.sb;
 // URL passed here must also be on Supabase's Redirect URL allowlist —
 // dashboard → Authentication → URL Configuration — or GoTrue silently
 // swaps it for the project's Site URL default.
-function siteBaseUrl() {
-  return window.location.hostname === 'localhost'
-    ? 'http://localhost:8794'
-    : 'https://gunforma.com';
-}
+// siteBaseUrl() comes from js/site-url.js (loaded above).
 
 // Turnstile widgets are rendered by onloadTurnstileCallback (see head) and
 // each widget's id is stashed on data-widget-id. These helpers wrap the
