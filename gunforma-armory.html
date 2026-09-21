@@ -187,6 +187,45 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .toast.show { opacity: 1; pointer-events: auto; }
 .toast a { color: #6fb4e8; margin-left: 6px; text-decoration: underline; }
 
+/* DRAFTS LIST */
+.drafts-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.drafts-title { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #555; }
+.btn-new-build { font-family: inherit; font-size: 12px; font-weight: 700; color: #fff; background: #2a7bbd; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+.btn-new-build:hover { background: #1e63a0; }
+
+.draft-row { display: flex; align-items: flex-start; gap: 14px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; transition: border-color 0.15s; }
+.draft-row:hover { border-color: #cfcdc4; }
+/* The whole body is the click target — big enough for a thumb. */
+.draft-open { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
+.draft-name { font-size: 14px; font-weight: 700; color: #1a1a1a; margin-bottom: 3px; word-break: break-word; }
+.draft-meta { font-size: 11.5px; color: #888; margin-bottom: 5px; }
+.draft-parts { font-size: 12px; color: #555; line-height: 1.5; word-break: break-word; }
+.draft-foot { display: flex; align-items: center; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
+.draft-total { font-size: 12.5px; font-weight: 700; color: #2a7bbd; }
+.draft-edited { font-size: 11px; color: #a8a5a0; }
+.draft-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+.draft-act { font-family: inherit; font-size: 11px; color: #555; background: #fafaf8; border: 0.5px solid #d5d3ca; padding: 6px 11px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
+.draft-act:hover { border-color: #4a9edd; color: #2a7bbd; }
+.draft-act.danger { color: #a25334; border-color: #eec2ae; }
+.draft-act.danger:hover { background: #fde8e2; border-color: #e08a6a; color: #8a3f22; }
+
+.rename-input { font-family: inherit; font-size: 14px; font-weight: 700; padding: 6px 9px; border: 1px solid #4a9edd; border-radius: 4px; width: 100%; max-width: 320px; }
+.rename-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+
+.drafts-empty { background: #fff; border: 0.5px dashed #d5d3ca; border-radius: 6px; padding: 44px 20px; text-align: center; }
+.drafts-empty-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.drafts-empty-sub { font-size: 12px; color: #666; line-height: 1.6; max-width: 380px; margin: 0 auto 18px; }
+
+/* BUILDER HEADER */
+.builder-header-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.back-to-list { font-family: inherit; font-size: 12px; color: #555; background: none; border: none; padding: 0; cursor: pointer; white-space: nowrap; }
+.back-to-list:hover { color: #2a7bbd; }
+.builder-name-wrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
+.builder-name { font-size: 15px; font-weight: 700; word-break: break-word; }
+.rename-btn { font-family: inherit; font-size: 11px; color: #555; background: #fafaf8; border: 0.5px solid #d5d3ca; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+.rename-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
+.builder-dirty { font-size: 11px; color: #b45309; background: #fef3e2; border: 0.5px solid #f9b860; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
+
 /* MOBILE */
 @media (max-width: 900px) {
   .armory { padding: 18px 16px 48px; }
@@ -195,6 +234,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .build-layout { grid-template-columns: 1fr; }
   .build-side { position: static; }
   .guides-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  /* Stack the row so the name gets full width, and put the actions on one
+     line underneath as full-height tap targets rather than a cramped column. */
+  .draft-row { flex-direction: column; gap: 10px; }
+  .draft-actions { flex-direction: row; width: 100%; }
+  .draft-act { flex: 1; text-align: center; padding: 9px 11px; }
+  .drafts-head { flex-direction: column; align-items: stretch; }
+  .btn-new-build { width: 100%; padding: 11px 16px; }
+  .rename-input { max-width: none; }
 }
 </style>
 </head>
@@ -220,14 +269,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <div class="tab-row" role="tablist">
-  <button type="button" class="tab-btn active" id="tab-build"  role="tab" aria-selected="true">My Build</button>
+  <button type="button" class="tab-btn active" id="tab-build"  role="tab" aria-selected="true">My Builds</button>
   <button type="button" class="tab-btn"        id="tab-guides" role="tab" aria-selected="false">Guides</button>
 </div>
 
 <div class="armory">
   <div id="tab-build-panel">
-    <div class="build-layout">
+    <!-- Drafts list. Shown when the tab opens without ?build=; the builder
+         below takes over once a draft is opened or a new one is started. -->
+    <div id="drafts-view" hidden></div>
+
+    <div class="build-layout" id="builder-view">
       <div class="build-main">
+        <!-- Builder header: which draft is open, rename, and the way back to
+             the list. Hidden until a draft is actually loaded or created. -->
+        <div class="card" id="builder-header" hidden>
+          <div class="builder-header-row">
+            <button type="button" class="back-to-list" id="btn-back-to-list">&larr; All builds</button>
+            <div class="builder-name-wrap">
+              <span class="builder-name" id="builder-name">Untitled build</span>
+              <button type="button" class="rename-btn" id="btn-rename-header" title="Rename">Rename</button>
+            </div>
+            <span class="builder-dirty" id="builder-dirty" hidden>Unsaved changes</span>
+          </div>
+        </div>
         <div class="card">
           <div class="card-title">Pistol <span class="card-hint" id="platform-note"></span></div>
           <div class="platform-row" id="platform-row"><span style="font-size:12px;color:#888;">Loading platforms…</span></div>
@@ -370,7 +435,336 @@ async function init() {
   // first platform and add the part, then scrub the URL so refresh doesn't
   // re-add it.
   applyPrefillFromUrl();
-  await applyBuildFromUrl();
+
+  // ?build= opens that draft straight into the builder. Otherwise a signed-in
+  // user lands on their drafts list; a signed-out one lands in the builder so
+  // they can still put something together before deciding to sign in.
+  var openedFromUrl = await applyBuildFromUrl();
+  if (!openedFromUrl) {
+    var prefilled = new URLSearchParams(window.location.search).get('prefill');
+    await loadMyDrafts();
+    renderDraftsList();
+    if (CURRENT_USER && !prefilled && !STATE.parts.length) {
+      showDraftsList();
+    } else {
+      showBuilder();
+    }
+  }
+  renderBuilderHeader();
+}
+
+// ─── MY BUILDS: DRAFT LIST ──────────────────────────────────
+// The tab opens on a list of the user's drafts; the builder takes over once
+// one is opened (?build=) or a new one is started. Signed-out visitors skip
+// straight to the builder — they can assemble a build, they just can't save
+// it until they sign in.
+var MY_DRAFTS = [];
+
+function showBuilder() {
+  document.getElementById('drafts-view').hidden = true;
+  document.getElementById('builder-view').hidden = false;
+}
+function showDraftsList() {
+  document.getElementById('drafts-view').hidden = false;
+  document.getElementById('builder-view').hidden = true;
+}
+
+function relTime(iso) {
+  if (!iso) return 'just now';
+  var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1)  return 'just now';
+  if (mins < 60) return mins + ' min' + (mins !== 1 ? 's' : '') + ' ago';
+  var hrs = Math.round(mins / 60);
+  if (hrs < 24)  return hrs + ' hour' + (hrs !== 1 ? 's' : '') + ' ago';
+  var days = Math.round(hrs / 24);
+  if (days < 30) return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
+  return new Date(iso).toLocaleDateString();
+}
+
+// Same pricing the builder's running total uses — product price off the
+// catalog, nulls skipped. Deliberately not a second calculation: a list that
+// disagreed with the builder about the same build would be worse than no
+// price at all.
+function snapshotTotal(snap) {
+  return (snap || []).reduce(function (sum, p) {
+    var live = p.refId ? PRODUCTS_BY_ID[p.refId] : null;
+    return (live && live.price != null) ? sum + live.price : sum;
+  }, 0);
+}
+
+function snapshotSummary(snap) {
+  var names = (snap || []).map(function (p) {
+    var live = p.refId ? PRODUCTS_BY_ID[p.refId] : null;
+    return p.name || (live ? live.name : '') || 'Unnamed part';
+  });
+  if (!names.length) return 'No parts yet';
+  var head = names.slice(0, 3).join(', ');
+  var rest = names.length - 3;
+  return rest > 0 ? head + ', +' + rest + ' more' : head;
+}
+
+async function loadMyDrafts() {
+  if (!CURRENT_USER) { MY_DRAFTS = []; return; }
+  var res = await sb.from('builds')
+    .select('id,name,platform_id,parts_snapshot,updated_at')
+    .eq('user_id', CURRENT_USER.id)
+    .eq('status', 'draft')
+    .order('updated_at', { ascending: false });
+  if (res.error) { console.error('[armory] draft list failed', res.error); MY_DRAFTS = []; return; }
+  MY_DRAFTS = res.data || [];
+}
+
+function renderDraftsList() {
+  var el = document.getElementById('drafts-view');
+
+  if (!CURRENT_USER) {
+    el.innerHTML =
+      '<div class="drafts-empty">' +
+        '<div class="drafts-empty-title">Sign in to save builds</div>' +
+        '<div class="drafts-empty-sub">You can put a build together right now — signing in lets you save it, come back to it, and post it when it\'s ready.</div>' +
+        '<a class="btn-new-build" style="text-decoration:none;display:inline-block;" href="gunforma-signin.html?next=gunforma-armory.html">Sign in</a>' +
+        '<div style="margin-top:14px;"><button type="button" class="draft-act" id="btn-build-anyway">Keep building without saving</button></div>' +
+      '</div>';
+    document.getElementById('btn-build-anyway').onclick = function () { startNewBuild(true); };
+    return;
+  }
+
+  var head =
+    '<div class="drafts-head">' +
+      '<span class="drafts-title">Your drafts (' + MY_DRAFTS.length + ')</span>' +
+      '<button type="button" class="btn-new-build" id="btn-new-build">+ New build</button>' +
+    '</div>';
+
+  if (!MY_DRAFTS.length) {
+    el.innerHTML = head +
+      '<div class="drafts-empty">' +
+        '<div class="drafts-empty-title">No saved builds yet</div>' +
+        '<div class="drafts-empty-sub">Pick a pistol, add parts, and save — your build will wait here until you\'re ready to post it.</div>' +
+        '<button type="button" class="btn-new-build" id="btn-start-build">Start a build</button>' +
+      '</div>';
+    document.getElementById('btn-new-build').onclick  = function () { startNewBuild(); };
+    document.getElementById('btn-start-build').onclick = function () { startNewBuild(); };
+    return;
+  }
+
+  el.innerHTML = head + MY_DRAFTS.map(renderDraftRow).join('');
+  document.getElementById('btn-new-build').onclick = function () { startNewBuild(); };
+  wireDraftRows();
+}
+
+function renderDraftRow(d) {
+  var plat  = PLATFORMS_BY_ID[d.platform_id];
+  var snap  = Array.isArray(d.parts_snapshot) ? d.parts_snapshot : [];
+  var total = snapshotTotal(snap);
+  return '' +
+    '<div class="draft-row" data-draft="' + escAttr(d.id) + '">' +
+      '<button type="button" class="draft-open" data-open="' + escAttr(d.id) + '">' +
+        '<div class="draft-name">' + esc(d.name || 'Untitled build') + '</div>' +
+        '<div class="draft-meta">' + esc(plat ? plat.name : 'Unknown pistol') + ' &middot; ' +
+          snap.length + ' part' + (snap.length !== 1 ? 's' : '') + '</div>' +
+        '<div class="draft-parts">' + esc(snapshotSummary(snap)) + '</div>' +
+        '<div class="draft-foot">' +
+          (total > 0 ? '<span class="draft-total">~$' + Math.round(total).toLocaleString() + '</span>' : '') +
+          '<span class="draft-edited">Edited ' + esc(relTime(d.updated_at)) + '</span>' +
+        '</div>' +
+      '</button>' +
+      '<div class="draft-actions">' +
+        '<button type="button" class="draft-act" data-rename="' + escAttr(d.id) + '">Rename</button>' +
+        '<button type="button" class="draft-act danger" data-delete="' + escAttr(d.id) + '">Delete</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function wireDraftRows() {
+  document.querySelectorAll('[data-open]').forEach(function (b) {
+    b.onclick = function () { openDraft(b.getAttribute('data-open')); };
+  });
+  document.querySelectorAll('[data-rename]').forEach(function (b) {
+    b.onclick = function () { beginRowRename(b.getAttribute('data-rename')); };
+  });
+  document.querySelectorAll('[data-delete]').forEach(function (b) {
+    b.onclick = function () { confirmDeleteDraft(b.getAttribute('data-delete')); };
+  });
+}
+
+// ─── RENAME ─────────────────────────────────────────────────
+// The ONLY place the Armory writes builds.name, and only on an explicit
+// rename. saveDraft() still never touches it (stage 1's rule), so a draft
+// started in post-build keeps its title through any number of parts edits.
+async function commitRename(buildId, raw) {
+  var name = (raw == null ? '' : String(raw)).trim();
+  if (!name) { toast('Name can\'t be empty'); return false; }
+  var res = await sb.from('builds')
+    .update({ name: name })
+    .eq('id', buildId)
+    .eq('user_id', CURRENT_USER.id)
+    .eq('status', 'draft')
+    .select('id,name')
+    .maybeSingle();
+  if (res.error) { console.error('[armory] rename failed', res.error); toast('Rename failed — try again'); return false; }
+  if (!res.data)  { toast('That draft no longer exists'); return false; }
+  if (STATE.buildId === buildId) {
+    STATE.buildName = res.data.name;
+    renderBuilderHeader();
+  }
+  var row = MY_DRAFTS.find(function (d) { return d.id === buildId; });
+  if (row) row.name = res.data.name;
+  toast('Renamed');
+  return true;
+}
+
+function beginRowRename(buildId) {
+  var row = document.querySelector('.draft-row[data-draft="' + buildId + '"]');
+  var d = MY_DRAFTS.find(function (x) { return x.id === buildId; });
+  if (!row || !d) return;
+  var open = row.querySelector('.draft-open');
+  open.innerHTML =
+    '<div class="rename-row">' +
+      '<input class="rename-input" id="rename-input" type="text" maxlength="80" value="' + escAttr(d.name || '') + '" />' +
+      '<button type="button" class="draft-act" id="rename-save">Save</button>' +
+      '<button type="button" class="draft-act" id="rename-cancel">Cancel</button>' +
+    '</div>';
+  var input = document.getElementById('rename-input');
+  input.focus(); input.select();
+  function finish(ok) {
+    if (!ok) { renderDraftsList(); return; }
+    commitRename(buildId, input.value).then(function () { renderDraftsList(); });
+  }
+  document.getElementById('rename-save').onclick   = function () { finish(true); };
+  document.getElementById('rename-cancel').onclick = function () { finish(false); };
+  input.onkeydown = function (e) {
+    if (e.key === 'Enter')  { e.preventDefault(); finish(true); }
+    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  };
+}
+
+function renameCurrentBuild() {
+  if (!STATE.buildId) { toast('Save this build first, then you can name it'); return; }
+  var next = window.prompt('Name this build', STATE.buildName || '');
+  if (next === null) return;                 // cancelled
+  commitRename(STATE.buildId, next);
+}
+
+// ─── DELETE ─────────────────────────────────────────────────
+// RLS policy "Owners can delete their own draft builds" is
+// (auth.uid() = user_id AND status = 'draft'), so the database refuses to
+// delete anything else regardless of what the client sends. The filters
+// below mirror it rather than replace it.
+async function confirmDeleteDraft(buildId) {
+  var d = MY_DRAFTS.find(function (x) { return x.id === buildId; });
+  if (!d) return;
+  var label = d.name || 'this draft';
+  if (!window.confirm('Delete "' + label + '"?\n\nThis can\'t be undone.')) return;
+
+  var res = await sb.from('builds')
+    .delete()
+    .eq('id', buildId)
+    .eq('user_id', CURRENT_USER.id)
+    .eq('status', 'draft')
+    .select('id')
+    .maybeSingle();
+  if (res.error) { console.error('[armory] delete failed', res.error); toast('Delete failed — try again'); return; }
+  if (!res.data)  { toast('That draft was already gone'); }
+  else            { toast('Deleted "' + label + '"'); }
+
+  // If the open build was the one deleted, drop back to the list rather than
+  // leaving the builder pointed at a row that no longer exists.
+  if (STATE.buildId === buildId) resetBuilderState();
+  await loadMyDrafts();
+  renderDraftsList();
+  showDraftsList();
+  scrubBuildParam();
+}
+
+// ─── UNSAVED CHANGES ────────────────────────────────────────
+// Signature of what saveDraft would persist. Compared against the last
+// saved state so "dirty" means genuinely unsaved work, not just any edit.
+var savedSignature = null;
+
+function buildSignature() {
+  return JSON.stringify({
+    p: STATE.platform ? STATE.platform.id : null,
+    parts: buildPartsSnapshot(),
+  });
+}
+function markClean() { savedSignature = buildSignature(); renderBuilderHeader(); }
+
+function isDirty() {
+  if (!CURRENT_USER) return false;                        // nothing to save to
+  if (!STATE.buildId) return STATE.parts.length > 0;      // unsaved new build
+  return savedSignature !== null && savedSignature !== buildSignature();
+}
+
+// Returns true if it's safe to proceed (either clean, or the user accepted).
+function confirmDiscardIfDirty(action) {
+  if (!isDirty()) return true;
+  return window.confirm('You have unsaved changes to this build.\n\n' + action + ' anyway?');
+}
+
+window.addEventListener('beforeunload', function (e) {
+  if (!isDirty()) return;
+  e.preventDefault();
+  e.returnValue = '';       // required by some browsers to trigger the prompt
+});
+
+// ─── BUILDER CHROME ─────────────────────────────────────────
+function renderBuilderHeader() {
+  var header = document.getElementById('builder-header');
+  if (!header) return;
+  var showing = !!(STATE.buildId || STATE.parts.length || STATE.platform);
+  header.hidden = !showing;
+  if (!showing) return;
+  document.getElementById('builder-name').textContent =
+    STATE.buildName || (STATE.platform ? defaultBuildName() : 'Untitled build');
+  document.getElementById('builder-dirty').hidden = !isDirty();
+  var renameBtn = document.getElementById('btn-rename-header');
+  if (renameBtn) renameBtn.hidden = !STATE.buildId;
+}
+
+// "<Platform> build" — e.g. "P365 X-Macro build". Replaces the old
+// "Armory draft — <date>", which made every draft look identical in a list.
+function defaultBuildName() {
+  return (STATE.platform ? STATE.platform.name : 'Custom') + ' build';
+}
+
+function scrubBuildParam() {
+  try { history.replaceState({}, '', window.location.pathname); } catch (_) {}
+}
+
+function resetBuilderState() {
+  STATE.buildId = null;
+  STATE.buildName = null;
+  STATE.parts = [];
+  STATE.openCategory = null;
+  savedSignature = null;
+}
+
+function startNewBuild(skipDirtyCheck) {
+  if (!skipDirtyCheck && !confirmDiscardIfDirty('Start a new build')) return;
+  resetBuilderState();
+  scrubBuildParam();
+  showBuilder();
+  renderPlatformRow();
+  renderPartsSection();
+  renderSummary();
+  renderBuilderHeader();
+  updateActionButtons();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function openDraft(buildId) {
+  if (!confirmDiscardIfDirty('Open a different build')) return;
+  try { history.replaceState({}, '', window.location.pathname + '?build=' + encodeURIComponent(buildId)); } catch (_) {}
+  var ok = await loadBuildById(buildId);
+  if (ok) { showBuilder(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+}
+
+async function backToList() {
+  if (!confirmDiscardIfDirty('Go back to your builds')) return;
+  scrubBuildParam();
+  await loadMyDrafts();
+  renderDraftsList();
+  showDraftsList();
 }
 
 // ─── OPEN AN EXISTING DRAFT (?build=<uuid>) ─────────────────
@@ -425,16 +819,23 @@ function normalizeSnapshotCategory(part) {
 async function applyBuildFromUrl() {
   var params = new URLSearchParams(window.location.search);
   var buildId = params.get('build');
-  if (!buildId) return;
+  if (!buildId) return false;
+  var ok = await loadBuildById(buildId);
+  if (ok) showBuilder();
+  return ok;
+}
 
+// Split out from applyBuildFromUrl so the drafts list can open a build
+// without a page load. Returns true only when STATE was actually hydrated.
+async function loadBuildById(buildId) {
   if (!BUILD_ID_RE.test(buildId)) {
     draftLoadError('That build link isn\'t a valid ID.');
-    return;
+    return false;
   }
   if (!CURRENT_USER) {
     draftLoadError('Sign in to open your saved build.',
       'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
-    return;
+    return false;
   }
 
   var res = await sb.from('builds')
@@ -445,7 +846,7 @@ async function applyBuildFromUrl() {
   if (res.error) {
     draftLoadError('Something went wrong loading that build — try again.');
     console.error('[armory] draft load failed', res.error);
-    return;
+    return false;
   }
 
   var b = res.data;
@@ -455,18 +856,18 @@ async function applyBuildFromUrl() {
   if (!b || b.user_id !== CURRENT_USER.id) {
     draftLoadError('That build doesn\'t exist, or it isn\'t yours.',
       'gunforma-profile.html', 'Your profile');
-    return;
+    return false;
   }
   if (b.status !== 'draft') {
     draftLoadError('That build has already been submitted, so it can\'t be edited here.',
       'gunforma-build-detail.html?id=' + encodeURIComponent(b.id), 'View the build');
-    return;
+    return false;
   }
 
   var plat = PLATFORMS_BY_ID[b.platform_id];
   if (!plat) {
     draftLoadError('That build\'s pistol is no longer in the catalog.');
-    return;
+    return false;
   }
 
   STATE.buildId   = b.id;
@@ -493,7 +894,10 @@ async function applyBuildFromUrl() {
   renderPartsSection();
   renderSummary();
   updateActionButtons();
+  markClean();
+  renderBuilderHeader();
   toast('Editing "' + b.name + '" — saving updates this build');
+  return true;
 }
 
 function applyPrefillFromUrl() {
@@ -592,6 +996,8 @@ function wireControls() {
   document.getElementById('tab-guides').onclick = function () { setTab('guides'); };
   document.getElementById('btn-save-draft').onclick = saveDraft;
   document.getElementById('btn-post').onclick       = postThisBuild;
+  document.getElementById('btn-back-to-list').onclick   = backToList;
+  document.getElementById('btn-rename-header').onclick  = renameCurrentBuild;
 }
 
 function setTab(tab) {
@@ -829,6 +1235,9 @@ function totalMsrp() {
   return STATE.parts.reduce(function (sum, p) { return p.price != null ? sum + p.price : sum; }, 0);
 }
 function renderSummary() {
+  // Every parts/platform mutation funnels through here, so it's the one
+  // place that reliably reflects the unsaved-changes badge.
+  renderBuilderHeader();
   document.getElementById('s-platform').textContent = STATE.platform ? STATE.platform.name : '—';
   document.getElementById('s-parts').textContent    = String(STATE.parts.length);
   document.getElementById('s-favs').textContent     = CURRENT_USER ? String(FAVORITES.size) : 'Sign in';
@@ -853,9 +1262,9 @@ function buildPartsSnapshot() {
 var draftSaveInFlight = false;
 
 async function saveDraft() {
-  if (!CURRENT_USER) { toast('Sign in to save drafts', 'gunforma-signin.html', 'Sign in'); return; }
-  if (!STATE.platform || STATE.parts.length === 0) return;
-  if (draftSaveInFlight) return;
+  if (!CURRENT_USER) { toast('Sign in to save drafts', 'gunforma-signin.html', 'Sign in'); return false; }
+  if (!STATE.platform || STATE.parts.length === 0) return false;
+  if (draftSaveInFlight) return false;
   draftSaveInFlight = true;
 
   var btn = document.getElementById('btn-save-draft');
@@ -895,7 +1304,10 @@ async function saveDraft() {
       .insert({
         user_id: CURRENT_USER.id,
         platform_id: STATE.platform.id,
-        name: 'Armory draft — ' + new Date().toLocaleDateString(),
+        // "<Platform> build" beats "Armory draft — <date>": in a list of
+        // drafts the old format made every row look identical. Renameable
+        // from the list or the builder header.
+        name: defaultBuildName(),
         tier: 'full',
         status: 'draft',
         activities: [],
@@ -916,7 +1328,7 @@ async function saveDraft() {
   if (res.error) {
     console.error('[armory] draft save failed', res.error);
     toast('Save failed — ' + (res.error.message || 'try again'));
-    return;
+    return false;
   }
 
   // An UPDATE matching no row comes back with data null and no error — the
@@ -924,10 +1336,11 @@ async function saveDraft() {
   // reporting a save that did not happen.
   if (STATE.buildId && !res.data) {
     toast('That draft no longer exists — reload to start a new one.');
-    return;
+    return false;
   }
 
   var wasNew = !STATE.buildId;
+  if (wasNew) STATE.buildName = defaultBuildName();
   if (wasNew && res.data && res.data.id) {
     // Adopt the new row so the next click updates it. Reflecting the id in
     // the URL means a refresh reopens the same draft rather than orphaning
@@ -939,24 +1352,40 @@ async function saveDraft() {
     } catch (_) { /* history blocked — STATE.buildId still prevents a dupe */ }
   }
 
+  markClean();
+  renderBuilderHeader();
   toast(wasNew ? 'Draft saved' : 'Draft updated');
+  return true;
 }
 
-function postThisBuild() {
+// Save first, then hand the SAME row to post-build as an edit. Previously
+// this passed the parts through localStorage and post-build INSERTed a fresh
+// build — so posting an existing draft left the draft behind as an orphan
+// duplicate. Now the draft becomes the post.
+//
+// post-build's edit mode handles a parts-only draft: it only refuses on
+// not-found, not-yours, or a status other than draft/rejected, and it
+// explicitly tolerates a draft with no photos. Publishing still requires a
+// photo — that gate is the point of sending the user there.
+async function postThisBuild() {
   if (!CURRENT_USER) { toast('Sign in to post a build', 'gunforma-signin.html', 'Sign in'); return; }
   if (!STATE.platform || STATE.parts.length === 0) return;
-  // Handshake: post-build-v6.html reads this on load and pre-fills its
-  // platform + parts, then removes the key. Localstorage — same origin,
-  // survives the redirect, no size concerns for this shape.
-  try {
-    localStorage.setItem(LS_ARMORY_POST_KEY, JSON.stringify({
-      v: 1,
-      platform_id: STATE.platform.id,
-      parts_snapshot: buildPartsSnapshot(),
-      handed_off_at: new Date().toISOString(),
-    }));
-  } catch (e) { console.error('localStorage set failed', e); toast('Couldn\'t hand off — try again'); return; }
-  window.location.href = 'gunforma-post-build-v6.html';
+
+  // Persist anything unsaved so the row post-build opens is what's on screen.
+  if (!STATE.buildId || isDirty()) {
+    var saved = await saveDraft();
+    if (!saved) return;              // saveDraft already surfaced the reason
+  }
+  if (!STATE.buildId) { toast('Couldn\'t save this build — try again'); return; }
+
+  // Clear the legacy handoff key. If a stale one survived from an older
+  // session, post-build would hydrate from it and clobber the draft we just
+  // pointed it at.
+  try { localStorage.removeItem(LS_ARMORY_POST_KEY); } catch (_) {}
+
+  savedSignature = buildSignature();   // suppress the beforeunload prompt
+  window.location.href = 'gunforma-post-build-v6.html?id=' +
+    encodeURIComponent(STATE.buildId) + '&mode=edit';
 }
 
 // ─── GUIDES TAB ────────────────────────────────────────────
