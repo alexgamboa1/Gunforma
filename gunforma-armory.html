@@ -43,6 +43,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* LAYOUT */
 .armory { max-width: 1400px; margin: 0 auto; padding: 22px 32px 64px; }
 .build-layout { display: grid; grid-template-columns: 1fr 320px; gap: 28px; align-items: start; }
+/* showDraftsList()/showBuilder() swap these two views with the hidden
+   attribute. [hidden] { display: none } is a user-agent rule, so the author
+   `display: grid` above wins and #builder-view stays on screen — "← All
+   builds" rendered the drafts list UNDERNEATH a still-visible builder.
+   #drafts-view has no class setting display, which is why only this half
+   broke. Specificity 0,1,1 beats the 0,1,0 above, including inside the
+   max-width:900px override (which only touches grid-template-columns). */
+.build-layout[hidden] { display: none; }
 .build-main { display: flex; flex-direction: column; gap: 16px; }
 .build-side { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; }
 
