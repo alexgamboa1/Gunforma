@@ -607,6 +607,39 @@ const CATEGORIES = [
   { key:'misc',     label:'Miscellaneous',          dbCategory:null },
 ];
 
+// parts_snapshot holds a mix of vocabularies. Parts added here are stored
+// under the UI key ('optics'); parts added from the Armory are stored under
+// the raw products.category enum value ('optic'). buildCategoryBlock filters
+// with `p.category === cat.key`, so a DB-vocabulary part matches no section
+// and silently vanishes — the build still reports the right part count,
+// which is why it reads as "the part is gone" rather than "the page broke".
+//
+// Derived from CATEGORIES rather than hand-written, so a new section only has
+// to declare dbCategory once and this map follows automatically.
+const DB_CATEGORY_TO_UI_KEY = CATEGORIES.reduce(function (map, cat) {
+  (cat.dbCategory || []).forEach(function (dbCat) { map[dbCat] = cat.key; });
+  return map;
+}, {});
+
+const UI_CATEGORY_KEYS = new Set(CATEGORIES.map(function (cat) { return cat.key; }));
+
+// Bucket for anything we can't place — a real, rendered section. Never drop a
+// part: a visible part in the wrong section is fixable by the user, an
+// invisible one looks like data loss.
+const FALLBACK_CATEGORY_KEY = 'misc';
+
+// Normalize ON READ, both hydration paths. Deliberately not a migration:
+// doing it here also rescues drafts already sitting in the database.
+function normalizePartCategory(raw) {
+  const value = (raw == null ? '' : String(raw)).trim();
+  if (!value) return FALLBACK_CATEGORY_KEY;
+  if (UI_CATEGORY_KEYS.has(value)) return value;            // already a UI key
+  if (DB_CATEGORY_TO_UI_KEY[value]) return DB_CATEGORY_TO_UI_KEY[value];
+  console.warn('[post-build] unmapped part category ' + JSON.stringify(value) +
+               ' — showing it under "' + FALLBACK_CATEGORY_KEY + '"');
+  return FALLBACK_CATEGORY_KEY;
+}
+
 // Runtime-populated per platform, keyed by UI category key. Each entry:
 //   { id: <products.id UUID>, brand, name, desc, price }
 // Filled by loadCatalog(platformId) after a pistol is picked. Categories
@@ -1982,7 +2015,8 @@ async function hydrateFromArmoryHandoff() {
 
   (payload.parts_snapshot || []).forEach(function (part) {
     state.parts.push({
-      uid: 'p' + (uid++), refId: part.refId || null, category: part.category,
+      uid: 'p' + (uid++), refId: part.refId || null,
+      category: normalizePartCategory(part.category),
       brand: part.brand || 'Unknown', name: part.name || '', pending: !!part.pending,
     });
   });
@@ -2096,7 +2130,7 @@ async function hydrateFromEditMode() {
     state.parts.push({
       uid: 'p' + (uid++),
       refId: part.refId || null,
-      category: part.category,
+      category: normalizePartCategory(part.category),
       brand: part.brand || 'Unknown',
       name: part.name || '',
       pending: !!part.pending,
