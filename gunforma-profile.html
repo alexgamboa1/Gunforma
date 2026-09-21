@@ -485,7 +485,9 @@ function renderMiniBuildCard(b) {
 async function loadMyBuilds() {
   const panel = document.getElementById('panel-my-builds');
   let q = sb.from('builds')
-    .select('id,name,status,activities,parts_snapshot,rejection_reason,reviewed_at,platforms(name),build_photos(storage_path,thumb_path,is_hero)')
+    // description is selected only so routeForBuild() can tell a parts-only
+    // draft from one carrying written content — it isn't rendered on the card.
+    .select('id,name,status,activities,description,parts_snapshot,rejection_reason,reviewed_at,platforms(name),build_photos(storage_path,thumb_path,is_hero)')
     .eq('user_id', VIEW_PROFILE.id)
     .order('created_at', { ascending: false });
   if (!IS_OWN_PROFILE) q = q.eq('status', 'approved');
@@ -504,6 +506,43 @@ async function loadMyBuilds() {
       : '<div class="empty"><div class="empty-title">Nothing here yet</div>'+
           (IS_OWN_PROFILE ? '<div class="empty-sub">Drafts, builds in review, and live builds all show up here.</div><a class="empty-cta" href="gunforma-post-build-v6.html">Post your build</a>' : '')+
         '</div>');
+}
+
+// Where a build card points.
+//
+// A draft that is nothing but a parts list opens in the Armory, which is
+// built for exactly that. Anything else keeps going to post-build.
+//
+// The test is deliberately NOT "did this come from the Armory?" — there is no
+// origin column, and every field an Armory draft sets can also occur on a
+// post-build draft (post-build's saveDraft only requires a platform and a
+// name, so it too can have no photos and no description). Instead the test is
+// "can the Armory represent this build without losing anything?", which is the
+// property that actually matters and can't be fooled by a renamed draft.
+//
+// name is intentionally not part of the rule: the Armory's UPDATE never writes
+// name, so a post-build draft opened there keeps its title.
+//
+// rejected builds always go to post-build — they need resubmission, which only
+// that page can do.
+function routeForBuild(b) {
+  if (b.status === 'approved') {
+    return 'gunforma-build-detail.html?id=' + encodeURIComponent(b.id);
+  }
+  if (b.status === 'draft' && isPartsOnlyDraft(b)) {
+    return 'gunforma-armory.html?build=' + encodeURIComponent(b.id);
+  }
+  return 'gunforma-post-build-v6.html?id=' + encodeURIComponent(b.id) + '&mode=edit';
+}
+
+// True only when the draft holds nothing post-build owns. Conservative by
+// construction: any photo, any story, or any activity tag keeps it in
+// post-build so nothing a user wrote becomes unreachable.
+function isPartsOnlyDraft(b) {
+  const photos = Array.isArray(b.build_photos) ? b.build_photos.length : 0;
+  const hasStory = typeof b.description === 'string' && b.description.trim() !== '';
+  const tags = Array.isArray(b.activities) ? b.activities.length : 0;
+  return photos === 0 && !hasStory && tags === 0;
 }
 
 function renderStatusBuildCard(b) {
@@ -530,9 +569,7 @@ function renderStatusBuildCard(b) {
         rejectionHtml+
         '<div class="build-card-sub">'+escH(platform)+' · '+partsCount+' part'+(partsCount!==1?'s':'')+'</div>'+
       '</div>';
-  const href = b.status === 'approved'
-    ? 'gunforma-build-detail.html?id='+encodeURIComponent(b.id)
-    : 'gunforma-post-build-v6.html?id='+encodeURIComponent(b.id)+'&mode=edit';
+  const href = routeForBuild(b);
   return clickable
     ? '<a class="build-card" href="'+href+'">'+inner+'</a>'
     : '<div class="build-card disabled">'+inner+'</div>';

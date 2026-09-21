@@ -863,16 +863,27 @@ async function saveDraft() {
 
   var res;
   if (STATE.buildId) {
-    // Only the fields the Armory actually owns. name is excluded on purpose:
-    // a draft started in post-build carries a user-typed name, and this page
-    // has no rename UI, so writing the generated name would destroy it.
-    // Consent flags are excluded too — the prevent_build_consent_tampering
-    // trigger rejects changes to them.
+    // EXACTLY the three columns the Armory owns. Everything else is left
+    // untouched so a draft that started in post-build survives a round trip
+    // through this page intact:
+    //   name         — user-typed there; no rename UI here, so writing the
+    //                  generated "Armory draft — <date>" would destroy it
+    //   description  — the story; this page has no field for it
+    //   activities   — tags; no UI here. Hardcoding [] would erase them.
+    //   status       — only post-build submits; never change it here
+    //   legal_confirmed / content_license_confirmed / confirmed_at
+    //                — prevent_build_consent_tampering rejects these anyway
+    //   updated_at   — set by the builds_updated_at BEFORE UPDATE trigger;
+    //                  writing it from the client is redundant
+    //   edit_history — prevent_owner_edit_history_change rejects owner writes
     res = await sb.from('builds')
       .update({
         platform_id: STATE.platform.id,
         parts_snapshot: buildPartsSnapshot(),
-        tier: 'full',
+        // Derived from the parts list, not hardcoded — matches post-build's
+        // rule, so a 'minimum' draft that gains parts here becomes 'full'
+        // instead of staying stale.
+        tier: STATE.parts.length ? 'full' : 'minimum',
       })
       .eq('id', STATE.buildId)
       .eq('user_id', CURRENT_USER.id)   // redundant with RLS, explicit anyway
