@@ -314,6 +314,13 @@ var STATE = {
   parts: [],                    // [{uid, refId, category, brand, name, pending, price}]
   openCategory: null,
   guideCategory: 'all',         // 'all' | 'home_defense' | 'concealed_carry' | ...
+  // Set when editing an existing draft (?build=<uuid>, or after the first
+  // save of a new one). Non-null makes saveDraft() UPDATE instead of INSERT.
+  buildId: null,
+  // Preserved verbatim across saves. A draft started in post-build has a
+  // user-typed name; the Armory has no rename UI, so overwriting it with the
+  // generated "Armory draft — <date>" would destroy something the user wrote.
+  buildName: null,
 };
 var partUid = 1;
 
@@ -363,12 +370,140 @@ async function init() {
   // first platform and add the part, then scrub the URL so refresh doesn't
   // re-add it.
   applyPrefillFromUrl();
+  await applyBuildFromUrl();
+}
+
+// ─── OPEN AN EXISTING DRAFT (?build=<uuid>) ─────────────────
+// The profile links parts-only drafts here instead of post-build, so the
+// parts list stays editable without walking back through the publishing
+// form. RLS ("Owners can view their own builds") already scopes the read to
+// the signed-in user; the ownership check below is belt-and-braces.
+var BUILD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Never leave the page blank on a failure — a silent empty Armory looks
+// identical to "your parts vanished", which is the bug class we just fixed.
+function draftLoadError(message, href, linkText) {
+  var el = document.getElementById('parts-container');
+  if (el) {
+    el.innerHTML = '<div class="card"><div style="padding:18px;text-align:center;">' +
+      '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Couldn\'t open that build</div>' +
+      '<div style="font-size:12px;color:#666;line-height:1.6;">' + esc(message) + '</div>' +
+      (href ? '<div style="margin-top:14px;"><a href="' + escAttr(href) + '" style="font-size:12px;font-weight:700;color:#2a7bbd;text-decoration:none;">' + esc(linkText || 'Continue') + ' &rarr;</a></div>' : '') +
+      '</div></div>';
+  }
+  toast(message, href, linkText);
+}
+
+// This page groups parts with `p.category === cat`, where cat comes from
+// PRODUCTS_BY_CATEGORY — raw products.category values ('optic', 'frame').
+// post-build stores its own UI keys ('optics', 'grips'). A draft saved there
+// would load here with categories matching no block: counted in the summary,
+// invisible in the list. Same failure as issue #2, pointed the other way.
+//
+// refId is the authoritative fix — the catalog knows each product's real
+// category, so the stored string doesn't matter. The reverse map only covers
+// custom/pending parts, which have no refId to look up.
+var UI_KEY_TO_DB_CATEGORY = {
+  optics: 'optic', lights: 'light', grips: 'frame', slides: 'slide',
+  barrels: 'barrel', triggers: 'trigger', magwells: 'magwell',
+  mag_release: 'mag_release', other_parts: 'basepad',
+};
+
+function normalizeSnapshotCategory(part) {
+  var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
+  if (live && live.category) return live.category;          // ground truth
+  var raw = (part.category == null ? '' : String(part.category)).trim();
+  if (!raw) return null;
+  if (CATEGORY_LABELS[raw] || PRODUCTS_BY_CATEGORY[raw]) return raw;   // already a DB category
+  if (UI_KEY_TO_DB_CATEGORY[raw]) return UI_KEY_TO_DB_CATEGORY[raw];
+  // Kept rather than dropped, so the part still counts and can be removed.
+  console.warn('[armory] unmapped part category ' + JSON.stringify(raw) +
+               ' — it will count toward the build but has no category block to render in');
+  return raw;
+}
+
+async function applyBuildFromUrl() {
+  var params = new URLSearchParams(window.location.search);
+  var buildId = params.get('build');
+  if (!buildId) return;
+
+  if (!BUILD_ID_RE.test(buildId)) {
+    draftLoadError('That build link isn\'t a valid ID.');
+    return;
+  }
+  if (!CURRENT_USER) {
+    draftLoadError('Sign in to open your saved build.',
+      'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
+    return;
+  }
+
+  var res = await sb.from('builds')
+    .select('id,user_id,status,platform_id,name,parts_snapshot')
+    .eq('id', buildId)
+    .maybeSingle();
+
+  if (res.error) {
+    draftLoadError('Something went wrong loading that build — try again.');
+    console.error('[armory] draft load failed', res.error);
+    return;
+  }
+
+  var b = res.data;
+  // RLS filters other people's builds to zero rows, so "missing" and "not
+  // yours" are indistinguishable here — and saying so would leak whether the
+  // id exists. One message covers both.
+  if (!b || b.user_id !== CURRENT_USER.id) {
+    draftLoadError('That build doesn\'t exist, or it isn\'t yours.',
+      'gunforma-profile.html', 'Your profile');
+    return;
+  }
+  if (b.status !== 'draft') {
+    draftLoadError('That build has already been submitted, so it can\'t be edited here.',
+      'gunforma-build-detail.html?id=' + encodeURIComponent(b.id), 'View the build');
+    return;
+  }
+
+  var plat = PLATFORMS_BY_ID[b.platform_id];
+  if (!plat) {
+    draftLoadError('That build\'s pistol is no longer in the catalog.');
+    return;
+  }
+
+  STATE.buildId   = b.id;
+  STATE.buildName = b.name;
+  STATE.platform  = plat;
+  rebuildCatalogForPlatform();
+
+  STATE.parts = (Array.isArray(b.parts_snapshot) ? b.parts_snapshot : []).map(function (part) {
+    var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
+    return {
+      uid: 'p' + (partUid++),
+      refId: part.refId || null,
+      category: normalizeSnapshotCategory(part),
+      brand: part.brand || (live ? live.brand : 'Unknown'),
+      name:  part.name  || (live ? live.name  : ''),
+      pending: !!part.pending,
+      price: live ? live.price : null,
+    };
+  });
+
+  STATE.openCategory = null;
+  setTab('build');
+  renderPlatformRow();
+  renderPartsSection();
+  renderSummary();
+  updateActionButtons();
+  toast('Editing "' + b.name + '" — saving updates this build');
 }
 
 function applyPrefillFromUrl() {
   var params = new URLSearchParams(window.location.search);
   var prefillId = params.get('prefill');
   if (!prefillId) return;
+  // ?build= wins. Prefill calls selectPlatform(), which drops every
+  // non-pending part, and it scrubs the query string afterwards — either
+  // would quietly destroy the draft applyBuildFromUrl is about to load.
+  if (params.get('build')) return;
   var product = PRODUCTS_BY_ID[prefillId];
   if (!product) { toast('That part isn\'t in the catalog anymore'); return; }
   var platformId = (product.platform_ids || [])[0];
@@ -712,29 +847,88 @@ function buildPartsSnapshot() {
   });
 }
 
+// Guards the window between click and response. The button is disabled for
+// the same span, but a double-click can queue a second call before the first
+// paint — which is how the duplicate rows in production got there.
+var draftSaveInFlight = false;
+
 async function saveDraft() {
   if (!CURRENT_USER) { toast('Sign in to save drafts', 'gunforma-signin.html', 'Sign in'); return; }
   if (!STATE.platform || STATE.parts.length === 0) return;
+  if (draftSaveInFlight) return;
+  draftSaveInFlight = true;
+
   var btn = document.getElementById('btn-save-draft');
   btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Saving…';
-  var payload = {
-    user_id: CURRENT_USER.id,
-    platform_id: STATE.platform.id,
-    name: 'Armory draft — ' + new Date().toLocaleDateString(),
-    tier: 'full',
-    status: 'draft',
-    activities: [],
-    parts_snapshot: buildPartsSnapshot(),
-    // Draft: no consent flags. The stamp_build_consent trigger leaves
-    // confirmed_at null in that case, and the row can be picked up later
-    // in post-build-v6 for real submission.
-    legal_confirmed: false,
-    content_license_confirmed: false,
-  };
-  var res = await sb.from('builds').insert(payload).select('id').single();
+
+  var res;
+  if (STATE.buildId) {
+    // Only the fields the Armory actually owns. name is excluded on purpose:
+    // a draft started in post-build carries a user-typed name, and this page
+    // has no rename UI, so writing the generated name would destroy it.
+    // Consent flags are excluded too — the prevent_build_consent_tampering
+    // trigger rejects changes to them.
+    res = await sb.from('builds')
+      .update({
+        platform_id: STATE.platform.id,
+        parts_snapshot: buildPartsSnapshot(),
+        tier: 'full',
+      })
+      .eq('id', STATE.buildId)
+      .eq('user_id', CURRENT_USER.id)   // redundant with RLS, explicit anyway
+      .eq('status', 'draft')            // never silently edit a submitted build
+      .select('id')
+      .maybeSingle();
+  } else {
+    res = await sb.from('builds')
+      .insert({
+        user_id: CURRENT_USER.id,
+        platform_id: STATE.platform.id,
+        name: 'Armory draft — ' + new Date().toLocaleDateString(),
+        tier: 'full',
+        status: 'draft',
+        activities: [],
+        parts_snapshot: buildPartsSnapshot(),
+        // Draft: no consent flags. The stamp_build_consent trigger leaves
+        // confirmed_at null in that case, and the row can be picked up later
+        // in post-build-v6 for real submission.
+        legal_confirmed: false,
+        content_license_confirmed: false,
+      })
+      .select('id')
+      .single();
+  }
+
+  draftSaveInFlight = false;
   btn.disabled = false; btn.textContent = orig;
-  if (res.error) { console.error(res.error); toast('Save failed — ' + (res.error.message || 'try again')); return; }
-  toast('Draft saved');
+
+  if (res.error) {
+    console.error('[armory] draft save failed', res.error);
+    toast('Save failed — ' + (res.error.message || 'try again'));
+    return;
+  }
+
+  // An UPDATE matching no row comes back with data null and no error — the
+  // build was deleted or submitted in another tab. Say so instead of
+  // reporting a save that did not happen.
+  if (STATE.buildId && !res.data) {
+    toast('That draft no longer exists — reload to start a new one.');
+    return;
+  }
+
+  var wasNew = !STATE.buildId;
+  if (wasNew && res.data && res.data.id) {
+    // Adopt the new row so the next click updates it. Reflecting the id in
+    // the URL means a refresh reopens the same draft rather than orphaning
+    // it and starting another.
+    STATE.buildId = res.data.id;
+    try {
+      history.replaceState({}, '',
+        window.location.pathname + '?build=' + encodeURIComponent(res.data.id));
+    } catch (_) { /* history blocked — STATE.buildId still prevents a dupe */ }
+  }
+
+  toast(wasNew ? 'Draft saved' : 'Draft updated');
 }
 
 function postThisBuild() {
