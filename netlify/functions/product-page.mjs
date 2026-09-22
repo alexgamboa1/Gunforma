@@ -388,9 +388,18 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
       '@type': 'Offer',
       price: r.price.toFixed(2),
       priceCurrency: 'USD',
-      availability: r.in_stock === true
-        ? 'https://schema.org/InStock'
-        : r.in_stock === false ? 'https://schema.org/OutOfStock' : 'https://schema.org/InStoreOnly',
+      // Omit availability entirely when stock is unknown. schema.org reads an
+      // absent property as "not stated", which is the truth. The previous
+      // fallback emitted InStoreOnly, which positively asserts the item can
+      // only be bought in a physical shop — false for an affiliate link, and
+      // exactly the kind of wrong structured data that surfaces in rich
+      // results. No link has a null in_stock today, so this has never fired;
+      // it is about to, once Olight's unverified stock flags are cleared.
+      ...(r.in_stock === true
+            ? { availability: 'https://schema.org/InStock' }
+            : r.in_stock === false
+              ? { availability: 'https://schema.org/OutOfStock' }
+              : {}),
       url: r.url,
       itemCondition: 'https://schema.org/NewCondition',
     })),
