@@ -20,3 +20,8 @@ holosun-507c-x2-review.html
 
 # Cloudflare wrangler local state — pins an account id, not for tracking
 .wrangler/
+
+# Supabase CLI local state — rewritten on every `supabase functions deploy`
+# and every link, so it shows up as spurious diffs. Contents are the linked
+# project ref and the versions of the managed services; no credentials.
+supabase/.temp/
