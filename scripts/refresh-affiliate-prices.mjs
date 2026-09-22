@@ -249,10 +249,21 @@ async function loadPartners() {
 
 // ─── load one partner's existing rows + build its match indexes ─────────────
 async function loadExistingRows(partner, host) {
-  const rows = await pgGet(
+  const allRows = await pgGet(
     `affiliate_links?partner_id=eq.${partner.id}&limit=5000` +
-    `&select=id,url,street_price,in_stock,op_mpn,op_gtin,op_merchant_product_id,op_last_matched_by,product_variants(sku,upc)`
+    `&select=id,url,street_price,in_stock,retired_at,op_mpn,op_gtin,op_merchant_product_id,op_last_matched_by,product_variants(sku,upc)`
   );
+
+  // Retired listings are skipped, not matched — but they are COUNTED and
+  // reported, never dropped silently. A retired link the feed still carries is
+  // worth knowing about: it usually means the merchant is still selling it and
+  // the retirement was ours, not theirs.
+  //
+  // They are excluded from `rows` entirely, so they do not sit in any index and
+  // do not inflate the coverage denominator: a retired link is not something
+  // the feed is failing to account for.
+  const retired = allRows.filter(r => r.retired_at != null);
+  const rows    = allRows.filter(r => r.retired_at == null);
 
   // Index 1: canonical URL (with _iv_* params) → [rows]
   const byUrl = new Map();
@@ -303,7 +314,7 @@ async function loadExistingRows(partner, host) {
     if (opGtin) byOpGtin.set(opGtin, r);
   }
 
-  return { rows, byId, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin };
+  return { rows, retiredSkipped: retired.length, byId, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin };
 }
 
 // ─── fetch + stream-parse feed ──────────────────────────────────────────────
@@ -601,6 +612,7 @@ function reportPartner(st) {
   log(c('bold', `\n── ${st.partner.name}  (merchant ${st.partner.awin_merchant_id}, host ${st.host}) ──`));
   log(`  feed rows for this merchant:  ${st.feedRowsSeen}`);
   log(`  existing rows in DB:          ${st.rows.length}`);
+  log(`  retired links skipped:        ${st.retiredSkipped}`);
   log(`  matched (written):            ${matched}`);
   log(`  coverage (matched+withheld):  ${matched + withheld}/${st.rows.length}   (${(coverage * 100).toFixed(1)}%)`);
   log(`  price changed:                ${priceChanged}`);
@@ -769,7 +781,8 @@ async function main() {
     const storedOp = ix.rows.filter(r => r.op_mpn || r.op_gtin).length;
 
     log(`  ${p.name}  (merchant ${mid}, host ${cfg.host}, floor ${(cfg.floor * 100).toFixed(0)}%, withheld ceiling ${cfg.withheldCeiling})`);
-    log(`    rows:                       ${ix.rows.length}`);
+    log(`    rows:                       ${ix.rows.length}` +
+        (ix.retiredSkipped ? `   (+${ix.retiredSkipped} retired, skipped)` : ''));
     log(`    distinct canonical URLs:    ${ix.byUrl.size}`);
     log(`    with SKU:                   ${ix.bySku.size}`);
     log(`    with UPC (or numeric SKU):  ${ix.byUpc.size}`);
