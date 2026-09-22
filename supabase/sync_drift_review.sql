@@ -1,5 +1,6 @@
 -- ============================================================
 -- Gunforma-v2 — sync_drift_review
+-- Applied to project lagjjcpclvzrjlrswojt as migration sync_drift_review.
 --
 -- Queue of things the nightly affiliate sync REFUSED to write.
 --

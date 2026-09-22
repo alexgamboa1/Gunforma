@@ -84,33 +84,41 @@ const FETCH_TIMEOUT_MS = 120_000;
 // Keyed by partners.awin_merchant_id. A merchant in the feed with no entry here
 // is ignored; a partner in the DB with no entry here is skipped with a warning.
 //
-// `floor` is a CIRCUIT BREAKER, not a coverage target. It exists to catch a
-// sudden collapse — a broken feed, a changed column layout, a merchant pulling
-// their catalogue — where writing would corrupt good data with nulls or stale
-// prices. It is deliberately set well BELOW the observed match rate so that
-// normal coverage drift never trips it. Raising a floor to chase better
-// coverage is the wrong tool: fix the matching instead.
+// Two independent safety limits, because they detect two different failures.
+//
+// `floor` is a CIRCUIT BREAKER on COVERAGE: how many of our links the feed
+// still accounts for, counted as (matched + withheld for review) / rows. It
+// catches a feed that has broken, changed shape, or lost a merchant's
+// catalogue — links that are no longer FOUND AT ALL. A link withheld for
+// review was found; we simply chose not to write it, so it counts toward
+// coverage. Folding deliberate holds into this number would make a working
+// guard fire for the wrong reason.
+//
+// `withheldCeiling` is the opposite check: a cap on how many links we are
+// holding back. Coverage can look perfect while the matching quietly rots —
+// every link found, every one contested. Crossing the ceiling means the
+// matching needs attention even though the feed is fine.
+//
+// Either limit skips that partner (the others still write) and exits non-zero.
 //
 // Measured on 2026-09-22 against the combined feed (492,753 rows), under the
-// v6 identifier policy, which withholds links whose identifiers are
-// contradicted or contested:
-//   46059 OpticsPlanet  404/468 = 86.3%  → floor 0.75
-//   90861 Olight         14/25  = 56.0%  → floor 0.40
+// v6 identifier policy:
+//                       rows  matched  withheld  coverage   floor  ceiling
+//   46059 OpticsPlanet   468      404        25     91.7%    0.85       50
+//   90861 Olight          25       14         1     60.0%    0.40       10
 //
-// OpticsPlanet's floor was 0.85 when the measured rate was 91.6%. v6 withholds
-// ~25 more links (24 candidate conflicts + 1 drift), which drops the rate to
-// 86.3% — 1.3 points of headroom, against a constant whose whole purpose is to
-// sit well clear of normal variation. One more colliding MPN would have
-// skipped the entire partner and stopped 400+ legitimate price updates. 0.75
-// restores a real margin without weakening the breaker: a genuine feed
-// collapse lands far below it.
+// OpticsPlanet's 25 withheld are 24 candidate conflicts plus 1 drift, most of
+// them caused by MPNs that are not unique across brands in that feed (69408 is
+// both a Primos choke tube and a Streamlight TLR-7 X). A ceiling of 50 leaves
+// room for that to worsen somewhat before it demands a look; doubling to 50+
+// would mean the collision problem had materially spread.
 //
-// Olight's rate is low because its feed rows carry no mpn at all (0/218) and
-// only 216 usable GTINs; its floor sits beneath the measured rate for the same
-// circuit-breaker reason, not as an endorsement of 56%.
+// Olight's coverage is low because its feed rows carry no mpn at all (0/218)
+// and only 216 usable GTINs. Its floor sits beneath the measured rate for the
+// same circuit-breaker reason, not as an endorsement of 60%.
 const PARTNER_CONFIG = {
-  '46059': { host: 'opticsplanet.com', floor: 0.75 },
-  '90861': { host: 'olight.com',       floor: 0.40 },
+  '46059': { host: 'opticsplanet.com', floor: 0.85, withheldCeiling: 50 },
+  '90861': { host: 'olight.com',       floor: 0.40, withheldCeiling: 10 },
 };
 
 // ─── logging ────────────────────────────────────────────────────────────────
@@ -471,6 +479,7 @@ function resolveProposals(st, today) {
       `${strictNorm(p.rawMpn) || ''}|${gtinNorm(p.rawGtin) || ''}|${strictNorm(p.rawMid) || ''}`;
     const distinct = [...new Set(proposals.map(fingerprint))];
     if (distinct.length > 1) {
+      st.withheldIds.add(linkId);
       st.conflicts.push({
         linkId, url: target.url,
         candidates: proposals.map(p => ({
@@ -503,6 +512,7 @@ function resolveProposals(st, today) {
     if (blocked) {
       // A contradicted identifier means the match itself is suspect, so the
       // price and stock are not trustworthy either. Nothing is written.
+      st.withheldIds.add(linkId);
       st.driftReview.push({
         linkId, url: target.url, tier: p.tier,
         field: blocked.field, stored: blocked.stored, incoming: blocked.incoming,
@@ -527,20 +537,23 @@ function reportPartner(st) {
   const matched      = st.updates.size;
   const priceChanged = [...st.updates.values()].filter(p => 'street_price' in p).length;
   const stockChanged = [...st.updates.values()].filter(p => 'in_stock'     in p).length;
-  const matchRate    = st.rows.length ? matched / st.rows.length : 0;
-  const unmatched    = st.rows.filter(r => !st.updates.has(r.id));
+  const withheld     = st.driftReview.length + st.conflicts.length;
+  // Coverage counts links the feed still accounts for: written, or found and
+  // deliberately held back. It is NOT the write rate.
+  const coverage     = st.rows.length ? (matched + withheld) / st.rows.length : 0;
+  const unmatched    = st.rows.filter(r => !st.updates.has(r.id) && !st.withheldIds.has(r.id));
 
   log(c('bold', `\n── ${st.partner.name}  (merchant ${st.partner.awin_merchant_id}, host ${st.host}) ──`));
   log(`  feed rows for this merchant:  ${st.feedRowsSeen}`);
   log(`  existing rows in DB:          ${st.rows.length}`);
-  log(`  matched:                      ${matched}   (${(matchRate * 100).toFixed(1)}%)`);
+  log(`  matched (written):            ${matched}`);
+  log(`  coverage (matched+withheld):  ${matched + withheld}/${st.rows.length}   (${(coverage * 100).toFixed(1)}%)`);
   log(`  price changed:                ${priceChanged}`);
   log(`  stock flag changed:           ${stockChanged}`);
   log(`  ambiguous unresolved:         ${st.unresolvedAmbiguous.length}`);
   log(`  unmatched:                    ${unmatched.length}`);
   log(`  identifiers filled (were null): ${st.filled}`);
-  log(`  drift review (not written):   ${st.driftReview.length}`);
-  log(`  conflicts (not written):      ${st.conflicts.length}`);
+  log(`  withheld for review:          ${withheld}  (drift ${st.driftReview.length}, conflicts ${st.conflicts.length})  ceiling ${st.withheldCeiling}`);
 
   // Belt and braces: prove no patch overwrites a non-null stored identifier.
   // If this ever trips, the policy has been broken by a later edit.
@@ -597,8 +610,8 @@ function reportPartner(st) {
     }
   }
 
-  // URL-shape diagnostic when match rate is imperfect
-  if (matchRate < 0.90 && unmatched.length) {
+  // URL-shape diagnostic when coverage is imperfect
+  if (coverage < 0.90 && unmatched.length) {
     log(c('grey', '\n  URL-shape diagnostic:'));
     log(c('grey', '    unmatched DB URLs (first 10):'));
     for (const r of unmatched.slice(0, 10)) {
@@ -612,7 +625,7 @@ function reportPartner(st) {
     }
   }
 
-  return { matched, matchRate };
+  return { matched, coverage, withheld };
 }
 
 // ─── persist the review list ────────────────────────────────────────────────
@@ -698,7 +711,7 @@ async function main() {
     const shared = [...ix.byUrl.entries()].filter(([, list]) => list.length > 1);
     const storedOp = ix.rows.filter(r => r.op_mpn || r.op_gtin).length;
 
-    log(`  ${p.name}  (merchant ${mid}, host ${cfg.host}, floor ${(cfg.floor * 100).toFixed(0)}%)`);
+    log(`  ${p.name}  (merchant ${mid}, host ${cfg.host}, floor ${(cfg.floor * 100).toFixed(0)}%, withheld ceiling ${cfg.withheldCeiling})`);
     log(`    rows:                       ${ix.rows.length}`);
     log(`    distinct canonical URLs:    ${ix.byUrl.size}`);
     log(`    with SKU:                   ${ix.bySku.size}`);
@@ -715,6 +728,8 @@ async function main() {
       fuzzyReviewList: [],
       driftReview: [],               // stored identifier contradicted → not written
       conflicts: [],                 // two feed rows disagree about this link → not written
+      withheldIds: new Set(),        // links found but deliberately not written
+      withheldCeiling: cfg.withheldCeiling,
       filled: 0,                     // identifiers written into a previously-null column
       feedRowsSeen: 0,
     });
@@ -756,17 +771,29 @@ async function main() {
   const skipped   = [];
 
   for (const st of states.values()) {
-    const { matched, matchRate } = reportPartner(st);
+    const { matched, coverage, withheld } = reportPartner(st);
     const floor = FLOOR_OVERRIDE != null ? FLOOR_OVERRIDE : st.floor;
 
-    if (matchRate < floor) {
-      // Skip THIS partner only. Other partners are independent and still write:
-      // a 26-link Olight problem must not block 466 OpticsPlanet updates.
-      log(c('red', `\n  !! ${st.partner.name}: match rate ${(matchRate * 100).toFixed(1)}% is below its floor ` +
-                   `${(floor * 100).toFixed(0)}%.`));
+    // Two independent trips. Coverage catches a feed that has stopped
+    // accounting for our links; the ceiling catches matching that has rotted
+    // while the feed is still fine. Either one skips THIS partner only — the
+    // others are independent and still write, because a small partner's
+    // problem must not block a large partner's updates.
+    const belowFloor  = coverage < floor;
+    const aboveCeil   = withheld > st.withheldCeiling;
+
+    if (belowFloor || aboveCeil) {
+      if (belowFloor) {
+        log(c('red', `\n  !! ${st.partner.name}: coverage ${(coverage * 100).toFixed(1)}% is below its floor ` +
+                     `${(floor * 100).toFixed(0)}% — the feed has stopped accounting for our links.`));
+      }
+      if (aboveCeil) {
+        log(c('red', `\n  !! ${st.partner.name}: ${withheld} links withheld for review, ceiling is ` +
+                     `${st.withheldCeiling} — the matching needs attention, not the feed.`));
+      }
       log(c('red',   `  !! SKIPPING this partner — no writes for ${st.partner.name}. Its ${st.rows.length} rows keep`));
-      log(c('red',   `  !! their existing prices. Investigate the feed shape for merchant ` +
-                   `${st.partner.awin_merchant_id} before the next run.`));
+      log(c('red',   `  !! their existing prices. Investigate merchant ${st.partner.awin_merchant_id} before the next run.`));
+      st.skipReason = belowFloor ? 'coverage below floor' : 'withheld above ceiling';
       skipped.push(st);
       continue;
     }
@@ -803,8 +830,8 @@ async function main() {
   // exit non-zero so the Actions run goes red and somebody looks at it.
   if (skipped.length) {
     console.error(c('red',
-      `\nerror: ${skipped.length} partner(s) skipped below their match-rate floor: ` +
-      skipped.map(s => s.partner.name).join(', ')
+      `\nerror: ${skipped.length} partner(s) skipped: ` +
+      skipped.map(s => `${s.partner.name} (${s.skipReason})`).join(', ')
     ));
     process.exit(1);
   }

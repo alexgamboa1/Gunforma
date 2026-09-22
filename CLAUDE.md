@@ -130,13 +130,16 @@ merchant means adding its `awin_merchant_id` to `partners` **and** an entry to
 There is no hardcoded partner name or host anywhere in the script — reintroducing
 one silently discards every other merchant's rows.
 
-**The match-rate floors are circuit breakers, not quality targets.** They exist
-to catch a sudden collapse (broken feed, changed column layout, merchant pulls
-its catalogue) where writing would overwrite good prices with nothing. They sit
-well below observed match rates on purpose. A partner below its floor is
-**skipped** — the others still write, because a small partner's problem must not
-block a large partner's updates — and the run then exits non-zero so the Actions
-job goes red.
+**Two safety limits, guarding different failures.** The **floor** is a circuit
+breaker on *coverage* — `(matched + withheld for review) / rows` — and catches a
+feed that has broken, changed shape, or dropped a catalogue, i.e. links no
+longer found at all. A link withheld for review *was* found, so it counts toward
+coverage; folding deliberate holds into that number would make a working guard
+fire for the wrong reason. The **withheld ceiling** is the opposite check: a cap
+on how many links are being held back, because coverage can look perfect while
+the matching quietly rots — every link found, every one contested. Either limit
+**skips that partner** (the others still write) and exits non-zero so the
+Actions job goes red. Both live in `PARTNER_CONFIG` with the measured numbers.
 
 **GTINs are not always bare digits.** Olight ships them as `"<EAN-13> <digits>"`,
 e.g. `6978095650162 78`. `gtinNorm` therefore splits on whitespace and keeps the
