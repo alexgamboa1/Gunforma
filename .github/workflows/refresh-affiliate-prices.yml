@@ -1,8 +1,14 @@
 name: Refresh affiliate prices
 
-# Fetches OpticsPlanet's Awin product datafeed and updates street_price,
-# in_stock and last_checked on the matching affiliate_links rows. Never
-# touches other partners, never blanks a row that doesn't match.
+# Fetches Awin's COMBINED product datafeed (all joined merchants in one file)
+# and updates street_price, in_stock and last_checked on the matching
+# affiliate_links rows. Rows are routed to a partner by merchant_id, so this
+# now covers OpticsPlanet (46059) and Olight (90861). Never touches partners
+# that have no awin_merchant_id, never blanks a row that doesn't match.
+#
+# A partner whose match rate falls below its own floor is SKIPPED — the other
+# partners still write — and the run then exits non-zero, so the job goes red
+# with the other partners' updates already applied.
 #
 # Failure modes are surfaced by GitHub Actions itself — if this workflow
 # fails, the account owner gets an email; no separate alerting to wire up.
@@ -42,10 +48,17 @@ jobs:
         working-directory: scripts
         run: npm ci
 
+      - name: Unit tests
+        working-directory: scripts
+        run: node --test
+
       - name: Refresh affiliate prices
         working-directory: scripts
         env:
-          AWIN_FEED_URL:             ${{ secrets.AWIN_FEED_URL }}
+          # The combined multi-merchant feed. The old single-merchant
+          # AWIN_FEED_URL secret is intentionally left in place until this has
+          # had a week of clean runs; nothing reads it any more.
+          AWIN_FEED_URL_V2:          ${{ secrets.AWIN_FEED_URL_V2 }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           # Scheduled runs always write. Manual runs default to dry-run
           # (the input default is true); flip the checkbox to write.
