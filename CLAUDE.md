@@ -200,8 +200,21 @@ an explicit revoke for exactly that reason.
 
 ## Duplicated logic to keep in sync
 
-The variant-label axis logic in `js/affiliate.js` (which axes vary across a product's
-listings, and how a variant is labelled) is **mirrored** in
-`netlify/functions/product-page.mjs`, because the function is dependency-free and cannot
-import the browser module. **Change both**, or the product page and the rest of the site
-will label the same variant differently.
+The variant-label axis logic — which axes vary across a product's listings, and
+how a variant is labelled — exists in **four** copies. Change all four, or the
+same variant gets different labels depending on which page you are looking at:
+
+- `js/affiliate.js` — the browser module, used across the site
+- `netlify/functions/product-page.mjs` — the server-rendered `/parts/:category/:slug`
+  page. Dependency-free by design, so it cannot import the browser module.
+- `gunforma-parts-catalog.html` — inline copy for catalog cards
+- `gunforma-build-detail.html` — inline copy for a build's parts list
+
+The axis columns they read (`reticle`, `reticle_color`, `color`, `optic_cut`,
+`bundle`, `clamp`, `manual_safety_variant`) feed **labels only**. Nothing filters
+on them, and the product page's spec table reads `optic_specs` instead — so a
+wrong axis value shows up as a wrong label next to the buy button while the spec
+table underneath still reads correctly. That split is what hid 16 Sig Sauer
+Romeo variants whose `reticle` was swapped between the 3 MOA and 6 MOA rows.
+
+`variant_label` overrides the computed label verbatim when non-empty.
