@@ -25,37 +25,18 @@
 // picked up here — worth a comment update on both sides if that list changes.
 // -----------------------------------------------------------------------------
 
+// category -> [URL segment, display label]. Shared with parts-index.mjs via
+// _category-meta.mjs rather than hand-copied — see that file's header for
+// why this pair of functions doesn't need the browser-vs-ESM duplication
+// that js/category-map.js still requires.
+import { CATEGORY_META } from './_category-meta.mjs';
+
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
 const SITE = 'https://gunforma.com';
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
-
-// category -> [URL segment, display label]. Order matches products.category enum.
-//
-// js/category-map.js holds a browser-side mirror of the segment column as
-// window.CATEGORY_URL_SEGMENT, so the catalog and armory cards can build
-// /parts/:category/:slug links that match what this function serves. Same
-// duplication rationale as the variant-label logic above (ESM function vs.
-// plain <script> globals). Add or rename a category in BOTH files — a
-// segment that exists in only one of them ships links that 404.
-const CATEGORY_META = {
-  slide:            ['slides',            'Slide'],
-  barrel:           ['barrels',           'Barrel'],
-  frame:            ['frames',            'Frame'],
-  trigger:          ['triggers',          'Trigger'],
-  compensator:      ['compensators',      'Compensator'],
-  light:            ['lights',            'Light'],
-  optic:            ['optics',            'Optic'],
-  mag_release:      ['mag-releases',      'Mag Release'],
-  magwell:          ['magwells',          'Magwell'],
-  basepad:          ['basepads',          'Basepad'],
-  slide_release:    ['slide-releases',    'Slide Release'],
-  safety_selector:  ['safety-selectors',  'Safety Selector'],
-  takedown_lever:   ['takedown-levers',   'Takedown Lever'],
-  slide_plate:      ['slide-plates',      'Slide Plate'],
-};
 
 // category -> [spec table, [ [column, label, formatter?], ... ] ]
 // Columns/tables taken from the live schema (see `products`' FK list) — not
