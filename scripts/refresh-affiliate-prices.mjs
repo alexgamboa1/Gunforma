@@ -165,6 +165,23 @@ export function gtinNorm(val) {
   return digits || null;
 }
 
+// ─── non-retail listings ────────────────────────────────────────────────────
+// OpticsPlanet lists open-box and demo units as separate feed rows on the SAME
+// product page as the retail item. They therefore land in the same URL
+// candidate group and turn an otherwise clean link into a conflict.
+//
+// This only marks a row; it does not drop it. A link whose STORED identifier
+// points at the demo unit is legitimately matched to it, and resolveProposals
+// keeps that case — see the isDemo handling there.
+function isNonRetail(row) {
+  const mpn  = String(row.mpn || row.model_number || '').trim().toUpperCase();
+  const name = String(row.product_name || '').trim().toLowerCase();
+  return mpn.endsWith('DEMO')
+      || name.startsWith('open box')
+      || name.startsWith('dealer demo')
+      || name.startsWith('demo,');
+}
+
 // ─── URL canonicalization ───────────────────────────────────────────────────
 // `allowedHost` is the partner's own host (PARTNER_CONFIG[mid].host). A URL on
 // any other host returns null — the caller treats that as "not this partner's
@@ -455,6 +472,7 @@ function processFeedRow(st, row, today) {
   st.proposals.get(target.id).push({
     tier, price, inStock,
     rawMpn, rawGtin, rawMid,
+    isDemo: isNonRetail(row),
     feedName: (row.product_name || '').slice(0, 120),
     url: canonicalDest,
   });
@@ -474,22 +492,59 @@ function resolveProposals(st, today) {
     const target = st.byId.get(linkId);
     if (!target) continue;
 
-    // ── Conflict: two feed rows disagree about what this link is ──────
     const fingerprint = p =>
       `${strictNorm(p.rawMpn) || ''}|${gtinNorm(p.rawGtin) || ''}|${strictNorm(p.rawMid) || ''}`;
-    const distinct = [...new Set(proposals.map(fingerprint))];
+
+    // The link's own stored identifier, if it has one.
+    const storedMpn  = strictNorm(target.op_mpn);
+    const storedGtin = gtinNorm(target.op_gtin);
+
+    // A proposal "confirms the stored identifier" when it matched at T1/T2 —
+    // i.e. the feed row's own mpn/gtin equals what this link already records.
+    // That is a far stronger statement than sharing a landing page.
+    const confirmsStored = p =>
+      (p.tier === 'stored_op_mpn'  && storedMpn  && strictNorm(p.rawMpn)  === storedMpn) ||
+      (p.tier === 'stored_op_gtin' && storedGtin && gtinNorm(p.rawGtin)   === storedGtin);
+
+    // ── Drop non-retail rows, unless this link IS the demo unit ───────
+    // Without this, an open-box twin sharing the retail item's page makes the
+    // retail link permanently unwritable. A link whose stored identifier points
+    // at the demo row keeps it.
+    let candidates = proposals;
+    if (candidates.length > 1) {
+      const kept = candidates.filter(p => !p.isDemo || confirmsStored(p));
+      if (kept.length) {
+        st.demoRowsDropped += candidates.length - kept.length;
+        candidates = kept;
+      }
+    }
+
+    // ── Stored identifier wins over rows that only shared a URL ───────
+    // A hand-correction has to stick. If exactly one feed row confirms what
+    // this link already records, that row is the answer and the rows that
+    // merely reached it through a shared landing page are ignored. Two rows
+    // confirming DIFFERENT stored values is still a genuine conflict.
+    const confirming = candidates.filter(confirmsStored);
+    const confirmingDistinct = [...new Set(confirming.map(fingerprint))];
+    if (confirmingDistinct.length === 1) {
+      if (candidates.length > 1) st.resolvedByStoredId++;
+      candidates = [confirming.find(p => fingerprint(p) === confirmingDistinct[0])];
+    }
+
+    // ── Conflict: the surviving rows still disagree ───────────────────
+    const distinct = [...new Set(candidates.map(fingerprint))];
     if (distinct.length > 1) {
       st.withheldIds.add(linkId);
       st.conflicts.push({
         linkId, url: target.url,
-        candidates: proposals.map(p => ({
+        candidates: candidates.map(p => ({
           mpn: p.rawMpn, gtin: p.rawGtin, mid: p.rawMid, price: p.price, name: p.feedName,
         })),
       });
       continue;   // skipped, not written
     }
 
-    const p = proposals[0];
+    const p = candidates[0];
 
     // ── Identifier policy: fill nulls, never overwrite ────────────────
     const patch = { last_checked: today };
@@ -553,6 +608,8 @@ function reportPartner(st) {
   log(`  ambiguous unresolved:         ${st.unresolvedAmbiguous.length}`);
   log(`  unmatched:                    ${unmatched.length}`);
   log(`  identifiers filled (were null): ${st.filled}`);
+  log(`  resolved by stored identifier:${st.resolvedByStoredId}   (would have been conflicts)`);
+  log(`  non-retail rows ignored:      ${st.demoRowsDropped}   (open box / demo)`);
   log(`  withheld for review:          ${withheld}  (drift ${st.driftReview.length}, conflicts ${st.conflicts.length})  ceiling ${st.withheldCeiling}`);
 
   // Belt and braces: prove no patch overwrites a non-null stored identifier.
@@ -731,6 +788,8 @@ async function main() {
       withheldIds: new Set(),        // links found but deliberately not written
       withheldCeiling: cfg.withheldCeiling,
       filled: 0,                     // identifiers written into a previously-null column
+      demoRowsDropped: 0,            // open-box / demo rows ignored beside a retail row
+      resolvedByStoredId: 0,         // links saved from a conflict by their stored identifier
       feedRowsSeen: 0,
     });
   }
