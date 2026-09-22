@@ -231,16 +231,18 @@ function resetTurnstileWidget(widgetElId) {
 // Redirect if already signed in
 sb.auth.getSession().then(function(res) {
   if (res.data && res.data.session) {
-    redirectByRole(res.data.session.user.id);
+    redirectByRole();
   }
 });
 
 // ============================================================
 // REDIRECT BY ROLE
 // ============================================================
-async function redirectByRole(userId) {
+// get_my_profile() resolves the user from the JWT, so no id is passed in —
+// `role` is no longer readable from profiles table-wide (audit finding #5).
+async function redirectByRole() {
   try {
-    var res = await sb.from('profiles').select('role, onboarding_complete').eq('id', userId).maybeSingle();
+    var res = await sb.rpc('get_my_profile').maybeSingle();
     var profile = res.data || {};
     // Onboarding check comes BEFORE role routing — an admin OAuth user (rare
     // but possible) still needs a username before they land in the admin queue.
@@ -306,7 +308,7 @@ async function handleSignIn() {
 
     // Small delay to ensure profile row is ready
     await new Promise(function(r) { setTimeout(r, 400); });
-    await redirectByRole(res.data.user.id);
+    await redirectByRole();
 
   } catch (err) {
     setLoading(false);

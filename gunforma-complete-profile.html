@@ -184,11 +184,9 @@ var usernameValid = false;
   CURRENT_USER = sess && sess.session && sess.session.user;
   if (!CURRENT_USER) { window.location.href = 'gunforma-signin.html'; return; }
 
-  var { data: profile, error } = await sb
-    .from('profiles')
-    .select('onboarding_complete, username, marketing_consent')
-    .eq('id', CURRENT_USER.id)
-    .maybeSingle();
+  // marketing_consent is not readable from profiles table-wide; this returns
+  // the caller's own row only (audit finding #5).
+  var { data: profile, error } = await sb.rpc('get_my_profile').maybeSingle();
   if (error) { showFatal("Couldn't load your profile. Try signing in again."); return; }
   if (profile && profile.onboarding_complete) { window.location.href = 'index.html'; return; }
 
