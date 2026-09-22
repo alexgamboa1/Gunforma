@@ -130,13 +130,16 @@ merchant means adding its `awin_merchant_id` to `partners` **and** an entry to
 There is no hardcoded partner name or host anywhere in the script — reintroducing
 one silently discards every other merchant's rows.
 
-**The match-rate floors are circuit breakers, not quality targets.** They exist
-to catch a sudden collapse (broken feed, changed column layout, merchant pulls
-its catalogue) where writing would overwrite good prices with nothing. They sit
-well below observed match rates on purpose. A partner below its floor is
-**skipped** — the others still write, because a small partner's problem must not
-block a large partner's updates — and the run then exits non-zero so the Actions
-job goes red.
+**Two safety limits, guarding different failures.** The **floor** is a circuit
+breaker on *coverage* — `(matched + withheld for review) / rows` — and catches a
+feed that has broken, changed shape, or dropped a catalogue, i.e. links no
+longer found at all. A link withheld for review *was* found, so it counts toward
+coverage; folding deliberate holds into that number would make a working guard
+fire for the wrong reason. The **withheld ceiling** is the opposite check: a cap
+on how many links are being held back, because coverage can look perfect while
+the matching quietly rots — every link found, every one contested. Either limit
+**skips that partner** (the others still write) and exits non-zero so the
+Actions job goes red. Both live in `PARTNER_CONFIG` with the measured numbers.
 
 **GTINs are not always bare digits.** Olight ships them as `"<EAN-13> <digits>"`,
 e.g. `6978095650162 78`. `gtinNorm` therefore splits on whitespace and keeps the
@@ -197,8 +200,21 @@ an explicit revoke for exactly that reason.
 
 ## Duplicated logic to keep in sync
 
-The variant-label axis logic in `js/affiliate.js` (which axes vary across a product's
-listings, and how a variant is labelled) is **mirrored** in
-`netlify/functions/product-page.mjs`, because the function is dependency-free and cannot
-import the browser module. **Change both**, or the product page and the rest of the site
-will label the same variant differently.
+The variant-label axis logic — which axes vary across a product's listings, and
+how a variant is labelled — exists in **four** copies. Change all four, or the
+same variant gets different labels depending on which page you are looking at:
+
+- `js/affiliate.js` — the browser module, used across the site
+- `netlify/functions/product-page.mjs` — the server-rendered `/parts/:category/:slug`
+  page. Dependency-free by design, so it cannot import the browser module.
+- `gunforma-parts-catalog.html` — inline copy for catalog cards
+- `gunforma-build-detail.html` — inline copy for a build's parts list
+
+The axis columns they read (`reticle`, `reticle_color`, `color`, `optic_cut`,
+`bundle`, `clamp`, `manual_safety_variant`) feed **labels only**. Nothing filters
+on them, and the product page's spec table reads `optic_specs` instead — so a
+wrong axis value shows up as a wrong label next to the buy button while the spec
+table underneath still reads correctly. That split is what hid 16 Sig Sauer
+Romeo variants whose `reticle` was swapped between the 3 MOA and 6 MOA rows.
+
+`variant_label` overrides the computed label verbatim when non-empty.
