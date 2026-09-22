@@ -1167,7 +1167,8 @@ async function requireAdmin() {
   const { data } = await sb.auth.getSession();
   const session = data && data.session;
   if (!session) { window.location.href = 'gunforma-signin.html'; return false; }
-  const { data: profile } = await sb.from('profiles').select('role').eq('id', session.user.id).maybeSingle();
+  // See gunforma-admin-queue.html — role comes from get_my_profile() now.
+  const { data: profile } = await sb.rpc('get_my_profile').maybeSingle();
   if (!profile || profile.role !== 'admin') { window.location.href = 'gunforma-signin.html'; return false; }
   currentAdmin = session.user;
   return true;

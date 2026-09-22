@@ -191,10 +191,9 @@ async function init() {
     return;
   }
 
-  const { data: profile } = await sb.from('profiles')
-    .select('username, builder_agreement_accepted, builder_agreement_accepted_at, builder_agreement_version')
-    .eq('id', user.id)
-    .maybeSingle();
+  // builder_agreement_* are not readable from profiles table-wide; this
+  // returns the caller's own row only (audit finding #5).
+  const { data: profile } = await sb.rpc('get_my_profile').maybeSingle();
 
   const accepted = !!(profile && profile.builder_agreement_accepted);
 
