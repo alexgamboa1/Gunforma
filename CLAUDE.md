@@ -145,6 +145,35 @@ the whole string concatenates them into a non-GTIN that matches nothing, which
 silently cost every Olight GTIN match. `scripts/gtin-norm.test.mjs` pins this;
 `node --test` runs in the workflow before the sync.
 
+### The sync never overwrites an identifier
+
+`op_mpn`, `op_gtin` and `op_merchant_product_id` are what pin a link to one
+specific product. The sync may **fill** one that is null; it must **never**
+overwrite one that is already set.
+
+This is not a style preference. Tiers T1/T2 match on the stored identifier, so
+overwriting it re-points the link at a different product *and* makes every later
+run re-confirm the new, wrong mapping. Earlier versions wrote the feed's values
+unconditionally and merely logged the disagreement as a "drift warning" — that
+is how link `269535fb` ended up on the green Osight SE variant while carrying
+the red product's MPN, price and URL.
+
+Two things are withheld rather than written, both to `sync_drift_review`:
+
+- **identifier drift** — the feed contradicts a stored identifier. The price and
+  stock are withheld too, because a contradicted identifier makes the whole
+  match suspect.
+- **candidate conflict** — several feed rows resolve to the same link. The old
+  code let whichever row came last in the file win silently.
+
+Conflicts are common because **MPNs are not unique across brands** in the
+OpticsPlanet feed: `69408` is both a Primos choke tube and a Streamlight
+TLR-7 X, `69500` is both a Redding die kit and a TLR-1 HL-X. T1 matches on MPN
+alone, so without this guard a choke tube can capture a weapon-light link.
+
+To re-point a link deliberately, clear the stored identifier and let the next
+run refill it — do not teach the sync to overwrite.
+
 ### price_history
 
 `price_history` is written by a trigger on `affiliate_links`, not by application
