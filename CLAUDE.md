@@ -24,16 +24,23 @@ duplicate live site.
 
 ## PostgREST embeds: the PGRST201 rule
 
-`products` has **two** foreign-key relationships to `product_variants`:
+`products` and `product_variants` reference **each other** — one foreign key in
+each direction:
 
-- `product_variants.product_id → products.id` (one-to-many — almost always the one you want)
-- `products.lowest_price_variant_id → product_variants.id` (many-to-one)
+- `product_variants.product_id → products.id` (many-to-one — almost always the one you want)
+- `products.lowest_price_variant_id → product_variants.id` (one-to-many)
 
-So a bare `product_variants(...)` embed from `products` is ambiguous and PostgREST rejects
-the **entire query** with `PGRST201`. Always name the FK:
+Because there are two FKs between the same *pair* of tables, an embed between
+them is ambiguous in **both directions**, and PostgREST rejects the **entire
+query** with `PGRST201`. Both directions must name the FK — and it is the same
+FK name either way:
 
 ```js
+// from products → variants
 products!inner(id, name, product_variants!product_variants_product_id_fkey(msrp, is_default))
+
+// from variants → products  (same trap, easy to miss)
+product_variants!inner(id, sku, products!product_variants_product_id_fkey(name, category))
 ```
 
 This fails quietly: `supabase-js` returns an error object rather than throwing, so the page
@@ -44,8 +51,15 @@ broken twice. Before pushing:
 scripts/check-embeds.sh
 ```
 
+The check covers both directions and runs as the Netlify build command.
+
 Embeds from `affiliate_links` and `variant_images` each have exactly one FK to
 `product_variants`, so their bare embeds are correct — do not "fix" those.
+Likewise a bare `products(...)` embed is fine from single-FK parents such as
+`part_favorites` and `product_platforms`. Several spec tables
+(`barrel_specs`, `optic_specs`, `slide_specs`, `trigger_specs` and others) carry
+two or more FKs to `products` and would be ambiguous too — nothing embeds
+through them today, so the check does not flag them.
 
 ## Server-rendered pages
 
@@ -100,6 +114,57 @@ of those places undoes that.
 
 Auth redirects are the one exception — those correctly follow the current origin via
 `js/site-url.js`.
+
+## Affiliate price sync
+
+`scripts/refresh-affiliate-prices.mjs` runs nightly from
+`.github/workflows/refresh-affiliate-prices.yml` and updates `street_price`,
+`in_stock`, `last_checked` and four `op_*` audit columns on `affiliate_links`.
+
+**It is multi-merchant.** One combined Awin feed (`AWIN_FEED_URL_V2`) carries
+every joined merchant, and rows are routed by the feed's `merchant_id` to
+`partners.awin_merchant_id`. Per-partner settings — the URL host a link must be
+on, and the match-rate floor — live in `PARTNER_CONFIG` in that script. Adding a
+merchant means adding its `awin_merchant_id` to `partners` **and** an entry to
+`PARTNER_CONFIG`; a partner missing from either side is skipped with a warning.
+There is no hardcoded partner name or host anywhere in the script — reintroducing
+one silently discards every other merchant's rows.
+
+**The match-rate floors are circuit breakers, not quality targets.** They exist
+to catch a sudden collapse (broken feed, changed column layout, merchant pulls
+its catalogue) where writing would overwrite good prices with nothing. They sit
+well below observed match rates on purpose. A partner below its floor is
+**skipped** — the others still write, because a small partner's problem must not
+block a large partner's updates — and the run then exits non-zero so the Actions
+job goes red.
+
+**GTINs are not always bare digits.** Olight ships them as `"<EAN-13> <digits>"`,
+e.g. `6978095650162 78`. `gtinNorm` therefore splits on whitespace and keeps the
+first token before stripping non-digits and leading zeros. Normalising across
+the whole string concatenates them into a non-GTIN that matches nothing, which
+silently cost every Olight GTIN match. `scripts/gtin-norm.test.mjs` pins this;
+`node --test` runs in the workflow before the sync.
+
+### price_history
+
+`price_history` is written by a trigger on `affiliate_links`, not by application
+code:
+
+- **INSERT** on `affiliate_links` always appends a baseline row (`old_price` null).
+- **UPDATE** appends only when `street_price` or `in_stock` actually changed.
+  Touching `last_checked` or the `op_*` columns alone writes nothing.
+
+So a bulk edit across many links produces a matching spike in `price_history`.
+That is expected, but it means a careless mass update is permanently visible in
+the price chart — check how many rows an update will touch before running it.
+
+`price_history` is **private by design**: RLS is enabled, it has **no policies
+and no grants at all**. Do not "fix" that by adding a public read policy. Note
+that a policy without a matching table grant silently returns `permission
+denied` — and conversely, Supabase's default ACL hands `anon` and
+`authenticated` full privileges on every new public table, so a table protected
+by RLS alone still has those grants sitting underneath it. `price_history` has
+an explicit revoke for exactly that reason.
 
 ## Duplicated logic to keep in sync
 

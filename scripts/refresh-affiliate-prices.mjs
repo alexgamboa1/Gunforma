@@ -1,19 +1,32 @@
 #!/usr/bin/env node
-// refresh-affiliate-prices.mjs — v4: nightly Awin/OpticsPlanet price sync
+// refresh-affiliate-prices.mjs — v5: nightly Awin multi-merchant price sync
 // -----------------------------------------------------------------------------
-// Pulls OpticsPlanet's Awin product datafeed, matches feed rows to our
+// Pulls Awin's COMBINED product datafeed (all joined merchants in one file),
+// routes each row to the right partner by merchant_id, matches feed rows to our
 // affiliate_links table using a six-tier match strategy (strict first, fuzzy
 // last, everything auditable), and updates street_price, in_stock,
-// last_checked, plus four new op_* audit columns.
+// last_checked, plus four op_* audit columns.
+//
+// v5 changes (multi-merchant):
+//   • Feed rows are routed by merchant_id -> partners.awin_merchant_id.
+//     There is no hardcoded partner and no hardcoded host.
+//   • Each partner has its own URL host and its own match-rate floor
+//     (see PARTNER_CONFIG).
+//   • A partner failing its floor is SKIPPED, not fatal — the other partners
+//     still write. The run then exits non-zero so Actions shows red.
 //
 // Scope by design:
-//   • Only touches affiliate_links rows where partner = "OpticsPlanet (Awin)".
+//   • Only touches affiliate_links rows whose partner has an awin_merchant_id.
 //   • Seven columns written on match: street_price, in_stock, last_checked,
 //     op_mpn, op_gtin, op_merchant_product_id, op_last_matched_by.
 //   • affiliate_url, product_variants.sku, product_variants.upc, msrp:
 //     NEVER WRITTEN. Not now, not ever.
 //   • Unmatched rows: left as-is, logged.
-//   • Failed fetch/parse or low match rate: exit before any DB write.
+//   • Failed fetch/parse: exit before any DB write.
+//
+// Every write to affiliate_links fires the price_history trigger, so a run
+// that touches N rows appends up to N history rows. Bulk edits show up as
+// spikes in that table — see CLAUDE.md.
 //
 // Match tiers (tried in order, first hit wins):
 //   T1  stored_op_mpn   — previously matched; op_mpn matches feed mpn exactly
@@ -30,28 +43,53 @@
 // with DRY_RUN=false.
 //
 // Env (all required unless noted):
-//   AWIN_FEED_URL              the Create-a-Feed URL (contains the API key)
+//   AWIN_FEED_URL_V2           the combined Create-a-Feed URL (contains the API key)
 //   SUPABASE_SERVICE_ROLE_KEY  bypasses RLS; kept in GitHub Actions secrets
 //   SUPABASE_URL               optional, defaults to the Gunforma project
 //   DRY_RUN                    'true' → parse and log but do not write
-//   MATCH_RATE_FLOOR           optional, default 0.70; abort below this
+//   MATCH_RATE_FLOOR           optional; overrides EVERY partner's floor. Escape
+//                              hatch for one-off reruns — normally unset, so the
+//                              per-partner floors in PARTNER_CONFIG apply.
 //   DEBUG_SAMPLES              optional, default 0; dump N raw feed rows
 // -----------------------------------------------------------------------------
 
 import { createGunzip } from 'node:zlib';
 import { Readable }     from 'node:stream';
 import { parse }        from 'csv-parse';
+import { fileURLToPath } from 'node:url';
+import { resolve }       from 'node:path';
 
-const AWIN_FEED_URL    = process.env.AWIN_FEED_URL || '';
+const AWIN_FEED_URL    = process.env.AWIN_FEED_URL_V2 || '';
 const SUPABASE_URL     = process.env.SUPABASE_URL || 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SERVICE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const DRY_RUN          = process.env.DRY_RUN === 'true';
-const MATCH_RATE_FLOOR = Number(process.env.MATCH_RATE_FLOOR || 0.70);
+const FLOOR_OVERRIDE   = process.env.MATCH_RATE_FLOOR ? Number(process.env.MATCH_RATE_FLOOR) : null;
 const DEBUG_SAMPLES    = Number(process.env.DEBUG_SAMPLES || 0);
-const PARTNER_NAME     = 'OpticsPlanet (Awin)';
-const OP_HOST          = 'opticsplanet.com';
 const CONCURRENCY      = 10;
-const FETCH_TIMEOUT_MS = 60_000;
+const FETCH_TIMEOUT_MS = 120_000;
+
+// ─── per-partner configuration ──────────────────────────────────────────────
+// Keyed by partners.awin_merchant_id. A merchant in the feed with no entry here
+// is ignored; a partner in the DB with no entry here is skipped with a warning.
+//
+// `floor` is a CIRCUIT BREAKER, not a coverage target. It exists to catch a
+// sudden collapse — a broken feed, a changed column layout, a merchant pulling
+// their catalogue — where writing would corrupt good data with nulls or stale
+// prices. It is deliberately set well BELOW the observed match rate so that
+// normal coverage drift never trips it. Raising a floor to chase better
+// coverage is the wrong tool: fix the matching instead.
+//
+// Measured on 2026-09-21 against the combined feed (492,753 rows), with the
+// whitespace-tolerant gtinNorm below:
+//   46059 OpticsPlanet  427/466 = 91.6%  → floor 0.85
+//   90861 Olight         12/26  = 46.2%  → floor 0.40
+// Olight's rate is low because its feed rows carry no mpn at all (0/218) and
+// only 216 usable GTINs; its floor is set beneath the measured rate for the
+// same circuit-breaker reason, not as an endorsement of 46%.
+const PARTNER_CONFIG = {
+  '46059': { host: 'opticsplanet.com', floor: 0.85 },
+  '90861': { host: 'olight.com',       floor: 0.40 },
+};
 
 // ─── logging ────────────────────────────────────────────────────────────────
 const isTTY = process.stdout.isTTY;
@@ -63,11 +101,6 @@ function c(color, s) {
 function log(msg)  { console.log(msg); }
 function warn(msg) { console.log(c('yellow', 'warn:  ') + msg); }
 function fail(msg) { console.error(c('red', 'error: ') + msg); process.exit(1); }
-
-// ─── preflight ──────────────────────────────────────────────────────────────
-if (!AWIN_FEED_URL) fail('AWIN_FEED_URL not set');
-if (!SERVICE_KEY)   fail('SUPABASE_SERVICE_ROLE_KEY not set');
-if (DRY_RUN) log(c('cyan', '── DRY RUN — no database writes ──'));
 
 // ─── normalizers ────────────────────────────────────────────────────────────
 // TWO normalizers, not one. They serve different comparison families.
@@ -83,21 +116,36 @@ function fuzzyNorm(val) {
   return val == null ? null : String(val).toLowerCase().replace(/[^a-z0-9]/g, '') || null;
 }
 
-// GTIN: strip non-digits then strip leading zeros.
-// "00612789319039" → "612789319039" to match our DB's 12-digit UPCs.
-function gtinNorm(val) {
+// GTIN: take the FIRST whitespace-separated token, then strip non-digits and
+// leading zeros.
+//
+// The whitespace split is not cosmetic. Olight's feed ships GTINs like
+// "6978095650162 78" — a valid EAN-13 followed by a space and trailing digits.
+// Stripping non-digits across the whole string concatenates them into a
+// 15-digit value that is not a GTIN and matches nothing, which silently cost us
+// every Olight T2 match. 215 of Olight's 216 populated GTINs have this shape;
+// zero of OpticsPlanet's 439,973 do, so this is a no-op for OpticsPlanet.
+//
+// "00612789319039"    → "612789319039"   (leading zeros stripped, 12-digit UPC)
+// "6978095650162 78"  → "6978095650162"  (first token only)
+export function gtinNorm(val) {
   if (val == null) return null;
-  const digits = String(val).replace(/[^0-9]/g, '').replace(/^0+/, '');
+  const first = String(val).trim().split(/\s+/)[0];
+  const digits = first.replace(/[^0-9]/g, '').replace(/^0+/, '');
   return digits || null;
 }
 
 // ─── URL canonicalization ───────────────────────────────────────────────────
-function canonicalizeUrl(raw) {
+// `allowedHost` is the partner's own host (PARTNER_CONFIG[mid].host). A URL on
+// any other host returns null — the caller treats that as "not this partner's
+// row". Previously this was a single module-level OP_HOST constant, which made
+// every olight.com URL canonicalize to null.
+function canonicalizeUrl(raw, allowedHost) {
   if (!raw) return null;
   let u;
   try { u = new URL(raw); } catch { return null; }
   const host = u.hostname.toLowerCase().replace(/^www\./, '');
-  if (!host.endsWith(OP_HOST)) return null;
+  if (allowedHost && !host.endsWith(allowedHost)) return null;
   const kept = new URLSearchParams();
   for (const [k, v] of u.searchParams) {
     if (k.startsWith('_iv_')) kept.append(k, v);
@@ -143,22 +191,26 @@ async function pgPatch(pathAndQuery, body) {
   if (!res.ok) fail(`PATCH ${pathAndQuery} → ${res.status}: ${await res.text()}`);
 }
 
-// ─── load existing OpticsPlanet rows ────────────────────────────────────────
-async function loadExistingRows() {
+// ─── load partners that are wired to an Awin merchant ───────────────────────
+async function loadPartners() {
   const partners = await pgGet(
-    `partners?name=eq.${encodeURIComponent(PARTNER_NAME)}&select=id`
+    'partners?awin_merchant_id=not.is.null&select=id,name,awin_merchant_id'
   );
-  if (!partners.length) fail(`partner "${PARTNER_NAME}" not found`);
-  const partnerId = partners[0].id;
+  if (!partners.length) fail('no partners have an awin_merchant_id set');
+  return partners;
+}
+
+// ─── load one partner's existing rows + build its match indexes ─────────────
+async function loadExistingRows(partner, host) {
   const rows = await pgGet(
-    `affiliate_links?partner_id=eq.${partnerId}` +
+    `affiliate_links?partner_id=eq.${partner.id}&limit=5000` +
     `&select=id,url,street_price,in_stock,op_mpn,op_gtin,op_merchant_product_id,op_last_matched_by,product_variants(sku,upc)`
   );
 
   // Index 1: canonical URL (with _iv_* params) → [rows]
   const byUrl = new Map();
   // Index 1b: base URL (no _iv_* params) → [rows]
-  // Feed URLs never carry _iv_* params. 310 of our DB URLs do. This index
+  // Feed URLs never carry _iv_* params. Many of our DB URLs do. This index
   // groups those DB rows by their base product page so the same
   // disambiguation tiers (T3–T6) work on them.
   const byBaseUrl = new Map();
@@ -172,7 +224,7 @@ async function loadExistingRows() {
   const byOpGtin = new Map();
 
   for (const r of rows) {
-    const canon = canonicalizeUrl(r.url);
+    const canon = canonicalizeUrl(r.url, host);
     if (!canon) continue;
     r._canon = canon;  // stash for later diagnostics
 
@@ -205,7 +257,10 @@ async function loadExistingRows() {
 }
 
 // ─── fetch + stream-parse feed ──────────────────────────────────────────────
-async function* streamOpticsPlanetRows() {
+// Yields EVERY row with its merchant_id. Routing and host filtering are the
+// caller's job — this used to drop any row whose link did not contain
+// opticsplanet.com, which silently discarded every other merchant's catalogue.
+async function* streamFeedRows() {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   let res;
@@ -238,10 +293,11 @@ async function* streamOpticsPlanetRows() {
     if (dumped < DEBUG_SAMPLES) {
       console.log(c('cyan', `\n[debug feed row ${dumped + 1}/${DEBUG_SAMPLES}]`));
       const keys = [
+        'merchant_id', 'merchant_name',
         'merchant_deep_link', 'aw_deep_link',
         'merchant_product_id', 'aw_product_id',
         'mpn', 'model_number', 'ean', 'upc', 'product_GTIN',
-        'product_name', 'brand_name',
+        'product_name', 'brand_name', 'colour',
         'search_price', 'display_price', 'store_price', 'rrp_price',
         'in_stock', 'stock_quantity', 'stock_status',
       ];
@@ -250,208 +306,178 @@ async function* streamOpticsPlanetRows() {
       }
       dumped++;
     }
-    const link = row.merchant_deep_link || row.deep_link ||
-                 row.aw_deep_link       || row.aw_product_link;
-    if (!link || !link.toLowerCase().includes(OP_HOST)) continue;
     yield row;
   }
 }
 
-// ─── main ───────────────────────────────────────────────────────────────────
-async function main() {
-  const startedAt = Date.now();
+// ─── match one feed row into one partner's state ────────────────────────────
+// Identical tier logic to v4; the only change is that everything it touches
+// comes from `st` (the partner's own indexes and host) instead of module state.
+function processFeedRow(st, row, today) {
+  const canonicalDest = canonicalizeUrl(
+    row.merchant_deep_link || row.deep_link ||
+    row.aw_product_link    || row.aw_deep_link,
+    st.host
+  );
+  if (!canonicalDest) return;
 
-  log(c('bold', '\nLoading existing OpticsPlanet rows from Supabase…'));
-  const { rows, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin } = await loadExistingRows();
-  const shared = [...byUrl.entries()].filter(([, list]) => list.length > 1);
-  const storedOp = rows.filter(r => r.op_mpn || r.op_gtin).length;
-  log(`  rows:                       ${rows.length}`);
-  log(`  distinct canonical URLs:    ${byUrl.size}`);
-  log(`  with SKU:                   ${bySku.size}`);
-  log(`  with UPC (or numeric SKU):  ${byUpc.size}`);
-  log(`  with stored op_mpn/op_gtin: ${storedOp}  (T1/T2 exact re-match)`);
-  log(`  shared URLs (>1 row):       ${shared.length}   (rows: ${shared.reduce((n, [, l]) => n + l.length, 0)})`);
+  const price   = parsePrice(row);
+  const inStock = parseStock(row);
+  if (price == null && inStock == null) return;
 
-  log(c('bold', '\nFetching + parsing Awin feed…'));
-  let feedRowsSeen = 0;
+  // Raw feed identifiers (preserved as-is for audit columns)
+  const rawMpn  = (row.mpn || row.model_number || '').trim() || null;
+  const rawGtin = (row.ean || row.upc || row.product_GTIN || '').trim() || null;
+  const rawMid  = (row.merchant_product_id || row.product_id || '').trim() || null;
 
-  // Per-tier counters
-  const tierCounts = {
-    stored_op_mpn: 0, stored_op_gtin: 0,
-    'url+mpn': 0, 'url+gtin': 0, url_only: 0,
-    strict_id_only: 0, fuzzy_mpn_needs_review: 0,
-  };
-  const updates = new Map();              // link.id → { patch, tier }
-  const unresolvedAmbiguous = [];
-  const unmatchedFeedUrls   = [];
-  const fuzzyReviewList     = [];         // { linkId, ourSku, theirMpn, url }
-  const driftWarnings       = [];         // { linkId, field, old, new }
-  const today = new Date().toISOString().slice(0, 10);
+  // Normalized for comparison
+  const feedMpnStrict = strictNorm(rawMpn);
+  const feedGtinNorm  = gtinNorm(rawGtin);
+  const feedMpnFuzzy  = fuzzyNorm(rawMpn);
+  const feedMidStrict = strictNorm(rawMid);
 
-  for await (const row of streamOpticsPlanetRows()) {
-    feedRowsSeen++;
-    const canonicalDest = canonicalizeUrl(
-      row.merchant_deep_link || row.deep_link ||
-      row.aw_product_link    || row.aw_deep_link
-    );
-    if (!canonicalDest) continue;
+  let target = null;
+  let tier   = null;
 
-    const price   = parsePrice(row);
-    const inStock = parseStock(row);
-    if (price == null && inStock == null) continue;
-
-    // Raw feed identifiers (preserved as-is for audit columns)
-    const rawMpn  = (row.mpn || row.model_number || '').trim() || null;
-    const rawGtin = (row.ean || row.upc || row.product_GTIN || '').trim() || null;
-    const rawMid  = (row.merchant_product_id || row.product_id || '').trim() || null;
-
-    // Normalized for comparison
-    const feedMpnStrict = strictNorm(rawMpn);
-    const feedGtinNorm  = gtinNorm(rawGtin);
-    const feedMpnFuzzy  = fuzzyNorm(rawMpn);
-    const feedMidStrict = strictNorm(rawMid);
-
-    let target = null;
-    let tier   = null;
-
-    // ── T1: stored op_mpn (exact re-match from prior run) ──────────────
-    if (!target && feedMpnStrict && byOpMpn.has(feedMpnStrict)) {
-      target = byOpMpn.get(feedMpnStrict);
-      tier = 'stored_op_mpn';
-    }
-    // ── T2: stored op_gtin (exact re-match from prior run) ─────────────
-    if (!target && feedGtinNorm && byOpGtin.has(feedGtinNorm)) {
-      target = byOpGtin.get(feedGtinNorm);
-      tier = 'stored_op_gtin';
-    }
-
-    // Candidates: try exact canonical URL first, then base URL (without
-    // _iv_* params) as fallback. The feed never carries _iv_* params, so
-    // 310 of our DB rows can only match via the base-URL candidate group.
-    const candidates = !target
-      ? (byUrl.get(canonicalDest) || byBaseUrl.get(baseUrlOf(canonicalDest)) || null)
-      : null;
-
-    // ── T3: URL + strict mpn match ─────────────────────────────────────
-    if (!target && candidates && feedMpnStrict) {
-      const hit = candidates.find(r =>
-        strictNorm(r.product_variants?.sku) === feedMpnStrict
-      );
-      if (hit) { target = hit; tier = 'url+mpn'; }
-    }
-    // ── T4: URL + strict gtin match ────────────────────────────────────
-    if (!target && candidates && feedGtinNorm) {
-      const hit = candidates.find(r =>
-        gtinNorm(r.product_variants?.upc) === feedGtinNorm ||
-        gtinNorm(r.product_variants?.sku) === feedGtinNorm
-      );
-      if (hit) { target = hit; tier = 'url+gtin'; }
-    }
-    // ── T5: URL only (single candidate, no ID confirmation) ────────────
-    if (!target && candidates && candidates.length === 1) {
-      target = candidates[0];
-      tier = 'url_only';
-    }
-    // ── T6: URL + fuzzy mpn (FLAGGED for review) ───────────────────────
-    if (!target && candidates && candidates.length > 1 && feedMpnFuzzy) {
-      const hit = candidates.find(r =>
-        fuzzyNorm(r.product_variants?.sku) === feedMpnFuzzy
-      );
-      if (hit) {
-        target = hit;
-        tier = 'fuzzy_mpn_needs_review';
-        fuzzyReviewList.push({
-          linkId: hit.id,
-          ourSku: hit.product_variants?.sku || '—',
-          theirMpn: rawMpn || '—',
-          url: canonicalDest,
-        });
-      }
-    }
-    // ── No URL match at all — try strict ID-only as last resort ────────
-    if (!target) {
-      if      (feedMpnStrict && bySku.has(feedMpnStrict))   { target = bySku.get(feedMpnStrict); tier = 'strict_id_only'; }
-      else if (feedGtinNorm  && byUpc.has(feedGtinNorm))    { target = byUpc.get(feedGtinNorm);  tier = 'strict_id_only'; }
-      else if (feedMidStrict && bySku.has(feedMidStrict))   { target = bySku.get(feedMidStrict); tier = 'strict_id_only'; }
-    }
-
-    if (!target) {
-      if (candidates && candidates.length > 1) {
-        unresolvedAmbiguous.push({
-          url: canonicalDest,
-          feedMpn: rawMpn, feedGtin: rawGtin, feedMid: rawMid,
-          candidateIds: candidates.map(x => x.id),
-        });
-      } else if (unmatchedFeedUrls.length < 25) {
-        unmatchedFeedUrls.push({ url: canonicalDest, mpn: rawMpn, gtin: rawGtin, mid: rawMid });
-      }
-      continue;
-    }
-
-    // ── Build patch ────────────────────────────────────────────────────
-    const patch = {
-      last_checked: today,
-      op_mpn: rawMpn,
-      op_gtin: rawGtin,
-      op_merchant_product_id: rawMid,
-      op_last_matched_by: tier,
-    };
-    if (price   != null && Number(target.street_price) !== price) patch.street_price = price;
-    if (inStock != null && target.in_stock !== inStock)           patch.in_stock     = inStock;
-
-    // ── Drift detection ────────────────────────────────────────────────
-    if (target.op_mpn && rawMpn && strictNorm(target.op_mpn) !== strictNorm(rawMpn)) {
-      driftWarnings.push({ linkId: target.id, field: 'op_mpn', old: target.op_mpn, new: rawMpn });
-    }
-    if (target.op_gtin && rawGtin && gtinNorm(target.op_gtin) !== gtinNorm(rawGtin)) {
-      driftWarnings.push({ linkId: target.id, field: 'op_gtin', old: target.op_gtin, new: rawGtin });
-    }
-
-    tierCounts[tier]++;
-    updates.set(target.id, patch);
+  // ── T1: stored op_mpn (exact re-match from prior run) ──────────────
+  if (!target && feedMpnStrict && st.byOpMpn.has(feedMpnStrict)) {
+    target = st.byOpMpn.get(feedMpnStrict);
+    tier = 'stored_op_mpn';
+  }
+  // ── T2: stored op_gtin (exact re-match from prior run) ─────────────
+  if (!target && feedGtinNorm && st.byOpGtin.has(feedGtinNorm)) {
+    target = st.byOpGtin.get(feedGtinNorm);
+    tier = 'stored_op_gtin';
   }
 
-  // ─── Summary ──────────────────────────────────────────────────────────
-  const matched      = updates.size;
-  const priceChanged = [...updates.values()].filter(p => 'street_price' in p).length;
-  const stockChanged = [...updates.values()].filter(p => 'in_stock'     in p).length;
-  const matchRate    = rows.length ? matched / rows.length : 0;
-  const unmatched    = rows.filter(r => !updates.has(r.id));
+  // Candidates: try exact canonical URL first, then base URL (without
+  // _iv_* params) as fallback. The feed never carries _iv_* params, so
+  // many of our DB rows can only match via the base-URL candidate group.
+  const candidates = !target
+    ? (st.byUrl.get(canonicalDest) || st.byBaseUrl.get(baseUrlOf(canonicalDest)) || null)
+    : null;
 
-  log(c('bold', '\nSummary'));
-  log(`  feed rows (opticsplanet.com): ${feedRowsSeen}`);
-  log(`  existing rows in DB:          ${rows.length}`);
+  // ── T3: URL + strict mpn match ─────────────────────────────────────
+  if (!target && candidates && feedMpnStrict) {
+    const hit = candidates.find(r =>
+      strictNorm(r.product_variants?.sku) === feedMpnStrict
+    );
+    if (hit) { target = hit; tier = 'url+mpn'; }
+  }
+  // ── T4: URL + strict gtin match ────────────────────────────────────
+  if (!target && candidates && feedGtinNorm) {
+    const hit = candidates.find(r =>
+      gtinNorm(r.product_variants?.upc) === feedGtinNorm ||
+      gtinNorm(r.product_variants?.sku) === feedGtinNorm
+    );
+    if (hit) { target = hit; tier = 'url+gtin'; }
+  }
+  // ── T5: URL only (single candidate, no ID confirmation) ────────────
+  if (!target && candidates && candidates.length === 1) {
+    target = candidates[0];
+    tier = 'url_only';
+  }
+  // ── T6: URL + fuzzy mpn (FLAGGED for review) ───────────────────────
+  if (!target && candidates && candidates.length > 1 && feedMpnFuzzy) {
+    const hit = candidates.find(r =>
+      fuzzyNorm(r.product_variants?.sku) === feedMpnFuzzy
+    );
+    if (hit) {
+      target = hit;
+      tier = 'fuzzy_mpn_needs_review';
+      st.fuzzyReviewList.push({
+        linkId: hit.id,
+        ourSku: hit.product_variants?.sku || '—',
+        theirMpn: rawMpn || '—',
+        url: canonicalDest,
+      });
+    }
+  }
+  // ── No URL match at all — try strict ID-only as last resort ────────
+  if (!target) {
+    if      (feedMpnStrict && st.bySku.has(feedMpnStrict))  { target = st.bySku.get(feedMpnStrict); tier = 'strict_id_only'; }
+    else if (feedGtinNorm  && st.byUpc.has(feedGtinNorm))   { target = st.byUpc.get(feedGtinNorm);  tier = 'strict_id_only'; }
+    else if (feedMidStrict && st.bySku.has(feedMidStrict))  { target = st.bySku.get(feedMidStrict); tier = 'strict_id_only'; }
+  }
+
+  if (!target) {
+    if (candidates && candidates.length > 1) {
+      st.unresolvedAmbiguous.push({
+        url: canonicalDest,
+        feedMpn: rawMpn, feedGtin: rawGtin, feedMid: rawMid,
+        candidateIds: candidates.map(x => x.id),
+      });
+    } else if (st.unmatchedFeedUrls.length < 25) {
+      st.unmatchedFeedUrls.push({ url: canonicalDest, mpn: rawMpn, gtin: rawGtin, mid: rawMid });
+    }
+    return;
+  }
+
+  // ── Build patch ────────────────────────────────────────────────────
+  const patch = {
+    last_checked: today,
+    op_mpn: rawMpn,
+    op_gtin: rawGtin,
+    op_merchant_product_id: rawMid,
+    op_last_matched_by: tier,
+  };
+  if (price   != null && Number(target.street_price) !== price) patch.street_price = price;
+  if (inStock != null && target.in_stock !== inStock)           patch.in_stock     = inStock;
+
+  // ── Drift detection ────────────────────────────────────────────────
+  if (target.op_mpn && rawMpn && strictNorm(target.op_mpn) !== strictNorm(rawMpn)) {
+    st.driftWarnings.push({ linkId: target.id, field: 'op_mpn', old: target.op_mpn, new: rawMpn });
+  }
+  if (target.op_gtin && rawGtin && gtinNorm(target.op_gtin) !== gtinNorm(rawGtin)) {
+    st.driftWarnings.push({ linkId: target.id, field: 'op_gtin', old: target.op_gtin, new: rawGtin });
+  }
+
+  st.tierCounts[tier] = (st.tierCounts[tier] || 0) + 1;
+  st.updates.set(target.id, patch);
+}
+
+// ─── per-partner report ─────────────────────────────────────────────────────
+function reportPartner(st) {
+  const matched      = st.updates.size;
+  const priceChanged = [...st.updates.values()].filter(p => 'street_price' in p).length;
+  const stockChanged = [...st.updates.values()].filter(p => 'in_stock'     in p).length;
+  const matchRate    = st.rows.length ? matched / st.rows.length : 0;
+  const unmatched    = st.rows.filter(r => !st.updates.has(r.id));
+
+  log(c('bold', `\n── ${st.partner.name}  (merchant ${st.partner.awin_merchant_id}, host ${st.host}) ──`));
+  log(`  feed rows for this merchant:  ${st.feedRowsSeen}`);
+  log(`  existing rows in DB:          ${st.rows.length}`);
   log(`  matched:                      ${matched}   (${(matchRate * 100).toFixed(1)}%)`);
   log(`  price changed:                ${priceChanged}`);
   log(`  stock flag changed:           ${stockChanged}`);
-  log(`  ambiguous unresolved:         ${unresolvedAmbiguous.length}`);
+  log(`  ambiguous unresolved:         ${st.unresolvedAmbiguous.length}`);
   log(`  unmatched:                    ${unmatched.length}`);
 
-  log(c('bold', '\nMatch confidence breakdown'));
-  for (const [tier, n] of Object.entries(tierCounts)) {
-    if (n > 0) log(`  ${tier.padEnd(30)} ${n}`);
-  }
+  log('  match confidence breakdown:');
+  const tiersSeen = Object.entries(st.tierCounts).filter(([, n]) => n > 0);
+  if (!tiersSeen.length) log(c('grey', '    (none)'));
+  for (const [tier, n] of tiersSeen) log(`    ${tier.padEnd(28)} ${n}`);
 
-  if (fuzzyReviewList.length) {
-    log(c('yellow', `\nFuzzy matches for review (${fuzzyReviewList.length}):`));
-    for (const f of fuzzyReviewList) {
-      log(c('yellow', `  Link ${f.linkId.slice(0, 8)}…`));
-      log(c('yellow', `    our sku:   ${f.ourSku}`));
-      log(c('yellow', `    their mpn: ${f.theirMpn}`));
-      log(c('yellow', `    URL:       ${f.url}`));
+  if (st.fuzzyReviewList.length) {
+    log(c('yellow', `\n  Fuzzy matches for review (${st.fuzzyReviewList.length}):`));
+    for (const f of st.fuzzyReviewList) {
+      log(c('yellow', `    Link ${f.linkId.slice(0, 8)}…`));
+      log(c('yellow', `      our sku:   ${f.ourSku}`));
+      log(c('yellow', `      their mpn: ${f.theirMpn}`));
+      log(c('yellow', `      URL:       ${f.url}`));
     }
   }
 
-  if (driftWarnings.length) {
-    log(c('yellow', `\nDrift warnings (${driftWarnings.length}):`));
-    for (const d of driftWarnings.slice(0, 20)) {
-      log(c('yellow', `  Link ${d.linkId.slice(0, 8)}…  ${d.field}: "${d.old}" → "${d.new}"`));
+  if (st.driftWarnings.length) {
+    log(c('yellow', `\n  Drift warnings (${st.driftWarnings.length}):`));
+    for (const d of st.driftWarnings.slice(0, 20)) {
+      log(c('yellow', `    Link ${d.linkId.slice(0, 8)}…  ${d.field}: "${d.old}" → "${d.new}"`));
     }
   }
 
-  if (unresolvedAmbiguous.length) {
+  if (st.unresolvedAmbiguous.length) {
     log(c('grey', '\n  Ambiguous (first 10):'));
-    for (const a of unresolvedAmbiguous.slice(0, 10)) {
+    for (const a of st.unresolvedAmbiguous.slice(0, 10)) {
       log(c('grey',
         `    ${a.url}  (mpn: ${a.feedMpn || '—'}, gtin: ${a.feedGtin || '—'}, mid: ${a.feedMid || '—'})`
       ));
@@ -459,34 +485,27 @@ async function main() {
   }
 
   // URL-shape diagnostic when match rate is imperfect
-  if (matchRate < 0.90 && unmatched.length && unmatchedFeedUrls.length) {
+  if (matchRate < 0.90 && unmatched.length) {
     log(c('grey', '\n  URL-shape diagnostic:'));
     log(c('grey', '    unmatched DB URLs (first 10):'));
     for (const r of unmatched.slice(0, 10)) {
       log(c('grey', `      ${r._canon || r.url}  (sku: ${r.product_variants?.sku || '—'})`));
     }
-    log(c('grey', '    unmatched feed URLs (first 10):'));
-    for (const f of unmatchedFeedUrls.slice(0, 10)) {
-      log(c('grey', `      ${f.url}  (mpn: ${f.mpn || '—'}, gtin: ${f.gtin || '—'})`));
+    if (st.unmatchedFeedUrls.length) {
+      log(c('grey', '    unmatched feed URLs (first 10):'));
+      for (const f of st.unmatchedFeedUrls.slice(0, 10)) {
+        log(c('grey', `      ${f.url}  (mpn: ${f.mpn || '—'}, gtin: ${f.gtin || '—'})`));
+      }
     }
   }
 
-  if (matchRate < MATCH_RATE_FLOOR) {
-    fail(
-      `match rate ${(matchRate * 100).toFixed(1)}% is below floor ` +
-      `${(MATCH_RATE_FLOOR * 100).toFixed(0)}%. Refusing to write. ` +
-      'Investigate feed shape before rerunning.'
-    );
-  }
+  return { matched, matchRate };
+}
 
-  if (DRY_RUN) {
-    log(c('cyan', '\n[dry-run] no writes performed'));
-    log(`  duration: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
-    return;
-  }
-
-  log(c('bold', `\nWriting ${matched} row updates (concurrency ${CONCURRENCY})…`));
-  const entries = [...updates.entries()];
+// ─── write one partner's updates ────────────────────────────────────────────
+async function writePartner(st) {
+  const entries = [...st.updates.entries()];
+  log(c('bold', `\nWriting ${entries.length} row updates for ${st.partner.name} (concurrency ${CONCURRENCY})…`));
   let written = 0;
   for (let i = 0; i < entries.length; i += CONCURRENCY) {
     const chunk = entries.slice(i, i + CONCURRENCY);
@@ -498,8 +517,128 @@ async function main() {
       log(c('grey', `  ${written}/${entries.length}`));
     }
   }
+  return written;
+}
 
-  log(c('green', `\n✓ updated ${written} rows in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`));
+// ─── main ───────────────────────────────────────────────────────────────────
+async function main() {
+  const startedAt = Date.now();
+
+  // ── preflight ──
+  if (!AWIN_FEED_URL) fail('AWIN_FEED_URL_V2 not set');
+  if (!SERVICE_KEY)   fail('SUPABASE_SERVICE_ROLE_KEY not set');
+  if (DRY_RUN) log(c('cyan', '── DRY RUN — no database writes ──'));
+  if (FLOOR_OVERRIDE != null) {
+    warn(`MATCH_RATE_FLOOR=${FLOOR_OVERRIDE} overrides every per-partner floor`);
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  // ── load partners and their rows ──
+  log(c('bold', '\nLoading Awin partners from Supabase…'));
+  const partners = await loadPartners();
+  const states = new Map();
+
+  for (const p of partners) {
+    const mid = String(p.awin_merchant_id).trim();
+    const cfg = PARTNER_CONFIG[mid];
+    if (!cfg) {
+      warn(`partner "${p.name}" has awin_merchant_id ${mid} but no PARTNER_CONFIG entry — skipping`);
+      continue;
+    }
+    const ix = await loadExistingRows(p, cfg.host);
+    const shared = [...ix.byUrl.entries()].filter(([, list]) => list.length > 1);
+    const storedOp = ix.rows.filter(r => r.op_mpn || r.op_gtin).length;
+
+    log(`  ${p.name}  (merchant ${mid}, host ${cfg.host}, floor ${(cfg.floor * 100).toFixed(0)}%)`);
+    log(`    rows:                       ${ix.rows.length}`);
+    log(`    distinct canonical URLs:    ${ix.byUrl.size}`);
+    log(`    with SKU:                   ${ix.bySku.size}`);
+    log(`    with UPC (or numeric SKU):  ${ix.byUpc.size}`);
+    log(`    with stored op_mpn/op_gtin: ${storedOp}  (T1/T2 exact re-match)`);
+    log(`    shared URLs (>1 row):       ${shared.length}   (rows: ${shared.reduce((n, [, l]) => n + l.length, 0)})`);
+
+    states.set(mid, {
+      partner: p, host: cfg.host, floor: cfg.floor, ...ix,
+      updates: new Map(),
+      tierCounts: {},
+      unresolvedAmbiguous: [], unmatchedFeedUrls: [],
+      fuzzyReviewList: [], driftWarnings: [],
+      feedRowsSeen: 0,
+    });
+  }
+
+  if (!states.size) fail('no configured partners to process');
+
+  // ── stream the combined feed once, routing by merchant_id ──
+  log(c('bold', '\nFetching + parsing combined Awin feed…'));
+  let totalRows = 0;
+  const unknownMerchants = new Map();
+
+  for await (const row of streamFeedRows()) {
+    totalRows++;
+    const mid = String(row.merchant_id ?? '').trim();
+    const st = states.get(mid);
+    if (!st) {
+      if (mid) unknownMerchants.set(mid, (unknownMerchants.get(mid) || 0) + 1);
+      continue;
+    }
+    st.feedRowsSeen++;
+    processFeedRow(st, row, today);
+  }
+
+  log(`  total feed rows: ${totalRows}`);
+  if (unknownMerchants.size) {
+    const list = [...unknownMerchants.entries()]
+      .sort((a, b) => b[1] - a[1]).slice(0, 10)
+      .map(([m, n]) => `${m} (${n})`).join(', ');
+    log(c('grey', `  ignored merchants not in PARTNER_CONFIG: ${list}`));
+  }
+
+  // ── per-partner report + floor check ──
+  log(c('bold', '\nSummary'));
+  const willWrite = [];
+  const skipped   = [];
+
+  for (const st of states.values()) {
+    const { matched, matchRate } = reportPartner(st);
+    const floor = FLOOR_OVERRIDE != null ? FLOOR_OVERRIDE : st.floor;
+
+    if (matchRate < floor) {
+      // Skip THIS partner only. Other partners are independent and still write:
+      // a 26-link Olight problem must not block 466 OpticsPlanet updates.
+      log(c('red', `\n  !! ${st.partner.name}: match rate ${(matchRate * 100).toFixed(1)}% is below its floor ` +
+                   `${(floor * 100).toFixed(0)}%.`));
+      log(c('red',   `  !! SKIPPING this partner — no writes for ${st.partner.name}. Its ${st.rows.length} rows keep`));
+      log(c('red',   `  !! their existing prices. Investigate the feed shape for merchant ` +
+                   `${st.partner.awin_merchant_id} before the next run.`));
+      skipped.push(st);
+      continue;
+    }
+    if (matched) willWrite.push(st);
+  }
+
+  // ── write ──
+  if (DRY_RUN) {
+    log(c('cyan', '\n[dry-run] no writes performed'));
+    log(`  would write: ${willWrite.map(s => `${s.partner.name} ${s.updates.size}`).join(', ') || 'nothing'}`);
+    log(`  duration: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+  } else {
+    let written = 0;
+    for (const st of willWrite) written += await writePartner(st);
+    log(c('green', `\n✓ updated ${written} rows in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`));
+  }
+
+  // ── exit status ──
+  // Skipped partners are a real failure even though the run did useful work:
+  // exit non-zero so the Actions run goes red and somebody looks at it.
+  if (skipped.length) {
+    console.error(c('red',
+      `\nerror: ${skipped.length} partner(s) skipped below their match-rate floor: ` +
+      skipped.map(s => s.partner.name).join(', ')
+    ));
+    process.exit(1);
+  }
 }
 
 // ─── parsing helpers ────────────────────────────────────────────────────────
@@ -523,4 +662,10 @@ function parseStock(row) {
   return null;
 }
 
-main().catch(e => fail(`unhandled: ${e.stack || e.message}`));
+// Run only when invoked directly, so the unit test can import the real
+// normalizers from this file rather than keeping a second copy in sync.
+const invokedDirectly = process.argv[1] &&
+  resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url));
+if (invokedDirectly) {
+  main().catch(e => fail(`unhandled: ${e.stack || e.message}`));
+}
