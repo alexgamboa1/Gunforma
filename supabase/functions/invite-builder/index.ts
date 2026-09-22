@@ -14,9 +14,9 @@
 //
 // Auth model:
 //   Callers must pass the SERVICE_ROLE_KEY as the `Authorization: Bearer <key>`
-//   header. This is enforced by Supabase's default JWT verification on edge
-//   functions (verify_jwt = true) — since only holders of the service role JWT
-//   can pass verification, no extra secret gate is needed here.
+//   header, and the function CHECKS THE ROLE CLAIM itself. verify_jwt = true
+//   is not sufficient on its own: it accepts any validly signed project JWT,
+//   including the public anon key. See isServiceRole() below.
 // -----------------------------------------------------------------------------
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -47,6 +47,51 @@ function json(req: Request, body: unknown, status = 200): Response {
   });
 }
 
+
+// -------- Authorization --------
+// `verify_jwt = true` only proves the bearer token is a validly signed,
+// unexpired JWT for THIS project. It does NOT check which role the token
+// carries. The anon key is exactly such a token, and it is published in
+// js/supabase-client.js on every page — so platform verification alone let
+// anyone who viewed the page source create auth users and send invite emails
+// from our domain. (Audit finding #1.)
+//
+// The only legitimate callers are scripts/batch-invite.js and
+// scripts/launch-invites.js, both of which send SUPABASE_SERVICE_ROLE_KEY.
+// Nothing in the browser calls these endpoints, so require the service role
+// and reject everything else with 403.
+//
+// CORS is not a defence here: it is enforced by browsers only, and curl
+// ignores it entirely.
+function bearerOf(req: Request): string | null {
+  const h = req.headers.get('Authorization') || '';
+  const m = h.match(/^Bearer\s+(.+)$/i);
+  return m ? m[1].trim() : null;
+}
+
+function roleOf(jwt: string): string | null {
+  // Signature and expiry are already checked by the platform; this only reads
+  // the role claim out of the payload segment.
+  const parts = jwt.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const claims = JSON.parse(atob(padded));
+    return typeof claims?.role === 'string' ? claims.role : null;
+  } catch {
+    return null;
+  }
+}
+
+function isServiceRole(req: Request): boolean {
+  const token = bearerOf(req);
+  if (!token) return false;
+  const envKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '';
+  if (envKey && token === envKey) return true;   // the key we were given
+  return roleOf(token) === 'service_role';       // or any service_role JWT
+}
+
 const UUID_RE  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -57,6 +102,13 @@ Deno.serve(async (req) => {
   }
   if (req.method !== 'POST') {
     return json(req, { error: 'Method not allowed' }, 405);
+  }
+
+
+  // Reject before parsing the body, so an unauthorized call does no work and
+  // never reaches auth.admin.*.
+  if (!isServiceRole(req)) {
+    return json(req, { error: 'Forbidden: this endpoint requires the service role key' }, 403);
   }
 
   // Parse body
