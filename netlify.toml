@@ -100,6 +100,24 @@
   to = "/field-notes.html"
   status = 200
 
+# Static crawler-facing index of every product, grouped by category — see
+# parts-index.mjs. Netlify redirects are first-match-wins, so these two exact
+# rules MUST sit above the /parts/* wildcard below: "/parts/*" only matches
+# paths starting with the literal "/parts/", so bare "/parts" never collides
+# with it, but "/parts/" (trailing slash, empty splat) DOES match "/parts/*"
+# and would otherwise be swallowed by product-page.mjs, which 404s on an
+# empty slug. Putting both exact rules first means whichever form a crawler
+# or link uses lands on the index, not a 404.
+[[redirects]]
+  from = "/parts"
+  to = "/.netlify/functions/parts-index"
+  status = 200
+
+[[redirects]]
+  from = "/parts/"
+  to = "/.netlify/functions/parts-index"
+  status = 200
+
 # Per-product pages, server-rendered so crawlers see real content instead of
 # the "Loading parts…" shell the client-side catalog shows before Supabase
 # resolves. :splat carries "category/slug" (or just "slug" — the function
