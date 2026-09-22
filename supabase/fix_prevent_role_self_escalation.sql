@@ -98,7 +98,8 @@ end;
 $function$;
 
 -- ============================================================
--- PROVEN in a rolled-back transaction against production, before/after:
+-- APPLIED 2026-09-22 as migration fix_prevent_role_self_escalation.
+-- Re-verified against the APPLIED function (writes rolled back, function live):
 --
 --                                          before (live)   after this change
 --   non-admin sets own role=admin          SUCCEEDED       BLOCKED
@@ -110,4 +111,10 @@ $function$;
 --   rewriting version after acceptance     SUCCEEDED       BLOCKED
 --   service_role changes a role            SUCCEEDED       SUCCEEDED
 --   direct SQL (no JWT) changes a role     SUCCEEDED       SUCCEEDED
+--
+-- One result needs reading carefully: a non-admin updating ANOTHER user's
+-- role returns no error, because the RLS policy (auth.uid() = id) matches
+-- zero rows and the trigger is never reached. Measured: rows affected = 0 and
+-- the target's role is unchanged. Safe, but it does not raise — so an error
+-- is not the signal to test for there; the row count is.
 -- ============================================================
