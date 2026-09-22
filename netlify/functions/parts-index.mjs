@@ -60,7 +60,27 @@ async function fetchAllProducts() {
     'id', 'slug', 'name', 'category',
     'manufacturers!products_brand_id_fkey(name)',
   ].join(',');
-  return pgGet('products?select=' + encodeURIComponent(cols) + '&order=name.asc');
+  // PostgREST caps a response at its configured max-rows (1000 by default)
+  // and does so SILENTLY — you get a short array, not an error. At 231
+  // products we are nowhere near it, but "nowhere near it" is a fact about
+  // today, and this page's whole purpose is being a COMPLETE manifest. A
+  // truncated index would quietly stop linking the tail of the catalog and
+  // nothing would fail. So page explicitly rather than relying on the cap
+  // staying above the row count.
+  const PAGE = 500;
+  const all = [];
+  for (let offset = 0; ; offset += PAGE) {
+    const page = await pgGet(
+      'products?select=' + encodeURIComponent(cols) +
+      '&order=name.asc&limit=' + PAGE + '&offset=' + offset
+    );
+    all.push(...page);
+    if (page.length < PAGE) break;          // short page = last page
+    if (offset > 50000) {                   // belt and braces, never expected
+      throw new Error('parts-index: product pagination exceeded 50k rows');
+    }
+  }
+  return all;
 }
 
 function groupByCategory(products) {
@@ -208,6 +228,14 @@ function renderPage(products) {
   '<span>&copy; 2026 Gunforma &middot; All rights reserved</span>' +
   '<span><a href="gunforma-legal.html#legal">Legal</a> &middot; <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> &middot; <a href="gunforma-legal.html#contact">Contact</a></span>' +
 '</div>' +
+'<!-- The nav ships fully rendered above, so crawlers see the links with no\n' +
+'     JS at all. These three only fill in the signed-in state for humans:\n' +
+'     without them a signed-in visitor arriving from the catalog link sees\n' +
+'     "Sign in", which is the same inconsistency PR #29 fixed across the rest\n' +
+'     of the site. They do not affect the server-rendered content. -->' +
+'<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>' +
+'<script src="js/supabase-client.js"></script>' +
+'<script src="js/nav.js"></script>' +
 '</body></html>';
 }
 
