@@ -303,7 +303,14 @@ var AFFILIATE_BY_PRODUCT_ID = {};
 var IMAGE_BY_PRODUCT_ID = {};
 
 async function loadBuild() {
-  const id = new URLSearchParams(window.location.search).get('id');
+  // Served at two URLs: /b/:id (the shareable one, rewritten to build-og.mjs
+  // which injects the OG meta) and gunforma-build-detail.html?id=... (the
+  // original, still supported so old links never break). Same resolution
+  // order gunforma-profile.html uses for /u/:username.
+  const fromPath = window.location.pathname.match(/^\/b\/([^/]+)\/?$/);
+  const id = fromPath
+    ? decodeURIComponent(fromPath[1])
+    : new URLSearchParams(window.location.search).get('id');
   if (!id) { renderNotFound(); return; }
 
   // No status filter needed here — RLS's "Public can view approved builds"
