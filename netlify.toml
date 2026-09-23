@@ -19,6 +19,12 @@
 [functions."profile-og"]
   included_files = ["gunforma-profile.html"]
 
+# build-og does the same for the build page — without this the function ships
+# without the HTML and falls back to its meta-only redirect stub, which still
+# previews correctly but costs the reader an extra hop.
+[functions."build-og"]
+  included_files = ["gunforma-build-detail.html"]
+
 # ---------------------------------------------------------------------------
 # Not-the-website paths. publish = "." serves the whole repo root, so source
 # that happens to live next to the pages is reachable over HTTP. None of it is
@@ -93,6 +99,23 @@
 [[redirects]]
   from = "/u/*"
   to = "/.netlify/functions/profile-og?username=:splat"
+  status = 200
+
+# Shareable build URLs. Same shape as /u/* directly above, for the same
+# reasons: status = 200 is a rewrite, not a redirect, so the address bar keeps
+# /b/:id — which is what the canonical tag and og:url point at.
+#
+# :splat rather than a named :id placeholder — production does not substitute
+# named placeholders into a rewrite target's query string (netlify dev does,
+# which hides it locally). The function also falls back to parsing the path
+# and x-nf-original-path, so routing changes can't silently break it.
+#
+# Nothing above this rule matches /b/*, and there is no catch-all below, so
+# first-match-wins is satisfied. gunforma-build-detail.html?id=... keeps
+# working untouched — this adds a URL, it does not replace one.
+[[redirects]]
+  from = "/b/*"
+  to = "/.netlify/functions/build-og?id=:splat"
   status = 200
 
 [[redirects]]
