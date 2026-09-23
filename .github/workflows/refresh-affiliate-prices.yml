@@ -15,9 +15,20 @@ name: Refresh affiliate prices
 
 on:
   schedule:
-    # 08:00 UTC daily = 01:00 Pacific / 04:00 Eastern.
+    # 07:23 UTC daily = 00:23 Pacific / 03:23 Eastern.
     # Off-peak for the site and well after Awin's nightly feed refresh.
-    - cron: '0 8 * * *'
+    #
+    # The odd minute is deliberate. GitHub queues scheduled workflows and
+    # deprioritises them under load, and the top of the hour is the busiest
+    # slot on the platform, so '0 8 * * *' consistently ran hours late:
+    #   09-19  fired 12:21  (+4h21m)
+    #   09-20  fired 12:56  (+4h56m)
+    #   09-21  fired 14:56  (+6h56m)
+    #   09-22  fired 12:51  (+4h51m)
+    # Firing at :23 avoids that crowd. The delay is not just untidy — it makes
+    # "has tonight's run landed?" unanswerable without checking, and it widens
+    # the window where a migration can collide with a run.
+    - cron: '23 7 * * *'
   workflow_dispatch:
     inputs:
       dry_run:
