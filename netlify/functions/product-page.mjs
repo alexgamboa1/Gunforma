@@ -269,7 +269,14 @@ async function fetchProduct(slug) {
       'variant_images(url,position,alt_text),' +
       'affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name)))',
   ].join(',');
-  const rows = await pgGet('products?slug=eq.' + encodeURIComponent(slug) + '&select=' + encodeURIComponent(cols) + '&limit=1');
+  // Embed filters, one per level: a retired variant drops out of the page, and
+  // a retired listing drops out of its (live) variant's buy rows. Both are
+  // embed filters, so the product itself always survives — a product whose
+  // every listing is retired still renders, just with no buy row.
+  const retiredFilters =
+    '&product_variants.retired_at=is.null' +
+    '&product_variants.affiliate_links.retired_at=is.null';
+  const rows = await pgGet('products?slug=eq.' + encodeURIComponent(slug) + '&select=' + encodeURIComponent(cols) + retiredFilters + '&limit=1');
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 

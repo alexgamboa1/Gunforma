@@ -324,13 +324,19 @@ async function loadProductImages() {
   });
   if (!refIds.size) return;
   const { data, error } = await sb
+    // Live variants only, default preferred in JS rather than filtered
+    // server-side — a retired default variant would otherwise leave the part
+    // with no thumbnail at all.
     .from('product_variants')
-    .select('product_id, primary_image_url')
-    .eq('is_default', true)
+    .select('product_id, primary_image_url, is_default')
+    .is('retired_at', null)
     .in('product_id', Array.from(refIds));
   if (error) { console.error('loadProductImages', error); return; }
   (data || []).forEach(function(v) {
-    if (v.primary_image_url) IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
+    if (!v.primary_image_url) return;
+    if (!IMAGE_BY_PRODUCT_ID[v.product_id] || v.is_default) {
+      IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
+    }
   });
 }
 

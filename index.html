@@ -312,12 +312,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     builds.forEach(b => (b.parts_snapshot || []).forEach(p => p.refId && refIds.add(p.refId)));
     const msrpByProduct = {};
     if (refIds.size) {
+      // Live variants only. is_default is NOT filtered server-side: if a
+      // product's default variant is retired, filtering on it would return no
+      // row and the part would silently price at 0. Ask for every live variant
+      // and prefer the default in JS, falling back to the first live one.
       const { data: variants } = await sb
         .from('product_variants')
-        .select('product_id, msrp')
-        .eq('is_default', true)
+        .select('product_id, msrp, is_default')
+        .is('retired_at', null)
         .in('product_id', Array.from(refIds));
-      (variants || []).forEach(v => { msrpByProduct[v.product_id] = Number(v.msrp || 0); });
+      (variants || []).forEach(v => {
+        if (msrpByProduct[v.product_id] === undefined || v.is_default) {
+          msrpByProduct[v.product_id] = Number(v.msrp || 0);
+        }
+      });
     }
 
     container.innerHTML = builds.map(b => {

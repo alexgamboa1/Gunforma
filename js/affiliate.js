@@ -95,6 +95,11 @@
               'manual_safety_variant, is_default, primary_image_url, ' +
               'products!product_variants_product_id_fkey(category), ' +
               'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, partners(name))')
+      // Retired rows never reach a buy surface. Top-level filter drops a
+      // retired variant; the embed filter drops a retired listing while
+      // keeping its (live) variant.
+      .is('retired_at', null)
+      .is('affiliate_links.retired_at', null)
       .in('product_id', ids);
     if (res.error) { console.error('[affiliate] load failed', res.error); return; }
 
