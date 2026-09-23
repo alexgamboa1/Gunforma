@@ -73,6 +73,35 @@
   }
   // DB stores retailer + network like "OpticsPlanet (Awin)"; shoppers only
   // need the retailer, so strip anything trailing in parens.
+  // A price we can stand behind is one a FEED verified within the window.
+  // op_last_matched_by null means no feed ever matched this link, so its
+  // street_price was hand-entered — a hand-typed last_checked must not pass as
+  // verification, which is why both columns are checked and not just the date.
+  //
+  // Duplicated in gunforma-build-detail.html and
+  // netlify/functions/product-page.mjs — the same three-way rule, same window.
+  // Change one, change all three or the same listing reads differently
+  // depending on which page you are on.
+  var STALE_AFTER_DAYS = 7;
+  function isStalePrice(l) {
+    if (!l || !l.last_checked || !l.op_last_matched_by) return true;
+    // last_checked is a DATE ('YYYY-MM-DD'); read it as UTC midnight so the
+    // comparison doesn't shift by a day for viewers west of UTC.
+    var checked = Date.parse(l.last_checked + 'T00:00:00Z');
+    if (isNaN(checked)) return true;
+    // Whole DAYS, not elapsed milliseconds: last_checked is a date, so
+    // "checked 7 days ago" must read the same at 09:00 and at 23:00. This is
+    // the same boundary as the SQL rule, last_checked < current_date - 7.
+    var now = new Date();
+    var todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+    return checked < todayUTC - STALE_AFTER_DAYS * 86400000;
+  }
+
+  // Price to rank by. A stale price sorts as unknown rather than as its
+  // number: otherwise a stale low price still wins the hero row, displacing a
+  // fresh listing, and merely renders as "Check price" once it has won.
+  function sortPrice(l) { return l.stale ? null : l.price; }
+
   function displayPartnerName(name) {
     if (!name) return name;
     return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
@@ -94,7 +123,8 @@
       .select('id, product_id, variant_label, reticle, reticle_color, color, finish, optic_cut, bundle, clamp, ' +
               'manual_safety_variant, is_default, primary_image_url, ' +
               'products!product_variants_product_id_fkey(category), ' +
-              'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, partners(name))')
+              'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, ' +
+              'last_checked, op_last_matched_by, partners(name))')
       // Retired rows never reach a buy surface. Top-level filter drops a
       // retired variant; the embed filter drops a retired listing while
       // keeping its (live) variant.
@@ -119,6 +149,7 @@
           isDefault:   !!v.is_default,
           url:         l.affiliate_url || l.url,
           price:       l.street_price != null ? Number(l.street_price) : null,
+          stale:       isStalePrice(l),
           in_stock:    l.in_stock,
           is_primary:  !!l.is_primary,
           partnerName: displayPartnerName(l.partners ? l.partners.name : null),
@@ -134,12 +165,15 @@
       listings.sort(function (a, b) {
         if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
         if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
-        if (a.price == null && b.price == null) return 0;
-        if (a.price == null) return 1;
-        if (b.price == null) return -1;
-        return a.price - b.price;
+        var ap = sortPrice(a), bp = sortPrice(b);
+        if (ap == null && bp == null) return 0;
+        if (ap == null) return 1;
+        if (bp == null) return -1;
+        return ap - bp;
       });
-      var priced = listings.filter(function (l) { return l.price != null; });
+      // Stale prices are excluded from the range too — "From $X" must not be
+      // anchored on a number no feed has confirmed.
+      var priced = listings.filter(function (l) { return l.price != null && !l.stale; });
       var inStockPriced = priced.filter(function (l) { return l.in_stock === true; });
       var priceSet = (inStockPriced.length ? inStockPriced : priced).map(function (l) { return l.price; });
       AFFILIATE_BY_PRODUCT_ID[productId] = {
@@ -173,10 +207,12 @@
                   '<span class="part-affiliate-range">up to $' + aff.maxPrice.toFixed(2) + '</span>';
     } else if (aff.minPrice != null) {
       priceHtml = '<span class="part-affiliate-price">$' + aff.minPrice.toFixed(2) + '</span>';
-    } else if (hero.price != null) {
+    } else if (hero.price != null && !hero.stale) {
       priceHtml = '<span class="part-affiliate-price">$' + hero.price.toFixed(2) + '</span>';
     } else {
-      priceHtml = '<span class="part-affiliate-price">See price</span>';
+      // Unknown or unverified — the buy link still works, we just won't state
+      // a number we can't stand behind.
+      priceHtml = '<span class="part-affiliate-price">Check price</span>';
     }
     var infoHtml;
     if (opts.compact) {
@@ -224,7 +260,7 @@
         '<div class="part-affiliate-variant-header-note">Prices and availability may vary based on promotions and in-stock items.</div>' +
       '</div>';
     var variantRows = aff.listings.map(function (l) {
-      var lPrice = l.price != null ? '$' + l.price.toFixed(2) : 'See price';
+      var lPrice = (l.price != null && !l.stale) ? '$' + l.price.toFixed(2) : 'Check price';
       var lStock = l.in_stock === true
         ? '<span class="part-affiliate-stock in">In stock</span>'
         : l.in_stock === false
