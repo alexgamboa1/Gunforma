@@ -936,6 +936,7 @@ async function loadAll() {
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
     )
+    .is('product_variants.retired_at', null)
     .eq('is_discontinued', false);
   var guideQ = sb.from('guides').select('*').eq('is_published', true).order('title');
 

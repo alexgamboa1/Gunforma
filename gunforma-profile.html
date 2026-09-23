@@ -650,6 +650,8 @@ async function loadFavoriteParts() {
   const { data, error } = await sb
     .from('part_favorites')
     .select('product_id, products!inner(id,name,description,manufacturers(name),product_variants!product_variants_product_id_fkey(is_default,msrp,primary_image_url))')
+    // Two levels down: part_favorites -> products -> product_variants.
+    .is('products.product_variants.retired_at', null)
     .eq('user_id', CURRENT_USER.id)
     .order('created_at', { ascending: false });
 

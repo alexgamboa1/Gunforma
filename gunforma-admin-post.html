@@ -538,6 +538,9 @@ async function loadCatalog(platformId) {
       // products.lowest_price_variant_id also referencing product_variants.id.
       'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
     )
+    // Retired variants are not offerable on a new build, so they stay out of
+    // the picker's price/image lookup too.
+    .is('product_variants.retired_at', null)
     .eq('is_discontinued', false)
     .eq('product_platforms.platform_id', platformId);
   catalogLoadingFor = null;

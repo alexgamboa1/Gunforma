@@ -340,6 +340,11 @@ async function loadAffiliates(build) {
   var { data, error } = await sb
     .from('product_variants')
     .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name))')
+    // Retired rows are hidden from buy surfaces: the variant filter is
+    // top-level (drops the variant outright), the affiliate_links one is an
+    // embed filter (keeps the variant, drops only the dead listing).
+    .is('retired_at', null)
+    .is('affiliate_links.retired_at', null)
     .in('product_id', refIds);
 
   if (error) { console.error('loadAffiliates', error); return; }

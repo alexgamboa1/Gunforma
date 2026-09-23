@@ -591,6 +591,9 @@ async function loadEverything() {
       'frame_specs!frame_specs_product_id_fkey(*),' +
       'magwell_specs(*)'
     )
+    // Embed filter: the product stays, its retired variants drop out. Prices
+    // and variant axes downstream read only what survives this.
+    .is('product_variants.retired_at', null)
     .eq('is_discontinued', false);
   var platformsQ = sb.from('platforms').select('id, name, slug').order('name');
   // Compatibility whitelists — populated pairs mean "only these fit".

@@ -278,15 +278,22 @@ async function loadTotals() {
   if (!refIds.size) { BUILDS.forEach(function(b){ b._msrpTotal = 0; }); return; }
 
   const { data, error } = await sb
+    // Live variants only. is_default is NOT filtered server-side: a product
+    // whose default variant is retired would return no row and drop out of
+    // the total silently. Prefer the default in JS, else the first live one.
     .from('product_variants')
-    .select('product_id,msrp')
-    .eq('is_default', true)
+    .select('product_id,msrp,is_default')
+    .is('retired_at', null)
     .in('product_id', Array.from(refIds));
 
   if (error) { console.error('loadTotals', error); return; }
 
   const msrpByProduct = {};
-  (data || []).forEach(function(v) { msrpByProduct[v.product_id] = Number(v.msrp || 0); });
+  (data || []).forEach(function(v) {
+    if (msrpByProduct[v.product_id] === undefined || v.is_default) {
+      msrpByProduct[v.product_id] = Number(v.msrp || 0);
+    }
+  });
 
   BUILDS.forEach(function(b) {
     let sum = 0;
