@@ -4,3 +4,11 @@
 /build         /gunforma-build-detail.html        200
 /admin         /gunforma-admin-queue.html         200
 /field-notes   /field-notes.html                  200
+
+# Old home URL Google still has indexed. No file of that name exists and
+# nothing in the repo links to it, so this shadows no live route — it just
+# collapses a stale indexed URL into the canonical root instead of serving a
+# 404. 301 (not 200) so the redirect is what gets indexed, and the duplicate
+# drops out of the index rather than lingering as a second path to the home
+# page. No "!" needed: force is only for overriding a file that exists.
+/gunforma-home.html   /                                  301
