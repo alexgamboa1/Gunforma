@@ -102,8 +102,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .fire-btn { display: inline-flex; align-items: center; gap: 4px; font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 10px; background: #fafaf8; border: 0.5px solid #d5d3ca; border-radius: 20px; color: #666; cursor: pointer; transition: all 0.15s; }
 .fire-btn:hover { border-color: #d85a30; color: #d85a30; }
 .fire-btn.fired { background: #faece7; border-color: #d85a30; color: #a25334; }
-.fire-btn-icon { font-size: 14px; line-height: 1; filter: grayscale(0.4); }
-.fire-btn.fired .fire-btn-icon { filter: none; }
+.fire-btn-icon { display: block; }
+.fire-btn.fired .fire-btn-icon { fill: currentColor; }
 
 /* STATES */
 .loading, .empty { padding: 60px 20px; text-align: center; font-size: 13px; color: #888; }
@@ -192,7 +192,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <span class="filter-label">Sort</span>
     <select class="filter-select" id="filter-sort" onchange="onFilterChange()">
       <option value="newest">Newest first</option>
-      <option value="fires">Most fires</option>
+      <option value="fires">Most liked</option>
       <option value="price-high">Price high → low</option>
       <option value="price-low">Price low → high</option>
     </select>
@@ -446,8 +446,8 @@ function renderCard(b) {
   // Click on the fire button must NOT navigate to the build detail — the
   // whole card is a link, so we intercept the click and stop propagation.
   const fireBtn =
-    '<button class="fire-btn'+(fired?' fired':'')+'" onclick="event.preventDefault();event.stopPropagation();toggleFire(\''+b.id+'\',this)">'+
-      '<span class="fire-btn-icon">🔥</span>'+
+    '<button class="fire-btn'+(fired?' fired':'')+'" title="Like" onclick="event.preventDefault();event.stopPropagation();toggleFire(\''+b.id+'\',this)">'+
+      '<svg class="fire-btn-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>'+
       '<span class="fire-btn-count">'+b._fireCount+'</span>'+
     '</button>';
 
@@ -498,7 +498,7 @@ window.clearFilters = function() {
 // ============================================================
 window.toggleFire = async function(buildId, btn) {
   if (!CURRENT_USER) {
-    showToast('Sign in to fire builds', 'gunforma-signin.html');
+    showToast('Sign in to like builds', 'gunforma-signin.html');
     return;
   }
   const build = BUILDS.find(function(b){ return b.id === buildId; });

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Inbox — Gunforma</title>
+<!-- Signed-in only, per-user content: never index. -->
+<meta name="robots" content="noindex, nofollow" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV — same static markup as the public pages; nav.js keeps it session-aware. */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
+.nav-logo span { color: #4a9edd; }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+
+/* FOOTER */
+.footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
+.footer-links-row { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.footer-txt { font-size: 10px; color: #999; letter-spacing: 0.06em; }
+.footer-txt a { color: #999; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+/* PAGE */
+.page { max-width: 760px; margin: 0 auto; padding: 32px 36px 64px; }
+.page-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 16px; border-bottom: 0.5px solid #e5e5e5; margin-bottom: 8px; }
+.page-head h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.page-head .sub { font-size: 12px; color: #888; }
+
+.notif-list { display: flex; flex-direction: column; }
+.notif { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: start; padding: 14px 10px; border-bottom: 0.5px solid #eee; text-decoration: none; color: inherit; border-radius: 6px; transition: background 0.15s; }
+.notif:hover { background: #fafaf8; }
+.notif.unread { background: #f4f8fc; }
+.notif.unread:hover { background: #eaf4fc; }
+.notif-avatar { width: 36px; height: 36px; border-radius: 50%; background: #f4f3ee; border: 0.5px solid #e5e2d8; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #888; text-transform: uppercase; }
+.notif-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.notif-line { font-size: 13.5px; line-height: 1.45; color: #1a1a1a; }
+.notif-line strong { font-weight: 700; }
+.notif-line .build { color: #2a7bbd; font-weight: 600; }
+.notif-preview { font-size: 12.5px; color: #666; line-height: 1.45; margin-top: 3px; border-left: 2px solid #e5e2d8; padding-left: 8px; }
+.notif-time { font-size: 11px; color: #999; white-space: nowrap; padding-top: 2px; }
+.notif-kind { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 1px 6px; border-radius: 20px; margin-right: 6px; vertical-align: 1px; }
+.notif-kind.like    { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
+.notif-kind.comment { color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; }
+.notif-kind.reply   { color: #166534; background: #e8f5ee; border: 0.5px solid #86cfad; }
+.empty { text-align: center; color: #999; padding: 48px 20px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; line-height: 1.6; margin-top: 16px; }
+.empty a { color: #2a7bbd; text-decoration: none; }
+.load-more { display: block; margin: 20px auto 0; font: inherit; font-size: 11px; font-weight: 600; color: #666; background: #fff; border: 0.5px solid #e5e5e5; padding: 8px 14px; border-radius: 4px; cursor: pointer; }
+.load-more:hover { border-color: #cfcdc4; color: #1a1a1a; }
+
+@media (max-width: 560px) {
+  .notif { grid-template-columns: 32px 1fr; }
+  .notif-time { grid-column: 2; padding-top: 0; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
+  <div class="nav-links">
+    <a class="nav-link" href="index.html">Home</a>
+    <a class="nav-link" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="gunforma-armory.html">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="page-head">
+    <h1>Inbox</h1>
+    <span class="sub" id="inbox-sub">Likes, comments and replies on your builds</span>
+  </div>
+  <div class="notif-list" id="notif-list"></div>
+  <div id="notif-more"></div>
+</div>
+
+<div id="footer-mount" data-footer="default"></div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
+<script>
+var sb = window.sb;
+var PAGE_SIZE = 30;
+var ROWS = [];
+var ME = null;
+
+function escH(s) { return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
+function relTime(iso) {
+  if (!iso) return '';
+  var mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime())/60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins+' min ago';
+  var hrs = Math.round(mins/60);
+  if (hrs < 24) return hrs+' hr ago';
+  var days = Math.round(hrs/24);
+  if (days < 30) return days+' day'+(days!==1?'s':'')+' ago';
+  return new Date(iso).toLocaleDateString('en-US', { month:'short', day:'numeric' });
+}
+
+async function init() {
+  var sess = await sb.auth.getSession();
+  ME = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (!ME) { window.location.href = 'gunforma-signin.html'; return; }
+  await loadPage(0);
+  // Everything on screen is now seen. Mark read AFTER rendering so the
+  // unread highlight shows once; the nav count refreshes to match.
+  var unreadIds = ROWS.filter(function (n) { return !n.read_at; }).map(function (n) { return n.id; });
+  if (unreadIds.length) {
+    var res = await sb.from('notifications').update({ read_at: new Date().toISOString() }).in('id', unreadIds);
+    if (res.error) console.error('mark read', res.error);
+    else if (typeof updateNavAuth === 'function') updateNavAuth();
+  }
+}
+
+async function loadPage(offset) {
+  // profiles has two FKs from notifications (user_id + actor_id), so the
+  // embed must name the constraint. builds has one, so it stays bare.
+  var res = await sb
+    .from('notifications')
+    .select('id,kind,build_id,comment_id,preview,created_at,read_at,profiles!notifications_actor_id_fkey(username,avatar_url),builds(name)')
+    .order('created_at', { ascending: false })
+    .range(offset, offset + PAGE_SIZE - 1);
+  if (res.error) {
+    console.error('notifications', res.error);
+    document.getElementById('notif-list').innerHTML = '<div class="empty">Couldn\'t load your inbox — try again in a moment.</div>';
+    return;
+  }
+  var rows = res.data || [];
+  ROWS = ROWS.concat(rows);
+  render(rows.length === PAGE_SIZE);
+}
+
+function render(hasMore) {
+  var list = document.getElementById('notif-list');
+  if (!ROWS.length) {
+    list.innerHTML = '<div class="empty">Nothing yet. When someone likes or comments on one of your builds, it shows up here.<br/>' +
+      '<a href="gunforma-builds.html">Browse builds</a> · <a href="gunforma-post-build-v6.html">Post yours</a></div>';
+    document.getElementById('notif-more').innerHTML = '';
+    return;
+  }
+  list.innerHTML = ROWS.map(rowHtml).join('');
+  document.getElementById('notif-more').innerHTML = hasMore
+    ? '<button class="load-more" onclick="loadPage(ROWS.length)">Load more</button>' : '';
+}
+
+function rowHtml(n) {
+  var actor = n.profiles || {};
+  var name = actor.username || 'Someone';
+  var build = n.builds ? n.builds.name : 'your build';
+  var href = '/b/' + encodeURIComponent(n.build_id) + (n.comment_id ? '#c-' + n.comment_id : '');
+  var verb = n.kind === 'like' ? 'liked' : n.kind === 'reply' ? 'replied to your comment on' : 'commented on';
+  var initial = name.charAt(0);
+  return '<a class="notif' + (n.read_at ? '' : ' unread') + '" href="' + escH(href) + '">' +
+    '<div class="notif-avatar">' + (actor.avatar_url ? '<img src="' + escH(actor.avatar_url) + '" alt="" loading="lazy"/>' : escH(initial)) + '</div>' +
+    '<div>' +
+      '<div class="notif-line"><span class="notif-kind ' + escH(n.kind) + '">' + escH(n.kind) + '</span>' +
+        '<strong>' + escH(name) + '</strong> ' + verb + ' <span class="build">' + escH(build) + '</span></div>' +
+      (n.preview ? '<div class="notif-preview">' + escH(n.preview) + '</div>' : '') +
+    '</div>' +
+    '<div class="notif-time">' + relTime(n.created_at) + '</div>' +
+  '</a>';
+}
+
+init();
+</script>
+</body>
+</html>

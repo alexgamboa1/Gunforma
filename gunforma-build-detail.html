@@ -82,6 +82,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .engagement-row { display: flex; align-items: center; gap: 8px; }
 .share-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; cursor: pointer; color: #555; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
 .share-btn:hover { border-color: #4a9edd; color: #4a9edd; }
+.like-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; cursor: pointer; color: #555; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
+.like-btn:hover { border-color: #d85a30; color: #d85a30; }
+.like-btn.liked { background: #faece7; border-color: #d85a30; color: #a25334; }
+.like-btn.liked svg { fill: currentColor; }
+.like-count { font-weight: 700; }
+.like-count:empty { display: none; }
 
 /* SECTION */
 .section-divider { display: flex; align-items: center; justify-content: space-between; padding: 28px 0 16px; border-bottom: 0.5px solid #e5e5e5; margin-bottom: 20px; }
@@ -280,6 +286,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <div class="build-total-sub" id="build-parts-sub">—</div>
       </div>
       <div class="engagement-row">
+        <button class="like-btn" id="like-btn" title="Like this build" onclick="toggleLike()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span id="like-label">Like</span><span class="like-count" id="like-count"></span>
+        </button>
         <button class="share-btn" title="Copy link" onclick="copyLink()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           Copy link
@@ -425,6 +435,55 @@ async function loadBuild() {
   BUILD_ID = data.id;
   BUILD_OWNER_ID = data.user_id;
   loadComments();
+  loadLikes();
+}
+
+// ============================================================
+// LIKES — build_fires. The table keeps its original name; every label the
+// reader sees says "Like". Same optimistic toggle gunforma-builds.html uses.
+// ============================================================
+var LIKE_COUNT = 0;
+var LIKED = false;
+
+async function loadLikes() {
+  var countRes = await sb.from('build_fires').select('build_id', { count: 'exact', head: true }).eq('build_id', BUILD_ID);
+  LIKE_COUNT = countRes.count || 0;
+  LIKED = false;
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (user) {
+    var mine = await sb.from('build_fires').select('build_id').eq('build_id', BUILD_ID).eq('user_id', user.id).maybeSingle();
+    LIKED = !!(mine.data);
+  }
+  renderLike();
+}
+
+function renderLike() {
+  var btn = document.getElementById('like-btn');
+  if (!btn) return;
+  btn.classList.toggle('liked', LIKED);
+  document.getElementById('like-label').textContent = LIKED ? 'Liked' : 'Like';
+  document.getElementById('like-count').textContent = LIKE_COUNT ? String(LIKE_COUNT) : '';
+}
+
+async function toggleLike() {
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (!user) { showToast('Sign in to like builds'); return; }
+  var was = LIKED;
+  LIKED = !was;
+  LIKE_COUNT = Math.max(0, LIKE_COUNT + (was ? -1 : 1));
+  renderLike();
+  var res = was
+    ? await sb.from('build_fires').delete().eq('build_id', BUILD_ID).eq('user_id', user.id)
+    : await sb.from('build_fires').insert({ build_id: BUILD_ID, user_id: user.id });
+  if (res.error) {
+    console.error('toggleLike', res.error);
+    LIKED = was;
+    LIKE_COUNT = Math.max(0, LIKE_COUNT + (was ? 1 : -1));
+    renderLike();
+    showToast('Something went wrong — try again');
+  }
 }
 
 async function loadAffiliates(build) {
@@ -855,6 +914,7 @@ sb.auth.onAuthStateChange(function (event) {
   // visible changes for it.
   if (!BUILD_ID || (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT')) return;
   loadComments();
+  loadLikes();
 });
 
 async function loadComments() {
@@ -868,7 +928,15 @@ async function loadComments() {
   else COMMENTS = res.data || [];
   document.getElementById('comments').style.display = '';
   renderComments();
+  // Inbox links land on /b/:id#c-<comment id>; the anchor doesn't exist
+  // until this render, so scroll to it by hand, once.
+  if (!SCROLLED_TO_HASH && /^#c-/.test(location.hash)) {
+    SCROLLED_TO_HASH = true;
+    var target = document.getElementById(location.hash.slice(1));
+    if (target) target.scrollIntoView({ block: 'center' });
+  }
 }
+var SCROLLED_TO_HASH = false;
 
 function renderComments() {
   var sortKey = document.getElementById('comments-sort').value;
