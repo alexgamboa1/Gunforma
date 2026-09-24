@@ -161,15 +161,19 @@
       var listings = byProduct[productId];
       var activeAxes = computeActiveAxes(listings);
       listings.forEach(function (l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes, l.customLabel); });
-      // Primary listings first, then in-stock, then price ascending (nulls last).
+      // Fresh price first, then in-stock, then cheapest; is_primary only breaks ties.
       listings.sort(function (a, b) {
-        if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+        // Fresh-and-priced first, so listings[0] IS the listing whose price gets
+        // displayed. is_primary drops to a tiebreak: it used to lead, which is
+        // how a product could show one listing's price and send the click to
+        // another (27 of 160 products did).
+        var af = (!a.stale && a.price != null), bf = (!b.stale && b.price != null);
+        if (af !== bf) return af ? -1 : 1;
         if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
         var ap = sortPrice(a), bp = sortPrice(b);
-        if (ap == null && bp == null) return 0;
-        if (ap == null) return 1;
-        if (bp == null) return -1;
-        return ap - bp;
+        if (ap != null && bp != null && ap !== bp) return ap - bp;
+        if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+        return 0;
       });
       // Stale prices are excluded from the range too — "From $X" must not be
       // anchored on a number no feed has confirmed.
