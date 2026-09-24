@@ -224,6 +224,15 @@ function isStalePrice(l) {
   return checked < todayUTC - STALE_AFTER_DAYS * 86400000;
 }
 
+// Last resort, so a tie resolves the same way on every request and every page:
+// partner name, then URL. PostgREST returns embedded rows in arbitrary order.
+function tieBreak(a, b) {
+  const ap = a.partnerName || '', bp = b.partnerName || '';
+  if (ap !== bp) return ap < bp ? -1 : 1;
+  const au = a.url || '', bu = b.url || '';
+  return au === bu ? 0 : (au < bu ? -1 : 1);
+}
+
 // A stale price sorts as unknown rather than as its number — otherwise a stale
 // low price still leads the buy rows and only then renders as "Check price".
 function sortPrice(r) { return r.stale ? null : r.price; }
@@ -291,7 +300,7 @@ async function fetchProduct(slug) {
     'product_variants!product_variants_product_id_fkey(id,slug,sku,upc,msrp,is_default,primary_image_url,color,finish,' +
       'optic_cut,bundle,clamp_style,manual_safety_variant,reticle,reticle_color,variant_label,' +
       'variant_images(url,position,alt_text),' +
-      'affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,last_checked,op_last_matched_by,partners(name)))',
+      'affiliate_links(url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name)))',
   ].join(',');
   // Embed filters, one per level: a retired variant drops out of the page, and
   // a retired listing drops out of its (live) variant's buy rows. Both are
@@ -333,7 +342,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     const links = v.affiliate_links || [];
     const axes = extractAxes(v);
     if (!links.length) {
-      rows.push({ v, axes, price: null, stale: true, url: null, in_stock: null, partnerName: null, is_primary: false });
+      rows.push({ v, axes, price: null, stale: true, url: null, in_stock: null, partnerName: null });
       return;
     }
     links.forEach((l) => {
@@ -343,7 +352,6 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
         stale: isStalePrice(l),
         url: l.affiliate_url || l.url,
         in_stock: l.in_stock,
-        is_primary: !!l.is_primary,
         partnerName: displayPartnerName(l.partners ? l.partners.name : null),
       });
     });
@@ -355,15 +363,13 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
   rows.forEach((r) => { r.label = variantLabel({ axes: r.axes, variant_label: r.v.variant_label }, activeAxes); });
   rows.sort((a, b) => {
     // Fresh-and-priced first, so the top buy row is the one the headline
-    // price quotes. is_primary used to lead, which is how the headline could
-    // read $669 while the first row read "Check price".
+    // price quotes; tieBreak keeps equal listings in a stable order.
     const af = (!a.stale && a.price != null), bf = (!b.stale && b.price != null);
     if (af !== bf) return af ? -1 : 1;
     if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
     const ap = sortPrice(a), bp = sortPrice(b);
     if (ap != null && bp != null && ap !== bp) return ap - bp;
-    if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
-    return 0;
+    return tieBreak(a, b);
   });
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
