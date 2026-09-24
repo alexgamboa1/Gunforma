@@ -204,6 +204,30 @@ function variantLabel(v, activeAxes) {
   return activeAxes.map((a) => v.axes[a.key] || '—').join(' / ');
 }
 
+// A price we can stand behind is one a FEED verified within the window.
+// op_last_matched_by null means no feed ever matched this link, so its
+// street_price was hand-entered — a hand-typed last_checked must not pass as
+// verification, which is why both columns are checked and not just the date.
+//
+// Duplicated in js/affiliate.js and gunforma-build-detail.html — same
+// three-way rule, same window. Change one, change all three.
+const STALE_AFTER_DAYS = 7;
+function isStalePrice(l) {
+  if (!l || !l.last_checked || !l.op_last_matched_by) return true;
+  // last_checked is a DATE ('YYYY-MM-DD'); read as UTC midnight.
+  const checked = Date.parse(l.last_checked + 'T00:00:00Z');
+  if (Number.isNaN(checked)) return true;
+  // Whole DAYS, not elapsed milliseconds — same boundary as the SQL rule,
+  // last_checked < current_date - 7.
+  const now = new Date();
+  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return checked < todayUTC - STALE_AFTER_DAYS * 86400000;
+}
+
+// A stale price sorts as unknown rather than as its number — otherwise a stale
+// low price still leads the buy rows and only then renders as "Check price".
+function sortPrice(r) { return r.stale ? null : r.price; }
+
 function displayPartnerName(name) {
   if (!name) return name;
   return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
@@ -267,7 +291,7 @@ async function fetchProduct(slug) {
     'product_variants!product_variants_product_id_fkey(id,slug,sku,upc,msrp,is_default,primary_image_url,color,finish,' +
       'optic_cut,bundle,clamp_style,manual_safety_variant,reticle,reticle_color,variant_label,' +
       'variant_images(url,position,alt_text),' +
-      'affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,partners(name)))',
+      'affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,last_checked,op_last_matched_by,partners(name)))',
   ].join(',');
   // Embed filters, one per level: a retired variant drops out of the page, and
   // a retired listing drops out of its (live) variant's buy rows. Both are
@@ -309,13 +333,14 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     const links = v.affiliate_links || [];
     const axes = extractAxes(v);
     if (!links.length) {
-      rows.push({ v, axes, price: null, url: null, in_stock: null, partnerName: null, is_primary: false });
+      rows.push({ v, axes, price: null, stale: true, url: null, in_stock: null, partnerName: null, is_primary: false });
       return;
     }
     links.forEach((l) => {
       rows.push({
         v, axes,
         price: l.street_price != null ? Number(l.street_price) : null,
+        stale: isStalePrice(l),
         url: l.affiliate_url || l.url,
         in_stock: l.in_stock,
         is_primary: !!l.is_primary,
@@ -331,14 +356,17 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
   rows.sort((a, b) => {
     if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
     if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
-    if (a.price == null && b.price == null) return 0;
-    if (a.price == null) return 1;
-    if (b.price == null) return -1;
-    return a.price - b.price;
+    const ap = sortPrice(a), bp = sortPrice(b);
+    if (ap == null && bp == null) return 0;
+    if (ap == null) return 1;
+    if (bp == null) return -1;
+    return ap - bp;
   });
 
-  const pricedInStock = rows.filter((r) => r.price != null && r.in_stock === true);
-  const priced = rows.filter((r) => r.price != null);
+  // Stale prices are excluded from the range — the headline "$X–$Y" must not
+  // be anchored on a number no feed has confirmed.
+  const pricedInStock = rows.filter((r) => r.price != null && !r.stale && r.in_stock === true);
+  const priced = rows.filter((r) => r.price != null && !r.stale);
   const priceSet = (pricedInStock.length ? pricedInStock : priced).map((r) => r.price);
   const minPrice = priceSet.length ? Math.min(...priceSet) : null;
   const maxPrice = priceSet.length ? Math.max(...priceSet) : null;
@@ -372,10 +400,15 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     brand: brand.name ? { '@type': 'Brand', name: brand.name } : undefined,
     image: heroImage || undefined,
     category: categoryLabel,
-    offers: rows.filter((r) => r.price != null && r.url).map((r) => ({
+    // A stale-priced listing still ships as an Offer — the URL and stock are
+    // true — but WITHOUT price/priceCurrency. Same principle as the
+    // availability omission below: absent means "not stated", which is honest,
+    // where a stale number positively asserts something we can't stand behind.
+    offers: rows.filter((r) => r.url).map((r) => ({
       '@type': 'Offer',
-      price: r.price.toFixed(2),
-      priceCurrency: 'USD',
+      ...(r.price != null && !r.stale
+            ? { price: r.price.toFixed(2), priceCurrency: 'USD' }
+            : {}),
       // Omit availability entirely when stock is unknown. schema.org reads an
       // absent property as "not stated", which is the truth. The previous
       // fallback emitted InStoreOnly, which positively asserts the item can
@@ -407,7 +440,16 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     .join('');
 
   const variantRowsHtml = rows.map((r) => {
-    const price = r.price != null ? '$' + r.price.toFixed(2) : (r.v.msrp ? 'MSRP $' + Number(r.v.msrp).toFixed(2) : 'See price');
+    // Three cases, and the order matters:
+    //   fresh price        → the number
+    //   stale price        → "Check price". NOT the MSRP fallback: a listing
+    //                        we last saw at $233 would otherwise advertise its
+    //                        $365 list price, which is a worse lie than saying
+    //                        nothing.
+    //   no listing at all  → MSRP, which is all we have and is still true.
+    const price = r.price != null
+      ? (r.stale ? 'Check price' : '$' + r.price.toFixed(2))
+      : (r.v.msrp ? 'MSRP $' + Number(r.v.msrp).toFixed(2) : 'Check price');
     const stock = r.in_stock === true ? '<span class="stock in">In stock</span>'
       : r.in_stock === false ? '<span class="stock out">Out of stock</span>' : '';
     const partner = r.partnerName ? ' at <strong>' + esc(r.partnerName) + '</strong>' : '';
