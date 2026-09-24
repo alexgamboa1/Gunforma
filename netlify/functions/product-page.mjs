@@ -354,13 +354,16 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
   const activeAxes = computeActiveAxes(rows, isOptic);
   rows.forEach((r) => { r.label = variantLabel({ axes: r.axes, variant_label: r.v.variant_label }, activeAxes); });
   rows.sort((a, b) => {
-    if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+    // Fresh-and-priced first, so the top buy row is the one the headline
+    // price quotes. is_primary used to lead, which is how the headline could
+    // read $669 while the first row read "Check price".
+    const af = (!a.stale && a.price != null), bf = (!b.stale && b.price != null);
+    if (af !== bf) return af ? -1 : 1;
     if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
     const ap = sortPrice(a), bp = sortPrice(b);
-    if (ap == null && bp == null) return 0;
-    if (ap == null) return 1;
-    if (bp == null) return -1;
-    return ap - bp;
+    if (ap != null && bp != null && ap !== bp) return ap - bp;
+    if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+    return 0;
   });
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
