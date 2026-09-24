@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
 <link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
 <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
 <link rel="shortcut icon" href="/favicon.ico?v=12026" />
@@ -17,8 +18,10 @@
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
 
 .nav { display: flex; align-items: center; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
-.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
-.nav-logo span { color: #4a9edd; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
 
 .hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
 .hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
@@ -42,7 +45,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <body>
 
 <nav class="nav">
-  <a href="index.html" class="nav-logo">GUN<span>FORMA</span></a>
+  <a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
 </nav>
 
 <div class="hero-strip">
