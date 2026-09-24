@@ -95,6 +95,113 @@ test would also catch the production mirrors, which are deliberately redirected 
 Turnstile token, and previews use the production site key whose hostname allowlist does not
 cover preview URLs. Use Google sign-in to test signed-in features on a preview.
 
+## Security conventions
+
+**Every new public table needs RLS *and* an explicit revoke.** Supabase's default
+ACL grants `anon` and `authenticated` full privileges on every table created in
+`public`, so a table "protected by RLS alone" still has those grants sitting
+underneath it. Enable RLS, then `revoke all ... from anon, authenticated`, and
+add back only what a policy needs. The inverse also bites: a policy without a
+matching table grant silently returns `permission denied`, which reads like a
+policy bug and is not one. `price_history` and
+`affiliate_links_is_primary_archive` are the worked examples.
+
+**A `SECURITY DEFINER` function must identify the caller from the request JWT,
+never from `current_user`.** Inside a `SECURITY DEFINER` function `current_user`
+is the function's OWNER, not the caller — so a guard opening with
+`if current_user in ('postgres','service_role') then return new; end if;` is
+always true and the whole function becomes a no-op. That is exactly how
+`prevent_role_self_escalation` silently stopped guarding anything, letting any
+signed-in user set their own `role` to `admin`. Read the caller from
+`current_setting('request.jwt.claims', true)::jsonb ->> 'role'`, which PostgREST
+sets per request and which the definer context does not disturb. Pin
+`search_path` on these functions too.
+
+Guards of this shape cannot be verified by reading them — they look correct
+either way. Prove them by simulating a caller (`set local role authenticated`
+plus a real `sub` in `request.jwt.claims`) inside a rolled-back transaction.
+
+## Retirement, not deletion
+
+`affiliate_links` and `product_variants` are **never hard-deleted**. They carry
+`retired_at timestamptz`; null means live.
+
+Deleting used to destroy the record silently: a link's `price_history` went with
+it, and a variant reached history through its links — two hops. So both edges
+now refuse:
+
+- `price_history.link_id → affiliate_links` is `ON DELETE RESTRICT`
+- `affiliate_links.variant_id → product_variants` is `ON DELETE RESTRICT`
+
+`variant_images` keeps `CASCADE` on purpose — images are derived, not a record.
+
+`trg_retire_links_with_variant` retires a variant's links when the variant is
+retired. It only ever **sets** `retired_at`, never clears it, and never
+overwrites an earlier retirement date — un-retiring is deliberate and per row, so
+a variant coming back does not silently revive listings retired for their own
+reasons. Un-retiring a link is a plain `update ... set retired_at = null`.
+
+**Every reader filters retired rows**, and the filter's shape matters:
+
+- top-level (`.is('retired_at', null)`) drops the retired row itself
+- embedded (`.is('affiliate_links.retired_at', null)`) keeps the parent and drops
+  the retired child
+
+So a product whose every listing is retired still renders — with no buy row —
+rather than 404ing. The nightly sync skips retired links and **reports** the
+count; they are also excluded from the coverage denominator, since a retired
+link is not something the feed failed to account for.
+
+Partial indexes `idx_affiliate_links_live` and `idx_product_variants_live` cover
+the `where retired_at is null` reads.
+
+## Prices we can stand behind
+
+A price is **stale** when **any** of these holds, and stale prices are never
+stated — the buy row reads **"Check price"** and the link still works:
+
+- `last_checked` is null
+- `op_last_matched_by` is null — **no feed has ever matched this link**
+- `last_checked` is older than **7 days**
+
+The middle clause is the load-bearing one. Checking only the date would let a
+hand-typed `last_checked` pass as feed-verified, which is exactly the thing the
+rule exists to catch: a price nobody has confirmed, wearing a fresh date.
+
+Stale prices are also **excluded from price ranges** (so "From $X" is never
+anchored on an unconfirmed number) and their JSON-LD offer ships **without**
+`price`/`priceCurrency`, keeping its URL. Absent means "not stated", which is
+true; a stale number asserts something we cannot support. Same reasoning as
+omitting `availability` when stock is unknown.
+
+A stale row does **not** fall back to MSRP. A listing last seen at $233 whose
+list price is $365 would otherwise advertise $365. MSRP is still shown for a
+variant with **no listing at all**, where it is the only number there is.
+
+Comparison is in **whole UTC days**, matching the SQL form
+`last_checked < current_date - 7`. Comparing elapsed milliseconds makes the
+boundary drift with the time of day and disagree with any SQL that counts the
+same set.
+
+## Listing order
+
+Listings sort by: **fresh-and-priced → in stock → price ascending → partner name
+→ URL**.
+
+The first key is what keeps the hero row honest: `listings[0]` is the listing
+whose price is displayed, so the number shown and the button's destination are
+the same row. They used to be different rows, because `is_primary` sorted first
+while the displayed price came from the cheapest fresh listing.
+
+The last two keys are not decoration. **PostgREST returns embedded rows in
+arbitrary order**, so without a deterministic final key two equally-priced
+listings swap places between requests — and the hero with them.
+
+`affiliate_links.is_primary` **no longer exists**. It was a hand-set flag with no
+writer in this repo, it caused the mismatch above, and the sort has a
+deterministic tiebreak now instead. See `supabase/retire_is_primary.sql`; the
+values are archived in `affiliate_links_is_primary_archive`.
+
 ## Verifying changes
 
 Anything that touches the database must be verified **signed in, on the deploy preview**,
@@ -240,15 +347,21 @@ an explicit revoke for exactly that reason.
 
 ## Duplicated logic to keep in sync
 
-The variant-label axis logic — which axes vary across a product's listings, and
-how a variant is labelled — exists in **four** copies. Change all four, or the
-same variant gets different labels depending on which page you are looking at:
+Three files carry their own copy of the buy-row logic — the variant-label axes,
+the stale-price rule, and the sort. Change all three, or the same listing reads
+differently depending on which page you are on:
 
-- `js/affiliate.js` — the browser module, used across the site
+- `js/affiliate.js` — the browser module. `gunforma-parts-catalog.html` and
+  `gunforma-armory.html` render through it and hold no copy of their own.
 - `netlify/functions/product-page.mjs` — the server-rendered `/parts/:category/:slug`
   page. Dependency-free by design, so it cannot import the browser module.
-- `gunforma-parts-catalog.html` — inline copy for catalog cards
 - `gunforma-build-detail.html` — inline copy for a build's parts list
+
+The category → URL-segment mapping is duplicated for the same reason:
+`netlify/functions/_category-meta.mjs` (shared by `product-page.mjs` and
+`parts-index.mjs`) and `js/category-map.js` (the browser mirror, loaded as a
+plain `<script>` global). A category that exists in only one of them ships links
+that 404.
 
 The axis columns they read (`reticle`, `reticle_color`, `color`, `optic_cut`,
 `bundle`, `clamp`, `manual_safety_variant`) feed **labels only**. Nothing filters
