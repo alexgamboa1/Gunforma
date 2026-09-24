@@ -24,6 +24,34 @@
 //   2. supabase-client.js
 //   3. nav.js
 // -----------------------------------------------------------------------------
+// Shared nav fragments. The mobile account icon and the hamburger live in
+// .nav-right after the Post button; the dropdown is the last child of <nav>
+// so it anchors to the bar itself. Kept as constants because the "full" and
+// "full-authed" variants below must stay byte-identical here — the static
+// navs in the HTML pages and both .mjs functions carry the same markup.
+//
+// The menu deliberately has no Home and no Profile entry: Home is the logo,
+// and the account icon is the way to the profile.
+var NAV_PROFILE =
+  '<a class="nav-profile" href="gunforma-signin.html" aria-label="Account">' +
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">' +
+      '<circle cx="12" cy="8" r="4"/>' +
+      '<path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/>' +
+    '</svg>' +
+  '</a>';
+
+var NAV_TOGGLE =
+  '<button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu">' +
+    '<span></span><span></span><span></span>' +
+  '</button>';
+
+var NAV_MENU =
+  '<div class="nav-menu" id="nav-menu">' +
+    '<a href="gunforma-builds.html">Builds</a>' +
+    '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+    '<a href="gunforma-armory.html">Armory</a>' +
+  '</div>';
+
 (function () {
   var mount = document.getElementById('nav-mount');
 
@@ -35,6 +63,10 @@
   //   2. The page genuinely opts out of the nav. No hook, nothing to do.
   if (!mount) {
     if (document.getElementById('nav-signin')) wireNavAuth();
+    // The eleven pages that ship a static nav carry the hamburger in their own
+    // markup, so the toggle has to be wired on this path too — otherwise the
+    // links are hidden below 820px with nothing to reveal them.
+    wireNavToggle();
     return;
   }
 
@@ -77,8 +109,11 @@
           '<a class="nav-link' + activeIf('gunforma-armory.html')        + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
-          '<a class="nav-btn" id="nav-signin">…</a>' +
+          '<a class="nav-btn nav-signin-inline" id="nav-signin">…</a>' +
+          NAV_PROFILE +
+          NAV_TOGGLE +
         '</div>' +
+        NAV_MENU +
       '</nav>';
   } else {
     // full — the default
@@ -92,9 +127,12 @@
           '<a class="nav-link' + activeIf('gunforma-armory.html')        + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
-          '<a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
+          '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
           '<a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>' +
+          NAV_PROFILE +
+          NAV_TOGGLE +
         '</div>' +
+        NAV_MENU +
       '</nav>';
   }
 
@@ -104,7 +142,41 @@
 
   // Session-aware right side (variants that render #nav-signin).
   if (variant === 'full' || variant === 'full-authed') wireNavAuth();
+  wireNavToggle();
 })();
+
+// Hamburger. Runs on both paths (rendered nav and static nav) and is a no-op
+// on pages without a toggle — the sign-in/sign-up variants, which deliberately
+// have neither hamburger nor account icon.
+function wireNavToggle() {
+  var toggle = document.querySelector('.nav-toggle');
+  var menu = document.querySelector('.nav-menu');
+  if (!toggle || !menu) return;
+
+  function close() {
+    menu.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+  }
+
+  toggle.addEventListener('click', function () {
+    var open = menu.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+
+  // Close on link tap. Delegated, because updateNavAuth adds and removes the
+  // Sign out item as the session changes — a listener bound per link now would
+  // miss it.
+  menu.addEventListener('click', function (e) {
+    if (e.target.closest('a')) close();
+  });
+
+  // Coming back above the breakpoint leaves .open set on a panel that desktop
+  // CSS no longer displays; the next drop below 820px would then show it
+  // already open. Clearing it here keeps the two widths consistent.
+  window.addEventListener('resize', function () {
+    if (window.innerWidth > 820) close();
+  });
+}
 
 // Paints the session-aware right side once, then repaints on every auth-state
 // change so sign-outs in another tab propagate. Hoisted, so the IIFE above can
@@ -122,6 +194,13 @@ async function updateNavAuth() {
   var signInEl = document.getElementById('nav-signin');
   if (!signInEl || !window.sb) return;
 
+  // The mobile account icon stands in for the text button below 820px, so it
+  // has to track the same session and point at the same place. Resolved on
+  // every call rather than cached — the static-nav pages and the rendered nav
+  // reach this function through different paths.
+  var profileEl = document.querySelector('.nav-profile');
+  var menuEl = document.querySelector('.nav-menu');
+
   var sess = await window.sb.auth.getSession();
   var user = sess && sess.data && sess.data.session && sess.data.session.user;
 
@@ -130,10 +209,12 @@ async function updateNavAuth() {
   // and getElementById only ever returns the first match).
   if (!user) {
     document.querySelectorAll('#nav-signout').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('.nav-menu a.signout').forEach(function (el) { el.remove(); });
     signInEl.textContent = 'Sign in';
     signInEl.setAttribute('href', 'gunforma-signin.html');
     signInEl.style.cursor = '';
     signInEl.onclick = null;
+    if (profileEl) profileEl.setAttribute('href', 'gunforma-signin.html');
     return;
   }
 
@@ -148,6 +229,7 @@ async function updateNavAuth() {
   signInEl.setAttribute('href', 'gunforma-profile.html');
   signInEl.style.cursor = 'pointer';
   signInEl.onclick = null;
+  if (profileEl) profileEl.setAttribute('href', 'gunforma-profile.html');
 
   // Cleanup must happen HERE, after all awaits — updateNavAuth runs
   // concurrently on page load (the mount script calls it, and
@@ -158,16 +240,34 @@ async function updateNavAuth() {
   // getElementById, which stops at the first match), is what keeps this
   // idempotent under the race.
   document.querySelectorAll('#nav-signout').forEach(function (el) { el.remove(); });
+  document.querySelectorAll('.nav-menu a.signout').forEach(function (el) { el.remove(); });
+
+  async function doSignOut(e) {
+    e.preventDefault();
+    await window.sb.auth.signOut();
+    location.reload();
+  }
 
   var signOut = document.createElement('a');
   signOut.id = 'nav-signout';
   signOut.href = '#';
-  signOut.className = signInEl.className;   // matches whichever nav-btn styling the page has
+  // Matches whichever nav-btn styling the page has. That className now also
+  // carries nav-signin-inline, so this button hides below 820px along with the
+  // username — on mobile the menu item below is the way out.
+  signOut.className = signInEl.className;
   signOut.textContent = 'Sign out';
-  signOut.onclick = async function (e) {
-    e.preventDefault();
-    await window.sb.auth.signOut();
-    location.reload();
-  };
+  signOut.onclick = doSignOut;
   signInEl.parentNode.insertBefore(signOut, signInEl);
+
+  // Mobile: Sign out is the one menu item that depends on the session, so it
+  // is appended here rather than shipped in the static markup. Swept just
+  // above, in the same idempotent pass as #nav-signout.
+  if (menuEl) {
+    var menuSignOut = document.createElement('a');
+    menuSignOut.className = 'signout';
+    menuSignOut.href = '#';
+    menuSignOut.textContent = 'Sign out';
+    menuSignOut.onclick = doSignOut;
+    menuEl.appendChild(menuSignOut);
+  }
 }

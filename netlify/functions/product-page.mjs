@@ -509,10 +509,11 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
 '.nav-logo img.nav-logo-mark { display: none; }' +
 '@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }' +
 '.nav-links { display: flex; gap: 28px; }' +
-'.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }' +
-'.nav-link:hover, .nav-link.active { color: #e8e6e1; }' +
+'.nav-link { font-size: 12px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }' +
+'.nav-link:hover, .nav-link.active { color: #ffffff; }' +
+'.nav-link.active { border-bottom: 2px solid #4a9edd; padding-bottom: 2px; }' +
 '.nav-right { display: flex; align-items: center; gap: 14px; }' +
-'.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }' +
+'.nav-btn { font-size: 11px; color: #ffffff; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }' +
 '.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }' +
 '.breadcrumb { max-width: 900px; margin: 18px auto 0; padding: 0 24px; font-size: 12px; color: #888; }' +
 '.breadcrumb a { color: #888; text-decoration: none; } .breadcrumb a:hover { color: #1a1a1a; }' +
@@ -541,6 +542,22 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
 '.disclosure { font-size: 11px; color: #999; margin-top: 10px; font-style: italic; }' +
 '.footer-bar { max-width: 900px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; border-top: 0.5px solid #e5e5e5; font-size: 11px; color: #999; }' +
 '.footer-bar a { color: #999; }' +
+'.nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }' +
+'.nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }' +
+'.nav-toggle span + span { margin-top: 4px; }' +
+'.nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }' +
+'.nav-profile svg { width: 19px; height: 19px; }' +
+'.nav-menu { display: none; }' +
+'@media (max-width: 820px) {' +
+'  .nav-links { display: none; }' +
+'  .nav-signin-inline { display: none; }' +
+'  .nav-profile { display: flex; }' +
+'  .nav-toggle { display: block; }' +
+'  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }' +
+'  .nav-menu.open { display: flex; }' +
+'  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }' +
+'  .nav-menu a.signout { color: #ffffff; }' +
+'}' +
 '</style>' +
 '</head><body>' +
 '<nav class="nav">' +
@@ -552,9 +569,16 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     '<a class="nav-link" href="gunforma-armory.html">Armory</a>' +
   '</div>' +
   '<div class="nav-right">' +
-    '<a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
+    '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
     '<a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>' +
+    '<a class="nav-profile" href="gunforma-signin.html" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></a>' +
+    '<button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><span></span><span></span><span></span></button>' +
   '</div>' +
+'<div class="nav-menu" id="nav-menu">' +
+  '<a href="gunforma-builds.html">Builds</a>' +
+  '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+  '<a href="gunforma-armory.html">Armory</a>' +
+'</div>' +
 '</nav>' +
 '<div class="breadcrumb">' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a> / ' +
@@ -585,6 +609,25 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
   '<span>&copy; 2026 Gunforma &middot; All rights reserved</span>' +
   '<span><a href="gunforma-legal.html#legal">Legal</a> &middot; <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> &middot; <a href="gunforma-legal.html#contact">Contact</a></span>' +
 '</div>' +
+// This page ships no client JS at all -- unlike parts-index.mjs it does not
+// load supabase-client.js or nav.js -- so the hamburger needs its own toggle
+// or the nav links are simply unreachable below 820px. Kept inline and
+// dependency-free, in keeping with the rest of the function.
+//
+// The account icon here is a plain link to sign-in: with no session script on
+// the page there is nothing to make it session-aware, which is the same reason
+// the "Sign in" button beside it is already static. Both are consistent with
+// each other; parts-index.mjs, which does load nav.js, gets the live version.
+'<script>(function(){' +
+  'var t=document.querySelector(".nav-toggle"),m=document.querySelector(".nav-menu");' +
+  'if(!t||!m)return;' +
+  'function c(){m.classList.remove("open");t.setAttribute("aria-expanded","false");}' +
+  't.addEventListener("click",function(){' +
+    'var o=m.classList.toggle("open");t.setAttribute("aria-expanded",o?"true":"false");' +
+  '});' +
+  'm.addEventListener("click",function(e){if(e.target.closest("a"))c();});' +
+  'window.addEventListener("resize",function(){if(window.innerWidth>820)c();});' +
+'})();</script>' +
 '</body></html>';
 }
 
