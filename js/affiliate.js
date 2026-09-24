@@ -97,6 +97,15 @@
     return checked < todayUTC - STALE_AFTER_DAYS * 86400000;
   }
 
+  // Last resort, so a tie resolves the same way on every request and every
+  // page: partner name, then URL. Both are stable per listing.
+  function tieBreak(a, b) {
+    var ap = a.partnerName || '', bp = b.partnerName || '';
+    if (ap !== bp) return ap < bp ? -1 : 1;
+    var au = a.url || '', bu = b.url || '';
+    return au === bu ? 0 : (au < bu ? -1 : 1);
+  }
+
   // Price to rank by. A stale price sorts as unknown rather than as its
   // number: otherwise a stale low price still wins the hero row, displacing a
   // fresh listing, and merely renders as "Check price" once it has won.
@@ -123,7 +132,7 @@
       .select('id, product_id, variant_label, reticle, reticle_color, color, finish, optic_cut, bundle, clamp, ' +
               'manual_safety_variant, is_default, primary_image_url, ' +
               'products!product_variants_product_id_fkey(category), ' +
-              'affiliate_links(url, affiliate_url, street_price, in_stock, is_primary, ' +
+              'affiliate_links(url, affiliate_url, street_price, in_stock, ' +
               'last_checked, op_last_matched_by, partners(name))')
       // Retired rows never reach a buy surface. Top-level filter drops a
       // retired variant; the embed filter drops a retired listing while
@@ -151,7 +160,6 @@
           price:       l.street_price != null ? Number(l.street_price) : null,
           stale:       isStalePrice(l),
           in_stock:    l.in_stock,
-          is_primary:  !!l.is_primary,
           partnerName: displayPartnerName(l.partners ? l.partners.name : null),
         });
       });
@@ -161,19 +169,19 @@
       var listings = byProduct[productId];
       var activeAxes = computeActiveAxes(listings);
       listings.forEach(function (l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes, l.customLabel); });
-      // Fresh price first, then in-stock, then cheapest; is_primary only breaks ties.
+      // Fresh price first, then in-stock, then cheapest, then a DETERMINISTIC
+      // tiebreak. PostgREST returns embedded rows in arbitrary order, so
+      // without that last key two equally-priced listings swap hero between
+      // requests — is_primary used to hide this for 25 products.
       listings.sort(function (a, b) {
-        // Fresh-and-priced first, so listings[0] IS the listing whose price gets
-        // displayed. is_primary drops to a tiebreak: it used to lead, which is
-        // how a product could show one listing's price and send the click to
-        // another (27 of 160 products did).
+        // Fresh-and-priced first, so listings[0] IS the listing whose price
+        // gets displayed.
         var af = (!a.stale && a.price != null), bf = (!b.stale && b.price != null);
         if (af !== bf) return af ? -1 : 1;
         if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
         var ap = sortPrice(a), bp = sortPrice(b);
         if (ap != null && bp != null && ap !== bp) return ap - bp;
-        if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
-        return 0;
+        return tieBreak(a, b);
       });
       // Stale prices are excluded from the range too — "From $X" must not be
       // anchored on a number no feed has confirmed.

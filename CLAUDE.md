@@ -115,6 +115,46 @@ of those places undoes that.
 Auth redirects are the one exception — those correctly follow the current origin via
 `js/site-url.js`.
 
+## Adding an affiliate link (CSV import)
+
+New `affiliate_links` rows are added **by hand**, through the Supabase dashboard's
+CSV import. Nothing in this repo inserts into that table — the nightly sync only
+PATCHes existing rows, and no page writes it. So the import template is the one
+place a new link's columns are decided.
+
+**The template's columns, in order:**
+
+| Column | | Notes |
+|---|---|---|
+| `variant_id` | **required** | uuid, FK to `product_variants.id`. `ON DELETE RESTRICT`. |
+| `partner_id` | strongly recommended | uuid, FK to `partners.id`. Nullable, but a link with no partner has no retailer name and the sync cannot route it — the feed is matched **per partner**. |
+| `url` | **required** | the retailer's own product URL. Also what the sync's URL tier matches on. |
+| `affiliate_url` | optional | the tracked link. Readers prefer it and fall back to `url`, so a row with only `url` earns no commission. |
+| `notes` | optional | free text, not displayed. |
+
+**Leave these out — the sync owns them.** A hand-typed value here is worse than
+an empty one, because `op_last_matched_by` being null is exactly how the stale
+guard knows a price was never feed-verified. Typing a `last_checked` does not
+make a price fresh; it only makes it look fresh:
+
+- `street_price`, `in_stock`, `last_checked`
+- `op_last_matched_by` — written by the sync, never by hand
+
+**`op_mpn` / `op_gtin` / `op_merchant_product_id` are the exception.** Fill one
+in when you already know the identifier and want the link pinned to that exact
+product from the first run; otherwise leave them empty and the sync fills them.
+The sync **never overwrites** one that is already set — a disagreement is
+withheld to `sync_drift_review` instead. To re-point a link, clear the stored
+identifier and let the next run refill it.
+
+**Never in the template:** `id`, `created_at`, `updated_at` (defaulted),
+`retired_at` (retirement is deliberate, not an import), and `is_primary`, which
+**no longer exists** — see `supabase/retire_is_primary.sql`. An import carrying
+an `is_primary` column now fails.
+
+A new row therefore looks like: a variant, a partner, a URL, its tracked URL,
+and nothing else. It will show as "Check price" until the first sync matches it.
+
 ## Affiliate price sync
 
 `scripts/refresh-affiliate-prices.mjs` runs nightly from

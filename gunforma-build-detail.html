@@ -339,7 +339,7 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,is_primary,last_checked,op_last_matched_by,partners(name))')
+    .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
@@ -377,7 +377,6 @@ async function loadAffiliates(build) {
         price:       l.street_price != null ? Number(l.street_price) : null,
         stale:       isStalePrice(l),
         in_stock:    l.in_stock,
-        is_primary:  !!l.is_primary,
         partnerName: displayPartnerName(l.partners ? l.partners.name : null),
       });
     });
@@ -387,18 +386,16 @@ async function loadAffiliates(build) {
     var listings = byProduct[productId];
     var activeAxes = computeActiveAxes(listings);
     listings.forEach(function(l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes, l.customLabel); });
-    // Sort: fresh price first, then in-stock, then cheapest; primary breaks ties.
+    // Sort: fresh price first, then in-stock, then cheapest, then partner/URL.
     listings.sort(function(a, b) {
       // Fresh-and-priced first, so listings[0] IS the listing whose price is
-      // displayed. is_primary drops to a tiebreak — leading with it is how a
-      // part could show one price and send the click to a different listing.
+      // displayed; tieBreak keeps equal listings in a stable order.
       var af = (!a.stale && a.price != null), bf = (!b.stale && b.price != null);
       if (af !== bf) return af ? -1 : 1;
       if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
       var ap = sortPrice(a), bp = sortPrice(b);
       if (ap != null && bp != null && ap !== bp) return ap - bp;
-      if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
-      return 0;
+      return tieBreak(a, b);
     });
 
     var priced = listings.filter(function(l){ return l.price != null && !l.stale; });
@@ -495,6 +492,15 @@ function isStalePrice(l) {
   var now = new Date();
   var todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return checked < todayUTC - STALE_AFTER_DAYS * 86400000;
+}
+
+// Last resort, so a tie resolves the same way on every request and every page:
+// partner name, then URL. PostgREST returns embedded rows in arbitrary order.
+function tieBreak(a, b) {
+  var ap = a.partnerName || '', bp = b.partnerName || '';
+  if (ap !== bp) return ap < bp ? -1 : 1;
+  var au = a.url || '', bu = b.url || '';
+  return au === bu ? 0 : (au < bu ? -1 : 1);
 }
 
 // A stale price sorts as unknown rather than as its number — otherwise a stale
