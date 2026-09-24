@@ -152,6 +152,7 @@ function renderPage(products) {
 '<meta charset="UTF-8"/>' +
 '<base href="/"/>' +
 '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>' +
+'<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />' +
 '<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />' +
 '<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />' +
 '<link rel="shortcut icon" href="/favicon.ico?v=12026" />' +
@@ -172,8 +173,10 @@ function renderPage(products) {
 '* { box-sizing: border-box; margin: 0; padding: 0; }' +
 'body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafaf8; color: #1a1a1a; min-height: 100vh; }' +
 '.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }' +
-'.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }' +
-'.nav-logo span { color: #4a9edd; }' +
+'.nav-logo { display: flex; align-items: center; text-decoration: none; }' +
+'.nav-logo img { height: 22px; width: auto; display: block; }' +
+'.nav-logo img.nav-logo-mark { display: none; }' +
+'@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }' +
 '.nav-links { display: flex; gap: 28px; }' +
 '.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }' +
 '.nav-link:hover, .nav-link.active { color: #e8e6e1; }' +
@@ -201,7 +204,7 @@ function renderPage(products) {
 '</style>' +
 '</head><body>' +
 '<nav class="nav">' +
-  '<a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>' +
+  '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
     '<a class="nav-link" href="index.html">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +

@@ -52,13 +52,13 @@
   if (variant === 'auth-signin') {
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>' +
+        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<a class="nav-link" href="gunforma-signup.html">Create account →</a>' +
       '</nav>';
   } else if (variant === 'auth-signup') {
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>' +
+        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<a class="nav-link" href="gunforma-signin.html">Sign in instead →</a>' +
       '</nav>';
   } else if (variant === 'full-authed') {
@@ -69,7 +69,7 @@
     // which also gives it its href — hence an <a> with no initial href.
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>' +
+        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
@@ -84,7 +84,7 @@
     // full — the default
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>' +
+        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
