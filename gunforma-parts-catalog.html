@@ -135,6 +135,32 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .toast a { color: #6fb4e8; margin-left: 6px; text-decoration: underline; }
 
 /* MOBILE */
+/* ── Mobile filter sheet ──────────────────────────────────────────────
+   Everything here is inert above 900px. .filter-drawer is display:contents
+   so the box tree at desktop width is exactly what it was before this
+   existed: .sidebar is .catalog's first grid column, nothing wraps it. */
+.filter-drawer { display: contents; }
+.filter-drawer-header, .filter-drawer-footer { display: none; }
+.cat-toolbar { display: none; }
+
+.filter-scrim {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(14,15,17,0.55);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.18s ease;
+}
+.filter-scrim.open { opacity: 1; pointer-events: auto; }
+
+.filter-btn { display: inline-flex; align-items: center; gap: 7px; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.02em; padding: 8px 14px; border: 0.5px solid #d5d3ca; background: #fff; color: #333; border-radius: 4px; cursor: pointer; }
+.filter-btn svg { width: 15px; height: 15px; }
+.filter-btn-badge { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 9px; background: #4a9edd; color: #fff; font-size: 10px; font-weight: 700; }
+/* An author display value outranks the UA sheet's [hidden] { display: none },
+   so without this the badge renders a literal "0" at zero active filters. */
+.filter-btn-badge[hidden] { display: none; }
+.filter-drawer-title { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.filter-drawer-close { background: none; border: none; font-family: inherit; font-size: 22px; line-height: 1; color: #666; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.filter-apply-btn { width: 100%; font-family: inherit; font-size: 13px; font-weight: 700; padding: 12px; border: none; border-radius: 4px; background: #1a1a1a; color: #fff; cursor: pointer; }
+
 @media (max-width: 900px) {
   .catalog { grid-template-columns: 1fr; padding: 18px 16px 48px; gap: 18px; }
   .sidebar { position: static; max-height: none; overflow-y: visible; padding-right: 0; }
@@ -332,6 +358,54 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
   .nav-menu a.signout { color: #ffffff; }
 }
+
+/* ── Catalog mobile layout ────────────────────────────────────────────
+   Deliberately the LAST block in this stylesheet. These rules override
+   base declarations that appear further down the file than the original
+   900px block does — .cat-tabs { flex-wrap: wrap } is defined at line ~225
+   and would otherwise win on equal specificity, leaving the chips wrapped
+   into five rows instead of one scrolling strip. */
+@media (max-width: 900px) {
+  /* The sidebar leaves the flow entirely — stacking it above .main is what
+     pushed every part below the fold. */
+  .filter-drawer {
+    display: flex; flex-direction: column;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 301;
+    max-height: 82vh;
+    background: #fafaf8;
+    border-top-left-radius: 12px; border-top-right-radius: 12px;
+    box-shadow: 0 -8px 32px rgba(0,0,0,0.18);
+    transform: translateY(100%);
+    transition: transform 0.22s ease;
+  }
+  .filter-drawer.open { transform: translateY(0); }
+
+  .filter-drawer-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 0.5px solid #e5e5e5; background: #fff; border-top-left-radius: 12px; border-top-right-radius: 12px; }
+
+  /* min-height:0 so this flex child may actually shrink and scroll rather
+     than forcing the sheet past its max-height. */
+  .sidebar { position: static; max-height: none; overflow-y: auto; flex: 1; min-height: 0; padding: 14px 16px; }
+
+  .filter-drawer-footer { display: block; padding: 12px 16px; border-top: 0.5px solid #e5e5e5; background: #fff; }
+
+  .cat-toolbar { display: flex; align-items: center; gap: 10px; position: sticky; top: 52px; z-index: 40; margin: 0 -16px; padding: 10px 16px; background: #fafaf8; border-bottom: 0.5px solid #e5e5e5; }
+  .cat-toolbar-sort { display: flex; align-items: center; gap: 6px; margin-left: auto; font-size: 11px; color: #888; }
+
+  /* One sort control on screen at a time — the .search-row copy is the
+     desktop one. */
+  .search-row .sort-wrap { display: none; }
+
+  /* .main is a grid item, so its min-width:auto floor is the min-content of
+     its widest child. The nowrap chip strip below measures ~1660px there, and
+     without this the whole column — grid, search row and all — is dragged out
+     to that width and the page scrolls sideways. */
+  .main { min-width: 0; }
+
+  /* Chips stay out of the drawer: category has to remain one tap. */
+  .cat-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; margin: 0 -16px 2px; padding: 0 16px 2px; }
+  .cat-tabs::-webkit-scrollbar { display: none; }
+  .cat-tab { flex: 0 0 auto; }
+}
 </style>
 </head>
 <body>
@@ -371,11 +445,48 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <div class="catalog">
-  <aside class="sidebar" id="sidebar">
-    <!-- Filter groups injected by renderFilters() so the option counts stay
-         accurate as the underlying product list changes. -->
-  </aside>
+  <!-- Drawer shell around the sidebar. Below 900px this becomes the bottom
+       sheet; at wider widths it is display:contents, so #sidebar is still the
+       grid's own first column and the desktop layout is untouched.
+       The header and footer live out here rather than inside #sidebar because
+       renderFilters() overwrites that element's innerHTML wholesale. -->
+  <div class="filter-drawer" id="filter-drawer">
+    <div class="filter-drawer-header">
+      <span class="filter-drawer-title">Filters</span>
+      <button type="button" class="filter-drawer-close" id="filter-close" aria-label="Close filters">×</button>
+    </div>
+    <aside class="sidebar" id="sidebar">
+      <!-- Filter groups injected by renderFilters() so the option counts stay
+           accurate as the underlying product list changes. -->
+    </aside>
+    <div class="filter-drawer-footer">
+      <!-- Filtering is already live as options toggle; this only dismisses
+           the sheet. The count keeps it honest about what is behind it. -->
+      <button type="button" class="filter-apply-btn" id="filter-apply">Show parts</button>
+    </div>
+  </div>
   <div class="main">
+    <!-- Mobile-only toolbar. Hidden above 900px, where the sidebar is always
+         on screen and the sort lives in .search-row as before. -->
+    <div class="cat-toolbar">
+      <button type="button" class="filter-btn" id="filter-btn" aria-expanded="false" aria-controls="filter-drawer">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+          <path d="M3 5h18l-7 8v5l-4 2v-7z" stroke-linejoin="round"/>
+        </svg>
+        <span>Filter</span>
+        <span class="filter-btn-badge" id="filter-btn-badge" hidden>0</span>
+      </button>
+      <div class="cat-toolbar-sort">
+        <label for="sort-select-m">Sort</label>
+        <select class="sort-select" id="sort-select-m">
+          <option value="newest">Newest</option>
+          <option value="price_asc">Price low → high</option>
+          <option value="price_desc">Price high → low</option>
+          <option value="brand">Brand A → Z</option>
+        </select>
+      </div>
+    </div>
+
     <!-- Sub-model selector — only renders when exactly one platform is
          active (sub-models are platform-specific). Populated from the
          guns table. -->
@@ -411,6 +522,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <!-- Detail slide-over: opens on part-card click. Kept in the DOM (hidden via
      transform) so open/close is a class toggle, no re-mount cost per click. -->
+<!-- Scrim behind the mobile filter sheet. Same pattern as the detail scrim
+     below: hidden attribute for the resting state, .open for the fade. -->
+<div class="filter-scrim" id="filter-scrim" hidden></div>
+
 <div class="detail-scrim" id="detail-scrim" hidden></div>
 <aside class="detail-panel" id="detail-panel" role="dialog" aria-modal="true" aria-labelledby="detail-title" hidden>
   <div class="detail-header">
@@ -720,14 +835,116 @@ function wireControls() {
     applyFiltersAndRender();
   });
   document.getElementById('sort-select').addEventListener('change', function (e) {
-    F.sort = e.target.value; applyFiltersAndRender();
+    F.sort = e.target.value;
+    document.getElementById('sort-select-m').value = e.target.value;
+    applyFiltersAndRender();
+  });
+  // Mobile toolbar's sort. A second <select> rather than the same node moved
+  // between two parents — see the note on wireFilterDrawer().
+  document.getElementById('sort-select-m').addEventListener('change', function (e) {
+    F.sort = e.target.value;
+    document.getElementById('sort-select').value = e.target.value;
+    applyFiltersAndRender();
   });
   document.getElementById('clear-filters').addEventListener('click', clearAllFilters);
+  wireFilterDrawer();
   document.getElementById('tab-all').addEventListener('click', function () { setTab(false); });
   document.getElementById('tab-favs').addEventListener('click', function () {
     if (!CURRENT_USER) { toast('Sign in to see your favorites', 'gunforma-signin.html', 'Sign in'); return; }
     setTab(true);
   });
+}
+
+// ─── MOBILE FILTER SHEET ─────────────────────────────────
+// Below 900px the sidebar is a bottom sheet. The filter groups themselves are
+// untouched — renderFilters() still owns #sidebar's innerHTML, which is why
+// the sheet's header and footer sit outside that element.
+//
+// The mobile sort is a separate <select> kept in sync with the desktop one.
+// A single node can't live in both .search-row (desktop) and this toolbar
+// (mobile), and moving it on resize would mean re-parenting a focused control
+// mid-interaction; two elements over one F.sort is the cheaper trade.
+
+// Counts only what the sheet actually contains: platform, brand, price and
+// the spec groups. Search has its own visible input and category its own
+// visible chips, so folding either into this badge would point at a control
+// that isn't behind the button.
+function activeDrawerFilterCount() {
+  return F.platforms.size
+       + F.brands.size
+       + ((F.priceMin != null || F.priceMax != null) ? 1 : 0)
+       + Object.keys(F.specs || {}).length;
+}
+
+// Pending hide-the-scrim timer. Tracked so a fast close→open can cancel it —
+// otherwise the timer from the close fires mid-open and hides the scrim out
+// from under a drawer that is on screen.
+var FILTER_CLOSE_T = null;
+
+function openFilters() {
+  var scrim = document.getElementById('filter-scrim');
+  var drawer = document.getElementById('filter-drawer');
+  clearTimeout(FILTER_CLOSE_T);
+  scrim.hidden = false;
+  // rAF so the transform transition plays — same reason as openDetail().
+  requestAnimationFrame(function () {
+    scrim.classList.add('open');
+    drawer.classList.add('open');
+  });
+  document.getElementById('filter-btn').setAttribute('aria-expanded', 'true');
+  document.body.style.overflow = 'hidden';
+}
+
+// Deliberately has no "already closed" early return. openFilters() sets the
+// scroll lock synchronously but adds .open in a rAF, so a close landing in
+// that one-frame gap would see no .open, bail, and leave the scrim up and the
+// page locked behind a drawer that never opened. Doing the full reset every
+// time is idempotent and can't strand that state.
+function closeFilters() {
+  var scrim = document.getElementById('filter-scrim');
+  var drawer = document.getElementById('filter-drawer');
+  scrim.classList.remove('open');
+  drawer.classList.remove('open');
+  document.getElementById('filter-btn').setAttribute('aria-expanded', 'false');
+  clearTimeout(FILTER_CLOSE_T);
+  FILTER_CLOSE_T = setTimeout(function () {
+    scrim.hidden = true;
+    // Only release the page if the detail panel hasn't taken the lock since.
+    if (!DETAIL_STATE.productId) document.body.style.overflow = '';
+  }, 220);
+}
+
+// Badge + "Show N parts". Called from applyFiltersAndRender so both track the
+// live result set as options toggle, not just on open.
+function updateFilterUi(count) {
+  var badge = document.getElementById('filter-btn-badge');
+  var n = activeDrawerFilterCount();
+  badge.textContent = String(n);
+  badge.hidden = n === 0;
+  document.getElementById('filter-apply').textContent =
+    'Show ' + count + ' part' + (count !== 1 ? 's' : '');
+}
+
+function wireFilterDrawer() {
+  document.getElementById('filter-btn').addEventListener('click', openFilters);
+  document.getElementById('filter-close').addEventListener('click', closeFilters);
+  document.getElementById('filter-apply').addEventListener('click', closeFilters);
+  document.getElementById('filter-scrim').addEventListener('click', closeFilters);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeFilters();
+  });
+  // Crossing back to desktop with the sheet open would otherwise leave the
+  // body scroll-locked against a drawer that is no longer positioned.
+  //
+  // Driven by the media query rather than window.innerWidth so this can never
+  // disagree with the CSS about where the breakpoint is — innerWidth includes
+  // the scrollbar and, under viewport emulation, can differ from the layout
+  // viewport outright, which fired this guard at phone width and closed the
+  // sheet the instant it opened.
+  var wide = window.matchMedia('(min-width: 901px)');
+  var onWide = function (e) { if (e.matches) closeFilters(); };
+  if (wide.addEventListener) wide.addEventListener('change', onWide);
+  else wide.addListener(onWide);   // Safari < 14
 }
 
 function setTab(favsOnly) {
@@ -1471,6 +1688,7 @@ function applyFiltersAndRender() {
   document.getElementById('result-count').textContent =
     list.length + ' part' + (list.length !== 1 ? 's' : '');
   document.getElementById('clear-filters').disabled = !hasActiveFilters();
+  updateFilterUi(list.length);
   // Fitment banner depends on current filter state.
   renderFitmentBanner();
 
