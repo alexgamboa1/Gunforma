@@ -4,7 +4,7 @@
 //   default  — index.html canonical: copyright line + link list
 //   legal    — same, but with the full legal disclaimer stacked above.
 //              Used on pages where a build is displayed/submitted
-//              (gunforma-build-detail, gunforma-post-build-v6) so the
+//              (gunforma-build-detail, gunforma-post-build) so the
 //              "not legal advice" language stays visible.
 //
 // Pages without a mount div render nothing. That preserves the current

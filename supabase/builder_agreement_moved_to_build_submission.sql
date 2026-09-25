@@ -1,6 +1,6 @@
 -- ============================================================
 -- Gunforma-v2 — Builder Agreement consent moved from signup to
--- build submission, to match the updated gunforma-post-build-v6.html
+-- build submission, to match the updated gunforma-post-build.html
 -- (checkbox + consentRecord tied to an actual build/photo, not a
 -- hypothetical signup-time checkbox).
 --
@@ -71,7 +71,7 @@ end;
 $$;
 
 -- BUILDS: per-submission consent record, matching the consentRecord
--- object gunforma-post-build-v6.html builds today
+-- object gunforma-post-build.html builds today
 -- (contentLicenseConfirmed, legalConfirmed, confirmedAt).
 alter table public.builds
   add column content_license_confirmed boolean not null default false,

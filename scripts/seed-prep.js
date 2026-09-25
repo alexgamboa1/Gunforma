@@ -6,7 +6,7 @@
 // exact shape launch-invites.js already reads).
 //
 // This script does bookkeeping and credential generation ONLY. A human still
-// posts each build through the real site UI (gunforma-post-build-v6.html)
+// posts each build through the real site UI (gunforma-post-build.html)
 // after using the generated magic link to sign in as that builder. This
 // script does NOT send any invite email — that's launch-invites.js.
 //
@@ -24,7 +24,7 @@
 // Env:
 //   SUPABASE_SERVICE_ROLE_KEY  required (Dashboard → Project Settings → API)
 //   SUPABASE_URL               optional, defaults to the Gunforma project
-//   NEXT_TARGET                optional, defaults to /gunforma-post-build-v6.html
+//   NEXT_TARGET                optional, defaults to /gunforma-post-build.html
 //                              (the ?next= path baked into the magic link)
 //
 // Node 18+ required (uses global fetch).
@@ -41,7 +41,7 @@ const EMAILS_PATH = path.resolve(__dirname, 'seed-emails.txt');
 const BUILDERS_PATH = path.resolve(__dirname, 'builders.json');
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SERVICE_KEY  = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const NEXT_TARGET  = process.env.NEXT_TARGET || '/gunforma-post-build-v6.html';
+const NEXT_TARGET  = process.env.NEXT_TARGET || '/gunforma-post-build.html';
 const REDIRECT_TO  = `https://gunforma.com/auth-callback.html?next=${encodeURIComponent(NEXT_TARGET)}`;
 const EMAIL_RE     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE      = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
