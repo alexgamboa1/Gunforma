@@ -1,6 +1,6 @@
 -- ============================================================
 -- Gunforma-v2 — product-images storage policies must not read profiles inline
--- NOT YET APPLIED. See the status note at the bottom of this header.
+-- APPLIED 2026-09-25. See the record at the bottom of this file.
 --
 -- No rollback file on purpose: the "before" state is the outage described
 -- below, and restoring it would restore the outage.
@@ -35,7 +35,9 @@
 -- uploads, avatar uploads and photo deletion — none of which touch the
 -- product-images bucket at all.
 --
--- Window: 2026-09-22 (when the revoke was applied) until fixed.
+-- Window: 2026-09-22 (when the revoke was applied) to 2026-09-25 — three
+-- days, silently. The only symptom anyone saw was a generic "Upload failed"
+-- toast; nothing surfaced the 42501 or named profiles.
 --
 -- THE FIX
 -- Call public.is_admin() instead. It is SECURITY DEFINER with a pinned
@@ -46,13 +48,8 @@
 -- The `auth.role() = 'authenticated'` clause in the old expressions is
 -- dropped as redundant: `to authenticated` on the policy already says it.
 --
--- STATUS
--- This file was written as a record of a change reported as already applied.
--- It is NOT applied. Verified read-only against project lagjjcpclvzrjlrswojt
--- on 2026-09-25: all three policies still carry the inline
--- EXISTS (SELECT 1 FROM profiles ...), `authenticated` still holds no
--- table-level SELECT on profiles, and `role` is not among its 8 column
--- grants. The outage above is therefore still live. Run this file.
+-- The invariant this cost us is recorded in CLAUDE.md, "A policy's table
+-- reads are checked even when the policy doesn't apply".
 -- ============================================================
 
 begin;
@@ -83,3 +80,18 @@ commit;
 -- The public read policy on this bucket ("Public read access for product
 -- images", using bucket_id = 'product-images') never referenced profiles and
 -- is deliberately left alone.
+
+-- ============================================================
+-- APPLIED 2026-09-25 to project lagjjcpclvzrjlrswojt.
+-- Verified live after the change:
+--
+--   zero policies on storage.objects reference profiles
+--   four build photos uploaded successfully, from the same account that had
+--     been getting 400s throughout the window above
+--
+-- Note for anyone reading the history: an earlier revision of this file
+-- carried a NOT YET APPLIED status, recorded on 2026-09-25 from a read-only
+-- check that found the old inline-profiles policies still live. The fix
+-- landed later the same day, from another session. Both statements were true
+-- when written; this one supersedes.
+-- ============================================================
