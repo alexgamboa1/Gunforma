@@ -16,16 +16,36 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
 
-/* NAV — same static markup as the public pages; nav.js keeps it session-aware. */
+/* NAV — byte-identical to the other pages' static nav; nav.js keeps it
+   session-aware and appends Inbox / Sign out. */
 .nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
-.nav-logo { font-size: 15px; font-weight: 600; color: #e8e6e1; letter-spacing: 0.12em; text-transform: uppercase; text-decoration: none; }
-.nav-logo span { color: #4a9edd; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
 .nav-links { display: flex; gap: 28px; }
-.nav-link { font-size: 12px; color: #888780; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
-.nav-link:hover, .nav-link.active { color: #e8e6e1; }
+.nav-link { font-size: 12px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #ffffff; }
+.nav-link.active { border-bottom: 2px solid #4a9edd; padding-bottom: 2px; }
 .nav-right { display: flex; align-items: center; gap: 14px; }
-.nav-btn { font-size: 11px; color: #888780; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn { font-size: 11px; color: #ffffff; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
 .nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+.nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
+.nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }
+.nav-toggle span + span { margin-top: 4px; }
+.nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }
+.nav-profile svg { width: 19px; height: 19px; }
+.nav-menu { display: none; }
+@media (max-width: 820px) {
+  .nav-links { display: none; }
+  .nav-signin-inline { display: none; }
+  .nav-profile { display: flex; }
+  .nav-toggle { display: block; }
+  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }
+  .nav-menu.open { display: flex; }
+  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
+  .nav-menu a.signout { color: #ffffff; }
+}
 
 /* FOOTER */
 .footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 36px; display: flex; flex-direction: column; gap: 10px; background: #fafaf8; }
@@ -70,7 +90,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <body>
 
 <nav class="nav">
-  <a class="nav-logo" href="index.html">GUN<span>FORMA</span></a>
+  <a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
   <div class="nav-links">
     <a class="nav-link" href="index.html">Home</a>
     <a class="nav-link" href="gunforma-builds.html">Builds</a>
@@ -78,8 +98,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <a class="nav-link" href="gunforma-armory.html">Armory</a>
   </div>
   <div class="nav-right">
-    <a class="nav-btn" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>
     <a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>
+    <a class="nav-profile" href="gunforma-signin.html" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></a>
+    <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><span></span><span></span><span></span></button>
+  </div>
+  <div class="nav-menu" id="nav-menu">
+    <a href="gunforma-builds.html">Builds</a>
+    <a href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a href="gunforma-armory.html">Armory</a>
   </div>
 </nav>
 

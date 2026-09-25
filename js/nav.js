@@ -63,7 +63,7 @@ var NAV_MENU =
   //   2. The page genuinely opts out of the nav. No hook, nothing to do.
   if (!mount) {
     if (document.getElementById('nav-signin')) wireNavAuth();
-    // The eleven pages that ship a static nav carry the hamburger in their own
+    // The twelve pages that ship a static nav carry the hamburger in their own
     // markup, so the toggle has to be wired on this path too — otherwise the
     // links are hidden below 820px with nothing to reveal them.
     wireNavToggle();
