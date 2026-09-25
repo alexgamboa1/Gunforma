@@ -121,6 +121,48 @@ Guards of this shape cannot be verified by reading them — they look correct
 either way. Prove them by simulating a caller (`set local role authenticated`
 plus a real `sub` in `request.jwt.claims`) inside a rolled-back transaction.
 
+### A policy's table reads are checked even when the policy doesn't apply
+
+**Never read a table inline from an RLS policy.** Call a `SECURITY DEFINER`
+function with a pinned `search_path` instead — which is exactly what
+`is_admin()` is for.
+
+Postgres permission-checks **every relation in a query plan**, at plan time,
+not lazily per row. So a policy whose expression contains
+`exists (select 1 from profiles ...)` needs the *caller* to hold `SELECT` on
+`profiles` — and if they don't, the statement throws `42501` **even when the
+policy's own predicate is false**. A leading `bucket_id = 'product-images'`
+never gets the chance to short-circuit it.
+
+The consequence is the part that surprises people: the policy is scoped to one
+bucket, but the failure is not. The expression is attached to
+`storage.objects`, so *every* insert/update/delete against that table is
+planned with it, and a policy about one bucket breaks writes to all of them.
+The same holds for any table with a policy of this shape — the blast radius is
+the table the policy is on, not the rows the policy selects.
+
+Worked example: `c9ce30f` ran `revoke select on public.profiles from
+authenticated` (audit #5 step 2). Three `product-images` storage policies
+still read `profiles` inline and were missed. That took down **build photo
+uploads, avatar uploads and photo deletion** — none of which touch the
+`product-images` bucket — from 2026-09-22 to 2026-09-25. Three days, and
+silently: the only symptom was a generic "Upload failed" toast, with nothing
+surfacing the `42501` or naming `profiles`. See
+`supabase/fix_product_image_policies.sql`.
+
+Sweep for the shape whenever a `SELECT` grant is revoked. Check **both**
+`polqual` and `polwithcheck` — the insert policy that caused the outage above
+had its inline read in `with check`, which a `using`-only sweep misses:
+
+```sql
+select polrelid::regclass as on_table, polname,
+       coalesce(pg_get_expr(polqual, polrelid), '') as using_expr,
+       coalesce(pg_get_expr(polwithcheck, polrelid), '') as check_expr
+  from pg_policy
+ where coalesce(pg_get_expr(polqual, polrelid), '') ilike '%from %'
+    or coalesce(pg_get_expr(polwithcheck, polrelid), '') ilike '%from %';
+```
+
 ## Retirement, not deletion
 
 `affiliate_links` and `product_variants` are **never hard-deleted**. They carry
