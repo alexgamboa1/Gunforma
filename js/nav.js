@@ -8,7 +8,7 @@
 //                 crawlers see the links in-source; nav.js runs anyway to keep
 //                 the #nav-signin hook session-aware (see the no-mount branch).
 //   full-authed — same, but no "Post your build" CTA and no "Sign in" link.
-//                 Post-build-v6 is the only page still using it — the other
+//                 Post-build is the only page still using it — the other
 //                 auth-required workflow pages (admin-queue, complete-profile,
 //                 claim) ship their own static navs and don't load nav.js.
 //   auth-signin — logo + "Create account →"       (used on sign-in page)
@@ -95,7 +95,7 @@ var NAV_MENU =
       '</nav>';
   } else if (variant === 'full-authed') {
     // No "Post your build" CTA (avoids self-links from auth-required flows
-    // like post-build-v6 that would blow away in-progress form state) and no
+    // like post-build that would blow away in-progress form state) and no
     // "Sign in" link (the page's watchdog guarantees a session). Username
     // still populated by updateNavAuth below via the same #nav-signin hook,
     // which also gives it its href — hence an <a> with no initial href.
@@ -128,7 +128,7 @@ var NAV_MENU =
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
-          '<a class="nav-btn cta" href="gunforma-post-build-v6.html">+ Post your build</a>' +
+          '<a class="nav-btn cta" href="gunforma-post-build.html">+ Post your build</a>' +
           NAV_PROFILE +
           NAV_TOGGLE +
         '</div>' +

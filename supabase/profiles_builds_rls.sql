@@ -41,7 +41,7 @@ for each row execute function public.handle_new_user();
 
 -- ============================================================
 -- BUILDS TABLE
--- Columns match what gunforma-post-build-v6.html collects and
+-- Columns match what gunforma-post-build.html collects and
 -- gunforma-admin-queue.html reviews.
 -- ============================================================
 create table public.builds (

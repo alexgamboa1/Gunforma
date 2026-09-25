@@ -89,6 +89,25 @@
   status = 404
   force = true
 
+# gunforma-post-build-v6.html was renamed to drop the -v6. Anything already
+# indexed, bookmarked, or sitting in an old email link still asks for the old
+# path, and no file answers to it any more.
+#
+# 301 (not 200) so the new URL is what gets indexed and the old one drops out,
+# same reasoning as /gunforma-home.html in _redirects. No force needed: force
+# only matters when a real file sits at the from-path, and this one no longer
+# exists.
+#
+# Placement is safe anywhere in this file — matching is first-match-wins and
+# every rule above is an exact path or a /scripts,/supabase,/netlify,/_scratch
+# prefix, none of which can match this one. It sits above the /u/*, /b/* and
+# /parts/* rewrites for the same reason those are grouped: nothing below it
+# should ever get the chance to claim a page path.
+[[redirects]]
+  from = "/gunforma-post-build-v6.html"
+  to = "/gunforma-post-build"
+  status = 301
+
 # Shareable profile URLs. status = 200 is a rewrite, not a redirect — the
 # address bar keeps /u/:username, which is what the canonical tag points at.
 #

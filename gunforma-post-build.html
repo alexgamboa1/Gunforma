@@ -727,7 +727,10 @@ function photoCount() {
 
 // ===== STEP 1 =====
 async function loadPlatforms() {
-  const { data, error } = await sb.from('platforms').select('id,name').order('name');
+  // is_live=false hides a platform with nothing to build on it yet (SIG P320
+  // today). gunforma-admin-post.html deliberately does NOT filter — see the
+  // note on its copy of this function.
+  const { data, error } = await sb.from('platforms').select('id,name').eq('is_live', true).order('name');
   platformsLoaded = true;
   if (error) {
     document.getElementById('platform-grid').innerHTML =

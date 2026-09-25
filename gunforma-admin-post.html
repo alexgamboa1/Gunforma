@@ -528,6 +528,9 @@ function photoCount() {
 
 // ===== STEP 1 =====
 async function loadPlatforms() {
+  // No .eq('is_live', true) here on purpose: the public builder hides
+  // not-yet-live platforms, but an admin posting on a builder's behalf must
+  // still be able to reach every one of them.
   const { data, error } = await sb.from('platforms').select('id,name').order('name');
   platformsLoaded = true;
   if (error) {
