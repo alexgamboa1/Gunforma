@@ -63,7 +63,7 @@ var NAV_MENU =
   //   2. The page genuinely opts out of the nav. No hook, nothing to do.
   if (!mount) {
     if (document.getElementById('nav-signin')) wireNavAuth();
-    // The eleven pages that ship a static nav carry the hamburger in their own
+    // The twelve pages that ship a static nav carry the hamburger in their own
     // markup, so the toggle has to be wired on this path too — otherwise the
     // links are hidden below 820px with nothing to reveal them.
     wireNavToggle();
@@ -208,8 +208,8 @@ async function updateNavAuth() {
   // getElementById, because concurrent invocations can duplicate the id
   // and getElementById only ever returns the first match).
   if (!user) {
-    document.querySelectorAll('#nav-signout').forEach(function (el) { el.remove(); });
-    document.querySelectorAll('.nav-menu a.signout').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('#nav-signout, #nav-inbox').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox').forEach(function (el) { el.remove(); });
     signInEl.textContent = 'Sign in';
     signInEl.setAttribute('href', 'gunforma-signin.html');
     signInEl.style.cursor = '';
@@ -231,6 +231,14 @@ async function updateNavAuth() {
   signInEl.onclick = null;
   if (profileEl) profileEl.setAttribute('href', 'gunforma-profile.html');
 
+  // Inbox — unread count from notifications (RLS scopes it to this user).
+  // Fetched before the sweep for the same race reason as Sign out below.
+  var unread = 0;
+  try {
+    var nres = await window.sb.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null);
+    unread = nres.count || 0;
+  } catch (e) { /* table may not exist yet on a preview — the link still works */ }
+
   // Cleanup must happen HERE, after all awaits — updateNavAuth runs
   // concurrently on page load (the mount script calls it, and
   // onAuthStateChange fires INITIAL_SESSION which calls it again). If we
@@ -239,14 +247,24 @@ async function updateNavAuth() {
   // them. Sweeping right before insertion, with querySelectorAll (not
   // getElementById, which stops at the first match), is what keeps this
   // idempotent under the race.
-  document.querySelectorAll('#nav-signout').forEach(function (el) { el.remove(); });
-  document.querySelectorAll('.nav-menu a.signout').forEach(function (el) { el.remove(); });
+  document.querySelectorAll('#nav-signout, #nav-inbox').forEach(function (el) { el.remove(); });
+  document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox').forEach(function (el) { el.remove(); });
 
   async function doSignOut(e) {
     e.preventDefault();
     await window.sb.auth.signOut();
     location.reload();
   }
+
+  // Inbox, inline. Takes signInEl's className so it hides below 820px with
+  // the username — the menu item further down is the mobile route in.
+  var inbox = document.createElement('a');
+  inbox.id = 'nav-inbox';
+  inbox.href = 'gunforma-notifications.html';
+  inbox.className = signInEl.className;
+  inbox.textContent = unread ? 'Inbox (' + unread + ')' : 'Inbox';
+  if (unread) inbox.style.color = '#4a9edd';
+  signInEl.parentNode.insertBefore(inbox, signInEl);
 
   var signOut = document.createElement('a');
   signOut.id = 'nav-signout';
@@ -263,6 +281,14 @@ async function updateNavAuth() {
   // is appended here rather than shipped in the static markup. Swept just
   // above, in the same idempotent pass as #nav-signout.
   if (menuEl) {
+    // Inbox first, so the menu reads Builds / Parts / Armory / Inbox / Sign out.
+    var menuInbox = document.createElement('a');
+    menuInbox.className = 'inbox';
+    menuInbox.href = 'gunforma-notifications.html';
+    menuInbox.textContent = unread ? 'Inbox (' + unread + ')' : 'Inbox';
+    if (unread) menuInbox.style.color = '#4a9edd';
+    menuEl.appendChild(menuInbox);
+
     var menuSignOut = document.createElement('a');
     menuSignOut.className = 'signout';
     menuSignOut.href = '#';

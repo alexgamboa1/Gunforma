@@ -82,6 +82,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .engagement-row { display: flex; align-items: center; gap: 8px; }
 .share-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; cursor: pointer; color: #555; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
 .share-btn:hover { border-color: #4a9edd; color: #4a9edd; }
+.like-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; cursor: pointer; color: #555; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
+.like-btn:hover { border-color: #d85a30; color: #d85a30; }
+.like-btn.liked { background: #faece7; border-color: #d85a30; color: #a25334; }
+.like-btn.liked svg { fill: currentColor; }
+.like-count { font-weight: 700; }
+.like-count:empty { display: none; }
 
 /* SECTION */
 .section-divider { display: flex; align-items: center; justify-content: space-between; padding: 28px 0 16px; border-bottom: 0.5px solid #e5e5e5; margin-bottom: 20px; }
@@ -161,8 +167,59 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a1a; color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; opacity: 0; transition: all 0.25s ease; pointer-events: none; z-index: 999; white-space: nowrap; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* COMMENTS — threaded one level, votes, sort. Same palette as the part cards. */
+.comments { margin-top: 8px; }
+.comments-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 28px 0 16px; border-bottom: 0.5px solid #e5e5e5; margin-bottom: 20px; }
+.comments-head h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.comments-sort { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; }
+.comments-sort select { font: inherit; font-size: 11px; color: #333; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 4px; padding: 4px 8px; }
+.comment-form { display: flex; flex-direction: column; gap: 8px; margin-bottom: 24px; }
+.comment-form textarea { width: 100%; min-height: 96px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.5; color: #1a1a1a; background: #fff; border: 0.5px solid #cfcdc4; border-radius: 6px; padding: 10px 12px; }
+.comment-form textarea:focus { outline: none; border-color: #4a9edd; box-shadow: 0 0 0 2px #eaf4fc; }
+.comment-form-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.comment-form-hint { font-size: 10.5px; color: #999; }
+.comment-form-hint a { color: #2a7bbd; text-decoration: none; }
+.comment-form-actions { display: flex; gap: 8px; align-items: center; }
+.btn-primary { font: inherit; font-size: 11px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; padding: 8px 16px; border-radius: 4px; cursor: pointer; letter-spacing: 0.02em; }
+.btn-primary:hover { background: #1e63a0; }
+.btn-primary:disabled { opacity: 0.5; cursor: default; }
+.btn-ghost { font: inherit; font-size: 11px; font-weight: 600; color: #666; background: #fff; border: 0.5px solid #e5e5e5; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+.btn-ghost:hover { border-color: #cfcdc4; color: #1a1a1a; }
+.comment-signin { background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 16px 18px; font-size: 13px; color: #555; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.comment-signin a.btn-primary { text-decoration: none; display: inline-block; }
+.comment-list { display: flex; flex-direction: column; gap: 4px; }
+.comment { display: grid; grid-template-columns: 36px 1fr; gap: 12px; padding: 14px 0; border-bottom: 0.5px solid #eee; }
+.comment.reply { margin-left: 48px; padding-left: 14px; border-left: 2px solid #eee; border-bottom: none; padding-bottom: 4px; }
+.comment.reply + .comment.reply { padding-top: 10px; }
+.comment-avatar { width: 36px; height: 36px; border-radius: 50%; background: #f4f3ee; border: 0.5px solid #e5e2d8; overflow: hidden; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: #888; text-transform: uppercase; }
+.comment-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.comment-body { min-width: 0; }
+.comment-meta { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.comment-user { font-size: 13px; font-weight: 700; color: #1a1a1a; text-decoration: none; }
+.comment-user:hover { color: #2a7bbd; }
+.comment-builds { font-size: 11px; color: #2a7bbd; text-decoration: none; }
+.comment-builds:hover { text-decoration: underline; }
+.comment-time { font-size: 11px; color: #999; }
+.comment-op { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 1px 6px; border-radius: 20px; }
+.comment-text { font-size: 14px; line-height: 1.55; color: #1a1a1a; white-space: pre-wrap; overflow-wrap: anywhere; }
+.comment-text.deleted { color: #999; font-style: italic; }
+.comment-actions { display: flex; align-items: center; gap: 12px; margin-top: 8px; }
+.vote { display: inline-flex; align-items: center; gap: 2px; }
+.vote button { font: inherit; background: none; border: 0.5px solid transparent; border-radius: 4px; padding: 2px 6px; cursor: pointer; color: #999; line-height: 1; font-size: 14px; }
+.vote button:hover { background: #f4f3ee; color: #1a1a1a; }
+.vote button.on-up { color: #2a7bbd; }
+.vote button.on-down { color: #c25d3a; }
+.vote-score { font-size: 12px; font-weight: 700; color: #444; min-width: 18px; text-align: center; }
+.comment-link { font: inherit; font-size: 11px; color: #888; background: none; border: none; padding: 0; cursor: pointer; }
+.comment-link:hover { color: #2a7bbd; }
+.comment-link.danger:hover { color: #c25d3a; }
+.comment-edit-form, .comment-reply-form { margin-top: 8px; }
+.comment-edit-form textarea, .comment-reply-form textarea { width: 100%; min-height: 72px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.5; border: 0.5px solid #cfcdc4; border-radius: 6px; padding: 8px 10px; }
+.comment-empty { text-align: center; color: #999; padding: 28px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; }
+
 @media (max-width: 760px) {
   .build-header { grid-template-columns: 1fr; }
+  .comment.reply { margin-left: 20px; }
 }
 .nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
 .nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }
@@ -229,6 +286,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <div class="build-total-sub" id="build-parts-sub">—</div>
       </div>
       <div class="engagement-row">
+        <button class="like-btn" id="like-btn" title="Like this build" onclick="toggleLike()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          <span id="like-label">Like</span><span class="like-count" id="like-count"></span>
+        </button>
         <button class="share-btn" title="Copy link" onclick="copyLink()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           Copy link
@@ -251,6 +312,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 
   <div id="parts-container"></div>
+
+  <!-- COMMENTS — hydrated by loadComments() once the build resolves. Hidden
+       until then so a 404 page doesn't carry an empty comments box. -->
+  <section class="comments" id="comments" style="display:none;">
+    <div class="comments-head">
+      <h2>Comments <span class="section-count" id="comments-count"></span></h2>
+      <div class="comments-sort">
+        <label for="comments-sort">Sort by</label>
+        <select id="comments-sort" onchange="renderComments()">
+          <option value="top">Top</option>
+          <option value="new">Newest</option>
+          <option value="old">Oldest</option>
+        </select>
+      </div>
+    </div>
+    <div id="comment-composer"></div>
+    <div class="comment-list" id="comment-list"></div>
+  </section>
 
 </div>
 
@@ -345,7 +424,7 @@ async function loadBuild() {
   // approved, so a not-yet-approved build correctly 404s instead of leaking.
   const { data, error } = await sb
     .from('builds')
-    .select('id,name,tier,activities,description,created_at,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .select('id,user_id,name,tier,activities,description,created_at,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
     .eq('id', id)
     .maybeSingle();
 
@@ -353,6 +432,58 @@ async function loadBuild() {
 
   await loadAffiliates(data);
   renderBuild(data);
+  BUILD_ID = data.id;
+  BUILD_OWNER_ID = data.user_id;
+  loadComments();
+  loadLikes();
+}
+
+// ============================================================
+// LIKES — build_fires. The table keeps its original name; every label the
+// reader sees says "Like". Same optimistic toggle gunforma-builds.html uses.
+// ============================================================
+var LIKE_COUNT = 0;
+var LIKED = false;
+
+async function loadLikes() {
+  var countRes = await sb.from('build_fires').select('build_id', { count: 'exact', head: true }).eq('build_id', BUILD_ID);
+  LIKE_COUNT = countRes.count || 0;
+  LIKED = false;
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (user) {
+    var mine = await sb.from('build_fires').select('build_id').eq('build_id', BUILD_ID).eq('user_id', user.id).maybeSingle();
+    LIKED = !!(mine.data);
+  }
+  renderLike();
+}
+
+function renderLike() {
+  var btn = document.getElementById('like-btn');
+  if (!btn) return;
+  btn.classList.toggle('liked', LIKED);
+  document.getElementById('like-label').textContent = LIKED ? 'Liked' : 'Like';
+  document.getElementById('like-count').textContent = LIKE_COUNT ? String(LIKE_COUNT) : '';
+}
+
+async function toggleLike() {
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (!user) { showToast('Sign in to like builds'); return; }
+  var was = LIKED;
+  LIKED = !was;
+  LIKE_COUNT = Math.max(0, LIKE_COUNT + (was ? -1 : 1));
+  renderLike();
+  var res = was
+    ? await sb.from('build_fires').delete().eq('build_id', BUILD_ID).eq('user_id', user.id)
+    : await sb.from('build_fires').insert({ build_id: BUILD_ID, user_id: user.id });
+  if (res.error) {
+    console.error('toggleLike', res.error);
+    LIKED = was;
+    LIKE_COUNT = Math.max(0, LIKE_COUNT + (was ? 1 : -1));
+    renderLike();
+    showToast('Something went wrong — try again');
+  }
 }
 
 async function loadAffiliates(build) {
@@ -752,6 +883,249 @@ async function flagForReview(buildId, partIdx) {
   if (error) { console.error(error); showToast('Something went wrong — try again'); return; }
   showToast('Sent back for review — thanks for flagging this');
   await loadBuild();
+}
+
+// ============================================================
+// COMMENTS — reads build_comments_public, writes build_comments and
+// build_comment_votes. See supabase/build_comments.sql for the rules the
+// database enforces (approved builds only, one reply level, no self-votes,
+// rate limit, who may edit what). The page never re-implements those; it
+// just shows the DB's error message when one fires.
+// ============================================================
+var BUILD_ID = null;
+var BUILD_OWNER_ID = null;
+var COMMENTS = [];            // rows from build_comments_public
+var ME = null;                // { id, username, role } from get_my_profile, or null
+var OPEN_REPLY = null;        // comment id whose reply box is open
+var OPEN_EDIT = null;         // comment id being edited
+
+// Session → ME. get_my_profile is the only sanctioned way to learn role
+// (profiles.role is hidden from direct selects). Re-run on auth changes so a
+// sign-in in another tab lights up the composer here.
+async function loadMe() {
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (!user) { ME = null; return; }
+  var res = await sb.rpc('get_my_profile').maybeSingle();
+  ME = res.data ? { id: res.data.id, username: res.data.username, role: res.data.role } : { id: user.id, username: null, role: 'user' };
+}
+sb.auth.onAuthStateChange(function (event) {
+  // Only real sign-in/out; TOKEN_REFRESHED fires on a timer and nothing
+  // visible changes for it.
+  if (!BUILD_ID || (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT')) return;
+  loadComments();
+  loadLikes();
+});
+
+async function loadComments() {
+  if (!BUILD_ID) return;
+  await loadMe();
+  var res = await sb
+    .from('build_comments_public')
+    .select('id,build_id,parent_id,user_id,body,created_at,edited_at,is_deleted,username,avatar_url,author_build_count,score,my_vote')
+    .eq('build_id', BUILD_ID);
+  if (res.error) { console.error('loadComments', res.error); COMMENTS = []; }
+  else COMMENTS = res.data || [];
+  document.getElementById('comments').style.display = '';
+  renderComments();
+  // Inbox links land on /b/:id#c-<comment id>; the anchor doesn't exist
+  // until this render, so scroll to it by hand, once.
+  if (!SCROLLED_TO_HASH && /^#c-/.test(location.hash)) {
+    SCROLLED_TO_HASH = true;
+    var target = document.getElementById(location.hash.slice(1));
+    if (target) target.scrollIntoView({ block: 'center' });
+  }
+}
+var SCROLLED_TO_HASH = false;
+
+function renderComments() {
+  var sortKey = document.getElementById('comments-sort').value;
+  var live = COMMENTS.filter(function (c) { return !c.is_deleted; }).length;
+  document.getElementById('comments-count').textContent = live ? '(' + live + ')' : '';
+
+  document.getElementById('comment-composer').innerHTML = composerHtml();
+
+  var tops = COMMENTS.filter(function (c) { return !c.parent_id; });
+  var repliesByParent = {};
+  COMMENTS.forEach(function (c) {
+    if (!c.parent_id) return;
+    (repliesByParent[c.parent_id] = repliesByParent[c.parent_id] || []).push(c);
+  });
+  // A deleted top-level comment with no live replies is just gone; with
+  // replies it stays as a "[deleted]" anchor so the thread still reads.
+  tops = tops.filter(function (c) {
+    return !c.is_deleted || (repliesByParent[c.id] || []).some(function (r) { return !r.is_deleted; });
+  });
+  tops.sort(sorter(sortKey));
+
+  var list = document.getElementById('comment-list');
+  if (!tops.length) {
+    list.innerHTML = '<div class="comment-empty">No comments yet. ' + (ME ? 'Ask the builder something.' : 'Sign in to ask the builder something.') + '</div>';
+    return;
+  }
+  list.innerHTML = tops.map(function (c) {
+    var replies = (repliesByParent[c.id] || []).filter(function (r) { return !r.is_deleted; });
+    replies.sort(sorter('old'));   // replies always chronological — it's a conversation
+    return commentHtml(c, false) + replies.map(function (r) { return commentHtml(r, true); }).join('');
+  }).join('');
+}
+
+function sorter(key) {
+  if (key === 'new') return function (a, b) { return b.created_at < a.created_at ? -1 : 1; };
+  if (key === 'old') return function (a, b) { return a.created_at < b.created_at ? -1 : 1; };
+  return function (a, b) { return (b.score - a.score) || (b.created_at < a.created_at ? -1 : 1); };
+}
+
+function composerHtml() {
+  if (!ME) {
+    return '<div class="comment-signin"><span>Sign in to comment on this build.</span>' +
+      '<a class="btn-primary" href="gunforma-signin.html">Sign in</a></div>';
+  }
+  if (!ME.username) {
+    return '<div class="comment-signin"><span>Pick a username to comment.</span>' +
+      '<a class="btn-primary" href="gunforma-complete-profile.html">Complete profile</a></div>';
+  }
+  return '<form class="comment-form" onsubmit="postComment(event, null)">' +
+    '<textarea id="comment-new" maxlength="2000" placeholder="Ask about fitment, why they picked a part, how it shoots…" required></textarea>' +
+    '<div class="comment-form-row">' +
+      '<span class="comment-form-hint">Be useful. No spam, no link shorteners. <a href="gunforma-legal.html#guidelines">Community guidelines</a></span>' +
+      '<div class="comment-form-actions"><button class="btn-primary" type="submit">Post comment</button></div>' +
+    '</div></form>';
+}
+
+function avatarHtml(c) {
+  var initial = (c.username || '?').charAt(0);
+  return '<div class="comment-avatar">' +
+    (c.avatar_url ? '<img src="' + escH(c.avatar_url) + '" alt="" loading="lazy" onerror="this.parentElement.textContent=\'' + escH(initial) + '\'"/>' : escH(initial)) +
+    '</div>';
+}
+
+function commentHtml(c, isReply) {
+  var mine = ME && ME.id === c.user_id;
+  var admin = ME && ME.role === 'admin';
+  var isOp = BUILD_OWNER_ID && c.user_id === BUILD_OWNER_ID;
+  var profileHref = '/u/' + encodeURIComponent(c.username || '');
+
+  var meta = '<div class="comment-meta">' +
+    '<a class="comment-user" href="' + escH(profileHref) + '">' + escH(c.username || 'unknown') + '</a>' +
+    (isOp ? '<span class="comment-op">Builder</span>' : '') +
+    (c.author_build_count ? '<a class="comment-builds" href="' + escH(profileHref) + '">' + c.author_build_count + ' build' + (c.author_build_count !== 1 ? 's' : '') + '</a>' : '') +
+    '<span class="comment-time">' + relTime(c.created_at) + (c.edited_at ? ' · edited' : '') + '</span>' +
+  '</div>';
+
+  var text;
+  if (c.is_deleted) {
+    text = '<div class="comment-text deleted">[deleted]</div>';
+  } else if (OPEN_EDIT === c.id) {
+    text = '<form class="comment-edit-form" onsubmit="saveEdit(event, \'' + c.id + '\')">' +
+      '<textarea id="edit-' + c.id + '" maxlength="2000" required>' + escH(c.body) + '</textarea>' +
+      '<div class="comment-form-row" style="margin-top:6px"><span></span><div class="comment-form-actions">' +
+        '<button type="button" class="btn-ghost" onclick="OPEN_EDIT=null;renderComments()">Cancel</button>' +
+        '<button type="submit" class="btn-primary">Save</button></div></div></form>';
+  } else {
+    text = '<div class="comment-text">' + escH(c.body) + '</div>';
+  }
+
+  var actions = '';
+  if (!c.is_deleted && OPEN_EDIT !== c.id) {
+    var canVote = ME && !mine;
+    actions = '<div class="comment-actions">' +
+      '<span class="vote">' +
+        '<button type="button" class="' + (c.my_vote === 1 ? 'on-up' : '') + '" title="Upvote" ' + (canVote ? 'onclick="vote(\'' + c.id + '\', 1)"' : 'onclick="voteBlocked(' + (mine ? 'true' : 'false') + ')"') + '>▲</button>' +
+        '<span class="vote-score">' + c.score + '</span>' +
+        '<button type="button" class="' + (c.my_vote === -1 ? 'on-down' : '') + '" title="Downvote" ' + (canVote ? 'onclick="vote(\'' + c.id + '\', -1)"' : 'onclick="voteBlocked(' + (mine ? 'true' : 'false') + ')"') + '>▼</button>' +
+      '</span>' +
+      (!isReply && ME && ME.username ? '<button type="button" class="comment-link" onclick="toggleReply(\'' + c.id + '\')">Reply</button>' : '') +
+      (mine ? '<button type="button" class="comment-link" onclick="OPEN_EDIT=\'' + c.id + '\';OPEN_REPLY=null;renderComments()">Edit</button>' : '') +
+      ((mine || admin) ? '<button type="button" class="comment-link danger" onclick="deleteComment(\'' + c.id + '\')">Delete</button>' : '') +
+    '</div>';
+  }
+
+  var replyForm = '';
+  if (OPEN_REPLY === c.id && !isReply) {
+    replyForm = '<form class="comment-reply-form" onsubmit="postComment(event, \'' + c.id + '\')">' +
+      '<textarea id="reply-' + c.id + '" maxlength="2000" placeholder="Reply to ' + escH(c.username || '') + '…" required></textarea>' +
+      '<div class="comment-form-row" style="margin-top:6px"><span></span><div class="comment-form-actions">' +
+        '<button type="button" class="btn-ghost" onclick="toggleReply(null)">Cancel</button>' +
+        '<button type="submit" class="btn-primary">Post reply</button></div></div></form>';
+  }
+
+  return '<div class="comment' + (isReply ? ' reply' : '') + '" id="c-' + c.id + '">' +
+    avatarHtml(c) +
+    '<div class="comment-body">' + meta + text + actions + replyForm + '</div>' +
+  '</div>';
+}
+
+function toggleReply(id) {
+  OPEN_REPLY = (OPEN_REPLY === id) ? null : id;
+  OPEN_EDIT = null;
+  renderComments();
+  if (OPEN_REPLY) { var ta = document.getElementById('reply-' + OPEN_REPLY); if (ta) ta.focus(); }
+}
+
+function voteBlocked(isMine) {
+  showToast(isMine ? 'You can\'t vote on your own comment' : 'Sign in to vote');
+}
+
+// DB error messages are written for the reader (see the triggers), so they
+// go straight to the toast. Anything unexpected gets the generic line.
+function friendlyError(err) {
+  var m = err && err.message ? String(err.message) : '';
+  var ok = /posted as yourself|Complete your profile|approved builds|one level deep|deleted comment|Slow down|own comment|Only the author|Not allowed|is deleted|Comment not found/.test(m);
+  return ok ? m : 'Something went wrong — try again';
+}
+
+async function postComment(ev, parentId) {
+  ev.preventDefault();
+  if (!ME) { showToast('Sign in to comment'); return; }
+  var ta = document.getElementById(parentId ? 'reply-' + parentId : 'comment-new');
+  var body = (ta.value || '').trim();
+  if (!body) return;
+  var btn = ev.target.querySelector('button[type=submit]');
+  if (btn) btn.disabled = true;
+  var res = await sb.from('build_comments').insert({ build_id: BUILD_ID, user_id: ME.id, parent_id: parentId || null, body: body });
+  if (btn) btn.disabled = false;
+  if (res.error) { console.error(res.error); showToast(friendlyError(res.error)); return; }
+  OPEN_REPLY = null;
+  showToast(parentId ? 'Reply posted' : 'Comment posted');
+  await loadComments();
+}
+
+async function saveEdit(ev, id) {
+  ev.preventDefault();
+  var body = (document.getElementById('edit-' + id).value || '').trim();
+  if (!body) return;
+  var res = await sb.from('build_comments').update({ body: body }).eq('id', id);
+  if (res.error) { console.error(res.error); showToast(friendlyError(res.error)); return; }
+  OPEN_EDIT = null;
+  await loadComments();
+}
+
+async function deleteComment(id) {
+  if (!confirm('Delete this comment?')) return;
+  var res = await sb.from('build_comments').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (res.error) { console.error(res.error); showToast(friendlyError(res.error)); return; }
+  showToast('Comment deleted');
+  await loadComments();
+}
+
+// Click the same arrow again to clear the vote; click the other to flip.
+// Optimistic update so the arrow reacts instantly, then reload for the
+// authoritative score.
+async function vote(id, value) {
+  if (!ME) { showToast('Sign in to vote'); return; }
+  var c = COMMENTS.find(function (x) { return x.id === id; });
+  if (!c) return;
+  var prev = c.my_vote || 0;
+  var next = (prev === value) ? 0 : value;
+  c.score += next - prev;
+  c.my_vote = next || null;
+  renderComments();
+  var res = next === 0
+    ? await sb.from('build_comment_votes').delete().eq('comment_id', id).eq('user_id', ME.id)
+    : await sb.from('build_comment_votes').upsert({ comment_id: id, user_id: ME.id, value: next }, { onConflict: 'comment_id,user_id' });
+  if (res.error) { console.error(res.error); showToast(friendlyError(res.error)); }
+  await loadComments();
 }
 
 loadBuild();
