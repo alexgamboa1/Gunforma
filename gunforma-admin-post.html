@@ -480,7 +480,23 @@ const CATEGORIES = [
   { key:'magwells', label:'Magwells',               dbCategory:null },
   { key:'holsters', label:'Holsters',               dbCategory:null },
   { key:'mags',     label:'Magazines',              dbCategory:null },
-  { key:'paintjob', label:'Paint Job & Finish',     dbCategory:null },
+  // A finish is work done to the gun, not a product anyone can buy, so this
+  // category replaces the generic Brand / Part name / link form with its own
+  // fields and skips the review queue — there is no catalog listing to
+  // promote it into. See customFormFieldsHtml() and addCustomPart().
+  { key:'paintjob', label:'Paint Job & Finish',     dbCategory:null,
+    custom:{
+      toggle:'Add your paint job or finish',
+      empty:'Finishes and custom work aren\'t catalog parts. Tell us who did the work, the color, and the stipple style — it gets credited on your build.',
+      fields:[
+        { id:'shop',    placeholder:'Custom work done by (shop name, or DIY)', required:true },
+        { id:'color',   placeholder:'Color (e.g. Cerakote FDE, two-tone)' },
+        { id:'stipple', placeholder:'Stippling style (e.g. laser, hand, none)' },
+      ],
+      note:'Goes straight onto your build. Shops that show up often get featured on Gunforma.',
+      submit:'Add to build →',
+      pending:false,
+    } },
   { key:'knife',    label:'Tactical Knife',         dbCategory:null },
   { key:'misc',     label:'Miscellaneous',          dbCategory:null },
 ];
@@ -883,6 +899,29 @@ function categoryPickerState(cat) {
   return 'browsing';
 }
 
+// Body of the custom-part form. Categories carrying a custom.fields config
+// render their own inputs (id "cf-<catKey>-<fieldId>"); everything else gets
+// the default Brand / Part name / link form that files the part as pending
+// review. Placeholders are interpolated into double-quoted attributes, so a
+// double quote in one would truncate it — keep them clear of quotes.
+function customFormFieldsHtml(cat) {
+  const c = cat.custom;
+  if (c && c.fields) {
+    return c.fields.map(function (f) {
+      return '<input class="custom-link-input" type="text" placeholder="' + f.placeholder + '" id="cf-' + cat.key + '-' + f.id + '" />';
+    }).join('') +
+      '<div class="custom-part-note">' + c.note + '</div>' +
+      '<button class="custom-part-submit" onclick="addCustomPart(\'' + cat.key + '\')">' + c.submit + '</button>';
+  }
+  return '<div class="custom-part-grid">' +
+      '<input type="text" placeholder="Brand" id="cb-'+cat.key+'" />' +
+      '<input type="text" placeholder="Part name" id="cn-'+cat.key+'" />' +
+    '</div>' +
+    '<input class="custom-link-input" type="text" placeholder="Link to where you bought it (optional)" id="cl-'+cat.key+'" />' +
+    '<div class="custom-part-note">Your part goes into your build immediately as "Pending review." Once verified by Gunforma it\'s added to the catalog permanently — with your build as the first to list it.</div>' +
+    '<button class="custom-part-submit" onclick="addCustomPart(\''+cat.key+'\')">Add for review →</button>';
+}
+
 function buildCategoryBlock(cat) {
   const added  = state.parts.filter(p => p.category === cat.key);
   const isOpen = state.openPicker === cat.key;
@@ -924,7 +963,7 @@ function buildCategoryBlock(cat) {
   // Header note for non-browsing states
   const modeNote =
     mode === 'loading'  ? '<div class="picker-empty-state">Loading '+cat.label.toLowerCase()+'…</div>' :
-    mode === 'unseeded' ? '<div class="picker-empty-state" style="text-align:left;">No catalog listings yet for this category. Add your part below and Gunforma will review it — approved parts get added to the catalog for everyone.</div>' :
+    mode === 'unseeded' ? '<div class="picker-empty-state" style="text-align:left;">' + ((cat.custom && cat.custom.empty) || 'No catalog listings yet for this category. Add your part below and Gunforma will review it — approved parts get added to the catalog for everyone.') + '</div>' :
     '';
 
   const toolbarHtml = mode === 'browsing'
@@ -952,16 +991,10 @@ function buildCategoryBlock(cat) {
       '<div class="custom-part-section">' +
         '<button class="custom-part-toggle" onclick="toggleCustomForm(\''+cat.key+'\')">' +
           '<span class="custom-part-toggle-icon' + (isCust?' open':'') + '">+</span>' +
-          ' Part not listed? Add a custom part' +
+          ' ' + ((cat.custom && cat.custom.toggle) || 'Part not listed? Add a custom part') +
         '</button>' +
         '<div class="custom-part-form' + (isCust?' open':'') + '">' +
-          '<div class="custom-part-grid">' +
-            '<input type="text" placeholder="Brand" id="cb-'+cat.key+'" />' +
-            '<input type="text" placeholder="Part name" id="cn-'+cat.key+'" />' +
-          '</div>' +
-          '<input class="custom-link-input" type="text" placeholder="Link to where you bought it (optional)" id="cl-'+cat.key+'" />' +
-          '<div class="custom-part-note">Your part goes into your build immediately as "Pending review." Once verified by Gunforma it\'s added to the catalog permanently — with your build as the first to list it.</div>' +
-          '<button class="custom-part-submit" onclick="addCustomPart(\''+cat.key+'\')">Add for review →</button>' +
+          customFormFieldsHtml(cat) +
         '</div>' +
       '</div>' +
     '</div>' +
@@ -1004,6 +1037,38 @@ function addCatalogPart(k, itemId) {
   renderParts(); renderSidebar();
 }
 function addCustomPart(k) {
+  const cat = CATEGORIES.find(function (c) { return c.key === k; });
+  const custom = cat && cat.custom;
+
+  // Custom-shaped categories (paint job / finish) collapse their fields into
+  // the same brand + name pair every reader already understands, and keep the
+  // raw values under `finish` for anything that wants them later.
+  if (custom && custom.fields) {
+    const vals = {};
+    let missing = false;
+    custom.fields.forEach(function (f) {
+      const el = document.getElementById('cf-' + k + '-' + f.id);
+      vals[f.id] = ((el && el.value) || '').trim();
+      if (f.required && !vals[f.id]) missing = true;
+    });
+    if (missing) return;
+    // A shop name on its own describes no finish, so one of the two
+    // descriptive fields has to be filled in. Scoped to configs that
+    // actually declare them.
+    const hasDesc = ('color' in vals) && ('stipple' in vals);
+    if (hasDesc && !vals.color && !vals.stipple) return;
+    const name = [vals.color, vals.stipple ? vals.stipple + ' stipple' : '']
+      .filter(Boolean).join(' · ');
+    state.parts.push({
+      uid:'p'+(uid++), refId:null, category:k,
+      brand: vals.shop, name: name, pending: !!custom.pending,
+      finish: { shop: vals.shop, color: vals.color, stipple: vals.stipple },
+    });
+    state.customOpen = null;
+    renderParts(); renderSidebar();
+    return;
+  }
+
   const brand = (document.getElementById('cb-'+k).value||'').trim();
   const name  = (document.getElementById('cn-'+k).value||'').trim();
   if (!brand||!name) return;
@@ -1060,7 +1125,11 @@ function setCheck(id,done) {
 // the catalog).
 function buildPartsSnapshot() {
   return state.parts.map(function(p) {
-    return { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+    const row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+    // Only finish-style entries carry this. Build detail, build-og and the
+    // armory all render brand + name, so the row stays readable to them.
+    if (p.finish) row.finish = p.finish;
+    return row;
   });
 }
 
