@@ -35,9 +35,9 @@
 -- uploads, avatar uploads and photo deletion — none of which touch the
 -- product-images bucket at all.
 --
--- Window: 2026-09-22 (when the revoke was applied) to 2026-09-25 — three
--- days, silently. The only symptom anyone saw was a generic "Upload failed"
--- toast; nothing surfaced the 42501 or named profiles.
+-- Window: 2026-09-22 17:42 UTC to 2026-09-25 ~18:50 UTC — three days,
+-- silently. The only symptom anyone saw was a generic "Upload failed" toast;
+-- nothing surfaced the 42501 or named profiles.
 --
 -- THE FIX
 -- Call public.is_admin() instead. It is SECURITY DEFINER with a pinned
@@ -82,12 +82,25 @@ commit;
 -- is deliberately left alone.
 
 -- ============================================================
--- APPLIED 2026-09-25 to project lagjjcpclvzrjlrswojt.
+-- APPLIED 2026-09-25 ~18:50 UTC to project lagjjcpclvzrjlrswojt.
 -- Verified live after the change:
 --
 --   zero policies on storage.objects reference profiles
 --   four build photos uploaded successfully, from the same account that had
 --     been getting 400s throughout the window above
+--
+-- Outage bounds, from supabase_migrations.schema_migrations:
+--
+--   20260922170455  get_my_profile_rpc              prerequisite
+--   20260922174215  profiles_revoke_hidden_columns  outage starts here
+--   2026-09-25 ~18:50 UTC  this file                outage ends
+--
+-- The revoke ran after its prerequisite, so the table-level SELECT grant on
+-- profiles existed right up to 17:42 on the 22nd and the outage cannot
+-- predate it. Three days, not the nine an earlier draft of this note
+-- guessed at: storage.objects has no rows created after 2026-09-16, but
+-- that gap is quiet traffic, not breakage — there were no uploads on the
+-- 17th through the 21st either, while the grant was still in place.
 --
 -- Note for anyone reading the history: an earlier revision of this file
 -- carried a NOT YET APPLIED status, recorded on 2026-09-25 from a read-only
