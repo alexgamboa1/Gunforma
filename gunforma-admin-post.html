@@ -439,6 +439,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
 <script src="js/supabase-client.js"></script>
+<script src="js/redact.js"></script>
 <script>
 var sb = window.sb;
 var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
@@ -756,6 +757,20 @@ async function processFile(file) {
     photoError('That photo is too large — please choose one under 8MB.');
     return;
   }
+
+  // Redact-before-upload gate. Opens a modal where the user can pixelate
+  // sensitive regions (serial numbers, faces, addresses) at full resolution.
+  // The resulting File is what continues down the pipeline — nothing
+  // unredacted ever reaches normalizeImage/upload/preview.
+  //   - resolves(File) → user hit Done (with boxes) or Skip
+  //   - resolves(null) → user cancelled (Escape / outside click)
+  // Same gate, same place in the pipeline, as gunforma-post-build.html —
+  // both call the one copy in js/redact.js. Posting on someone else's
+  // behalf is exactly when a serial is most likely to slip through, since
+  // the photo came from them and the admin may never have looked closely.
+  const redactedFile = await openRedactModal(file);
+  if (!redactedFile) return;
+  file = redactedFile;
 
   setSlotUploading(slot);
 
