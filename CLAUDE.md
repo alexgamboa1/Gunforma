@@ -559,3 +559,36 @@ table underneath still reads correctly. That split is what hid 16 Sig Sauer
 Romeo variants whose `reticle` was swapped between the 3 MOA and 6 MOA rows.
 
 `variant_label` overrides the computed label verbatim when non-empty.
+
+### The redact modal is not on that list, and must not join it
+
+The pre-upload photo redaction modal — markup, CSS and JS — lives in
+**`js/redact.js` and nowhere else**. It is loaded as a plain `<script src>`
+global by the two pages that upload a build photo:
+
+- `gunforma-post-build.html` — a builder posting their own build
+- `gunforma-admin-post.html` — an admin posting on a builder's behalf
+
+The module injects its own markup into `document.body` and its own CSS into
+`document.head` on the first call, so a page adds the script tag and nothing
+else. The whole public surface is one function:
+
+```js
+const redactedFile = await openRedactModal(file);   // File | null
+if (!redactedFile) return;                          // null = user cancelled
+file = redactedFile;
+```
+
+Call it **after the type and size checks and before `normalizeImage`**, so
+nothing unredacted ever reaches normalize, upload or preview. Both pages call
+it at that exact point; their `processFile` bodies are otherwise identical
+apart from `currentUser` vs `currentAdmin`.
+
+Do not inline any part of it into a page, and do not copy it to a third
+upload path — add the script tag and the four lines above. The admin page is
+the worked example of what the copy would have cost: it shipped running the
+same validate → normalize → upload pipeline with no redaction gate at all,
+so there was no way to blur a serial when posting on someone else's
+behalf — the case where it matters most, because the photo came from the
+builder and the admin may never have looked closely. The fix was to extract
+the one copy, not to grow a second.
