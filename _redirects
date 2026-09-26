@@ -5,6 +5,7 @@
 /builds        /gunforma-builds.html              200
 /post-build    /gunforma-post-build.html          200
 /build         /gunforma-build-detail.html        200
+/admin-post    /gunforma-admin-post.html          200
 /admin         /gunforma-admin-queue.html         200
 /field-notes   /field-notes.html                  200
 
