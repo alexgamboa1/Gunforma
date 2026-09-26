@@ -420,8 +420,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <button class="btn-block blue" id="post-another-btn" onclick="postAnother()" style="display:none;margin-top:10px;background:#22a06b;">Post another →</button>
   </div>
 
+  <!-- Reused for both outcomes: publishBuild() recolours it and swaps the
+       title, so the title carries an id rather than being anonymous markup.
+       Neither path may replace this element's innerHTML — that would drop
+       #post-result-body and break whichever outcome came second. -->
   <div class="mod-note" id="post-result-note" style="display:none;background:#e8f5ee;border-color:#86cfad;color:#166534;">
-    <strong>Published</strong>
+    <strong id="post-result-title">Published</strong>
     <div id="post-result-body" style="font-size:11px;line-height:1.6;"></div>
   </div>
 
@@ -1186,10 +1190,71 @@ async function submitBuild() {
 
   if (photoRows.length) {
     const { error: photoErr } = await sb.from('build_photos').insert(photoRows);
-    if (photoErr) return { error: photoErr, buildId: buildId };
+    if (photoErr) {
+      // Roll the build row back before surfacing the error.
+      //
+      // Without this the build is already committed and live: approved,
+      // ownerless and photo-less, with the admin seeing only a failure. On
+      // 2026-09-26 that turned one failed publish into seven orphaned public
+      // builds, because every retry inserted another one.
+      //
+      // .select('id') so the delete RETURNs what it removed. An RLS-filtered
+      // DELETE that matches nothing returns success with zero rows, so
+      // checking only `error` would report a clean rollback while the orphan
+      // is still live — the same silent-success shape as the photo insert
+      // this is cleaning up after.
+      const { data: deleted, error: rollbackErr } =
+        await sb.from('builds').delete().eq('id', buildId).select('id');
+      const rolledBack = !rollbackErr && Array.isArray(deleted) && deleted.length === 1;
+      return {
+        error: photoErr,
+        buildId: buildId,
+        stage: 'photos',
+        rolledBack: rolledBack,
+        rollbackError: rollbackErr || (rolledBack ? null : { message: 'delete removed no rows — build may still be live' }),
+      };
+    }
   }
 
   return { error: null, buildId: buildId };
+}
+
+// Flattens a PostgREST error into something an admin can act on. The generic
+// "Publish failed — see console" was most of why the 2026-09-26 orphans went
+// unnoticed: the real refusal was a 42501 from a missing INSERT policy, and
+// nothing on screen said so. code/details/hint are where PostgREST puts the
+// part that matters.
+function describeError(err) {
+  if (!err) return 'unknown error';
+  const bits = [];
+  if (err.code)    bits.push('code ' + err.code);
+  if (err.message) bits.push(err.message);
+  if (err.details) bits.push('details: ' + err.details);
+  if (err.hint)    bits.push('hint: ' + err.hint);
+  return bits.length ? bits.join(' · ') : String(err);
+}
+
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (ch) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+  });
+}
+
+// Single writer for the result note, because both outcomes share the element
+// and an admin can hit both in one session. Sets the colours AND the title
+// every time, so a success after a failure doesn't inherit red styling or a
+// stale "Publish failed" heading. Writes into #post-result-body rather than
+// replacing the note's innerHTML, which would delete that element and break
+// whichever outcome came second.
+function setResultNote(kind, title, bodyHtml) {
+  const note = document.getElementById('post-result-note');
+  const ok = kind === 'ok';
+  note.style.background  = ok ? '#e8f5ee' : '#fde8e2';
+  note.style.borderColor = ok ? '#86cfad' : '#f5b4a1';
+  note.style.color       = ok ? '#166534' : '#9b1c1c';
+  document.getElementById('post-result-title').textContent = title;
+  document.getElementById('post-result-body').innerHTML = bodyHtml;
+  note.style.display = 'block';
 }
 
 async function publishBuild() {
@@ -1201,19 +1266,36 @@ async function publishBuild() {
   const result = await submitBuild();
 
   if (result.error) {
-    console.error(result.error);
+    console.error(result.error, result.rollbackError || '');
     btn.disabled = false;
     btn.textContent = 'Publish build (approved)';
-    showToast('Publish failed — ' + (result.error.message || 'see console'));
+
+    // Shown in the result note rather than only a toast: a toast disappears,
+    // and this is the text an admin needs to read, copy and act on. The
+    // rollback line is the load-bearing one — it says whether a retry starts
+    // clean or whether something is already live and needs deleting by hand.
+    let rollbackLine = '';
+    if (result.stage === 'photos') {
+      rollbackLine = result.rolledBack
+        ? '<div style="margin-top:6px;">The build row was rolled back — nothing was published, so a retry starts clean.</div>'
+        : '<div style="margin-top:6px;"><strong>Rollback failed.</strong> Build <code style="font-size:10px;">' + esc(result.buildId) +
+          '</code> may still be live and needs deleting by hand: ' + esc(describeError(result.rollbackError)) + '</div>';
+    }
+
+    setResultNote('fail', 'Publish failed',
+      '<div>' + esc(describeError(result.error)) + '</div>' + rollbackLine);
+
+    showToast('Publish failed — ' + (result.error.message || 'see the note above'));
     return;
   }
 
   const detailUrl = 'gunforma-build-detail.html?id=' + encodeURIComponent(result.buildId);
-  const note = document.getElementById('post-result-note');
-  document.getElementById('post-result-body').innerHTML =
-    '<div style="margin-bottom:6px;">Build UUID: <code style="font-size:10px;">' + result.buildId + '</code></div>' +
-    '<a href="' + detailUrl + '" target="_blank" style="color:#166534;font-weight:700;text-decoration:underline;">Open build detail →</a>';
-  note.style.display = 'block';
+  // Goes through setResultNote so a success after a failed attempt resets the
+  // red styling and the title, instead of showing "Publish failed" in red
+  // above a successful publish.
+  setResultNote('ok', 'Published',
+    '<div style="margin-bottom:6px;">Build UUID: <code style="font-size:10px;">' + esc(result.buildId) + '</code></div>' +
+    '<a href="' + esc(detailUrl) + '" target="_blank" style="color:#166534;font-weight:700;text-decoration:underline;">Open build detail →</a>');
 
   btn.style.display = 'none';
   document.getElementById('post-another-btn').style.display = 'block';
