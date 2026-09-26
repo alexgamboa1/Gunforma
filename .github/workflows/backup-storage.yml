@@ -49,9 +49,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -95,7 +95,7 @@ jobs:
       # Tier 1 — always. Uploaded before the R2 step so that an R2
       # misconfiguration cannot cost us the copy we already have in hand.
       - name: Upload backup artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: storage-backup
           path: storage-backup
@@ -104,7 +104,7 @@ jobs:
 
       # The manifest again on its own, so the next run can fetch just this.
       - name: Upload manifest artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: storage-manifest
           path: storage-backup/manifest.json
