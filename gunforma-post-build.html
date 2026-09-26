@@ -86,7 +86,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .platform-change { font-size: 11px; color: #6fb4e8; background: none; border: 0.5px solid #3a3b3e; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; }
 
 /* PHOTOS */
-.photo-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 8px; }
+/* Square slots (matching .existing-photo below), hero still visibly bigger:
+   the hero column is 1.6fr and every slot is aspect-ratio 1/1, so the hero
+   is a larger SQUARE rather than a wider letterbox. align-items:center
+   floats the three smaller squares on the hero's centreline instead of
+   stretching them back into portraits. */
+.photo-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 8px; align-items: center; }
 .existing-photos { display: none; margin-bottom: 12px; }
 .existing-photos.show { display: block; }
 .existing-photos-label { font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
@@ -102,8 +107,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .existing-photo.marked .existing-photo-del::before { content: '↺'; }
 .existing-photo.marked .existing-photo-del-x { display: none; }
 .existing-photos-hint { font-size: 10.5px; color: #888; margin-top: 6px; }
-.photo-slot { background: #fafaf8; border: 1px dashed #d9d6cc; border-radius: 6px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.15s; text-align: center; padding: 8px; position: relative; overflow: hidden; }
+.photo-slot { background: #fafaf8; border: 1px dashed #d9d6cc; border-radius: 6px; aspect-ratio: 1/1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.15s; text-align: center; padding: 8px; position: relative; overflow: hidden; }
 .photo-slot:hover { border-color: #4a9edd; background: #f0f6fc; }
+/* The slot is the control now — see .photo-slot-hint — so it is in the tab
+   order and has to show where focus is. */
+.photo-slot:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; }
 .photo-slot.filled { border-style: solid; border-color: #4a9edd; background: #eaf4fc; }
 .photo-slot.uploading { border-style: solid; border-color: #f9b860; background: #fef3e2; cursor: default; }
 .photo-slot.error { border-style: solid; border-color: #e25c3a; background: #fde8e2; }
@@ -113,20 +121,72 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .photo-slot.filled .photo-slot-label { color: #1d6fb8; font-weight: 700; }
 .photo-slot-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
 .photo-slot.filled .photo-slot-preview { display: block; }
-.photo-slot.filled .photo-slot-icon, .photo-slot.filled .photo-slot-label { text-shadow: 0 1px 3px rgba(0,0,0,0.6); color: #fff; }
+/* A filled slot is now big enough to actually read, so the ✓ and its label
+   stop sitting in the middle of the photo the user is trying to look at.
+   The JS still writes them (setSlotFilled/clearSlot are untouched); they
+   are just not shown once there is an image behind them. */
+.photo-slot.filled .photo-slot-icon, .photo-slot.filled .photo-slot-label { display: none; }
 /* Hero-badge + hover actions + drag-over target state */
 .photo-slot-hero-badge { position: absolute; top: 6px; left: 6px; z-index: 3; display: none; background: #f9b860; color: #4a3c14; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.1em; text-transform: uppercase; pointer-events: none; }
 .photo-slot.filled[data-slot="hero"] .photo-slot-hero-badge { display: block; }
-.photo-slot-actions { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: flex; gap: 6px; padding: 6px 8px; background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0) 100%); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
-.photo-slot.filled .photo-slot-actions { pointer-events: auto; }
-.photo-slot.filled:hover .photo-slot-actions { opacity: 1; }
-.photo-slot-action-btn { background: rgba(255,255,255,0.94); border: none; color: #1a1a1a; font-size: 10px; font-weight: 700; padding: 5px 9px; border-radius: 4px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; }
-.photo-slot-action-btn:hover { background: #fff; }
-.photo-slot-action-btn.danger:hover { color: #c25d3a; }
-.photo-slot[data-slot="hero"] .photo-slot-set-main-btn { display: none; }
+/* This strip used to hold a Set-as-main and a Remove button revealed on
+   :hover. It only ever animated OPACITY, while `.photo-slot.filled
+   .photo-slot-actions` set pointer-events:auto unconditionally — so on a
+   filled slot both buttons stayed hit-testable and focusable while
+   invisible. Measured on the real page: they sat at tab position 11 of 35,
+   opacity:0 hides the focus ring too, and Enter on the unseeable one
+   deleted the photo and its storage objects. Every action they offered is
+   now in the preview overlay that a tap or click on the photo opens, so
+   what is left here is a caption: no buttons, nothing focusable, and
+   pointer-events:none so the click always reaches the slot. */
+.photo-slot-hint { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: none; align-items: center; justify-content: center; gap: 5px; padding: 7px 8px; background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0) 100%); color: #fff; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; }
+.photo-slot.filled .photo-slot-hint { display: flex; }
 .photo-slot.drag-over { border-style: dashed !important; border-color: #d4a853 !important; background: #fdf6e6 !important; transform: scale(1.02); transition: transform 0.1s, border-color 0.1s, background 0.1s; }
-/* Touch devices can't hover — always show actions on filled slots */
-@media (hover: none) { .photo-slot.filled .photo-slot-actions { opacity: 1; } }
+
+/* ===== PHOTO PREVIEW — the whole photo, uncropped =====
+   A slot thumbnail is square and object-fit:cover, which answers "is there
+   a photo here" and cannot answer "did the blur actually land on the
+   serial". This is where that gets confirmed, at the largest size the
+   screen allows, before the build is submitted. Sits BELOW the redact
+   modal's z-index on purpose: Edit blur hands off to that modal. */
+.photo-preview { position: fixed; inset: 0; z-index: 900; background: rgba(14,15,17,0.9); display: none; align-items: center; justify-content: center; padding: 20px; }
+.photo-preview.open { display: flex; }
+.photo-preview-panel { background: #fff; border-radius: 8px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); width: 100%; max-width: 1100px; height: calc(100vh - 40px); display: flex; flex-direction: column; overflow: hidden; }
+.photo-preview-head { padding: 12px 18px; border-bottom: 0.5px solid #e5e5e5; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.photo-preview-title { font-size: 13px; font-weight: 700; color: #1a1a1a; letter-spacing: 0.04em; }
+.photo-preview-sub { font-size: 11px; color: #666; }
+/* Dark stage + object-fit:contain — the whole frame, letterboxed against
+   the backdrop rather than cropped to fill. */
+.photo-preview-stage { flex: 1; min-height: 150px; background: #14151a; display: flex; align-items: center; justify-content: center; padding: 12px; overflow: hidden; }
+.photo-preview-stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.photo-preview-bar { padding: 12px 18px; border-top: 0.5px solid #e5e5e5; background: #fafaf8; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.photo-preview-btn { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 9px 14px; border-radius: 4px; cursor: pointer; border: 0.5px solid #d9d6cc; background: #fff; color: #444; transition: filter 0.15s, background 0.15s; }
+.photo-preview-btn:hover { filter: brightness(1.05); }
+.photo-preview-btn.danger { color: #c25d3a; border-color: #e6c3b6; }
+.photo-preview-btn.danger:hover { background: #fdf0ec; }
+.photo-preview-btn.primary { background: #4a9edd; color: #fff; border-color: #4a9edd; margin-left: auto; }
+
+@media (max-width: 640px) {
+  .photo-preview { padding: 0; }
+  .photo-preview-panel {
+    max-width: none; border-radius: 0;
+    height: 100vh;
+    /* Same lesson as the redact modal: vh keeps the tall value while
+       Safari's URL bar is collapsing and pushes the action row off the
+       bottom; dvh tracks it. The vh line above is the fallback. */
+    height: 100dvh;
+  }
+  .photo-preview-head { padding: 10px 12px; }
+  .photo-preview-sub { display: none; }
+  .photo-preview-stage { padding: 6px; }
+  /* Three actions on one row, Done on its own — four across a 375px phone
+     leaves each one too narrow to hit, and Remove is the last button that
+     should be cramped next to anything. The bottom padding clears the
+     iPhone home indicator the same way the redact toolbar does. */
+  .photo-preview-bar { padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+  .photo-preview-btn { flex: 1; min-width: 0; padding: 11px 6px; font-size: 11px; text-align: center; }
+  .photo-preview-btn.primary { margin-left: 0; flex-basis: 100%; order: 9; }
+}
 
 /* FORM */
 .field { margin-bottom: 16px; }
@@ -326,57 +386,49 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="existing-photos-hint">Kept as-is on this edit. Add more below.</div>
     </div>
     <div class="photo-grid">
-      <div class="photo-slot" data-slot="hero" id="slot-hero"
+      <div class="photo-slot" data-slot="hero" id="slot-hero" role="button" tabindex="0"
            onclick="onSlotClick('hero')"
+           onkeydown="onSlotKey(event,'hero')"
            ondragover="onSlotDragOver(event,'hero')"
            ondragleave="onSlotDragLeave(event,'hero')"
            ondrop="onSlotDrop(event,'hero')">
-        <img class="photo-slot-preview" id="preview-hero" />
+        <img class="photo-slot-preview" id="preview-hero" alt="" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add hero photo</div>
         <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('hero')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('hero')">✕ Remove</button>
-        </div>
+        <div class="photo-slot-hint">⤢ View &amp; edit</div>
       </div>
-      <div class="photo-slot" data-slot="g1" id="slot-g1"
+      <div class="photo-slot" data-slot="g1" id="slot-g1" role="button" tabindex="0"
            onclick="onSlotClick('g1')"
+           onkeydown="onSlotKey(event,'g1')"
            ondragover="onSlotDragOver(event,'g1')"
            ondragleave="onSlotDragLeave(event,'g1')"
            ondrop="onSlotDrop(event,'g1')">
-        <img class="photo-slot-preview" id="preview-g1" />
+        <img class="photo-slot-preview" id="preview-g1" alt="" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
         <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g1')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g1')">✕ Remove</button>
-        </div>
+        <div class="photo-slot-hint">⤢ View &amp; edit</div>
       </div>
-      <div class="photo-slot" data-slot="g2" id="slot-g2"
+      <div class="photo-slot" data-slot="g2" id="slot-g2" role="button" tabindex="0"
            onclick="onSlotClick('g2')"
+           onkeydown="onSlotKey(event,'g2')"
            ondragover="onSlotDragOver(event,'g2')"
            ondragleave="onSlotDragLeave(event,'g2')"
            ondrop="onSlotDrop(event,'g2')">
-        <img class="photo-slot-preview" id="preview-g2" />
+        <img class="photo-slot-preview" id="preview-g2" alt="" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
         <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g2')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g2')">✕ Remove</button>
-        </div>
+        <div class="photo-slot-hint">⤢ View &amp; edit</div>
       </div>
-      <div class="photo-slot" data-slot="g3" id="slot-g3"
+      <div class="photo-slot" data-slot="g3" id="slot-g3" role="button" tabindex="0"
            onclick="onSlotClick('g3')"
+           onkeydown="onSlotKey(event,'g3')"
            ondragover="onSlotDragOver(event,'g3')"
            ondragleave="onSlotDragLeave(event,'g3')"
            ondrop="onSlotDrop(event,'g3')">
-        <img class="photo-slot-preview" id="preview-g3" />
+        <img class="photo-slot-preview" id="preview-g3" alt="" />
         <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
         <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g3')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g3')">✕ Remove</button>
-        </div>
+        <div class="photo-slot-hint">⤢ View &amp; edit</div>
       </div>
     </div>
     <div class="field-sub" id="photo-error" style="color:#c25d3a;display:none;"></div>
@@ -465,6 +517,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <div id="footer-mount" data-footer="legal"></div>
+
+<!-- PHOTO PREVIEW — the full, uncropped photo, with the actions that used to
+     live in the slot's hover strip. Opened by a tap or a click on a filled
+     slot. The point is confirmation: a 1/1 cover-cropped thumbnail cannot
+     show whether a blur actually covered a serial number, and that has to be
+     checkable before the build is submitted rather than after. -->
+<div class="photo-preview" id="photo-preview" role="dialog" aria-modal="true"
+     aria-label="Photo preview" onclick="onPhotoPreviewBackdrop(event)">
+  <div class="photo-preview-panel">
+    <div class="photo-preview-head">
+      <span class="photo-preview-title" id="photo-preview-title">Photo</span>
+      <span class="photo-preview-sub">Check that anything you blurred is actually covered before you post.</span>
+    </div>
+    <div class="photo-preview-stage">
+      <img id="photo-preview-img" alt="Full-size view of the photo you added" />
+    </div>
+    <div class="photo-preview-bar">
+      <button type="button" class="photo-preview-btn" id="photo-preview-edit" onclick="previewEditBlur()">✎ Edit blur</button>
+      <button type="button" class="photo-preview-btn" id="photo-preview-hero" onclick="previewSetAsHero()">★ Set as main</button>
+      <button type="button" class="photo-preview-btn danger" id="photo-preview-remove" onclick="previewRemove()">✕ Remove</button>
+      <button type="button" class="photo-preview-btn primary" id="photo-preview-done" onclick="closePhotoPreview()">Done</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
@@ -758,9 +834,22 @@ let activeSlot = null;
 
 function onSlotClick(slot) {
   const cur = state.photos[slot];
-  if (cur) return;                               // filled slots use the action buttons
+  if (cur && cur.uploading) return;
+  // A filled slot opens the photo full size. It used to do nothing at all,
+  // which left the hover-only action strip as the only way to touch a
+  // photo once it was uploaded — and no way whatsoever to look at one.
+  if (cur) { openPhotoPreview(slot); return; }
   activeSlot = slot;
   document.getElementById('photo-file-input').click();
+}
+
+// The slot carries the click now, so it is in the tab order (role=button,
+// tabindex=0) and has to answer the keyboard too. The only focusable things
+// in here used to be the two invisible buttons in the hover strip.
+function onSlotKey(e, slot) {
+  if (e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+  e.preventDefault();
+  onSlotClick(slot);
 }
 
 // Drag-and-drop from Finder/desktop straight onto a slot. The drop path
@@ -872,7 +961,13 @@ async function processFile(file) {
     return;
   }
 
+  // Two object URLs per photo: the thumb drives the slot, the display
+  // version drives the full-size preview. displayBlob itself is kept
+  // because "Edit blur" re-opens the redact modal on it — that blob is the
+  // redacted image as uploaded, so more blur lands on top of the blur
+  // already there. The unredacted original is deliberately never kept.
   const previewUrl = URL.createObjectURL(thumbBlob);
+  const displayUrl = URL.createObjectURL(displayBlob);
   setSlotPreview(slot, previewUrl);
 
   const base = currentUser.id + '/' + draftId + '/' + slot + '-' + Date.now();
@@ -890,10 +985,14 @@ async function processFile(file) {
     if (!thumbRes.error) sb.storage.from('build-photos').remove([thumbPath]);
     photoError('Upload failed — try again.');
     clearSlot(slot);
+    revokeSlotUrls({ previewUrl: previewUrl, displayUrl: displayUrl });
     return;
   }
 
-  state.photos[slot] = { path: path, thumbPath: thumbPath, uploading: false, previewUrl: previewUrl };
+  state.photos[slot] = {
+    path: path, thumbPath: thumbPath, uploading: false,
+    previewUrl: previewUrl, displayUrl: displayUrl, displayBlob: displayBlob,
+  };
   setSlotFilled(slot);
   renderSidebar();
 }
@@ -946,8 +1045,36 @@ async function removePhoto(slot) {
   state.photos[slot] = null;
   clearSlot(slot);
   renderSidebar();
-  const { error } = await sb.storage.from('build-photos').remove([cur.path, cur.thumbPath].filter(Boolean));
-  if (error) console.error(error);   // slot is already cleared client-side either way
+  revokeSlotUrls(cur);
+  // Slot is already cleared client-side either way — but see
+  // deleteStoragePaths for why a null error is not the thing to check.
+  await deleteStoragePaths([cur.path, cur.thumbPath].filter(Boolean), 'a removed photo');
+}
+
+function revokeSlotUrls(entry) {
+  if (!entry) return;
+  [entry.previewUrl, entry.displayUrl].forEach(function (u) {
+    if (u) { try { URL.revokeObjectURL(u); } catch (_) { /* already revoked */ } }
+  });
+}
+
+// storage.remove() resolves with the list of objects it ACTUALLY deleted,
+// and that list is the fact worth reading. A null error says only that the
+// request was accepted — a key that matched nothing comes back exactly the
+// same way. Re-fetching the public URL is not a check either: a deleted
+// object still answers 200 from the CDN, so that question has to be put to
+// object metadata rather than to the cache.
+async function deleteStoragePaths(paths, what) {
+  if (!paths.length) return true;
+  const { data, error } = await sb.storage.from('build-photos').remove(paths);
+  if (error) { console.error('storage delete failed for ' + what + ':', error); return false; }
+  const gone = Array.isArray(data) ? data.length : 0;
+  if (gone !== paths.length) {
+    console.warn('storage delete matched only ' + gone + ' of ' + paths.length +
+                 ' objects for ' + what + ':', paths, data);
+    return false;
+  }
+  return true;
 }
 
 function setSlotUploading(slot) {
@@ -966,6 +1093,137 @@ function setSlotFilled(slot) {
   el.querySelector('.photo-slot-icon').textContent = '✓';
   el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Hero photo set' : 'Photo added';
 }
+// ===== PHOTO PREVIEW =====
+// A slot is a square, cover-cropped thumbnail. That is enough to answer
+// "is there a photo here" and useless for "did the blur land on the
+// serial" — so tapping or clicking a filled slot opens the photo at the
+// largest size the screen allows, with the actions that used to be hidden
+// in the slot's hover strip. Nothing here touches the database; the photo
+// is already in storage and these only change which object a slot points
+// at, which is what the submit step reads.
+
+let previewSlot = null;   // slot key the overlay is currently showing
+
+function openPhotoPreview(slot) {
+  const data = state.photos[slot];
+  if (!data || data.uploading) return;
+  previewSlot = slot;
+  // displayUrl is the 1600px version; previewUrl (the 480px thumb) is only
+  // a fallback for an entry that predates it.
+  document.getElementById('photo-preview-img').src = data.displayUrl || data.previewUrl;
+  document.getElementById('photo-preview-title').textContent = slot === 'hero' ? '★ Main photo' : 'Photo';
+  // Nothing to promote when you are already looking at the main photo.
+  document.getElementById('photo-preview-hero').style.display = slot === 'hero' ? 'none' : '';
+  document.getElementById('photo-preview').classList.add('open');
+  document.addEventListener('keydown', onPhotoPreviewKey);
+  document.getElementById('photo-preview-done').focus();
+}
+
+function closePhotoPreview() {
+  previewSlot = null;
+  document.getElementById('photo-preview').classList.remove('open');
+  // Drop the src so a removed photo is not still being held open here.
+  document.getElementById('photo-preview-img').removeAttribute('src');
+  document.removeEventListener('keydown', onPhotoPreviewKey);
+}
+function onPhotoPreviewKey(e) { if (e.key === 'Escape') closePhotoPreview(); }
+function onPhotoPreviewBackdrop(e) { if (e.target.id === 'photo-preview') closePhotoPreview(); }
+
+// setAsHero swaps the two slots' entries, so the photo on screen moves to
+// the 'hero' key. Re-open on that key rather than closing — the user asked
+// to promote this photo, not to stop looking at it.
+function previewSetAsHero() {
+  const slot = previewSlot;
+  if (!slot || slot === 'hero') return;
+  setAsHero(slot);
+  openPhotoPreview('hero');
+}
+
+// Close first: the thing the overlay is showing is about to stop existing.
+async function previewRemove() {
+  const slot = previewSlot;
+  if (!slot) return;
+  closePhotoPreview();
+  await removePhoto(slot);
+}
+
+// Re-open the redact modal on a photo that is already uploaded, so more
+// blur can be added once it has been seen full size. The modal is fed the
+// display blob kept by processFile — the redacted image as uploaded — so
+// new boxes stack on the existing blur instead of starting from an
+// original this page never retains.
+async function previewEditBlur() {
+  const slot = previewSlot;
+  const data = slot && state.photos[slot];
+  if (!data || data.uploading || !data.displayBlob) return;
+  closePhotoPreview();                                  // the redact modal takes the screen
+  const input = new File([data.displayBlob], 'photo.jpg', { type: 'image/jpeg' });
+  const out = await openRedactModal(input);
+  // null = cancelled, and Skip resolves the SAME File object back. Neither
+  // is a change, so nothing is re-uploaded and nothing is deleted.
+  if (!out || out === input) { openPhotoPreview(slot); return; }
+  const replaced = await replaceSlotPhoto(slot, out);
+  if (replaced) openPhotoPreview(slot);
+}
+
+// Swap a slot's uploaded photo for a newly redacted version of itself.
+// Order matters: the new objects go up FIRST and the old ones come down
+// only once the new ones are stored. The other order loses the photo
+// outright if the upload fails — and the copy being deleted here is the
+// one with LESS blur on it, so leaving it behind on a failure is the safe
+// direction to fail in.
+async function replaceSlotPhoto(slot, file) {
+  const old = state.photos[slot];
+  if (!old) return false;
+  photoError('');
+  setSlotUploading(slot);
+
+  let normalized;
+  try {
+    normalized = await normalizeImage(file);
+  } catch (e) {
+    console.error(e);
+    photoError('Couldn\'t re-encode that photo — the one you had is untouched.');
+    state.photos[slot] = old; syncSlotUI(slot); renderSidebar();
+    return false;
+  }
+
+  const base = currentUser.id + '/' + draftId + '/' + slot + '-' + Date.now();
+  const path = base + '.jpg';
+  const thumbPath = base + '-thumb.jpg';
+
+  const [displayRes, thumbRes] = await Promise.all([
+    sb.storage.from('build-photos').upload(path, normalized.displayBlob, { contentType: 'image/jpeg', upsert: false }),
+    sb.storage.from('build-photos').upload(thumbPath, normalized.thumbBlob, { contentType: 'image/jpeg', upsert: false }),
+  ]);
+
+  if (displayRes.error || thumbRes.error) {
+    console.error(displayRes.error || thumbRes.error);
+    if (!displayRes.error) sb.storage.from('build-photos').remove([path]);
+    if (!thumbRes.error) sb.storage.from('build-photos').remove([thumbPath]);
+    photoError('Upload failed — the photo you had is still there, with the blur it already had.');
+    state.photos[slot] = old; syncSlotUI(slot); renderSidebar();
+    return false;
+  }
+
+  const previewUrl = URL.createObjectURL(normalized.thumbBlob);
+  const displayUrl = URL.createObjectURL(normalized.displayBlob);
+  state.photos[slot] = {
+    path: path, thumbPath: thumbPath, uploading: false,
+    previewUrl: previewUrl, displayUrl: displayUrl, displayBlob: normalized.displayBlob,
+  };
+  setSlotPreview(slot, previewUrl);
+  setSlotFilled(slot);
+  renderSidebar();
+  revokeSlotUrls(old);
+
+  // Only now is the less-redacted copy safe to destroy. It must not
+  // survive: it is the same photo with less of it covered up.
+  await deleteStoragePaths([old.path, old.thumbPath].filter(Boolean),
+                           'the pre-blur copy of a re-blurred photo');
+  return true;
+}
+
 function clearSlot(slot) {
   const el = document.getElementById('slot-' + slot);
   el.classList.remove('filled','uploading','error');
