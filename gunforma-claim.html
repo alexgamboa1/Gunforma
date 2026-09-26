@@ -246,6 +246,10 @@ var usernameValid = false;
       .from('builds')
       .select('id, name, platforms(name), build_photos(storage_path, thumb_path, is_hero, position)')
       .eq('user_id', CURRENT_USER.id)
+      // PostgREST returns rows in arbitrary order, so .limit(1) on its own
+      // picks a different build run to run for anyone with more than one.
+      // Newest first, matching how the rest of the site orders builds.
+      .order('created_at', { ascending: false })
       .limit(1);
     if (builds && builds.length) {
       var b = builds[0];
@@ -276,7 +280,11 @@ function showExpired() {
     '<div class="state-expired">'+
       '<div class="state-expired-icon">✖</div>'+
       '<div class="state-title">This invite link has expired or was already used</div>'+
-      '<div class="state-sub">Invites are single-use. If you’ve already claimed your account, just sign in.</div>'+
+      // Invited users were created by auth.admin.inviteUserByEmail and never
+      // set a password, so "just sign in" was a dead end for exactly the
+      // people who land here. Send them to the reset instead. The label
+      // matches the link on gunforma-signin.html verbatim.
+      '<div class="state-sub">Invites are single-use. If you’ve already claimed your account, sign in below — and if you never set a password, use <strong>Forgot password?</strong> on the sign-in page to create one.</div>'+
       '<a class="btn-submit" href="gunforma-signin.html" style="text-decoration:none;">Go to sign in →</a>'+
     '</div>';
 }
