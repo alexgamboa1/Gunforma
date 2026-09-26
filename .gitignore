@@ -6,8 +6,10 @@ node_modules/
 # Local Netlify folder
 .netlify
 
-# PII — real builder emails, never commit
-scripts/builders.json
+# PII — real builder emails, never commit. Glob, not a single filename:
+# builders.real.json was created alongside builders.json and was NOT
+# covered, so a `git add -A` picked it straight up.
+scripts/builders*.json
 scripts/seed-emails.txt
 scripts/seed-state.json
 

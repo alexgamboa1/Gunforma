@@ -163,6 +163,60 @@ select polrelid::regclass as on_table, polname,
     or coalesce(pg_get_expr(polwithcheck, polrelid), '') ilike '%from %';
 ```
 
+### service_role bypasses RLS. It does not bypass triggers.
+
+**A trigger guard that identifies the caller with `auth.uid()` will reject
+server-side code.** A `service_role` request has no end user, so `auth.uid()`
+is NULL, so `is_admin()` — which resolves the caller that way — is false. The
+guard then treats the most trusted caller in the system as an anonymous
+stranger.
+
+This is not the same trap as the `current_user` one above. That one is about a
+`SECURITY DEFINER` function mistaking its owner for its caller, and it fails
+*open*. This one fails *closed*, and it bites in a different place: the
+statement gets past RLS exactly as expected, and then a BEFORE trigger nobody
+was thinking about raises. Reaching for the service key is the standard answer
+to "RLS is in my way" and it does work — which is what makes this expensive.
+Every trigger on the table still runs, with the authority it always had.
+
+Let service_role through explicitly, reading the role from the same claim
+CLAUDE.md already uses elsewhere:
+
+```sql
+declare jwt_role text;
+begin
+  -- current_setting(..., true) yields NULL rather than raising when absent,
+  -- and the cast is wrapped as well: a direct psql session has no
+  -- request.jwt.claims, and the guard must degrade to "not service_role"
+  -- there rather than erroring inside a trigger.
+  begin
+    jwt_role := coalesce(current_setting('request.jwt.claims', true)::jsonb ->> 'role', '');
+  exception when others then
+    jwt_role := '';
+  end;
+
+  if <the thing being guarded>
+     and jwt_role <> 'service_role'
+     and not public.is_admin()
+  then
+    raise exception '...';
+  end if;
+```
+
+Worked example: `prevent_build_photo_path_tampering()` blocked any change to
+`build_photos.user_id` unless `is_admin()`. That silently stopped
+launch-invite's photo ownership transfer, which runs as service role. The
+Edge Function reported the failure as `{ success: true, warning: ... }` and
+`scripts/launch-invites.js` printed a green tick and "0 failed" — so a
+half-finished invite, which cannot be retried because the function refuses any
+build that already has a `user_id`, looked like a clean launch. See
+`supabase/fix_build_photo_tampering_guard.sql`.
+
+Widening a guard for service_role must not widen it for anyone else, and that
+is the half worth proving. As with the guards above, simulate both callers in
+a rolled-back transaction: service_role should now pass, and a non-admin
+acting on a row RLS *does* let them reach should still raise.
+
 ## Retirement, not deletion
 
 `affiliate_links` and `product_variants` are **never hard-deleted**. They carry

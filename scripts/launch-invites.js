@@ -28,11 +28,14 @@ const EMAIL_RE      = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_RE       = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function c(color, s) {
-  const codes = { grey:90, red:31, green:32, yellow:33, cyan:36, bold:1 };
+  const codes = { grey:90, red:31, green:32, yellow:33, magenta:35, cyan:36, bold:1 };
   return `\x1b[${codes[color] || 0}m${s}\x1b[0m`;
 }
-function log(icon, entry, message, color) {
-  console.log(`${c(color, icon)} ${entry.email.padEnd(40)} ${c('grey', message)}`);
+// msgColor defaults to grey, which is right for routine per-entry detail. A
+// warning passes something louder, because the whole failure this guards
+// against was a half-finished invite reading like a clean one.
+function log(icon, entry, message, color, msgColor) {
+  console.log(`${c(color, icon)} ${entry.email.padEnd(40)} ${c(msgColor || 'grey', message)}`);
 }
 
 function readAndValidate() {
@@ -125,6 +128,11 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   console.log(c('grey', `delay:    ${DELAY_MS}ms between calls\n`));
 
   let ok = 0, skipped = 0, failed = 0;
+  // Entries the function reported as successful but incomplete. Kept as a
+  // list, not just a count, because each one needs a human — see the recap
+  // block below.
+  const warnings = [];
+
   for (let i = 0; i < entries.length; i++) {
     const entry = entries[i];
     if (DRY_RUN) {
@@ -137,8 +145,15 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       if (body && body.skipped) {
         log('•', entry, `skipped: ${body.reason || 'unknown'}${body.user_id ? ` (user_id=${body.user_id})` : ''}`, 'yellow');
         skipped++;
+      } else if (status >= 200 && status < 300 && body && body.success && body.warning) {
+        // success:true WITH a warning is the dangerous case: the invite went
+        // out and part of the work landed, so retrying the batch will not fix
+        // it — launch-invite refuses any build that already has a user_id.
+        // It used to take the green tick below and be counted as clean.
+        log('!', entry, `INCOMPLETE — ${body.warning}`, 'magenta', 'magenta');
+        warnings.push({ entry, warning: body.warning, userId: body.user_id });
       } else if (status >= 200 && status < 300 && body && body.success) {
-        log('✓', entry, `launched (user_id=${body.user_id}, build linked)${body.warning ? ' — ' + body.warning : ''}`, 'green');
+        log('✓', entry, `launched (user_id=${body.user_id}, build linked)`, 'green');
         ok++;
       } else {
         log('✗', entry, `HTTP ${status}: ${(body && body.error) || 'unknown error'}`, 'red');
@@ -151,8 +166,30 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (i < entries.length - 1) await sleep(DELAY_MS);
   }
 
+  // Recap, because a warning scrolls past in a 30-entry batch and the whole
+  // point is that it must not be missed. Re-running the batch is NOT the
+  // remedy, so say so rather than leaving the operator to discover it.
+  if (warnings.length) {
+    console.log('');
+    console.log(c('magenta', c('bold', `${warnings.length} invite(s) half-finished — these need fixing by hand:`)));
+    warnings.forEach(w => {
+      console.log(c('magenta', `  ${w.entry.email}`));
+      console.log(c('grey',    `    build_id ${w.entry.build_id}${w.userId ? `  user_id ${w.userId}` : ''}`));
+      console.log(c('grey',    `    ${w.warning}`));
+    });
+    console.log(c('grey', '  Re-running this batch will not repair them: launch-invite skips any'));
+    console.log(c('grey', '  build that already has a user_id, so these entries return "already"'));
+    console.log(c('grey', '  on the next run and the unfinished half stays unfinished.'));
+  }
+
   console.log('');
-  const summary = `Launched ${ok} of ${entries.length} invites. ${skipped} skipped. ${failed} failed.`;
-  console.log(c(failed ? 'yellow' : 'green', summary));
-  process.exit(failed ? 1 : 0);
+  const launched = ok + warnings.length;
+  const summary =
+    `Launched ${launched} of ${entries.length} invites` +
+    (warnings.length ? ` — ${warnings.length} WITH WARNINGS` : '') +
+    `. ${skipped} skipped. ${failed} failed.`;
+  // Warnings colour the summary like a failure on purpose: a batch that only
+  // half-worked must not read as a clean run.
+  console.log(c(failed || warnings.length ? 'red' : 'green', summary));
+  process.exit(failed || warnings.length ? 1 : 0);
 })();
