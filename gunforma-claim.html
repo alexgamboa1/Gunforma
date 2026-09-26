@@ -106,7 +106,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .state-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
 .state-sub { font-size: 13px; color: #666; line-height: 1.7; margin-bottom: 16px; }
 
-.cf-turnstile { margin-bottom: 16px; }
 
 /* MOBILE */
 @media (max-width: 480px) {
@@ -133,28 +132,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .nav-menu a.signout { color: #ffffff; }
 }
 </style>
-<script>
-  // Turnstile site key — swap in Cloudflare's always-passes test key for
-  // local development so widgets don't show "Unable to connect" when the
-  // real key's hostname allowlist doesn't include localhost.
-  window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
-    ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
-    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
-
-  // Explicit-render callback: Turnstile invokes this once its script loads.
-  // Since the widget is injected AFTER the invite session resolves, we also
-  // trigger a render from renderForm() on the freshly-added element.
-  window.onloadTurnstileCallback = function() {
-    document.querySelectorAll('.cf-turnstile').forEach(function(el) {
-      if (el.dataset.widgetId) return;
-      el.dataset.widgetId = turnstile.render(el, {
-        sitekey: TURNSTILE_SITE_KEY,
-        theme:   el.dataset.theme || 'light',
-      });
-    });
-  };
-</script>
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
 </head>
 <body>
 
@@ -192,18 +169,6 @@ sb.auth.onAuthStateChange(function(event, session) {
 
 function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
-
-// Turnstile widget helpers (same pattern as the other auth pages).
-function getTurnstileToken(widgetElId) {
-  var el = document.getElementById(widgetElId);
-  var wid = el && el.dataset.widgetId;
-  return (window.turnstile && wid) ? turnstile.getResponse(wid) : '';
-}
-function resetTurnstileWidget(widgetElId) {
-  var el = document.getElementById(widgetElId);
-  var wid = el && el.dataset.widgetId;
-  if (window.turnstile && wid) turnstile.reset(wid);
-}
 
 // ============================================================
 // STATE
@@ -327,22 +292,11 @@ function renderForm() {
       '<input type="checkbox" id="consent" onchange="refreshSubmitState()"/>'+
       '<label for="consent">I agree to Gunforma\'s <a href="terms-of-service.html" target="_blank" rel="noopener">Terms of Service</a> and confirm that my build may be displayed publicly on Gunforma.</label>'+
     '</div>'+
-    '<div class="cf-turnstile" id="ts-claim" data-theme="light"></div>'+
     '<button class="btn-submit" id="submit-btn" onclick="handleClaim()" disabled>'+
       '<div class="spinner" id="spinner"></div>'+
       '<span id="btn-text">Claim My Account →</span>'+
     '</button>'+
     '<div class="card-footer">Wrong account? <a href="#" onclick="signOutAndBounce();return false;">Sign out and start over</a></div>';
-
-  // Turnstile might have already loaded before we injected the widget div.
-  // If so, render it explicitly now (the onload callback checks widgetId to
-  // avoid double-rendering when both paths race).
-  if (window.turnstile) {
-    var el = document.getElementById('ts-claim');
-    if (el && !el.dataset.widgetId) {
-      el.dataset.widgetId = turnstile.render(el, { sitekey: TURNSTILE_SITE_KEY, theme: 'light' });
-    }
-  }
 }
 
 // ============================================================
@@ -414,9 +368,6 @@ function refreshSubmitState() {
 async function handleClaim() {
   showError('');
 
-  var turnstileToken = getTurnstileToken('ts-claim');
-  if (!turnstileToken) { showError('Please complete the verification.'); return; }
-
   var username = document.getElementById('username').value.trim();
   var consent  = document.getElementById('consent').checked;
 
@@ -437,7 +388,6 @@ async function handleClaim() {
   setLoading(false);
 
   if (error) {
-    resetTurnstileWidget('ts-claim');
     // Uniqueness race: someone else grabbed the same username in the last
     // few hundred ms between the availability check and the submit.
     if (error.code === '23505' || /duplicate|unique/i.test(error.message)) {

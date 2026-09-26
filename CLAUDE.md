@@ -163,6 +163,49 @@ select polrelid::regclass as on_table, polname,
     or coalesce(pg_get_expr(polwithcheck, polrelid), '') ilike '%from %';
 ```
 
+### A revoke is not permanent — default privileges re-grant
+
+**Revoking a grant fixes the tables that exist. `ALTER DEFAULT PRIVILEGES`
+fixes the ones that don't yet.** Supabase's default ACL grants `anon` and
+`authenticated` full privileges on every table created in `public`, so without
+the second step the next `create table` re-grants exactly what was just
+revoked and the schema drifts straight back.
+
+```sql
+revoke insert, update, delete, truncate on all tables in schema public from anon;
+
+alter default privileges for role postgres in schema public
+  revoke insert, update, delete, truncate on tables from anon;
+```
+
+**And the second step does not always take.** `ALTER DEFAULT PRIVILEGES` can
+only be run by the role owning the entry, or a superuser — and this project
+has two entries for `public`, one owned by `postgres` and one by
+`supabase_admin`. The `supabase_admin` one cannot be altered from the SQL
+editor, so **a table created by Supabase's own tooling still arrives with
+write grants for `anon`**. Tables we create are covered; tables created for us
+are not, which is the case nobody is watching.
+
+So treat it as drift to sweep for, not a thing that was fixed once:
+
+```sql
+select table_name, string_agg(privilege_type, ', ' order by privilege_type)
+  from information_schema.role_table_grants
+ where table_schema = 'public' and grantee = 'anon'
+   and privilege_type in ('INSERT','UPDATE','DELETE','TRUNCATE')
+ group by table_name order by table_name;
+```
+
+Zero rows is correct. Anything returned is a table carrying grants it should
+not have — revoke them, then check whether its RLS policies were ever written,
+because a table that slipped past this probably slipped past that too.
+
+Worked example: `supabase/revoke_anon_write_grants.sql`. RLS was doing the
+real work the whole time — no policy admitted `anon` for a write — but the
+grants are what turn one missing or mis-scoped policy into a writable table.
+`builds` carried a DELETE grant for `anon` with no anon-facing DELETE policy
+behind it, found while adding the admin delete.
+
 ### service_role bypasses RLS. It does not bypass triggers.
 
 **A trigger guard that identifies the caller with `auth.uid()` will reject
