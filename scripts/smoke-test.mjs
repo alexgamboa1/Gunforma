@@ -219,24 +219,58 @@ async function readBack(session, path) {
 //    blocks SQL deletes outright, and the DELETE policy is one of the three
 //    that broke in the outage — so deleting any other way would skip the
 //    thing most worth testing.
-async function remove(session, path) {
+//
+//    Returns as soon as the DELETE is accepted; the caller marks the object
+//    gone at that point, so a failure in the verification below can't trigger
+//    a bogus "orphan left" from cleanup re-deleting what is already deleted.
+async function remove(session, path, onDeleted) {
   const step = '4/5 delete';
   const res = await request(step, `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
     method: 'DELETE',
     headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${session.token}` },
   });
   await requireOk(step, res, 'delete rejected');
+  onDeleted();
 
-  // Confirm it is actually gone rather than trusting the 200.
-  const check = await request(step, `${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
-    headers: { apikey: SUPABASE_ANON, Authorization: `Bearer ${session.token}` },
+  // Confirm it is really gone rather than trusting the 200 — a delete that
+  // reports success without deleting is exactly the silent failure this test
+  // exists to catch.
+  //
+  // Verified via the list endpoint, NOT by re-fetching the object. Storage
+  // serves object reads through a CDN, and a GET straight after a delete
+  // comes back 200 from cache long after the row is gone — which had this
+  // step reporting a phantom failure on its first real run. list reads object
+  // metadata from the database, so it answers about storage rather than about
+  // the cache.
+  const prefix = path.slice(0, path.lastIndexOf('/') + 1);
+  const name = path.slice(prefix.length);
+  const listRes = await request(step, `${SUPABASE_URL}/storage/v1/object/list/${BUCKET}`, {
+    method: 'POST',
+    headers: {
+      apikey: SUPABASE_ANON,
+      Authorization: `Bearer ${session.token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ prefix, limit: 100 }),
   });
-  if (check.ok) {
-    throw new StepError(step, 'delete returned success but the object is still readable', {
-      path, status_after_delete: check.status,
+  await requireOk(step, listRes, 'could not list the prefix to confirm deletion');
+
+  const remaining = await listRes.json();
+  const names = Array.isArray(remaining) ? remaining.map(o => o.name) : [];
+  if (names.includes(name)) {
+    throw new StepError(step, 'delete returned success but the object is still listed', {
+      path,
+      still_under_prefix: names.join(', '),
     });
   }
-  log(`${c('green', 'ok')}  ${step} — removed, and confirmed gone (${check.status})`);
+  log(`${c('green', 'ok')}  ${step} — removed, and confirmed gone from ${prefix}`);
+
+  // Anything else still sitting here is an orphan from an earlier run that
+  // died between upload and delete. Worth saying out loud — it is the reason
+  // the prefix is fixed — but not worth failing a run that is otherwise fine.
+  if (names.length) {
+    warn(`${names.length} orphan(s) under ${prefix} from earlier runs: ${names.join(', ')}`);
+  }
 }
 
 // 5. The builder's own platforms query, filter and all. Catches the 42703
@@ -285,8 +319,11 @@ async function main() {
   try {
     path = await upload(session);
     await readBack(session, path);
-    await remove(session, path);
-    path = null;               // step 4 is the cleanup; nothing left to sweep
+    // Step 4 is itself the cleanup. Clearing `path` the moment the DELETE is
+    // accepted — rather than after the whole step returns — keeps the sweep
+    // below from re-deleting an object that is already gone and calling the
+    // resulting 400 an orphan.
+    await remove(session, path, () => { path = null; });
     await platformsQuery(session);
   } finally {
     // Best effort only, and only if step 4 never got to run. A failure here
