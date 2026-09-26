@@ -1,0 +1,161 @@
+name: Backup storage
+
+# Supabase's daily backups cover the DATABASE, not STORAGE. Every build photo
+# on gunforma exists in exactly one place, and unlike a parts row a lost photo
+# cannot be retyped. This copies every object out of Supabase, daily.
+#
+# WHERE THE COPIES GO
+# A second Supabase bucket is not a backup: one service-role key reaches the
+# original and the copy, so a single leaked or mistaken credential takes both.
+# The copies therefore leave Supabase entirely, to two places:
+#
+#   1. a GitHub Actions artifact, ALWAYS. Written with this workflow's own
+#      GITHUB_TOKEN, which cannot touch Supabase storage, while the Supabase
+#      service key cannot touch GitHub artifacts. Different provider,
+#      different credential, no shared blast radius. Retention is capped at
+#      90 days, so this is a rolling window and not an archive.
+#
+#   2. Cloudflare R2, when the R2_* secrets exist. Separate provider,
+#      separate credential, no expiry, effectively free at this size — this
+#      is the durable tier. The step skips itself, loudly, when the secrets
+#      are not set, so the backup still works on day one with zero setup.
+#
+# Committing the backup into this repo was rejected: netlify.toml publishes
+# the repo root, so anything committed here becomes a public URL.
+#
+# Failures surface as a red job and the account-owner email, same as the
+# affiliate refresh — nothing extra to wire up.
+
+on:
+  schedule:
+    # 03:41 UTC daily. Photos are the irreplaceable data here, so this runs
+    # every day rather than weekly.
+    #
+    # The odd minute is the habit from refresh-affiliate-prices.yml and for
+    # its measured reason: GitHub queues scheduled workflows and deprioritises
+    # them under load, and the top of the hour is the busiest slot, so
+    # on-the-hour crons routinely ran hours late.
+    - cron: '41 3 * * *'
+  workflow_dispatch:
+
+# Two runs at once would both write the manifest artifact and race on which
+# becomes the baseline for the next comparison.
+concurrency:
+  group: backup-storage
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No `npm ci`: backup-storage.mjs imports only Node built-ins. A backup
+      # should not be able to fail on a dependency install.
+
+      # The drop check needs the last good run to compare against. The
+      # manifest is uploaded as its own small artifact precisely so fetching
+      # it back is cheap — the full backup artifact is not downloaded here.
+      #
+      # A missing manifest is not an error: first run, or retention expired.
+      # The script says so and skips the check rather than inventing a
+      # baseline.
+      - name: Fetch previous manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          id=$(gh api "repos/${{ github.repository }}/actions/artifacts?name=storage-manifest&per_page=1" \
+                 --jq '.artifacts[0].id // empty' || true)
+          if [ -z "$id" ]; then
+            echo "No previous storage-manifest artifact found — first run, or retention expired."
+            exit 0
+          fi
+          echo "Previous manifest artifact: $id"
+          gh api "repos/${{ github.repository }}/actions/artifacts/$id/zip" > prev.zip
+          mkdir -p prev && unzip -o -q prev.zip -d prev
+          ls -la prev
+
+      - name: Back up storage
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -f prev/manifest.json ]; then
+            node scripts/backup-storage.mjs --out storage-backup --previous prev/manifest.json
+          else
+            node scripts/backup-storage.mjs --out storage-backup
+          fi
+
+      # Tier 1 — always. Uploaded before the R2 step so that an R2
+      # misconfiguration cannot cost us the copy we already have in hand.
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-backup
+          path: storage-backup
+          retention-days: 90
+          if-no-files-found: error
+
+      # The manifest again on its own, so the next run can fetch just this.
+      - name: Upload manifest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: storage-manifest
+          path: storage-backup/manifest.json
+          retention-days: 90
+          if-no-files-found: error
+
+      # Tier 2 — durable, off-platform, no expiry. R2 is S3-compatible and the
+      # AWS CLI is preinstalled on the runner, so this needs no dependency.
+      #
+      # Checked in the script rather than a step-level `if:` so the skip is
+      # visible in the log — a backup tier that is silently off is worse than
+      # one that is loudly absent.
+      - name: Sync to Cloudflare R2
+        env:
+          AWS_ACCESS_KEY_ID:     ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_ACCOUNT_ID:         ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET:             ${{ secrets.R2_BUCKET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${R2_ACCOUNT_ID:-}" ] || [ -z "${R2_BUCKET:-}" ]; then
+            echo "::warning title=Durable backup tier is off::R2_* secrets are not set."
+            echo "The GitHub artifact above is the only copy, and it expires after 90 days."
+            echo "To turn on the durable tier, add these four repo secrets:"
+            echo "  R2_ACCOUNT_ID         Cloudflare account id (the same one .wrangler pins)"
+            echo "  R2_BUCKET             destination bucket name"
+            echo "  R2_ACCESS_KEY_ID      R2 API token, scoped to that bucket only"
+            echo "  R2_SECRET_ACCESS_KEY"
+            exit 0
+          fi
+          # Dated prefix, so a run that backs up a damaged source cannot
+          # overwrite the last good copy. `sync` without this would happily
+          # mirror a deletion straight into the backup.
+          STAMP=$(date -u +%Y-%m-%d)
+          aws s3 sync storage-backup "s3://${R2_BUCKET}/gunforma/${STAMP}/" \
+            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --only-show-errors
+          echo "Synced to r2://${R2_BUCKET}/gunforma/${STAMP}/"
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ -f storage-backup/manifest.json ]; then
+            node -e '
+              const m = require("./storage-backup/manifest.json");
+              const mb = (m.totals.bytes / 1048576).toFixed(2);
+              let s = `## Storage backup\n\n**${m.totals.objects} objects, ${mb} MB**\n\n`;
+              s += "| bucket | objects | bytes |\n|---|---:|---:|\n";
+              for (const [k, v] of Object.entries(m.buckets)) s += `| ${k} | ${v.objects} | ${v.bytes} |\n`;
+              require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, s);
+            '
+          else
+            echo "No manifest — the backup step did not complete." >> "$GITHUB_STEP_SUMMARY"
+          fi
