@@ -6,12 +6,14 @@ node_modules/
 # Local Netlify folder
 .netlify
 
-# PII — real builder emails, never commit. Glob, not a single filename:
+# PII — real builder emails, never commit. Globs, not exact filenames:
 # builders.real.json was created alongside builders.json and was NOT
-# covered, so a `git add -A` picked it straight up.
+# covered, so a `git add -A` picked it straight up. Every rule here is a
+# glob for that reason — a sibling, a .bak or a dated copy is the normal way
+# these files get made, and an exact filename protects none of them.
 scripts/builders*.json
-scripts/seed-emails.txt
-scripts/seed-state.json
+scripts/seed-emails*
+scripts/seed-state*
 
 # Claude Code local scratch state
 .claude/
