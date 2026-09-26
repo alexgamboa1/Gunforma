@@ -53,6 +53,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .sidebar { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; }
 
 .card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 20px; }
+
+/* Locked sections on an approved build. The database refuses a change to the
+   platform, the parts or the status of a live build, so the form must refuse
+   it first — visibly. A control that looks editable and then throws away what
+   you typed is worse than one that never invited you. */
+.card.locked { background: #fbfaf8; border-color: #e9e7e1; }
+.card.locked .locked-body { opacity: 0.55; filter: grayscale(0.35); }
+.locked-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #8a6d3b; background: #fdf4e3; border: 0.5px solid #e8d9b5; padding: 3px 8px; border-radius: 3px; }
+.locked-note { font-size: 11.5px; color: #8a6d3b; background: #fdf4e3; border: 0.5px solid #e8d9b5; border-radius: 4px; padding: 9px 11px; margin-bottom: 14px; line-height: 1.6; }
+.live-edit-banner { background: #eaf3fb; border: 0.5px solid #b9d8f0; border-radius: 6px; padding: 14px 16px; margin-bottom: 16px; }
+.live-edit-banner-title { font-size: 12px; font-weight: 700; color: #1c4f7c; margin-bottom: 5px; }
+.live-edit-banner-body { font-size: 12px; color: #2a6296; line-height: 1.65; }
+.live-edit-banner-body a { color: #1c4f7c; font-weight: 700; }
 .card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1a1a1a; display: flex; align-items: center; gap: 8px; }
 .card-step { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #1a1a1a; color: #fff; font-size: 10px; font-weight: 700; flex-shrink: 0; }
@@ -373,7 +386,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="main-col">
 
   <!-- 1. PISTOL -->
-  <div class="card">
+  <div class="card" id="card-platform">
     <div class="card-head">
       <span class="card-title"><span class="card-step" id="step1-dot">1</span> Choose your pistol</span>
       <span class="card-hint">Determines which parts fit</span>
@@ -392,7 +405,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 
   <!-- 2. PHOTOS -->
-  <div class="card">
+  <div class="card" id="card-photos">
     <div class="card-head">
       <span class="card-title"><span class="card-step" id="step2-dot">2</span> Photos</span>
       <span class="card-hint">Builds with photos get saved 3× more</span>
@@ -488,7 +501,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 
   <!-- 4. PARTS -->
-  <div class="card">
+  <div class="card" id="card-parts">
     <div class="card-head">
       <span class="card-title"><span class="card-step" id="step4-dot">4</span> Parts in this build</span>
       <span class="card-hint" id="parts-hint">Optional — gets your build live faster</span>
@@ -709,7 +722,10 @@ let draftId = crypto.randomUUID();
 const editState = {
   active: false,
   buildId: null,
-  previousStatus: null,   // 'draft' | 'rejected'
+  previousStatus: null,   // 'draft' | 'rejected' | 'approved'
+  // True on a live build: locks the pistol/photos/parts sections and narrows
+  // the UPDATE to the three columns the DB trigger permits.
+  approvedLock: false,
   existingPhotos: [],     // rows from build_photos, sorted by position
   nextPosition: 1,        // for new photo inserts
   markedForDeletion: new Set(),  // build_photos.id values the user X'd out
@@ -1895,6 +1911,31 @@ async function submitBuild(status) {
 // deletes, then hero promotion, then inserts. The 4-photo trigger cap is
 // checked BEFORE any writes so we don't leave the row half-updated.
 async function submitBuildEdit(status) {
+  // Live build: send the three editable columns and nothing else, then stop.
+  //
+  // Sending the rest "unchanged" is not safe — the trigger compares NEW to
+  // OLD with IS DISTINCT FROM, and parts_snapshot is jsonb rebuilt from
+  // in-memory state, so a re-serialised copy that differs only in key order
+  // would read as a change and raise. `tier` is on the blocked list too, and
+  // the old payload computed it from parts length on every save. The narrow
+  // payload is the correctness fix, not just a tidiness one.
+  //
+  // No photo add/delete either: the sections are inert, so there is nothing
+  // staged, and build_photos' own RLS requires the parent build to be
+  // draft or pending anyway.
+  if (editState.approvedLock) {
+    const { error } = await sb.from('builds')
+      .update({
+        name: state.name.trim(),
+        description: document.getElementById('build-description').value || null,
+        activities: state.activities,
+      })
+      .eq('id', editState.buildId)
+      .eq('user_id', currentUser.id);
+    if (error) return { error: error, buildId: editState.buildId };
+    return { error: null, buildId: editState.buildId };
+  }
+
   const staged = Object.keys(state.photos)
     .filter(function(slot) { return state.photos[slot] && !state.photos[slot].uploading; })
     .map(function(slot) { return { slot: slot, entry: state.photos[slot] }; });
@@ -2123,6 +2164,71 @@ async function hydrateFromArmoryHandoff() {
   return true;
 }
 
+// Locks the platform, photo and parts sections on a live build.
+//
+// The rule is the database's, not the page's: on an approved build
+// restrict_owner_edits_on_approved_build refuses any change to platform_id,
+// parts_snapshot, status, tier or ownership. The form's job is to stop the
+// owner spending ten minutes rebuilding a parts list that would be thrown
+// away — so these sections are disabled where they can be seen, not quietly
+// dropped from the payload.
+//
+// `inert` does the real work: it removes the subtree from the tab order and
+// from hit-testing, so keyboard and pointer are both closed off. It also
+// survives renderParts() re-rendering the parts section, which disabling
+// individual controls would not — the picker rebuilds its buttons on every
+// render and they would come back enabled.
+function lockSectionsForApprovedBuild() {
+  var note =
+    'Locked while this build is live. To change the gun, its photos or its parts, ' +
+    'delete this build and post the new one.';
+
+  [['card-platform', 'Pistol'], ['card-photos', 'Photos'], ['card-parts', 'Parts']].forEach(function (pair) {
+    var card = document.getElementById(pair[0]);
+    if (!card) return;
+    card.classList.add('locked');
+
+    var head = card.querySelector('.card-head');
+    if (head && !head.querySelector('.locked-tag')) {
+      var tag = document.createElement('span');
+      tag.className = 'locked-tag';
+      tag.textContent = '🔒 Locked';
+      head.appendChild(tag);
+    }
+
+    // Everything except the heading goes inert and dimmed.
+    var body = document.createElement('div');
+    body.className = 'locked-body';
+    body.setAttribute('inert', '');
+    while (card.children.length > (head ? 1 : 0)) {
+      body.appendChild(card.children[head ? 1 : 0]);
+    }
+    card.appendChild(body);
+
+    var n = document.createElement('div');
+    n.className = 'locked-note';
+    n.textContent = note;
+    card.insertBefore(n, body);
+  });
+
+  // One banner at the top of the form carrying the why and the way out.
+  var main = document.querySelector('.main-col') || document.querySelector('.layout');
+  if (main && !document.getElementById('live-edit-banner')) {
+    var b = document.createElement('div');
+    b.className = 'live-edit-banner';
+    b.id = 'live-edit-banner';
+    b.innerHTML =
+      '<div class="live-edit-banner-title">This build is live on Gunforma</div>' +
+      '<div class="live-edit-banner-body">' +
+        'You can change the <strong>name</strong>, <strong>description</strong> and <strong>activity</strong>. ' +
+        'The pistol, photos and parts are fixed once a build is published — they are what people ' +
+        'found and shared. To change any of those, delete this build and post the new one, ' +
+        'which you can do from your profile.' +
+      '</div>';
+    main.insertBefore(b, main.firstChild);
+  }
+}
+
 // Fatal-error screen for edit-mode ownership / status refusals. Wipes
 // the form so nothing here looks editable while the user reads the error.
 function editModeRefuse(message) {
@@ -2158,7 +2264,12 @@ async function hydrateFromEditMode() {
     editModeRefuse('This build isn’t yours to edit.');
     return false;
   }
-  if (build.status !== 'draft' && build.status !== 'rejected') {
+  // Approved builds are editable now, but only in part: the DB trigger
+  // restrict_owner_edits_on_approved_build refuses a change to platform_id,
+  // parts_snapshot, status, tier or ownership on a live build. Pending is
+  // still closed — it is mid-review, and an edit under a reviewer is a
+  // different problem from this one.
+  if (build.status !== 'draft' && build.status !== 'rejected' && build.status !== 'approved') {
     editModeRefuse(build.status === 'pending'
       ? 'This build is currently in review. You can edit it again once an admin has reviewed it.'
       : 'This build can’t be edited right now.');
@@ -2168,6 +2279,9 @@ async function hydrateFromEditMode() {
   editState.active = true;
   editState.buildId = build.id;
   editState.previousStatus = build.status;
+  // Drives both the locked UI and the narrowed UPDATE payload. One flag, so
+  // the two can't disagree about what is editable.
+  editState.approvedLock = build.status === 'approved';
   editState.existingPhotos = (build.build_photos || []).slice().sort(function(a,b){ return (a.position||0) - (b.position||0); });
   editState.nextPosition = (editState.existingPhotos.reduce(function(m,p){ return Math.max(m, p.position||0); }, 0)) + 1;
 
@@ -2187,21 +2301,28 @@ async function hydrateFromEditMode() {
   const eyebrow = document.getElementById('page-eyebrow');
   const title = document.getElementById('page-title');
   const sub = document.getElementById('page-sub');
-  if (eyebrow) eyebrow.textContent = build.status === 'rejected' ? 'Resubmit' : 'Edit draft';
+  if (eyebrow) eyebrow.textContent = editState.approvedLock ? 'Edit live build' : (build.status === 'rejected' ? 'Resubmit' : 'Edit draft');
   if (title) title.textContent = 'Edit your build';
-  if (sub) sub.textContent = build.status === 'rejected'
-    ? 'Address the reviewer’s feedback, then resubmit for review.'
-    : 'Pick up where you left off. Save as a draft or submit for review.';
+  if (sub) sub.textContent = editState.approvedLock
+    ? 'This build is live. You can change its name, description and activity.'
+    : (build.status === 'rejected'
+      ? 'Address the reviewer’s feedback, then resubmit for review.'
+      : 'Pick up where you left off. Save as a draft or submit for review.');
   document.title = 'Edit your build — Gunforma';
 
   const publishBtn = document.getElementById('publish-btn');
-  if (publishBtn) publishBtn.textContent = build.status === 'rejected' ? 'Resubmit for review →' : 'Submit for review →';
+  if (publishBtn) publishBtn.textContent = editState.approvedLock
+    ? 'Save changes →'
+    : (build.status === 'rejected' ? 'Resubmit for review →' : 'Submit for review →');
 
   // Rejected builds can only transition to pending — hide the draft
   // pathway so the user isn't offered a save that would be refused by
   // both the client guard in saveDraft() and the trigger's expectations.
   const draftBtn = document.getElementById('draft-btn');
-  if (draftBtn && build.status === 'rejected') draftBtn.style.display = 'none';
+  if (draftBtn && (build.status === 'rejected' || editState.approvedLock)) draftBtn.style.display = 'none';
+
+  // Lock the three sections the database will not let a live build change.
+  if (editState.approvedLock) lockSectionsForApprovedBuild();
 
   // Hydrate platform + form + parts. Mirror hydrateFromArmoryHandoff's
   // UI toggles for the picker so the "Building for" header shows.
