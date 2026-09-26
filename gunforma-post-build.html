@@ -379,7 +379,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 @media (max-width: 640px) {
   .redact-overlay { padding: 0; }
-  .redact-panel { max-width: none; height: 100vh; border-radius: 0; }
+  .redact-panel {
+    max-width: none; border-radius: 0;
+    height: 100vh;
+    /* dvh tracks Safari's collapsing URL bar; vh does not, and stays on the
+       tall value, which pushed the toolbar off the bottom of the screen.
+       The vh line above is the fallback for browsers without dvh. */
+    height: 100dvh;
+  }
   .redact-header { padding: 10px 12px; }
   .redact-hint .long { display: none; }
   .redact-hint .short { display: inline; }
@@ -387,8 +394,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   /* Two rows on a phone: tools, then actions. Every control shrinks rather
      than wrapping to a row of its own — a four-row toolbar left the photo
      itself with almost no height, which is the opposite of the point. */
-  .redact-toolbar { padding: 8px 10px; gap: 6px; }
-  .redact-shape-toggle button { padding: 7px 9px; }
+  /* The action row sat hard against the bottom of the screen, on top of the
+     iPhone home indicator. The 20px is what actually does the lifting: the
+     site sets no `viewport-fit=cover` on any page, so env(safe-area-inset-*)
+     resolves to 0 here and is carried only so this stays correct if the
+     viewport meta is ever opted in. Row gap is up from 6px so the two rows
+     read as separate rather than one crushed block. */
+  .redact-toolbar {
+    padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px));
+    gap: 10px;
+  }
+  .redact-shape-toggle button { padding: 9px 10px; }
   /* The size slider gets its own full-width row, and only in Brush mode —
      squeezed inline next to the zoom cluster it collapsed to a few px and
      could not be dragged. */
@@ -400,7 +416,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   /* The count lives in the Done label on a phone (see setCount) — one row
      of controls saved. */
   .redact-count { display: none; }
-  .redact-btn { padding: 8px 10px; order: 3; }
+  .redact-btn { padding: 10px 12px; order: 3; }
   .redact-btn .long { display: none; }
   #redact-skip { margin-left: auto; }
 }
