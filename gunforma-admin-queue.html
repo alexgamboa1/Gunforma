@@ -158,6 +158,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .btn-reject-confirm:hover { background: #a93226; }
 .btn-reject-cancel { background: none; border: 0.5px solid #f9c4b6; color: #9b1c1c; padding: 9px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
 
+/* Danger zone — delete. Visually separated from approve/reject on purpose:
+   those move a build between states and are undoable from this page, this
+   one is not. Sits below everything else so it is never the first thing a
+   cursor lands on. */
+.danger-zone { background: #fff; border: 0.5px solid #e5e5e5; border-left: 3px solid #c0392b; border-radius: 8px; padding: 18px 20px; margin-top: 14px; }
+.danger-zone-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9b1c1c; margin-bottom: 6px; }
+.danger-zone-sub { font-size: 12px; color: #888; margin-bottom: 14px; line-height: 1.6; }
+.danger-zone-sub code { font-size: 11px; background: #f4f3ee; padding: 1px 5px; border-radius: 3px; }
+.btn-delete { background: #fff; color: #9b1c1c; border: 1.5px solid #f9c4b6; padding: 10px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+.btn-delete:hover { background: #fde8e2; }
+.delete-form { display: none; background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 16px; margin-top: 12px; }
+.delete-form.open { display: block; animation: slideIn 0.15s ease; }
+.delete-form-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #7f1d1d; margin-bottom: 8px; display: block; }
+.delete-cascade-list { font-size: 11.5px; color: #7f1d1d; line-height: 1.7; margin-bottom: 12px; }
+.delete-confirm-input { width: 100%; font-size: 12px; padding: 9px 10px; border: 0.5px solid #f9c4b6; border-radius: 4px; font-family: inherit; background: #fff; margin-bottom: 10px; }
+.delete-confirm-input:focus { outline: none; border-color: #e25c3a; }
+.btn-delete-confirm { background: #c0392b; color: #fff; border: none; padding: 9px 18px; border-radius: 4px; font-size: 12px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.btn-delete-confirm:hover:not(:disabled) { background: #a93226; }
+.btn-delete-confirm:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn-delete-cancel { background: none; border: 0.5px solid #f9c4b6; color: #9b1c1c; padding: 9px 14px; border-radius: 4px; font-size: 12px; cursor: pointer; font-family: inherit; }
+/* Orphaned-file report. Persistent, because the build it refers to is gone
+   and a toast would take the paths with it. */
+.orphan-warn { background: #fef6e7; border: 0.5px solid #f0c674; border-radius: 8px; padding: 18px 20px; }
+.orphan-warn-title { font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a5a00; margin-bottom: 8px; }
+.orphan-warn-body { font-size: 12px; color: #6b4a1e; line-height: 1.7; }
+.orphan-warn-body code { font-size: 10.5px; background: #fff; padding: 1px 5px; border-radius: 3px; display: inline-block; margin: 2px 0; }
+
 .notif-preview { background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 16px; margin-top: 14px; }
 .notif-preview-label { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #bbb; margin-bottom: 8px; }
 .notif-preview-body { font-size: 12px; color: #555; line-height: 1.7; }
@@ -580,8 +607,72 @@ function renderDetail(b) {
       '</div></div>';
   }
 
+  // Delete is offered for every status, not just pending: test posts,
+  // duplicates and takedown requests are mostly already approved.
+  html += dangerZoneHtml(b);
+
   html += '</div>';
   document.getElementById('detail-panel').innerHTML = html;
+}
+
+// Delete, behind a typed confirmation. The expected name rides on a data
+// attribute rather than being interpolated into an onclick string — build
+// names are user-supplied and contain quotes and apostrophes often enough
+// that string-building the handler would break on exactly the builds an
+// admin most wants to remove.
+function dangerZoneHtml(b) {
+  var photoCount = (b.build_photos || []).length;
+  var fileCount  = (b.build_photos || []).reduce(function (n, p) {
+    return n + (p.storage_path ? 1 : 0) + (p.thumb_path ? 1 : 0);
+  }, 0);
+
+  return '<div class="detail-section"><div class="danger-zone">'+
+    '<div class="danger-zone-title">Danger zone</div>'+
+    '<div class="danger-zone-sub">Deleting is permanent and cannot be undone from this page. '+
+      'Use it for test posts, duplicates and takedown requests — to take a live build off the '+
+      'site without destroying it, use <code>Undo</code> to move it back to pending instead.</div>'+
+    '<button class="btn-delete" onclick="openDeleteForm()">Delete this build…</button>'+
+    '<div class="delete-form" id="delete-form">'+
+      '<label class="delete-form-label">This will permanently delete</label>'+
+      '<div class="delete-cascade-list">'+
+        '• the build row<br>'+
+        '• its ' + photoCount + ' photo record(s), and ' + fileCount + ' file(s) from storage<br>'+
+        '• every comment, vote, like, saved-build entry and notification attached to it'+
+      '</div>'+
+      '<label class="delete-form-label">Type the build name to confirm</label>'+
+      '<div class="danger-zone-sub" style="margin-bottom:8px;"><code>'+escH(b.name||'')+'</code></div>'+
+      '<input class="delete-confirm-input" id="delete-confirm-input" type="text" autocomplete="off" '+
+        'placeholder="Build name" data-expect="'+escH((b.name||'').trim())+'" oninput="refreshDeleteBtn()" />'+
+      '<div class="reject-row">'+
+        '<button class="btn-delete-confirm" id="delete-confirm-btn" disabled onclick="doDelete(\''+b.id+'\')">Delete permanently</button>'+
+        '<button class="btn-delete-cancel" onclick="closeDeleteForm()">Cancel</button>'+
+      '</div>'+
+    '</div>'+
+  '</div></div>';
+}
+
+function openDeleteForm() {
+  var f = document.getElementById('delete-form');
+  if (f) f.classList.add('open');
+  var i = document.getElementById('delete-confirm-input');
+  if (i) i.focus();
+}
+function closeDeleteForm() {
+  var f = document.getElementById('delete-form');
+  if (f) f.classList.remove('open');
+  var i = document.getElementById('delete-confirm-input');
+  if (i) i.value = '';
+  refreshDeleteBtn();
+}
+// Exact match on the trimmed name. Not case-insensitive and not a prefix:
+// the point of a typed confirmation is that it cannot be satisfied by
+// reflex, and a build called "Test" sitting next to "test 2" is exactly the
+// pair this is meant to keep apart.
+function refreshDeleteBtn() {
+  var i = document.getElementById('delete-confirm-input');
+  var btn = document.getElementById('delete-confirm-btn');
+  if (!i || !btn) return;
+  btn.disabled = i.value.trim() !== (i.dataset.expect || '');
 }
 
 // ============================================================
@@ -609,6 +700,95 @@ async function doUndo(id) {
   if (error) { console.error(error); showToast('red','Something went wrong'); return; }
   showToast('blue','Moved back to pending');
   await loadBuilds();
+}
+
+// Permanent delete, covered by the "Admins can delete any build" RLS policy
+// (DELETE on builds, using is_admin(), to authenticated).
+//
+// Everything that references builds cascades — build_photos, build_comments,
+// build_fires, notifications and saved_builds are all ON DELETE CASCADE — so
+// no foreign key can block this and no child rows are left behind. Storage
+// objects are the exception: nothing in the database knows about them, so
+// they are removed here by hand.
+async function doDelete(id) {
+  var b = BUILDS.find(function(x){ return x.id===id; });
+  if (!b) return;
+
+  var input = document.getElementById('delete-confirm-input');
+  var typed = ((input && input.value) || '').trim();
+  if (typed !== (b.name || '').trim()) {
+    showToast('red','Type the build name exactly to confirm');
+    return;
+  }
+
+  var btn = document.getElementById('delete-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+
+  // Collect the storage paths BEFORE deleting. build_photos cascades away
+  // with the build, and once those rows are gone nothing records where the
+  // files were — an orphan nobody can name is an orphan nobody can clean up.
+  var paths = [];
+  (b.build_photos || []).forEach(function(p) {
+    if (p.storage_path) paths.push(p.storage_path);
+    if (p.thumb_path)   paths.push(p.thumb_path);
+  });
+
+  // Row first, files second. The other order risks deleting the photos of a
+  // build that then survives the delete, and a live build with broken images
+  // is worse than an orphaned object in a bucket.
+  //
+  // .select('id') so the DELETE returns what it removed. An RLS-filtered
+  // DELETE matches zero rows and reports no error, so checking only `error`
+  // would show "deleted" for a build that is still there — the same check
+  // gunforma-admin-post.html's rollback makes, for the same reason.
+  const { data: deleted, error } = await sb.from('builds').delete().eq('id', id).select('id');
+  if (error) {
+    console.error(error);
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete permanently'; }
+    showToast('red', 'Delete failed — ' + (error.code ? error.code + ': ' : '') + (error.message || 'see console'));
+    return;
+  }
+  if (!Array.isArray(deleted) || deleted.length !== 1) {
+    // No error and no row: RLS refused it. Nothing was deleted, and no files
+    // have been touched yet, so there is nothing to clean up.
+    console.error('delete matched no rows', { id: id, returned: deleted });
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete permanently'; }
+    showToast('red', 'Delete refused — no row was removed (admin policy?). Nothing was changed.');
+    return;
+  }
+
+  // Files. The build is already gone at this point, so a failure here is
+  // reported rather than treated as a failed delete.
+  var orphans = [];
+  var storageErr = null;
+  if (paths.length) {
+    const { error: sErr } = await sb.storage.from('build-photos').remove(paths);
+    if (sErr) { storageErr = sErr; orphans = paths; console.error('storage delete failed', sErr, paths); }
+  }
+
+  selectedId = null;
+  await loadBuilds();
+
+  if (orphans.length) {
+    // Persistent, not a toast: the build is gone, so these paths exist
+    // nowhere else now and the admin needs them to finish the job by hand.
+    document.getElementById('detail-panel').innerHTML =
+      '<div class="detail-section"><div class="orphan-warn">'+
+        '<div class="orphan-warn-title">Build deleted — but its files were not</div>'+
+        '<div class="orphan-warn-body">'+
+          'The build row and everything referencing it are gone. '+
+          orphans.length + ' file(s) could not be removed from the <code>build-photos</code> bucket '+
+          'and are now orphaned: <br><strong>'+escH(storageErr && storageErr.message || 'unknown storage error')+'</strong><br><br>'+
+          'Delete these by hand in the Supabase dashboard — they are listed here because '+
+          'nothing records them any more:<br>'+
+          orphans.map(function(p){ return '<code>'+escH(p)+'</code>'; }).join('<br>')+
+        '</div>'+
+      '</div></div>';
+    showToast('red', 'Build deleted — ' + orphans.length + ' file(s) left orphaned, see panel');
+    return;
+  }
+
+  showToast('green', 'Build deleted' + (paths.length ? ' — ' + paths.length + ' file(s) removed' : ''));
 }
 function doToggleEdit(buildId, idx) {
   var key = buildId+'-'+idx;
