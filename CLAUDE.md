@@ -260,6 +260,55 @@ is the half worth proving. As with the guards above, simulate both callers in
 a rolled-back transaction: service_role should now pass, and a non-admin
 acting on a row RLS *does* let them reach should still raise.
 
+### A green result is not evidence the work happened
+
+**Confirm the effect independently of the call that claimed it.** Several
+operations in this stack succeed while doing nothing: they return no error,
+they take the success branch, and they read as done. The three sections above
+are each an instance — a revoke that holds until the next `create table`
+silently re-grants it, and two guards that raise correctly at the database and
+then reach a person as "Upload failed" or "0 failed". Note that second shape:
+the database was loud both times. It went quiet on the way up.
+
+Four from this repo, all of which shipped:
+
+**An RLS-filtered `DELETE` matches zero rows and returns no error.** A builder
+removing a photo that was not theirs to remove got a clean result and the
+photo stayed. Nothing in the response distinguishes "deleted one row" from
+"matched nothing". Verify with `.select('id')` and assert a row came back:
+
+```js
+const { data: deleted, error } = await sb.from('builds')
+  .delete().eq('id', id).select('id');
+if (error) …
+if (!Array.isArray(deleted) || deleted.length !== 1) …   // RLS refused it
+```
+
+**A public read of a deleted storage object returns 200 from the CDN.** The
+smoke test's first real run reported a failed delete — the object was gone,
+`storage.objects` had no matching row, and re-fetching it still answered 200.
+The re-read was asking the cache, not storage. Confirm a deletion through the
+list endpoint, which reads object metadata from the database.
+
+**The Storage list API returns only immediate children**, with folders as
+entries whose `id` is `null`. `build-photos` keys are
+`<uid>/<draftId>/<file>`, so a flat listing of the bucket root returns folders
+and no files at all. A non-recursive backup reports *"0 objects backed up"*
+and exits 0 — empty, and proud of it. `scripts/backup-storage.mjs` recurses
+for exactly this reason, and `scripts/find-orphan-storage.mjs` inherits it.
+
+**A `{ success: true, warning: … }` response took the success branch** in
+`scripts/launch-invites.js`, which printed a green tick and *"0 failed"* over
+a half-completed invite — and one that cannot be repaired by re-running,
+because the function refuses any build that already has a `user_id`. Partial
+success is not success, and a field nobody branches on is a field that does
+not exist.
+
+The through-line: **status codes, exit codes and log lines are claims. Row
+counts, listings and independently-read state are facts.** Prefer the fact.
+A call that reports on itself is a witness to its own case — ask the row
+count, the listing, or the next query what actually happened.
+
 ## Retirement, not deletion
 
 `affiliate_links` and `product_variants` are **never hard-deleted**. They carry
