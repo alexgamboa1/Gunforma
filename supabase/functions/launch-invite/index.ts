@@ -212,5 +212,42 @@ Deno.serve(async (req) => {
     }, 200);
   }
 
+  // -------- Step 5: hand the photo ROWS over as well --------
+  // gunforma-admin-post.html inserts build_photos with the ADMIN's user_id,
+  // because the column is NOT NULL and the real builder does not exist yet.
+  // Nothing used to move it afterwards, which left every owner-write policy
+  // on build_photos pointing at the wrong person:
+  //
+  //   DELETE / UPDATE  auth.uid() = build_photos.user_id AND build is draft|pending
+  //   INSERT           the same, plus builds.user_id = auth.uid()
+  //
+  // So a claimed builder editing their own build could ADD photos (inserted
+  // under their own id) but never remove the ones posted for them — and the
+  // failure was silent, because an RLS-filtered DELETE matches zero rows and
+  // returns no error. The row survived while the UI reported success.
+  //
+  // This transfers the rows only. The storage OBJECTS stay at
+  // <adminUid>/<draftId>/... forever: the bucket's insert policy requires the
+  // first path segment to equal auth.uid(), so the admin's upload could never
+  // have been written anywhere else, and moving them now would mean copying
+  // every file and rewriting storage_path. Row ownership and byte ownership
+  // are already separable here — gunforma-post-build.html's photo delete
+  // treats the storage half as best-effort and tolerates orphaned bytes on
+  // purpose. Transferring the row is what gives the builder control of what
+  // the site actually renders; the bytes are a storage-cost question, not a
+  // permissions one.
+  //
+  // Runs as service role, so RLS does not apply to this update.
+  const { error: photoErr } = await supabase
+    .from('build_photos').update({ user_id: userId }).eq('build_id', buildId);
+  if (photoErr) {
+    return json(req, {
+      success: true,
+      user_id: userId,
+      build_id: buildId,
+      warning: 'build linked but photo ownership transfer failed: ' + photoErr.message,
+    }, 200);
+  }
+
   return json(req, { success: true, user_id: userId, build_id: buildId });
 });

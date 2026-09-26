@@ -1140,8 +1140,19 @@ async function submitBuild() {
   // Admin insert — hardcoded consent flags (real builder accepts them
   // during the claim flow), user_id null, status approved. Photo rows
   // use the admin's own user_id as a placeholder because
-  // public.build_photos.user_id is NOT NULL — the real builder's id
-  // gets swapped in by the claim flow.
+  // public.build_photos.user_id is NOT NULL.
+  //
+  // The real builder's id is swapped in by the launch-invite Edge Function,
+  // NOT by the claim page — launch-invite links builds.user_id and then
+  // build_photos.user_id, both as service role, before the builder ever
+  // reaches gunforma-claim.html. (It said "the claim flow" here for a while
+  // and nothing anywhere did it, which left admin-posted photos permanently
+  // undeletable by the builder who owns the build.)
+  //
+  // The storage OBJECTS stay under the admin's uid either way: the bucket's
+  // insert policy requires the first path segment to equal auth.uid(), so
+  // these files could not have been written anywhere else. Only the rows
+  // move.
   const payload = {
     user_id: null,
     platform_id: state.platform.id,
@@ -1165,7 +1176,7 @@ async function submitBuild() {
     .map(function(slot, i) {
       return {
         build_id: buildId,
-        user_id: currentAdmin.id,   // placeholder — build_photos.user_id is NOT NULL
+        user_id: currentAdmin.id,   // placeholder — launch-invite transfers it to the builder
         storage_path: state.photos[slot].path,
         thumb_path: state.photos[slot].thumbPath,
         is_hero: slot === 'hero',
