@@ -1,0 +1,62 @@
+name: Smoke test
+
+# Walks the critical path as a real signed-in user: sign in, upload a JPEG to
+# build-photos, read it back and compare bytes, delete it through the Storage
+# API, then run the builder's own platforms query.
+#
+# This exists because photo upload broke on 2026-09-22 and was not found until
+# 2026-09-25. Every upload returned 400, the only symptom was a generic
+# "Upload failed" toast, and nothing was watching. See
+# supabase/fix_product_image_policies.sql for the incident and CLAUDE.md for
+# the invariant.
+#
+# It signs in with a dedicated non-admin account, NOT the service-role key.
+# service_role bypasses RLS, so it would have passed cleanly all the way
+# through that outage — the broken policy only affected `authenticated`.
+#
+# Failure modes are surfaced by GitHub Actions itself: a red job emails the
+# account owner, same as the affiliate refresh. Nothing extra to wire up.
+
+on:
+  schedule:
+    # Four times a day at :17 — 02:17, 08:17, 14:17, 20:17 UTC. A few hours
+    # of exposure is the most this can go unnoticed, against the three days
+    # it took last time.
+    #
+    # The odd minute is the same habit as refresh-affiliate-prices.yml and for
+    # the same measured reason: GitHub queues scheduled workflows and
+    # deprioritises them under load, and the top of the hour is the busiest
+    # slot on the platform, so '0 * * * *' style crons routinely ran hours
+    # late. A late smoke test is a smoke test you cannot reason about — "has
+    # today's 08:00 run landed yet?" should never need checking.
+    - cron: '17 2,8,14,20 * * *'
+  workflow_dispatch:
+
+# Two runs at once would write under the same prefix and could race on
+# cleanup. Scheduled runs are hours apart, but a manual run during one would
+# otherwise overlap.
+concurrency:
+  group: smoke-test
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # No `npm ci` step: smoke-test.mjs imports nothing. It uses built-in
+      # fetch and Buffer only, deliberately — a test of the critical path
+      # should not itself be able to fail on a dependency install.
+
+      - name: Smoke test
+        working-directory: scripts
+        env:
+          SMOKE_TEST_EMAIL:    ${{ secrets.SMOKE_TEST_EMAIL }}
+          SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
+        run: node smoke-test.mjs
