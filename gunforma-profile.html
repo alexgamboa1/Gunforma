@@ -74,6 +74,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* BUILD CARD GRID (matches gunforma-builds.html card language) */
 .builds-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+/* Owner delete lives on the card, not inside the link — a <button> nested in
+   an <a> is invalid and a stray click on a destructive control should never
+   be one the router handles. */
+.build-card-wrap { position: relative; }
+.build-card-delete { position: absolute; top: 10px; right: 10px; z-index: 2; width: 28px; height: 28px; border-radius: 6px; border: 0.5px solid #e5e5e5; background: rgba(255,255,255,0.94); color: #9b1c1c; font-size: 13px; line-height: 1; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s, background 0.15s; }
+.build-card-wrap:hover .build-card-delete,
+.build-card-delete:focus-visible { opacity: 1; }
+.build-card-delete:hover { background: #fde8e2; border-color: #f9c4b6; }
+
+/* Confirm dialog. Explicit Delete / Cancel, never a bare confirm(): the
+   browser dialog cannot say what is destroyed, and this has to. */
+.del-scrim { position: fixed; inset: 0; z-index: 400; background: rgba(14,15,17,0.55); opacity: 0; pointer-events: none; transition: opacity 0.18s ease; }
+.del-scrim.open { opacity: 1; pointer-events: auto; }
+.del-modal { position: fixed; z-index: 401; top: 50%; left: 50%; transform: translate(-50%, -48%); width: calc(100% - 32px); max-width: 460px; background: #fff; border-radius: 10px; box-shadow: 0 18px 50px rgba(0,0,0,0.25); padding: 22px; opacity: 0; pointer-events: none; transition: opacity 0.18s ease, transform 0.18s ease; }
+.del-modal.open { opacity: 1; pointer-events: auto; transform: translate(-50%, -50%); }
+.del-modal-title { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.del-modal-sub { font-size: 13px; color: #666; line-height: 1.6; margin-bottom: 14px; }
+.del-modal-list { font-size: 12.5px; color: #7f1d1d; background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 12px 14px; line-height: 1.75; margin-bottom: 14px; }
+.del-modal-url { font-size: 12px; color: #8a5a00; background: #fef6e7; border: 0.5px solid #f0c674; border-radius: 6px; padding: 10px 12px; line-height: 1.6; margin-bottom: 18px; }
+.del-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+.del-btn-cancel { background: #fff; border: 0.5px solid #d5d3ca; color: #333; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; font-family: inherit; }
+.del-btn-confirm { background: #c0392b; border: none; color: #fff; padding: 10px 18px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit; }
+.del-btn-confirm:hover:not(:disabled) { background: #a93226; }
+.del-btn-confirm:disabled { opacity: 0.5; cursor: not-allowed; }
+
 .build-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; text-decoration: none; color: inherit; transition: border-color 0.15s, transform 0.15s; }
 .build-card:hover { border-color: #cfcdc4; transform: translateY(-1px); }
 .build-card.disabled { cursor: default; }
@@ -182,6 +207,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- Owner delete confirmation. Deliberately not confirm(): the browser dialog
+     cannot list what is destroyed or warn that the URL dies, and those are
+     the two things someone needs to read before agreeing. -->
+<div class="del-scrim" id="del-scrim" onclick="closeDeleteBuild()"></div>
+<div class="del-modal" id="del-modal" role="dialog" aria-modal="true" aria-labelledby="del-modal-title">
+  <div class="del-modal-title" id="del-modal-title">Delete this build?</div>
+  <div class="del-modal-sub" id="del-modal-sub"></div>
+  <div class="del-modal-list" id="del-modal-list"></div>
+  <div class="del-modal-url" id="del-modal-url"></div>
+  <div class="del-modal-actions">
+    <button class="del-btn-cancel"  id="del-btn-cancel"  type="button" onclick="closeDeleteBuild()">Cancel</button>
+    <button class="del-btn-confirm" id="del-btn-confirm" type="button" onclick="confirmDeleteBuild()">Delete build</button>
+  </div>
+</div>
 
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -597,9 +637,128 @@ function renderStatusBuildCard(b) {
         '<div class="build-card-sub">'+escH(platform)+' · '+partsCount+' part'+(partsCount!==1?'s':'')+'</div>'+
       '</div>';
   const href = routeForBuild(b);
-  return clickable
+  const card = clickable
     ? '<a class="build-card" href="'+href+'">'+inner+'</a>'
     : '<div class="build-card disabled">'+inner+'</div>';
+
+  // Owner-only, and every status — the DB policy is now
+  // "Owners can delete their own builds" using auth.uid() = user_id, with no
+  // status clause. The id rides on a data attribute rather than an inline
+  // argument so a build named with a quote can still be deleted.
+  if (!IS_OWN_PROFILE) return card;
+  return '<div class="build-card-wrap">'+card+
+    '<button class="build-card-delete" type="button" title="Delete this build" '+
+      'aria-label="Delete '+escH(b.name||'')+'" data-build-id="'+escH(b.id)+'" '+
+      'onclick="openDeleteBuild(this.dataset.buildId)">🗑</button>'+
+  '</div>';
+}
+
+// ============================================================
+// OWNER DELETE
+// ============================================================
+// Lives here, on the profile, rather than on gunforma-build-detail.html:
+//   • the profile is the owner's management surface — it already carries the
+//     per-status cards and the edit routing, and it is where someone goes to
+//     administer their own things rather than to read one;
+//   • the profile still exists afterwards. Deleting from the build page
+//     destroys the page you are standing on, which then has to redirect
+//     somewhere and explain itself;
+//   • the build page is the one owners share. A destructive control there is
+//     one misclick away from an audience.
+let DELETE_TARGET = null;
+
+function openDeleteBuild(buildId) {
+  const b = (MY_BUILDS || []).find(function(x){ return x.id === buildId; });
+  if (!b) return;
+  DELETE_TARGET = b;
+
+  const live = b.status === 'approved';
+  const photos = (b.build_photos || []).length;
+
+  document.getElementById('del-modal-title').textContent = 'Delete “' + (b.name || 'this build') + '”?';
+  document.getElementById('del-modal-sub').textContent =
+    'This cannot be undone. There is no trash and no restore.';
+  document.getElementById('del-modal-list').innerHTML =
+    'Deleting this build permanently removes:' +
+    '<br>• the build page itself' +
+    '<br>• its ' + photos + ' photo' + (photos === 1 ? '' : 's') + ', including the image files' +
+    '<br>• every comment and reply on it' +
+    '<br>• every like and every save by other people';
+  // Only worth saying for a build that has a live URL someone might hold.
+  document.getElementById('del-modal-url').style.display = live ? '' : 'none';
+  document.getElementById('del-modal-url').innerHTML =
+    'This build is <strong>live</strong>. Its address stops working the moment it is deleted, ' +
+    'so any link you have shared — in a message, a forum post or a bio — will break.';
+
+  document.getElementById('del-scrim').classList.add('open');
+  document.getElementById('del-modal').classList.add('open');
+  const cancel = document.getElementById('del-btn-cancel');
+  if (cancel) cancel.focus();
+}
+
+// Escape closes it, like any dialog. Guarded on DELETE_TARGET so this does
+// nothing when the modal is not up.
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && DELETE_TARGET) closeDeleteBuild();
+});
+
+function closeDeleteBuild() {
+  DELETE_TARGET = null;
+  document.getElementById('del-scrim').classList.remove('open');
+  document.getElementById('del-modal').classList.remove('open');
+  const btn = document.getElementById('del-btn-confirm');
+  if (btn) { btn.disabled = false; btn.textContent = 'Delete build'; }
+}
+
+async function confirmDeleteBuild() {
+  const b = DELETE_TARGET;
+  if (!b) return;
+  const btn = document.getElementById('del-btn-confirm');
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting…'; }
+
+  // Paths BEFORE the row goes. build_photos cascades with the build, and
+  // once those rows are gone nothing records where the files were — an
+  // orphan nobody can name is one nobody can clean up.
+  const paths = [];
+  (b.build_photos || []).forEach(function(p) {
+    if (p.storage_path) paths.push(p.storage_path);
+    if (p.thumb_path)   paths.push(p.thumb_path);
+  });
+
+  // Row first, files second: deleting the files of a build that then survives
+  // leaves a live page with broken images, which is worse than an orphan.
+  //
+  // .select('id') and a row-count check, because an RLS-filtered DELETE
+  // matches zero rows and returns no error — the silent success that has
+  // bitten this project three times this week.
+  const { data: deleted, error } = await sb.from('builds')
+    .delete().eq('id', b.id).eq('user_id', CURRENT_USER.id).select('id');
+
+  if (error) {
+    console.error(error);
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete build'; }
+    showToast('Delete failed — ' + (error.code ? error.code + ': ' : '') + (error.message || 'see console'));
+    return;
+  }
+  if (!Array.isArray(deleted) || deleted.length !== 1) {
+    console.error('delete matched no rows', { id: b.id, returned: deleted });
+    if (btn) { btn.disabled = false; btn.textContent = 'Delete build'; }
+    showToast('Delete refused — nothing was removed. Reload and try again.');
+    return;
+  }
+
+  // The build is gone by here, so a storage failure is reported, not fatal.
+  let orphaned = 0;
+  if (paths.length) {
+    const { error: sErr } = await sb.storage.from('build-photos').remove(paths);
+    if (sErr) { orphaned = paths.length; console.error('storage delete failed', sErr, paths); }
+  }
+
+  closeDeleteBuild();
+  await loadMyBuilds();
+  showToast(orphaned
+    ? 'Build deleted — ' + orphaned + ' image file(s) could not be removed'
+    : 'Build deleted');
 }
 
 // Cheap relative-time formatter for owner-facing "Reviewed X ago" copy.
