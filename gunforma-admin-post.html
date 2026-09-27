@@ -71,33 +71,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .platform-selected-name { font-size: 14px; font-weight: 700; color: #e8e6e1; margin-top: 2px; }
 .platform-change { font-size: 11px; color: #6fb4e8; background: none; border: 0.5px solid #3a3b3e; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; }
 
-/* PHOTOS */
-.photo-grid { display: grid; grid-template-columns: 1.6fr 1fr 1fr 1fr; gap: 8px; }
-.photo-slot { background: #fafaf8; border: 1px dashed #d9d6cc; border-radius: 6px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; cursor: pointer; transition: all 0.15s; text-align: center; padding: 8px; position: relative; overflow: hidden; }
-.photo-slot:hover { border-color: #4a9edd; background: #f0f6fc; }
-.photo-slot.filled { border-style: solid; border-color: #4a9edd; background: #eaf4fc; }
-.photo-slot.uploading { border-style: solid; border-color: #f9b860; background: #fef3e2; cursor: default; }
-.photo-slot.error { border-style: solid; border-color: #e25c3a; background: #fde8e2; }
-.photo-slot-icon { font-size: 20px; color: #ccc; position: relative; z-index: 1; }
-.photo-slot.filled .photo-slot-icon { color: #2a7bbd; }
-.photo-slot-label { font-size: 10px; color: #999; position: relative; z-index: 1; }
-.photo-slot.filled .photo-slot-label { color: #1d6fb8; font-weight: 700; }
-.photo-slot-preview { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: none; }
-.photo-slot.filled .photo-slot-preview { display: block; }
-.photo-slot.filled .photo-slot-icon, .photo-slot.filled .photo-slot-label { text-shadow: 0 1px 3px rgba(0,0,0,0.6); color: #fff; }
-/* Hero-badge + hover actions + drag-over target state */
-.photo-slot-hero-badge { position: absolute; top: 6px; left: 6px; z-index: 3; display: none; background: #f9b860; color: #4a3c14; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.1em; text-transform: uppercase; pointer-events: none; }
-.photo-slot.filled[data-slot="hero"] .photo-slot-hero-badge { display: block; }
-.photo-slot-actions { position: absolute; bottom: 0; left: 0; right: 0; z-index: 3; display: flex; gap: 6px; padding: 6px 8px; background: linear-gradient(to top, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.5) 70%, rgba(0,0,0,0) 100%); opacity: 0; transition: opacity 0.15s; pointer-events: none; }
-.photo-slot.filled .photo-slot-actions { pointer-events: auto; }
-.photo-slot.filled:hover .photo-slot-actions { opacity: 1; }
-.photo-slot-action-btn { background: rgba(255,255,255,0.94); border: none; color: #1a1a1a; font-size: 10px; font-weight: 700; padding: 5px 9px; border-radius: 4px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; }
-.photo-slot-action-btn:hover { background: #fff; }
-.photo-slot-action-btn.danger:hover { color: #c25d3a; }
-.photo-slot[data-slot="hero"] .photo-slot-set-main-btn { display: none; }
-.photo-slot.drag-over { border-style: dashed !important; border-color: #d4a853 !important; background: #fdf6e6 !important; transform: scale(1.02); transition: transform 0.1s, border-color 0.1s, background 0.1s; }
-/* Touch devices can't hover — always show actions on filled slots */
-@media (hover: none) { .photo-slot.filled .photo-slot-actions { opacity: 1; } }
+/* PHOTOS — the slots, the preview overlay and their CSS live in
+   js/photos.js, loaded below and shared with gunforma-post-build.html.
+   This page used to carry its own copy of all of it, which is how it
+   ended up two releases behind that page's. */
 
 /* FORM */
 .field { margin-bottom: 16px; }
@@ -231,7 +208,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { position: static; }
-  .photo-grid { grid-template-columns: repeat(2, 1fr); }
   .part-cards-grid { grid-template-columns: 1fr; }
 }
 .nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
@@ -300,62 +276,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <span class="card-title"><span class="card-step" id="step2-dot">2</span> Photos</span>
       <span class="card-hint">Builds with photos get saved 3× more</span>
     </div>
-    <div class="photo-grid">
-      <div class="photo-slot" data-slot="hero" id="slot-hero"
-           onclick="onSlotClick('hero')"
-           ondragover="onSlotDragOver(event,'hero')"
-           ondragleave="onSlotDragLeave(event,'hero')"
-           ondrop="onSlotDrop(event,'hero')">
-        <img class="photo-slot-preview" id="preview-hero" />
-        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add hero photo</div>
-        <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('hero')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('hero')">✕ Remove</button>
-        </div>
-      </div>
-      <div class="photo-slot" data-slot="g1" id="slot-g1"
-           onclick="onSlotClick('g1')"
-           ondragover="onSlotDragOver(event,'g1')"
-           ondragleave="onSlotDragLeave(event,'g1')"
-           ondrop="onSlotDrop(event,'g1')">
-        <img class="photo-slot-preview" id="preview-g1" />
-        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
-        <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g1')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g1')">✕ Remove</button>
-        </div>
-      </div>
-      <div class="photo-slot" data-slot="g2" id="slot-g2"
-           onclick="onSlotClick('g2')"
-           ondragover="onSlotDragOver(event,'g2')"
-           ondragleave="onSlotDragLeave(event,'g2')"
-           ondrop="onSlotDrop(event,'g2')">
-        <img class="photo-slot-preview" id="preview-g2" />
-        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
-        <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g2')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g2')">✕ Remove</button>
-        </div>
-      </div>
-      <div class="photo-slot" data-slot="g3" id="slot-g3"
-           onclick="onSlotClick('g3')"
-           ondragover="onSlotDragOver(event,'g3')"
-           ondragleave="onSlotDragLeave(event,'g3')"
-           ondrop="onSlotDrop(event,'g3')">
-        <img class="photo-slot-preview" id="preview-g3" />
-        <div class="photo-slot-icon">⊕</div><div class="photo-slot-label">Add photo</div>
-        <div class="photo-slot-hero-badge">★ Main</div>
-        <div class="photo-slot-actions">
-          <button type="button" class="photo-slot-action-btn photo-slot-set-main-btn" onclick="event.stopPropagation();setAsHero('g3')">★ Set as main</button>
-          <button type="button" class="photo-slot-action-btn danger" onclick="event.stopPropagation();removePhoto('g3')">✕ Remove</button>
-        </div>
-      </div>
-    </div>
-    <div class="field-sub" id="photo-error" style="color:#c25d3a;display:none;"></div>
-    <input type="file" id="photo-file-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="onFileSelected(event)" />
+    <!-- Slots, messages and the file input are rendered here by
+         js/photos.js (PhotoUploader.init). -->
+    <div id="photo-grid-mount"></div>
   </div>
 
   <!-- 3. BUILD DETAILS -->
@@ -440,6 +363,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/supabase-client.js"></script>
 <script src="js/redact.js"></script>
+<script src="js/photos.js"></script>
 <script>
 var sb = window.sb;
 var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
@@ -655,237 +579,24 @@ function changePlatform() {
 }
 
 // ===== STEP 2 =====
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;      // matches the bucket's server-side limit
-// Two stored sizes per photo — one plan tier away from just using Storage's
-// on-the-fly transform API and dropping this, but that's Pro-only and this
-// project is on the free plan.
-const DISPLAY_MAX_DIMENSION = 1600;            // long edge, px — hero/full view
-const DISPLAY_JPEG_QUALITY = 0.80;
-const THUMB_MAX_DIMENSION = 480;               // long edge, px — grid/card views
-const THUMB_JPEG_QUALITY = 0.70;
-
-let activeSlot = null;
-
-function onSlotClick(slot) {
-  const cur = state.photos[slot];
-  if (cur) return;                               // filled slots use the action buttons
-  activeSlot = slot;
-  document.getElementById('photo-file-input').click();
-}
-
-// Drag-and-drop from Finder/desktop straight onto a slot. The drop path
-// runs the same validation + normalize + upload pipeline as the click path
-// via processFile — file input just supplies the File a different way.
-function onSlotDragOver(e, slot) {
-  e.preventDefault();
-  const cur = state.photos[slot];
-  if (cur && cur.uploading) { e.dataTransfer.dropEffect = 'none'; return; }
-  e.dataTransfer.dropEffect = 'copy';
-  document.getElementById('slot-' + slot).classList.add('drag-over');
-}
-function onSlotDragLeave(e, slot) {
-  document.getElementById('slot-' + slot).classList.remove('drag-over');
-}
-async function onSlotDrop(e, slot) {
-  e.preventDefault();
-  document.getElementById('slot-' + slot).classList.remove('drag-over');
-  const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (!file) return;
-  const cur = state.photos[slot];
-  if (cur && cur.uploading) return;
-  if (cur) { await removePhoto(slot); }         // drop replaces existing photo
-  activeSlot = slot;
-  await processFile(file);
-}
-
-// Set any filled non-hero slot as the hero by swapping photo objects in
-// state — the hero slot key stays canonical (the DB insert reads
-// slot==='hero' → is_hero:true), so nothing changes about how photo rows
-// are written; only which photo occupies the "hero" seat.
-function setAsHero(slot) {
-  if (slot === 'hero') return;
-  const incoming = state.photos[slot];
-  if (!incoming || incoming.uploading) return;
-  const heroCur = state.photos.hero;
-  state.photos.hero = incoming;
-  state.photos[slot] = heroCur;
-  syncSlotUI('hero');
-  syncSlotUI(slot);
-  renderSidebar();
-}
-
-// Repaint one slot's UI from its current state.photos entry — used after a
-// hero swap where the slot key doesn't move but its underlying photo does.
-function syncSlotUI(slot) {
-  const el = document.getElementById('slot-' + slot);
-  const img = document.getElementById('preview-' + slot);
-  const data = state.photos[slot];
-  if (!data) { clearSlot(slot); return; }
-  if (data.uploading) { setSlotUploading(slot); return; }
-  el.classList.remove('uploading','error','drag-over');
-  el.classList.add('filled');
-  el.querySelector('.photo-slot-icon').textContent = '✓';
-  el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Hero photo set' : 'Photo added';
-  if (data.previewUrl) img.src = data.previewUrl;
-}
-
-function photoError(msg) {
-  const el = document.getElementById('photo-error');
-  el.textContent = msg;
-  el.style.display = msg ? 'block' : 'none';
-}
-
-async function onFileSelected(event) {
-  const file = event.target.files[0];
-  event.target.value = '';                       // allow re-selecting the same file later
-  await processFile(file);
-}
-
-// Shared upload pipeline — the click path (onFileSelected) and the drop
-// path (onSlotDrop) both funnel through here so validation, normalize,
-// and upload are guaranteed identical.
-async function processFile(file) {
-  const slot = activeSlot;
-  if (!file || !slot) return;
-  photoError('');
-
-  if (!['image/jpeg','image/png','image/webp'].includes(file.type)) {
-    photoError('Please choose a JPEG, PNG, or WebP photo.');
-    return;
-  }
-  if (file.size > MAX_PHOTO_BYTES) {
-    photoError('That photo is too large — please choose one under 8MB.');
-    return;
-  }
-
-  // Redact-before-upload gate. Opens a modal where the user can pixelate
-  // sensitive regions (serial numbers, faces, addresses) at full resolution.
-  // The resulting File is what continues down the pipeline — nothing
-  // unredacted ever reaches normalizeImage/upload/preview.
-  //   - resolves(File) → user hit Done (with boxes) or Skip
-  //   - resolves(null) → user cancelled (Escape / outside click)
-  // Same gate, same place in the pipeline, as gunforma-post-build.html —
-  // both call the one copy in js/redact.js. Posting on someone else's
-  // behalf is exactly when a serial is most likely to slip through, since
-  // the photo came from them and the admin may never have looked closely.
-  const redactedFile = await openRedactModal(file);
-  if (!redactedFile) return;
-  file = redactedFile;
-
-  setSlotUploading(slot);
-
-  let displayBlob, thumbBlob;
-  try {
-    const normalized = await normalizeImage(file);
-    displayBlob = normalized.displayBlob;
-    thumbBlob = normalized.thumbBlob;
-  } catch (e) {
-    console.error(e);
-    photoError('Couldn\'t read that image — try a different file.');
-    clearSlot(slot);
-    return;
-  }
-
-  const previewUrl = URL.createObjectURL(thumbBlob);
-  setSlotPreview(slot, previewUrl);
-
-  const base = currentAdmin.id + '/' + draftId + '/' + slot + '-' + Date.now();
-  const path = base + '.jpg';
-  const thumbPath = base + '-thumb.jpg';
-
-  const [displayRes, thumbRes] = await Promise.all([
-    sb.storage.from('build-photos').upload(path, displayBlob, { contentType: 'image/jpeg', upsert: false }),
-    sb.storage.from('build-photos').upload(thumbPath, thumbBlob, { contentType: 'image/jpeg', upsert: false }),
-  ]);
-
-  if (displayRes.error || thumbRes.error) {
-    console.error(displayRes.error || thumbRes.error);
-    if (!displayRes.error) sb.storage.from('build-photos').remove([path]);
-    if (!thumbRes.error) sb.storage.from('build-photos').remove([thumbPath]);
-    photoError('Upload failed — try again.');
-    clearSlot(slot);
-    return;
-  }
-
-  state.photos[slot] = { path: path, thumbPath: thumbPath, uploading: false, previewUrl: previewUrl };
-  setSlotFilled(slot);
-  renderSidebar();
-}
-
-// Re-encodes through a canvas: normalizes to JPEG regardless of source
-// format, strips all EXIF (including GPS — phone photos routinely embed
-// geolocation, which nobody posting a carry gun photo wants published),
-// and produces two sizes from the one decode — a display version for
-// hero/full view and a small thumbnail for grid/card views, so a phone
-// on cellular data isn't downloading a 1600px image to render a 100px
-// thumbnail.
-function normalizeImage(file) {
-  return new Promise(function(resolve, reject) {
-    const img = new Image();
-    const objectUrl = URL.createObjectURL(file);
-    img.onload = function() {
-      URL.revokeObjectURL(objectUrl);
-      const w0 = img.naturalWidth, h0 = img.naturalHeight;
-      if (!w0 || !h0) { reject(new Error('Image has no dimensions')); return; }
-
-      function renderAt(maxDim, quality) {
-        const scale = Math.min(1, maxDim / Math.max(w0, h0));
-        const w = Math.round(w0 * scale), h = Math.round(h0 * scale);
-        const canvas = document.createElement('canvas');
-        canvas.width = w; canvas.height = h;
-        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        return new Promise(function(res, rej) {
-          canvas.toBlob(function(blob) {
-            if (!blob) { rej(new Error('Could not encode image')); return; }
-            res(blob);
-          }, 'image/jpeg', quality);
-        });
-      }
-
-      Promise.all([
-        renderAt(DISPLAY_MAX_DIMENSION, DISPLAY_JPEG_QUALITY),
-        renderAt(THUMB_MAX_DIMENSION, THUMB_JPEG_QUALITY),
-      ]).then(function(results) {
-        resolve({ displayBlob: results[0], thumbBlob: results[1] });
-      }).catch(reject);
-    };
-    img.onerror = function() { URL.revokeObjectURL(objectUrl); reject(new Error('Unsupported image')); };
-    img.src = objectUrl;
+// The uploader — slots, the upload pipeline and the full-size preview —
+// is js/photos.js, shared with gunforma-post-build.html. This page used
+// to carry its own copy of all thirteen functions, which is how it went
+// two releases without a redact gate and then another without any way to
+// check that a blur had landed.
+function initPhotoUploader() {
+  PhotoUploader.init({
+    mount:    '#photo-grid-mount',
+    photos:   function () { return state.photos; },
+    // The only genuine difference between the two pages: photos are
+    // filed under the ADMIN's uid here, and launch-invite transfers
+    // ownership to the builder later.
+    ownerId:  function () { return currentAdmin.id; },
+    // Reassigned by postAnother() so a chained build gets its own
+    // storage folder — hence a getter, not a value.
+    draftId:  function () { return draftId; },
+    onChange: renderSidebar,
   });
-}
-
-async function removePhoto(slot) {
-  const cur = state.photos[slot];
-  if (!cur) return;
-  state.photos[slot] = null;
-  clearSlot(slot);
-  renderSidebar();
-  const { error } = await sb.storage.from('build-photos').remove([cur.path, cur.thumbPath].filter(Boolean));
-  if (error) console.error(error);   // slot is already cleared client-side either way
-}
-
-function setSlotUploading(slot) {
-  state.photos[slot] = { uploading: true };
-  const el = document.getElementById('slot-' + slot);
-  el.classList.remove('filled','error'); el.classList.add('uploading');
-  el.querySelector('.photo-slot-icon').textContent = '…';
-  el.querySelector('.photo-slot-label').textContent = 'Uploading…';
-}
-function setSlotPreview(slot, url) {
-  document.getElementById('preview-' + slot).src = url;
-}
-function setSlotFilled(slot) {
-  const el = document.getElementById('slot-' + slot);
-  el.classList.remove('uploading','error'); el.classList.add('filled');
-  el.querySelector('.photo-slot-icon').textContent = '✓';
-  el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Hero photo set' : 'Photo added';
-}
-function clearSlot(slot) {
-  const el = document.getElementById('slot-' + slot);
-  el.classList.remove('filled','uploading','error');
-  document.getElementById('preview-' + slot).removeAttribute('src');
-  el.querySelector('.photo-slot-icon').textContent = '⊕';
-  el.querySelector('.photo-slot-label').textContent = slot === 'hero' ? 'Add hero photo' : 'Add photo';
 }
 
 // ===== STEP 3 =====
@@ -1322,7 +1033,12 @@ async function publishBuild() {
 // reload. Fresh draftId so photos land in a new storage folder.
 function postAnother() {
   state.platform = null;
-  state.photos = { hero: null, g1: null, g2: null, g3: null };
+  // PhotoUploader.reset() empties the slots IN PLACE — it revokes the
+  // object URLs first (the old code replaced state.photos and leaked
+  // them) and leaves the same object in place, which is what photoCount()
+  // and submitBuild() read. Storage is deliberately untouched: those
+  // objects belong to the build that was just published.
+  PhotoUploader.reset();
   state.name = '';
   state.activities = [];
   state.parts = [];
@@ -1332,10 +1048,10 @@ function postAnother() {
   catalogLoadedFor = null;
   draftId = crypto.randomUUID();
 
-  // Reset UI: platform picker back on, photo slots cleared, form fields blank
+  // Reset UI: platform picker back on, form fields blank (the photo slots
+  // were cleared by PhotoUploader.reset() above)
   document.getElementById('platform-picker').style.display = 'block';
   document.getElementById('platform-selected').classList.remove('show');
-  ['hero','g1','g2','g3'].forEach(clearSlot);
   document.getElementById('build-name').value = '';
   document.getElementById('build-description').value = '';
   document.querySelectorAll('.pill.active').forEach(function(p){ p.classList.remove('active'); });
@@ -1380,6 +1096,8 @@ async function requireAdmin() {
   renderParts(); renderSidebar();
   const ok = await requireAdmin();
   if (!ok) return;
+  // After the admin gate: the uploader's ownerId getter needs currentAdmin.
+  initPhotoUploader();
   renderPlatformGrid();
   loadPlatforms();
 })();
