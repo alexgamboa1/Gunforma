@@ -37,6 +37,11 @@ const REDACT_CSS = `
   background: rgba(14, 15, 17, 0.88);
   display: none; align-items: center; justify-content: center;
   padding: 20px;
+  /* No pinch-zoom of the PAGE from anywhere in the modal, while still
+     allowing one- and two-finger panning (the canvas wrap scrolls). This
+     is the standards-compliant half and is what Chrome/Android honour;
+     Safari needs the gesture* handlers in openRedactModal as well. */
+  touch-action: pan-x pan-y;
 }
 .redact-overlay.open { display: flex; }
 .redact-panel {
@@ -108,6 +113,10 @@ const REDACT_CSS = `
   padding: 8px 14px; border-radius: 4px; cursor: pointer; border: 0.5px solid;
   transition: filter 0.15s;
 }
+/* A plain group so the four actions can be given a row of their own on a
+   phone. On a wide screen it behaves as the loose buttons did: one flex
+   item after the count, which still pushes it right with margin-right. */
+.redact-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .redact-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .redact-btn:not(:disabled):hover { filter: brightness(1.08); }
 .redact-btn.ghost   { background: #fff; color: #444;      border-color: #d9d6cc; }
@@ -158,34 +167,63 @@ const REDACT_CSS = `
   .redact-hint .long { display: none; }
   .redact-hint .short { display: inline; }
   .redact-canvas-wrap { padding: 8px; }
-  /* Two rows on a phone: tools, then actions. Every control shrinks rather
-     than wrapping to a row of its own — a four-row toolbar left the photo
-     itself with almost no height, which is the opposite of the point. */
+  /* Two rows on a phone — tools, then actions — and a third only in Brush
+     mode, for the size slider.
+
+     Every control here is now at least 44px tall. The old ones were 26-37px,
+     which is what let the toolbar be 112px at 390px, and it still wrapped
+     the four action buttons across two rows of their own at 360px and ran
+     to 158px. With a 44px floor the height is rows x 44 plus padding, so
+     the only lever left on height is the number of rows: everything below
+     is in service of keeping that at two. */
   /* The action row sat hard against the bottom of the screen, on top of the
-     iPhone home indicator. The 20px is what actually does the lifting: the
-     site sets no \`viewport-fit=cover\` on any page, so env(safe-area-inset-*)
+     iPhone home indicator. That padding is what does the lifting: the site
+     sets no \`viewport-fit=cover\` on any page, so env(safe-area-inset-*)
      resolves to 0 here and is carried only so this stays correct if the
-     viewport meta is ever opted in. Row gap is up from 6px so the two rows
-     read as separate rather than one crushed block. */
+     viewport meta is ever opted in. */
   .redact-toolbar {
-    padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px));
-    gap: 10px;
+    padding: 4px 10px calc(18px + env(safe-area-inset-bottom, 0px));
+    column-gap: 6px;
+    row-gap: 4px;
   }
-  .redact-shape-toggle button { padding: 9px 10px; }
-  /* The size slider gets its own full-width row, and only in Brush mode —
-     squeezed inline next to the zoom cluster it collapsed to a few px and
-     could not be dragged. */
-  .redact-brush-size.visible { order: 2; flex-basis: 100%; }
-  .redact-brush-size input[type=range] { flex: 1; width: auto; }
+  /* Row 1 — mode, then zoom pinned right. Horizontal padding comes down so
+     the two clusters still fit side by side at 360px once the buttons are
+     44px tall. */
+  .redact-shape-toggle button { min-height: 44px; padding: 0 9px; }
   .redact-zoom { order: 1; margin-left: auto; }
-  .redact-zoom button { width: 28px; height: 26px; }
-  .redact-zoom-label { min-width: 38px; }
+  .redact-zoom button { width: 44px; height: 44px; font-size: 16px; }
+  .redact-zoom button.fit { width: auto; min-width: 44px; padding: 0 8px; font-size: 11px; }
+  /* The percent readout is the one thing here that is not a control, and
+     it is what does not fit: with it, the mode toggle and the zoom cluster
+     come to 356px and wrap onto separate rows at 375px and below. The
+     photo itself shows how far in you are, and Fit is right there to go
+     back, so the readout is what gives way rather than a tap target or a
+     row. It is still written to (see applyZoom) and returns above 640px. */
+  .redact-zoom-label { display: none; }
+  /* Row 2, Brush mode only — the size slider. Squeezed inline next to the
+     zoom cluster it collapsed to a few px and could not be dragged. The
+     track gets the full 44px so it is grabbable anywhere along its length,
+     not only on the thumb. */
+  .redact-brush-size.visible { order: 2; flex-basis: 100%; }
+  .redact-brush-size input[type=range] { flex: 1; width: auto; height: 44px; }
   /* The count lives in the Done label on a phone (see setCount) — one row
      of controls saved. */
   .redact-count { display: none; }
-  .redact-btn { padding: 10px 12px; order: 3; }
+  /* Row 3 — the actions, always on a line of their own. That line is what
+     buys "Skip — nothing to blur" the width it needs at 360px; sharing a
+     row with the mode toggle is what forced it down to a bare "Skip".
+     flex-wrap here is a safety net, not the plan: if a wide system font
+     ever overflows the row it becomes two lines rather than pushing a
+     control off the edge of the screen. */
+  .redact-actions { order: 3; flex-basis: 100%; gap: 5px; }
+  .redact-btn { min-height: 44px; padding: 0 8px; }
+  /* "Skip" on its own does not tell anyone they are allowed to move on,
+     which is the entire job of that button, so its label is the one that
+     survives on a phone. "Clear all" gives up its "all" instead — the verb
+     alone still reads. */
   .redact-btn .long { display: none; }
-  #redact-skip { margin-left: auto; }
+  #redact-skip { margin-left: auto; padding: 0 4px; font-size: 10.5px; }
+  #redact-skip .long { display: inline; }
 }
 `;
 
@@ -223,10 +261,12 @@ const REDACT_HTML = `
         <button type="button" id="redact-zoom-fit" class="fit" title="Fit whole photo on screen">Fit</button>
       </div>
       <span class="redact-count" id="redact-count">0 blurred regions</span>
-      <button type="button" class="redact-btn ghost"    id="redact-undo"  disabled>Undo</button>
-      <button type="button" class="redact-btn ghost"    id="redact-clear" disabled>Clear all</button>
-      <button type="button" class="redact-btn skip"     id="redact-skip">Skip<span class="long"> — nothing to blur</span></button>
-      <button type="button" class="redact-btn primary"  id="redact-done"  disabled>Done</button>
+      <div class="redact-actions">
+        <button type="button" class="redact-btn ghost"    id="redact-undo"  disabled>Undo</button>
+        <button type="button" class="redact-btn ghost"    id="redact-clear" disabled>Clear<span class="long"> all</span></button>
+        <button type="button" class="redact-btn skip"     id="redact-skip">Skip<span class="long"> — nothing to blur</span></button>
+        <button type="button" class="redact-btn primary"  id="redact-done"  disabled>Done</button>
+      </div>
     </div>
   </div>
 </div>
@@ -915,6 +955,7 @@ function openRedactModal(file) {
       // the previous session's circle/brush mode.
       setShapeMode('rect');
       overlay.removeEventListener('click', onBackdropClick);
+      removeGestureGuards();
       document.removeEventListener('keydown', onKeydown);
       // Free the canvas backing store so a very large photo doesn't linger.
       canvas.width = 0; canvas.height = 0;
@@ -947,8 +988,32 @@ function openRedactModal(file) {
     function onBackdropClick(e) { if (e.target === overlay) finishAsCancel(); }
     function onKeydown(e) { if (e.key === 'Escape') finishAsCancel(); }
 
+    // iOS Safari zooms the PAGE on a pinch and does not route that through
+    // touch-action — it fires its own non-standard gesture* events. That is
+    // why `touch-action: none` on the canvas only ever protected the canvas:
+    // a pinch starting a few px outside it zoomed Safari itself, and the
+    // toolbar went off-screen with no way to get it back. (`user-scalable=no`
+    // in the viewport meta is not the fix — iOS has ignored it since 10, and
+    // the site sets no such meta anyway.) Blocking these across the whole
+    // overlay means a pinch anywhere in the modal can only ever zoom the
+    // photo. The modal's own pinch runs on pointer events and is untouched,
+    // and panning a zoomed photo is ordinary scrolling of the canvas wrap,
+    // which gesture events are not involved in.
+    function onGesture(e) { e.preventDefault(); }
+    const GESTURE_EVENTS = ['gesturestart', 'gesturechange', 'gestureend'];
+    function addGestureGuards() {
+      GESTURE_EVENTS.forEach(function (t) { overlay.addEventListener(t, onGesture, { passive: false }); });
+    }
+    function removeGestureGuards() {
+      GESTURE_EVENTS.forEach(function (t) { overlay.removeEventListener(t, onGesture); });
+    }
+
     // Show shell + loading state before we decode — large phone photos take a beat.
     overlay.classList.add('open');
+    // Bound here rather than in img.onload: the overlay is on screen and
+    // pinchable during the decode, which on a 12MP phone photo is not a
+    // short window.
+    addGestureGuards();
     loading.style.display = '';
     setCount();
 
