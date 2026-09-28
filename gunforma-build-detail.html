@@ -421,8 +421,28 @@ function showToast(msg) {
   clearTimeout(window._tt);
   window._tt = setTimeout(() => t.classList.remove('show'), 2600);
 }
+// What the share button puts on the clipboard. The CANONICAL, not
+// window.location.href: someone who arrived on an old
+// gunforma-build-detail.html?id=... link would otherwise pass that URL on,
+// and that is the one with no OG tags — it previews as a bare title and the
+// app icon. The script at the top of this page has already pointed the
+// canonical at /b/<id> by the time this button can be clicked, at both URLs,
+// and at /b/<id> it is build-og.mjs's own injected tag.
+//
+// Shape-checked rather than trusted: only a per-build /b/<id> canonical is
+// worth sharing. If it is missing, or is still the id-less static one (no id
+// in the URL at all), fall back to the current URL — better a working link
+// than none. No host check, so deploy previews share themselves.
+//
+// This also drops any #c-<comment> anchor, which is correct here: the button
+// says "Copy link" for the build, and inbox deep links are their own thing.
+function shareUrl() {
+  var link = document.querySelector('link[rel="canonical"]');
+  var href = link && link.href;
+  return href && /\/b\/[^/]+$/.test(href) ? href : window.location.href;
+}
 function copyLink() {
-  navigator.clipboard.writeText(window.location.href).then(function() {
+  navigator.clipboard.writeText(shareUrl()).then(function() {
     showToast('Link copied');
   }).catch(function() {
     showToast('Could not copy link');
