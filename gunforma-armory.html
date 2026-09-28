@@ -1013,7 +1013,9 @@ async function loadBuildById(buildId) {
       brand: part.brand || (live ? live.brand : 'Unknown'),
       name:  part.name  || (live ? live.name  : ''),
       pending: !!part.pending,
-      // Carried, or it is gone on the next save — see buildPartsSnapshot().
+      // Carried, or they are gone on the next save — see buildPartsSnapshot().
+      // finish is post-build's object; it passes through untouched.
+      finish:  part.finish  || undefined,
       variant: part.variant || undefined,
       price: live ? live.price : null,
     };
@@ -1498,22 +1500,32 @@ function updateActionButtons() {
   document.getElementById('btn-post').disabled       = !canSubmit;
 }
 
-// WHITELIST. Every key a part carries has to be named here or this page
-// DELETES it on the next save — silently, with no error, because the write
-// succeeds and the row simply comes back smaller.
+// WHITELIST. Every key a part carries has to be named here — and in BOTH
+// STATE.parts mappers below — or this page DELETES it on the next save.
+// Silently: the write succeeds, no error is raised, and the row simply comes
+// back smaller. Nothing surfaces it except noticing the data is gone.
 //
-// Known gap, deliberately not fixed in this PR: post-build's own
-// buildPartsSnapshot() also emits `finish` (the paint-job/cerakote object)
-// and this one does not, so a finish authored there is dropped the first
-// time the draft is saved from the Armory. Latent rather than live today —
-// checked against the database and 0 builds currently carry a finish key.
-// Reported rather than folded in; the fix is one line here plus one in each
-// mapper below.
+// This has already cost one field. `finish` (the paint-job / cerakote object
+// authored by post-build's Paint Job & Finish form) was emitted there and
+// carried by no site here, so any finish would have been dropped the first
+// time its draft was saved from the Armory. It was caught while adding
+// `variant` and while 0 builds carried a finish key — which is luck, not
+// design, because that form is live and the next Cerakote entry posted would
+// have been the one to lose it.
+//
+// So: adding a key to a part means three edits in this file, not one. If you
+// are adding a fourth, the list is here, the mapper in loadBuildById(), and
+// the mapper in remixGuide().
 function buildPartsSnapshot() {
   return STATE.parts.map(function (p) {
     var row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
-    // Omitted when blank, matching post-build, so an untouched part round
-    // trips through this page byte-identical.
+    // Both omitted when absent, matching post-build, so an untouched part
+    // round trips through this page byte-identical.
+    //
+    // `finish` is an object and is carried through UNTOUCHED — this page has
+    // no finish form and should not grow one. It is post-build's field; the
+    // Armory's only job is not to destroy it.
+    if (p.finish)  row.finish  = p.finish;
     if (p.variant) row.variant = p.variant;
     return row;
   });
@@ -1834,7 +1846,9 @@ function remixGuide(guideId) {
       brand: part.brand || (live ? live.brand : 'Unknown'),
       name:  part.name  || (live ? live.name  : ''),
       pending: !!part.pending,
-      // Carried, or it is gone on the next save — see buildPartsSnapshot().
+      // Carried, or they are gone on the next save — see buildPartsSnapshot().
+      // finish is post-build's object; it passes through untouched.
+      finish:  part.finish  || undefined,
       variant: part.variant || undefined,
       price: live ? live.price : null,
     };

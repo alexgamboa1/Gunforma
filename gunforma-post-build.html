@@ -839,8 +839,21 @@ function setCheck(id,done) {
 function buildPartsSnapshot() {
   return state.parts.map(function(p) {
     const row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
-    // Only finish-style entries carry this. Build detail, build-og and the
-    // armory all render brand + name, so the row stays readable to them.
+    // Only finish-style entries (Paint Job & Finish) carry this, and it is an
+    // OBJECT, not a string.
+    //
+    // The sentence that used to be here said build detail, build-og and the
+    // armory "all render brand + name, so the row stays readable to them" —
+    // true, and misleading in the way that mattered: reading it, you assume
+    // those pages cope with `finish`. The armory did not. Its three
+    // whitelists never named the key, so it deleted the object on the first
+    // save of any draft carrying one. That sentence is part of why nobody
+    // noticed.
+    //
+    // As of this change the armory round-trips BOTH `finish` and `variant`
+    // without editing either — it carries them through its mappers and its
+    // buildPartsSnapshot() untouched. It has no UI for either and should not
+    // grow one for `finish`; this page owns that field.
     if (p.finish) row.finish = p.finish;
     // Optional free-text variant/colour note. OMITTED entirely when blank —
     // js/part-picker.js stores undefined rather than '' for exactly this, so
