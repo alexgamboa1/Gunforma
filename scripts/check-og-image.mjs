@@ -13,8 +13,10 @@
 //
 //   1. og:image returns 200 — an og:image that 404s for a crawler is worse
 //      than a thumbnail, because it drops the card entirely.
-//   2. The DECODED BYTES are 1200x630. Not the declared width/height, the
-//      actual image. If the CDN declines to upscale a small source, the
+//   2. The DECODED BYTES are the size the tags claim — OG_W x OG_H for a
+//      transformed hero, og-default.png's own size when that is the card.
+//      Not the declared width/height, the actual image. If the CDN declines
+//      to upscale a small source, the
 //      declaration becomes a lie and the card silently goes back to being
 //      small.
 //   3. og:image:width / og:image:height match those bytes.
@@ -37,7 +39,13 @@ const origin = (process.argv[2] || process.env.DEPLOY_URL || '').replace(/\/$/, 
 if (!origin) { console.error('usage: node scripts/check-og-image.mjs <origin>'); process.exit(2); }
 
 const SITE = 'https://gunforma.com';
-const WANT_W = 1200, WANT_H = 630;
+
+// Imported, never hardcoded. A check carrying its own copy of the expected
+// size goes red on correct output the day the size changes, and a check that
+// cries wolf is a check somebody deletes. These are the same constants the
+// function builds the transform and the meta tags from.
+const { OG_W, OG_H, OG_DEFAULT_W, OG_DEFAULT_H } =
+  await import('../netlify/functions/build-og.mjs');
 
 let failures = 0;
 const ok = (c, l, d) => { console.log((c ? 'PASS  ' : 'FAIL  ') + l + (d !== undefined && d !== '' ? `   [${d}]` : '')); if (!c) failures++; };
@@ -86,7 +94,16 @@ for (const [label, path] of BUILDS) {
 
   ok(!!img, '  og:image present');
   ok(img.startsWith(SITE + '/'), '  og:image is an absolute apex URL', img.slice(0, 60) + '…');
-  ok(w === String(WANT_W) && h === String(WANT_H), '  og:image:width/height declared', `${w}x${h}`);
+  // The declared size depends on WHICH image the card uses: a transformed
+  // hero photo is OG_W x OG_H, og-default.png is its own 1200x630 and says
+  // so. Both are legitimate; what is not legitimate is either one lying,
+  // which the byte check below is what actually settles.
+  const isDefault = /\/og-default\.png$/.test(img);
+  const expectW = isDefault ? OG_DEFAULT_W : OG_W;
+  const expectH = isDefault ? OG_DEFAULT_H : OG_H;
+  if (isDefault) note('this build has no photo — card falls back to og-default.png');
+  ok(w === String(expectW) && h === String(expectH),
+     `  og:image:width/height declared`, `${w}x${h}, expected ${expectW}x${expectH}`);
   ok(!!alt && alt.length > 3, '  og:image:alt present', alt);
 
   // Swap the origin so a preview tests ITS OWN transform, not production's.
@@ -111,8 +128,8 @@ for (const [label, path] of BUILDS) {
     const size = imageSize(buf);
     ok(!!size, '  bytes decode as an image', size ? `${size.w}x${size.h}` : 'unrecognised');
     if (size) {
-      ok(size.w === WANT_W && size.h === WANT_H,
-         '  ACTUAL pixels are 1200x630 — the declaration is not a lie',
+      ok(size.w === expectW && size.h === expectH,
+         `  ACTUAL pixels are ${expectW}x${expectH} — the declaration is not a lie`,
          `${size.w}x${size.h}, ratio ${(size.w / size.h).toFixed(2)}`);
       ok(size.w >= 600, '  wide enough for the large card', size.w + 'px');
     }

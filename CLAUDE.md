@@ -535,7 +535,7 @@ card to roughly 1.91:1 at 600px or wider, and a ~160px thumbnail-with-text to
 anything portrait or square. `twitter:card=summary_large_image` is
 Twitter-only and does not move them. Build photos come off phones and are
 mostly portrait, so `build-og.mjs` serves the hero through the Netlify Image
-CDN at 1200x630 (`ogTransform()`), declares `og:image:width`/`height` from the
+CDN at 1200x900 (`ogTransform()`), declares `og:image:width`/`height` from the
 same constants, and never hands a scraper the raw object URL. The
 `[images]` allowlist in `netlify.toml` is scoped to the build-photos object
 path, not the Supabase host.

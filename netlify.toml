@@ -21,7 +21,7 @@
 # iMessage, Slack and LinkedIn pick the layout from the image's ACTUAL pixels
 # — roughly 1.91:1 and >=600px wide gets the big card — and build photos come
 # off phones and are mostly portrait. build-og.mjs now serves the hero through
-# /.netlify/images at 1200x630. See ogTransform() there.
+# /.netlify/images at 1200x900 (4:3). See ogTransform() there.
 #
 # SCOPED TO THE BUCKET PATH, NOT THE HOST. remote_images entries are anchored
 # full-match regexes, so this permits exactly the public build-photos objects
