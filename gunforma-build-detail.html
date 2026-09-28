@@ -96,10 +96,24 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* The hero image's fit lives HERE, not inline on the element renderBuild
    writes. One place, so a future change to the box cannot be silently
    overridden by a style attribute a few hundred lines away. */
-.build-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.build-hero img { width: 100%; height: 100%; object-fit: cover; display: block; transition: opacity 0.12s; }
 .build-gallery { display: flex; gap: 8px; margin-bottom: 36px; }
-.gallery-thumb { width: 90px; height: 68px; border-radius: 6px; overflow: hidden; border: 0.5px solid #e5e5e5; flex-shrink: 0; }
+/* A <button>, not a div. A div with a click handler is invisible to anyone
+   tabbing, and Enter/Space come free from the element rather than from a
+   keydown handler somebody has to remember to write. The reset is what turns
+   a button back into a picture. */
+.gallery-thumb { width: 90px; height: 68px; border-radius: 6px; overflow: hidden; border: 0.5px solid #e5e5e5; flex-shrink: 0; padding: 0; background: none; cursor: pointer; display: block; transition: border-color 0.15s, box-shadow 0.15s; }
 .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gallery-thumb:hover { border-color: #4a9edd; }
+/* box-shadow, not a thicker border: the page is box-sizing:border-box, so
+   growing the border would shrink the image inside and the strip would
+   twitch as the selection moves. */
+.gallery-thumb[aria-current="true"] { border-color: #4a9edd; box-shadow: 0 0 0 2px #4a9edd; }
+.gallery-thumb:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; }
+/* Dim the outgoing photo while the next one decodes. The <img> element and
+   the square box both stay put, so this is the only thing that changes —
+   no reflow, and a visible acknowledgement that the click landed. */
+.build-hero.loading img { opacity: 0.55; }
 .build-meta { display: flex; flex-direction: column; gap: 14px; }
 .build-eyebrow { font-size: 10px; color: #2a7bbd; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600; }
 .build-title { font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
@@ -751,6 +765,73 @@ function renderNotFound() {
     '</div>';
 }
 
+// ── hero / gallery swap ───────────────────────────────────────────────────
+// The strip used to be four dead 90x68 stamps: rendered as bare divs, no
+// onclick, no listener anywhere in the file. A build with four photos showed
+// one. Clicking a thumbnail now swaps the big image — not a lightbox, because
+// the square hero is ~583px and already a decent viewer, and a swap is the
+// change the strip already looks like it makes.
+var PHOTOS = [];          // strip order: hero first, then the rest by position
+var PHOTO_INDEX = 0;      // which one the big image is showing
+var PHOTO_SUBJECT = '';   // "<name>, a <platform> build" — same shape as og:image:alt
+var GALLERY_BOUND = false;
+
+function photoAlt(i) {
+  var n = PHOTOS.length;
+  return (n > 1 ? 'photo ' + (i + 1) + ' of ' + n + ' — ' : 'photo of ') + PHOTO_SUBJECT;
+}
+
+// Delegated once on the container, which survives renderBuild rewriting its
+// innerHTML. <button> gives Enter and Space for free; there is deliberately
+// no keydown handler to get wrong.
+function bindGallery() {
+  if (GALLERY_BOUND) return;
+  GALLERY_BOUND = true;
+  document.getElementById('build-gallery').addEventListener('click', function (e) {
+    var btn = e.target.closest('.gallery-thumb');
+    if (btn) showPhoto(Number(btn.dataset.i));
+  });
+}
+
+function showPhoto(i) {
+  if (!PHOTOS[i] || i === PHOTO_INDEX) return;
+  PHOTO_INDEX = i;
+
+  var heroEl = document.getElementById('build-hero');
+  var img = heroEl.querySelector('img');
+  if (!img) return;
+
+  // Marker moves first, so the click is acknowledged before any bytes arrive.
+  [].forEach.call(document.querySelectorAll('.gallery-thumb'), function (b) {
+    if (Number(b.dataset.i) === i) b.setAttribute('aria-current', 'true');
+    else b.removeAttribute('aria-current');
+  });
+
+  // storage_path, NEVER thumb_path. The thumbs are ~360x480 and correct at
+  // 90x68; putting one in a 583px box is a thumbnail upscaled into the hero,
+  // which is the bug the square-hero and og:image work just finished removing.
+  var url = photoUrl(PHOTOS[i].storage_path);
+  var alt = photoAlt(i);
+
+  // Preload, then swap. Assigning src straight onto a visible <img> blanks the
+  // box while the new file decodes — on a slow connection that is an empty
+  // square where a photo was. Holding the old frame, dimmed, is the better of
+  // the two. The <img> element itself never leaves the DOM, so nothing
+  // reflows either way.
+  heroEl.classList.add('loading');
+  var pre = new Image();
+  function apply() {
+    if (PHOTO_INDEX !== i) return;   // a later click already won the race
+    img.src = url;
+    img.alt = alt;
+    heroEl.classList.remove('loading');
+  }
+  pre.onload = apply;
+  pre.onerror = apply;               // let the <img> show its own failure
+  pre.src = url;
+  if (pre.complete) apply();         // already cached: no dim, no wait
+}
+
 function renderBuild(b) {
   document.title = b.name + ' — Gunforma';
   setCanonical(b);            // the slug needs the name; this is the first point we have it
@@ -759,7 +840,20 @@ function renderBuild(b) {
   var username = b.profiles ? b.profiles.username : 'unknown';
   var photos = b.build_photos || [];
   var hero = photos.find(function(p){ return p.is_hero; }) || photos[0];
-  var gallery = photos.filter(function(p){ return p !== hero; });
+  // THE STRIP INCLUDES THE HERO. It used to be photos.filter(p => p !== hero),
+  // which is fine for a strip nobody can click and a trap for one you can:
+  // swap away from the hero and there is no thumbnail left to get back to it.
+  //
+  // Order is imposed, not assumed — PostgREST returns embedded rows in
+  // arbitrary order (see CLAUDE.md), so without this the strip could reshuffle
+  // between requests. Hero first, then the rest by position, with id as a
+  // deterministic tiebreak.
+  var others = photos.filter(function(p){ return p !== hero; }).sort(function(a, c){
+    return (a.position || 0) - (c.position || 0) || String(a.id).localeCompare(String(c.id));
+  });
+  PHOTOS = hero ? [hero].concat(others) : [];
+  PHOTO_INDEX = 0;
+  PHOTO_SUBJECT = b.name + (b.platforms && b.platforms.name ? ', a ' + b.platforms.name + ' build' : '');
 
   document.getElementById('breadcrumb-platform').textContent = platformName;
   document.getElementById('breadcrumb-name').textContent = b.name;
@@ -777,15 +871,27 @@ function renderBuild(b) {
   document.getElementById('build-parts-sub').textContent = partsCount ? partsCount+' part'+(partsCount!==1?'s':'')+' listed' : 'No parts listed yet';
 
   document.getElementById('build-hero').innerHTML = hero
-    ? '<img src="'+photoUrl(hero.storage_path)+'" alt="" />'
+    ? '<img src="'+photoUrl(hero.storage_path)+'" alt="'+escH(photoAlt(0))+'" />'
     : '<span>No hero photo yet</span>';
 
   var galleryEl = document.getElementById('build-gallery');
-  if (gallery.length) {
+  // One photo needs no strip — the hero already is it.
+  if (PHOTOS.length > 1) {
     galleryEl.style.display = 'flex';
-    galleryEl.innerHTML = gallery.map(function(p){ return '<div class="gallery-thumb"><img src="'+photoUrl(p.thumb_path)+'" alt="" /></div>'; }).join('');
+    galleryEl.innerHTML = PHOTOS.map(function(p, i){
+      // The button carries the accessible name, so the img inside is
+      // decorative and takes alt="" — otherwise a screen reader announces
+      // the same description twice for one control.
+      return '<button type="button" class="gallery-thumb" data-i="'+i+'"'+
+             (i === 0 ? ' aria-current="true"' : '')+
+             ' aria-label="'+escH('Show ' + photoAlt(i))+'">'+
+               '<img src="'+photoUrl(p.thumb_path || p.storage_path)+'" alt="" />'+
+             '</button>';
+    }).join('');
+    bindGallery();
   } else {
     galleryEl.style.display = 'none';
+    galleryEl.innerHTML = '';
   }
 
   document.getElementById('parts-container').innerHTML = renderParts(b);
