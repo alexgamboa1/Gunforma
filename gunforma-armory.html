@@ -1119,6 +1119,22 @@ function selectPlatform(id) {
   // Changing platform: catalog picks likely don't fit the new one, drop them.
   // Pending (custom) parts survive since they aren't tied to catalog IDs.
   if (STATE.platform && STATE.platform.id !== id) {
+    var doomed = STATE.parts.filter(function (pt) { return !pt.pending; }).length;
+    // Ask ONLY when something would actually be lost, and say how much. The
+    // pistol row is two buttons side by side, so an unconditional confirm
+    // would fire on almost every click and train people to dismiss it —
+    // at which point it protects nothing.
+    //
+    // NOT confirmDiscardIfDirty(): the condition here is "parts would be
+    // dropped", not "the build is dirty", and they are not the same. A
+    // freshly loaded, perfectly clean draft still loses every catalog part
+    // to a platform switch, and isDirty() is false for it — so the dirty
+    // check would wave through exactly the case where saved work is on the
+    // line. Keep this keyed to the count.
+    if (doomed && !window.confirm(
+          'Switching to ' + next.name + ' will remove ' + doomed +
+          (doomed === 1 ? ' part that doesn\'t' : ' parts that don\'t') +
+          ' fit it.\n\nSwitch anyway?')) return;
     STATE.parts = STATE.parts.filter(function (pt) { return pt.pending; });
   }
   STATE.platform = next;

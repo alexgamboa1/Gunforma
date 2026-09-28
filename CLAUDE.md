@@ -888,3 +888,67 @@ actions and a stretched-link overlay. It does not load `js/part-picker.js`,
 and it should not: the module's injected CSS would land on those shared
 selectors and restyle the armory grid. Extracting the armory card is a
 separate question from extracting the picker.
+
+## Replacing the builder's contents: identity, and asking first
+
+**Any action that REPLACES the builder's contents, or CHANGES which row it
+writes to, must do two things:**
+
+- **(a) clear or deliberately adopt the identity** — `STATE.buildId`,
+  `STATE.buildName`, `nameTouched`, `savedSignature`, and the `?build=`
+  query param. Not one of them: all five. They are what decides whether the
+  next save INSERTs a new row or UPDATEs an existing one, and which one.
+- **(b) ask before discarding unsaved work — BEFORE mutating anything,
+  never after.** Put the prompt after the cheap validity checks so it never
+  asks and then fails, and before the first assignment so declining leaves
+  state byte-identical.
+
+**Why this needs writing down: a wrong-row UPDATE is silent.** It returns no
+error and touches no guard. `.eq('status', 'draft')` does not save you — it
+passes, because the row it is about to corrupt really is a draft. The only
+symptom `remixGuide()` produced was a header showing one build's name over
+another build's parts, and nobody was looking at that.
+
+Three instances turned up in one session, and the third is the corollary:
+**after the mutation, show what happened.** The picker re-rendered a grid of
+forty cards with no visible confirmation that the add had landed
+(`#81`/`#83`) — no wrong row, no lost work, but the same class of silence.
+
+### The audit, and why "keeps buildId" is not the test
+
+Every wholesale `STATE.parts` reassignment in `gunforma-armory.html`:
+
+| function | identity handling | verdict |
+|---|---|---|
+| `resetBuilderState()` | clears buildId, buildName, nameTouched, savedSignature; caller scrubs the URL | correct — a new build |
+| `loadBuildById()` | sets buildId + buildName from the row, `nameTouched = false`, `markClean()` | correct — deliberately **adopts** an identity |
+| `selectPlatform()` | **keeps** buildId | correct — see below |
+| `removePartByRefId()` / `removePartByUid()` | single-part filters | not identity-changing |
+| `remixGuide()` | none at all | **the bug** |
+
+`selectPlatform()` and `remixGuide()` both kept `buildId`, and one was right.
+Changing the pistol **is** an edit of the draft you have open, so its save
+belongs on that row. A remix is a **different build**, so its save does not —
+and leaving `buildId` set made "Remix" overwrite whatever draft happened to
+be open, replacing its `parts_snapshot` *and* its `platform_id`.
+
+So the rule is about **intent**, not a mechanical "does it clear buildId".
+Ask: *after this action, is the thing on screen the same build the user was
+editing?* If yes, keep the identity. If no, clear it. Either way, decide on
+purpose and say which in a comment — the two cases look identical in a diff.
+
+### Only ask when something is actually lost
+
+Both halves matter. `selectPlatform()` silently dropped every catalog part on
+a pistol switch; it now confirms — but **only when the count is non-zero**,
+and it names it: *"Switching to SIG P320 will remove 3 parts that don't fit
+it."* The pistol row is two buttons side by side, so an unconditional confirm
+would fire on nearly every click and train people to dismiss it, at which
+point it protects nothing.
+
+**Do not reach for `confirmDiscardIfDirty()` here.** Its condition is "the
+build is dirty", and that is not the same question. A freshly loaded,
+perfectly clean draft still loses every catalog part to a platform switch,
+and `isDirty()` is false for it — so the dirty check waves through exactly
+the case where *saved* work is on the line. Key the prompt to what would
+actually be destroyed.
