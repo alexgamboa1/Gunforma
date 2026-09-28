@@ -542,6 +542,25 @@ of those places undoes that.
 Auth redirects are the one exception — those correctly follow the current origin via
 `js/site-url.js`.
 
+**A share card's layout is chosen from the image's actual pixels, not from
+`twitter:card`.** Facebook, iMessage, Slack and LinkedIn give the full-width
+card to roughly 1.91:1 at 600px or wider, and a ~160px thumbnail-with-text to
+anything portrait or square. `twitter:card=summary_large_image` is
+Twitter-only and does not move them. Build photos come off phones and are
+mostly portrait, so `build-og.mjs` serves the hero through the Netlify Image
+CDN at 1200x900 (`ogTransform()`), declares `og:image:width`/`height` from the
+same constants, and never hands a scraper the raw object URL. The
+`[images]` allowlist in `netlify.toml` is scoped to the build-photos object
+path, not the Supabase host.
+
+Two things about that are easy to get wrong later. Declaring a size the bytes
+do not have is worse than declaring nothing — `scripts/check-og-image.mjs`
+decodes the returned image and checks, rather than trusting the tag. And
+`og:image` stays an absolute apex URL even on a preview, so a preview's own
+transform is only exercised by swapping the origin, which that script does.
+Testing through Facebook's Sharing Debugger instead will tell you about its
+cache for days after you have fixed something.
+
 ## Adding an affiliate link (CSV import)
 
 New `affiliate_links` rows are added **by hand**, through the Supabase dashboard's

@@ -82,6 +82,12 @@ NOT_BUILD_CHECKS=(
   # deploy would grade the wrong artifact. Runs from
   # .github/workflows/check-sitemap.yml.
   scripts/check-sitemap.mjs
+
+  # Fetches the share-card image from a live origin and decodes the bytes to
+  # confirm they really are 1200x630. Needs a deployed Image CDN transform,
+  # which does not exist at build time. Runs from
+  # .github/workflows/check-routes.yml.
+  scripts/check-og-image.mjs
 )
 
 # ── the audit: a check file that is not registered fails the build ─────────
