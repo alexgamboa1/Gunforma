@@ -560,6 +560,52 @@ Romeo variants whose `reticle` was swapped between the 3 MOA and 6 MOA rows.
 
 `variant_label` overrides the computed label verbatim when non-empty.
 
+### Neither is the photo uploader
+
+`js/photos.js` owns the build-photo uploader — the four slots, the
+validate → redact → normalize → upload pipeline, and the full-size preview
+overlay. It injects its own CSS, its own grid markup and its own overlay
+markup, and it is loaded by the same two pages as the redact modal.
+
+A page mounts it once, after its auth gate has resolved:
+
+```js
+PhotoUploader.init({
+  mount:    '#photo-grid-mount',   // grid, messages and file input render here
+  photos:   () => state.photos,    // the page still owns the store
+  ownerId:  () => currentUser.id,  // currentAdmin.id on the admin page
+  draftId:  () => draftId,         // storage folder for this draft
+  onChange: renderSidebar,
+});
+```
+
+**Every one of those is a function, and that is not style.** A captured
+value is wrong for three of them: `gunforma-admin-post.html`'s
+`postAnother()` used to replace `state.photos` wholesale, `draftId` is
+reassigned when `gunforma-post-build.html` loads a build to edit and again
+by `postAnother()`, and `ownerId` does not exist until the auth gate
+resolves. `PhotoUploader.reset()` exists for the same reason — it empties
+the slots **in place** and revokes the object URLs, because `photoCount()`
+and `submitBuild()` on both pages read `state.photos` directly and a fresh
+object would leave them reading a detached one.
+
+This is the third thing that had to be extracted rather than copied, and
+the uploader is the worked example of what the copy costs. Thirteen
+functions and about sixty CSS rules lived in both pages, and the admin
+copy fell behind twice:
+
+- it had no redact gate at all until `#62`, so there was no way to blur a
+  serial when posting on someone else's behalf
+- it then missed all of `#65` — the preview overlay, square slots, the
+  fixed action strip, keyboard-reachable slots, and reading the result of
+  a storage delete — so an admin could blur a serial and had no way to
+  confirm the blur had landed
+
+Both gaps are the same shape: the page nobody was looking at kept the old
+behaviour, and nothing failed. Meanwhile `js/redact.js`, already shared,
+delivered the iOS pinch-zoom fix to both pages without anyone having to
+remember the second one.
+
 ### The redact modal is not on that list, and must not join it
 
 The pre-upload photo redaction modal — markup, CSS and JS — lives in
