@@ -175,30 +175,45 @@ function notFound() {
 // empty param and every build 404s. Rather than depend on one mechanism, read
 // whichever source actually carries it.
 //
-// Returns { id, source }. The source is not decoration: which of these
-// actually fires in production was guessed wrong once already (see the
-// x-nf-original-path note in CLAUDE.md, "Netlify redirects"), and a guess
-// about routing is not something this file should be carrying. It is echoed
-// on the response as x-build-og-id-source so the answer can be read off a
-// real deploy with curl -I instead of inferred from behaviour.
+// MEASURED on a deploy preview, which is the only place this can be known —
+// it was guessed wrong twice from a laptop first:
+//
+//   /b/<slug>-<uuid>                     source=path    x-nf-original-path absent
+//   gunforma-build-detail.html?id=<uuid> source=query   x-nf-original-path absent
+//
+// Both readings say the same thing: a Netlify function receives the ORIGINAL
+// request URL in req.url, not the rewrite target. The pre-rewrite path is
+// therefore already here, and a rewrite target does not need to carry the id
+// for this function to find it. See CLAUDE.md, "Netlify redirects".
+//
+// Returns { id, source }, echoed on every response as x-build-og-id-source,
+// so this stays a measurement rather than reverting to a belief.
 function extractId(req) {
   const url = new URL(req.url);
 
-  // The forwarded query. /b/* puts the id here via :splat; the legacy rule's
-  // `query = { id = ":id" }` match is forwarded here too.
+  // req.url is the ORIGINAL request URL, not the rewrite target — measured,
+  // see the table above. So this is the reader's own query string:
+  // gunforma-build-detail.html?id=<uuid> lands here. /b/… has no query at
+  // all and falls through to the pathname below.
+  //
+  // `splat` is read too, on the same never-observed-insurance footing as the
+  // header branch at the bottom.
   const fromQuery = url.searchParams.get('id') || url.searchParams.get('splat');
   if (fromQuery) {
     const id = buildIdFromPath(decodeURIComponent(fromQuery));
     if (id) return { id, source: 'query' };
   }
 
+  // The original pathname. /b/<slug>-<uuid> resolves here.
   const fromPath = buildIdFromPath(decodeURIComponent(url.pathname));
   if (fromPath) return { id: fromPath, source: 'path' };
 
-  // Netlify sets this to the pre-rewrite path on SOME rewrites. Measured on a
-  // deploy preview: absent on the forced exact-path rule with a query
-  // condition. Whether it is set on the /b/* splat rewrite is what
-  // x-build-og-id-source now answers rather than asserts.
+  // NEVER-OBSERVED INSURANCE. x-nf-original-path was measured absent on BOTH
+  // routes, so this branch has not fired once. It stays because two
+  // observations is thin evidence for a runtime behaviour someone else owns,
+  // and because it costs a header read — not because anything relies on it.
+  // If it ever does fire, x-build-og-id-source will say `header-path` or
+  // `header-query` and that is the signal to revisit this comment.
   const original = req.headers.get('x-nf-original-path') || '';
   if (original) {
     const decoded = decodeURIComponent(original);

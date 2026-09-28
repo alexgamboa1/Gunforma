@@ -137,6 +137,15 @@
 # Nothing above this rule matches /b/*, and there is no catch-all below, so
 # first-match-wins is satisfied. gunforma-build-detail.html?id=... keeps
 # working untouched — this adds a URL, it does not replace one.
+# The ?id=:splat on the target is INERT. Measured on a deploy preview: a
+# Netlify function receives the ORIGINAL request URL in req.url, not the
+# rewrite target, so build-og never sees this query string at all — it
+# resolves the id from the original pathname (x-build-og-id-source: path).
+#
+# Kept, not deleted, on the same footing as the header branch in extractId:
+# it costs nothing, and one preview's worth of evidence about someone else's
+# routing internals is thin ground for removing a fallback. It is written
+# down as inert so nobody reads it as load-bearing and reasons from it.
 [[redirects]]
   from = "/b/*"
   to = "/.netlify/functions/build-og?id=:splat"
