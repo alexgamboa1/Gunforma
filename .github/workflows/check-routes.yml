@@ -1,0 +1,75 @@
+name: Check routes
+
+# Asserts routing behaviour against a REAL deployed origin.
+#
+# WHY IT IS NOT A BUILD CHECK
+# scripts/check-all.sh runs at build time and proves a check exists and runs.
+# Nothing proved a code path was REACHABLE, and that gap shipped a dead
+# branch: build-og.mjs had an isShareRoute() path that made the legacy ?id=
+# URL soft-serve instead of 404ing, and it never once executed in production,
+# because the header it keys on is not set on that route. Two local suites
+# passed — a synthetic Request carries whatever header the test author writes.
+#
+# The only thing that can catch that is a request Netlify actually routed. So
+# this asks a URL, not a mock. It cannot run in the Netlify build either: the
+# site is not serving yet at build time, and fetching the previous deploy
+# would grade the wrong artifact.
+#
+# COVERAGE, HONESTLY
+#   schedule           guaranteed. Catches a routing regression on production
+#                      within a few hours, the same bargain smoke-test.yml
+#                      makes.
+#   workflow_dispatch  the deliberate one: paste a deploy-preview URL and run
+#                      it before merging, which is what CLAUDE.md's
+#                      "Verifying changes" asks for anyway.
+#   deployment_status  best effort. Only fires if Netlify's GitHub App is
+#                      creating deployments for this repo. If it never fires,
+#                      nothing is lost and nothing is silently uncovered —
+#                      the two above are what this relies on.
+
+on:
+  schedule:
+    # :41 past, twice a day. Odd minute for the same measured reason as the
+    # other workflows here: GitHub deprioritises scheduled jobs at the top of
+    # the hour and they routinely run late.
+    - cron: '41 5,17 * * *'
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: 'Origin to check (e.g. a deploy-preview URL). Defaults to production.'
+        required: false
+        default: 'https://gunforma.com'
+  deployment_status:
+
+concurrency:
+  group: check-routes-${{ github.event.inputs.origin || github.event.deployment_status.environment_url || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  routes:
+    # deployment_status fires for every state; only a successful deploy is
+    # worth checking, and a deploy with no URL cannot be checked at all.
+    if: >-
+      github.event_name != 'deployment_status' ||
+      (github.event.deployment_status.state == 'success' &&
+       github.event.deployment_status.environment_url != '')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # No install step: check-routes.mjs imports nothing but the repo's own
+      # _build-url.mjs. A check of the critical path should not be able to
+      # fail on a dependency install.
+
+      - name: Check routes
+        env:
+          DEPLOY_URL: >-
+            ${{ github.event.inputs.origin
+                || github.event.deployment_status.environment_url
+                || 'https://gunforma.com' }}
+        run: node scripts/check-routes.mjs "$DEPLOY_URL"

@@ -75,27 +75,20 @@ by a Netlify function. Two working precedents to copy from:
 Both are dependency-free (plain `fetch` against PostgREST, no `supabase-js`), use the anon
 key only, and return a real 404 for unknown slugs rather than a soft 404.
 
-`netlify/functions/build-og.mjs` is the third, and it is the one with an
-exception to that last rule. Two routes reach it:
+`netlify/functions/build-og.mjs` is the third, and it holds to the same rule.
+Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
+`/gunforma-build-detail.html?id=<uuid>`, the legacy one, routed here so both
+emit the same canonical instead of one declaring the id-less one until its
+fetch lands. **An id that cannot be resolved gets a real 404 on both.**
 
-- `/b/<slug>-<uuid>` — the share URL. An unknown or unapproved build gets a
-  **real 404**, same as the other two.
-- `/gunforma-build-detail.html?id=<uuid>` — the legacy URL, routed here so it
-  emits the same canonical instead of declaring the id-less one until its
-  fetch lands. A bad or missing id here serves **the page unadorned, 200**,
-  and the client renders its own "Build not found" — exactly what that URL did
-  before the function sat in front of it.
-
-The split is deliberate: nothing links to the legacy URL any more, so the
-reason to route it is to fix its canonical, not to start refusing old links
-that used to show something. `isShareRoute()` reads `x-nf-original-path` to
-tell them apart, and treats a header-less direct invocation as the share
-route — the stricter of the two.
-
-That function is also why its no-bundle fallback no longer auto-refreshes. It
-used to bounce to `/gunforma-build-detail.html?id=…`, which is now rewritten
-back to the function: with the page missing, that is an infinite loop in the
-reader's browser. It serves the OG meta plus a visible link instead.
+It briefly had a split: hard 404 on `/b/…`, and a 200 serving the page
+unadorned on the legacy URL so the client could render its own "Build not
+found", on the reasoning that an old link should not start refusing. That was
+wrong twice over. A 200 carrying "Build not found" is a soft 404 and Google
+penalises it — and the branch never ran anyway, because it told the routes
+apart with `x-nf-original-path`, which that route does not carry. See
+**Netlify redirects** below; it is the second instance of the same class of
+mistake.
 
 ## Netlify redirects
 
@@ -106,6 +99,29 @@ must be ordered **above** the catch-all `/parts/*`.
 Named `:placeholder` values are **not** substituted into a rewrite target's query string in
 production, though `netlify dev` does substitute them — which hides the bug locally. Use
 `:splat`, and have the function fall back to parsing the path and `x-nf-original-path`.
+
+**`x-nf-original-path` is not set on every rewrite.** Measured on production:
+absent on a forced exact-path rule with a `query` condition
+(`/gunforma-build-detail.html` → `build-og`). A function that reads it to tell
+which rule routed it will silently take the same branch every time. `netlify
+dev` and any synthetic `Request` supply whatever header the caller writes, so
+a local test cannot see this — both a local suite and a reviewer's local run
+passed against a branch that never executed in production.
+
+The same rule's matched `query` param **is** forwarded to the target, which is
+how that route resolves its id at all.
+
+So: **do not branch on which rule routed a request.** If a function genuinely
+needs to know, derive it from something in the request every route carries, or
+split it into two functions. And if a function's behaviour depends on Netlify's
+plumbing, make the plumbing observable from outside — `build-og.mjs` returns
+`x-build-og-id-source` and `x-build-og-orig` for exactly that, and
+`scripts/check-routes.mjs` prints them on every run so the next person reads a
+measurement instead of guessing.
+
+That is twice now that a rewrite behaved differently in production than
+locally, and twice that a green local test covered it. A rewrite's behaviour
+is not verified until it has been observed on a deploy.
 
 ## Deploy previews and auth
 
@@ -454,6 +470,23 @@ problem rather than the first.
 **A guard nobody has watched fail is not a guard.** Each of these was proved
 by breaking the thing it protects and confirming a non-zero exit — see the PR
 that introduced the runner.
+
+### And one that cannot run at build time
+
+`scripts/check-routes.mjs` asserts routing behaviour against a **real deployed
+origin**: status codes, one canonical, the two build URL shapes agreeing, the
+bare legacy path still served as a file, and a hard 404 on every unresolvable
+id. It is listed under `NOT_BUILD_CHECKS` because the site is not serving
+during its own build, and fetching the previous deploy would grade the wrong
+artifact. `.github/workflows/check-routes.yml` runs it on a schedule against
+production and on demand against a deploy-preview URL.
+
+It exists because the registry closes a different gap than the one that bit.
+The registry proves a check **exists and runs**. Nothing proved a code path was
+**reachable** — and a whole branch of `build-og.mjs` shipped having never
+executed, with two local suites green over it. A synthetic `Request` cannot
+catch that by construction: the thing under test is what Netlify puts on the
+wire. Only a request Netlify actually routed can answer it.
 
 ## Verifying changes
 

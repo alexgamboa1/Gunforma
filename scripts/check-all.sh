@@ -63,6 +63,12 @@ check "build-og page literals"     scripts/check-canonical-coupling.mjs
 NOT_BUILD_CHECKS=(
   # This runner. It is what does the running.
   scripts/check-all.sh
+
+  # Needs a live origin to fetch. The site is not serving during its own
+  # build, and fetching the previous deploy would grade the wrong artifact.
+  # It runs from .github/workflows/check-routes.yml — on a schedule against
+  # production, and on demand against a deploy-preview URL before merging.
+  scripts/check-routes.mjs
   # Imports refresh-affiliate-prices.mjs, which needs csv-parse from
   # scripts/package.json. Nothing installs that during the site build, so it
   # would fail for the wrong reason. It runs in
