@@ -233,9 +233,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .back-to-list { font-family: inherit; font-size: 12px; color: #555; background: none; border: none; padding: 0; cursor: pointer; white-space: nowrap; }
 .back-to-list:hover { color: #2a7bbd; }
 .builder-name-wrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
-.builder-name { font-size: 15px; font-weight: 700; word-break: break-word; }
-.rename-btn { font-family: inherit; font-size: 11px; color: #555; background: #fafaf8; border: 0.5px solid #d5d3ca; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
-.rename-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
+.builder-title-input { flex: 1; min-width: 0; font-family: inherit; font-size: 15px; font-weight: 700; color: #1a1a1a; background: transparent; border: 0.5px solid transparent; border-radius: 4px; padding: 5px 8px; margin: -5px -8px; }
+.builder-title-input::placeholder { color: #b8b5ac; font-weight: 700; }
+.builder-title-input:hover { border-color: #e5e2d8; background: #fafaf8; }
+.builder-title-input:focus { outline: none; border-color: #4a9edd; background: #fff; }
 .builder-dirty { font-size: 11px; color: #b45309; background: #fef3e2; border: 0.5px solid #f9b860; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
 
 /* MOBILE */
@@ -322,8 +323,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
           <div class="builder-header-row">
             <button type="button" class="back-to-list" id="btn-back-to-list">&larr; All builds</button>
             <div class="builder-name-wrap">
-              <span class="builder-name" id="builder-name">Untitled build</span>
-              <button type="button" class="rename-btn" id="btn-rename-header" title="Rename">Rename</button>
+              <!-- The title is a plain input, live from the moment a pistol is
+                   picked (that is when #builder-header stops being hidden).
+                   It replaces a "Rename" button that renderBuilderHeader()
+                   hid until STATE.buildId existed — so a build could not be
+                   named until after it had been saved under a generated name.
+                   The placeholder carries defaultBuildName(); leaving the
+                   field empty still saves that generated name. -->
+              <input type="text" class="builder-title-input" id="builder-title"
+                     maxlength="80" aria-label="Build name" autocomplete="off" />
             </div>
             <span class="builder-dirty" id="builder-dirty" hidden>Unsaved changes</span>
           </div>
@@ -347,7 +355,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
             <div class="summary-total" id="s-total">$0</div>
           </div>
           <button type="button" class="btn-block primary" id="btn-post"       disabled>Post this build →</button>
-          <button type="button" class="btn-block ghost"   id="btn-save-draft" disabled>Save as draft</button>
+          <button type="button" class="btn-block ghost"   id="btn-save-draft">Save as draft</button>
         </div>
       </aside>
     </div>
@@ -623,10 +631,15 @@ function wireDraftRows() {
   });
 }
 
-// ─── RENAME ─────────────────────────────────────────────────
-// The ONLY place the Armory writes builds.name, and only on an explicit
-// rename. saveDraft() still never touches it (stage 1's rule), so a draft
-// started in post-build keeps its title through any number of parts edits.
+// ─── RENAME (drafts list) ───────────────────────────────────
+// Renaming from a row in the drafts list. No longer the only place the
+// Armory writes builds.name — the builder's title field does too, through
+// saveDraft(), under the nameTouched rule documented there. This path is
+// still an immediate, explicit write of its own.
+//
+// It also sets STATE.buildName when the renamed row is the open build, and
+// deliberately does NOT set nameTouched: the name is already persisted, so
+// the next saveDraft() has nothing to add.
 async function commitRename(buildId, raw) {
   var name = (raw == null ? '' : String(raw)).trim();
   if (!name) { toast('Name can\'t be empty'); return false; }
@@ -674,13 +687,6 @@ function beginRowRename(buildId) {
   };
 }
 
-function renameCurrentBuild() {
-  if (!STATE.buildId) { toast('Save this build first, then you can name it'); return; }
-  var next = window.prompt('Name this build', STATE.buildName || '');
-  if (next === null) return;                 // cancelled
-  commitRename(STATE.buildId, next);
-}
-
 // ─── DELETE ─────────────────────────────────────────────────
 // RLS policy "Owners can delete their own draft builds" is
 // (auth.uid() = user_id AND status = 'draft'), so the database refuses to
@@ -720,6 +726,10 @@ var savedSignature = null;
 function buildSignature() {
   return JSON.stringify({
     p: STATE.platform ? STATE.platform.id : null,
+    // The title is saveable from this page now, so editing it has to count as
+    // an unsaved change — otherwise renaming and nothing else leaves the
+    // header claiming there is nothing to save.
+    n: STATE.buildName || null,
     parts: buildPartsSnapshot(),
   });
 }
@@ -750,11 +760,36 @@ function renderBuilderHeader() {
   var showing = !!(STATE.buildId || STATE.parts.length || STATE.platform);
   header.hidden = !showing;
   if (!showing) return;
-  document.getElementById('builder-name').textContent =
-    STATE.buildName || (STATE.platform ? defaultBuildName() : 'Untitled build');
+  var titleEl = document.getElementById('builder-title');
+  if (titleEl) {
+    // Placeholder, never value: an untouched field has to stay EMPTY so that
+    // saveDraft() can tell "the user did not name this" from "the user typed
+    // exactly the generated name", and still persist defaultBuildName().
+    titleEl.placeholder = STATE.platform ? defaultBuildName() : 'Untitled build';
+    // Do not overwrite what someone is in the middle of typing. renderBuilderHeader()
+    // is called from every parts mutation, and reassigning .value mid-edit
+    // moves the caret to the end on a re-render the user did not ask for.
+    if (document.activeElement !== titleEl) titleEl.value = STATE.buildName || '';
+  }
   document.getElementById('builder-dirty').hidden = !isDirty();
-  var renameBtn = document.getElementById('btn-rename-header');
-  if (renameBtn) renameBtn.hidden = !STATE.buildId;
+}
+
+// True once the user has typed in the title field for the CURRENTLY LOADED
+// build. Cleared wherever STATE.buildName is assigned from a source that is
+// not the user — a new build, or a draft loaded off the server. saveDraft()
+// reads it to decide whether it may write builds.name; see the rule there.
+var nameTouched = false;
+
+function onTitleInput() {
+  var el = document.getElementById('builder-title');
+  if (!el) return;
+  var v = el.value.trim();
+  STATE.buildName = v || null;
+  nameTouched = true;
+  // Only the dirty badge — a full renderBuilderHeader() here would re-enter
+  // the .value assignment above and fight the caret.
+  var d = document.getElementById('builder-dirty');
+  if (d) d.hidden = !isDirty();
 }
 
 // "<Platform> build" — e.g. "P365 X-Macro build". Replaces the old
@@ -770,6 +805,7 @@ function scrubBuildParam() {
 function resetBuilderState() {
   STATE.buildId = null;
   STATE.buildName = null;
+  nameTouched = false;
   STATE.parts = [];
   STATE.openCategory = null;
   savedSignature = null;
@@ -908,6 +944,9 @@ async function loadBuildById(buildId) {
 
   STATE.buildId   = b.id;
   STATE.buildName = b.name;
+  // The name now in STATE is the server's, not the user's. Until they edit
+  // the field, this page must not write it back — see saveDraft().
+  nameTouched     = false;
   STATE.platform  = plat;
   rebuildCatalogForPlatform();
 
@@ -1034,7 +1073,8 @@ function wireControls() {
   document.getElementById('btn-save-draft').onclick = saveDraft;
   document.getElementById('btn-post').onclick       = postThisBuild;
   document.getElementById('btn-back-to-list').onclick   = backToList;
-  document.getElementById('btn-rename-header').onclick  = renameCurrentBuild;
+  var titleEl = document.getElementById('builder-title');
+  if (titleEl) titleEl.oninput = onTitleInput;
 }
 
 function setTab(tab) {
@@ -1283,7 +1323,12 @@ function renderSummary() {
 }
 function updateActionButtons() {
   var canSubmit = !!STATE.platform && STATE.parts.length > 0;
-  document.getElementById('btn-save-draft').disabled = !canSubmit;
+  // Save as draft stays ENABLED even when it cannot succeed. A disabled
+  // button is indistinguishable from a broken one — it gives no reason and
+  // no way to ask for one. saveDraft() now toasts which piece is missing.
+  // (btn-post is still gated: posting has a longer list of requirements that
+  // post-build itself enforces, and is a separate question from this.)
+  document.getElementById('btn-save-draft').disabled = false;
   document.getElementById('btn-post').disabled       = !canSubmit;
 }
 
@@ -1300,20 +1345,32 @@ var draftSaveInFlight = false;
 
 async function saveDraft() {
   if (!CURRENT_USER) { toast('Sign in to save drafts', 'gunforma-signin.html', 'Sign in'); return false; }
-  if (!STATE.platform || STATE.parts.length === 0) return false;
+  // These two used to `return false` with nothing shown. The button is no
+  // longer disabled for them (a disabled button explains nothing either), so
+  // say which one is missing.
+  if (!STATE.platform)          { toast('Pick a pistol first'); return false; }
+  if (STATE.parts.length === 0) { toast('Add at least one part to save'); return false; }
+  // Deliberately silent: this is a double-click racing itself, not something
+  // the user did wrong, and a toast for it would be noise. It is only safe to
+  // stay silent because the finally below always clears it — see the note there.
   if (draftSaveInFlight) return false;
   draftSaveInFlight = true;
 
   var btn = document.getElementById('btn-save-draft');
   btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Saving…';
 
+  // The name to persist on an INSERT: what the user typed, or the generated
+  // one when they left the field alone. Computed once so the row and
+  // STATE.buildName below cannot disagree.
+  var newName = (nameTouched && STATE.buildName) ? STATE.buildName : defaultBuildName();
+
   var res;
+  try {
   if (STATE.buildId) {
-    // EXACTLY the three columns the Armory owns. Everything else is left
-    // untouched so a draft that started in post-build survives a round trip
-    // through this page intact:
-    //   name         — user-typed there; no rename UI here, so writing the
-    //                  generated "Armory draft — <date>" would destroy it
+    // The columns the Armory owns. Everything else is left untouched so a
+    // draft that started in post-build survives a round trip through this
+    // page intact:
+    //   name         — CONDITIONAL; see nameWrite below
     //   description  — the story; this page has no field for it
     //   activities   — tags; no UI here. Hardcoding [] would erase them.
     //   status       — only post-build submits; never change it here
@@ -1322,15 +1379,32 @@ async function saveDraft() {
     //   updated_at   — set by the builds_updated_at BEFORE UPDATE trigger;
     //                  writing it from the client is redundant
     //   edit_history — prevent_owner_edit_history_change rejects owner writes
+    //
+    // THE NAME RULE: write builds.name only when the user edited the title in
+    // THIS session (nameTouched).
+    //
+    // The old rule was "never", because there was no title field and the only
+    // value to hand was the generated defaultBuildName() — writing that over a
+    // name typed in post-build was the hazard. That hazard is gone: the field
+    // holds the real name now.
+    //
+    // The remaining one is staleness, and it is why this is not simply
+    // "always". When the field is untouched, STATE.buildName is a COPY taken
+    // when the draft loaded. The row may have been renamed since — from the
+    // drafts list in another tab, or in post-build — and writing the copy back
+    // would silently revert that rename with no error and nothing to see. When
+    // the field IS touched, the value is an instruction from the user and is
+    // the newest thing we have, so it wins.
+    var nameWrite = (nameTouched && STATE.buildName) ? { name: STATE.buildName } : {};
     res = await sb.from('builds')
-      .update({
+      .update(Object.assign({
         platform_id: STATE.platform.id,
         parts_snapshot: buildPartsSnapshot(),
         // Derived from the parts list, not hardcoded — matches post-build's
         // rule, so a 'minimum' draft that gains parts here becomes 'full'
         // instead of staying stale.
         tier: STATE.parts.length ? 'full' : 'minimum',
-      })
+      }, nameWrite))
       .eq('id', STATE.buildId)
       .eq('user_id', CURRENT_USER.id)   // redundant with RLS, explicit anyway
       .eq('status', 'draft')            // never silently edit a submitted build
@@ -1341,10 +1415,10 @@ async function saveDraft() {
       .insert({
         user_id: CURRENT_USER.id,
         platform_id: STATE.platform.id,
-        // "<Platform> build" beats "Armory draft — <date>": in a list of
-        // drafts the old format made every row look identical. Renameable
-        // from the list or the builder header.
-        name: defaultBuildName(),
+        // The title field when the user filled it in, else
+        // "<Platform> build" — which beats the old "Armory draft — <date>",
+        // where every row in a list looked identical.
+        name: newName,
         tier: 'full',
         status: 'draft',
         activities: [],
@@ -1358,9 +1432,28 @@ async function saveDraft() {
       .select('id')
       .single();
   }
-
-  draftSaveInFlight = false;
-  btn.disabled = false; btn.textContent = orig;
+  } catch (err) {
+    // try/catch as well as try/finally, on purpose. finally alone unwedges the
+    // button but lets the rejection escape into the onclick handler, where it
+    // surfaces as an unhandled promise rejection in the console and NOTHING
+    // on screen — the same "it just didn't work" this whole change is about.
+    console.error('[armory] draft save threw', err);
+    toast('Save failed — check your connection and try again');
+    return false;
+  } finally {
+    // ALWAYS, including on a throw. supabase-js normally reports failures as
+    // { error } rather than rejecting, but a genuine transport failure —
+    // offline, DNS, CORS, an aborted request — rejects out of the await. When
+    // this reset lived after the await instead of in a finally, one such
+    // throw left draftSaveInFlight stuck true and the button stuck disabled
+    // reading "Saving…", and every later click returned false at the
+    // in-flight guard with no toast and nothing in the console except an
+    // unhandled rejection naming the network, not the save. That wedge is
+    // the reason "Save as draft" could stop working for a whole session with
+    // no way to tell it from a dead button.
+    draftSaveInFlight = false;
+    btn.disabled = false; btn.textContent = orig;
+  }
 
   if (res.error) {
     console.error('[armory] draft save failed', res.error);
@@ -1377,7 +1470,7 @@ async function saveDraft() {
   }
 
   var wasNew = !STATE.buildId;
-  if (wasNew) STATE.buildName = defaultBuildName();
+  if (wasNew) STATE.buildName = newName;
   if (wasNew && res.data && res.data.id) {
     // Adopt the new row so the next click updates it. Reflecting the id in
     // the URL means a refresh reopens the same draft rather than orphaning
