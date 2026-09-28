@@ -84,8 +84,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* BUILD HEADER */
 .build-header { display: grid; grid-template-columns: 1fr 320px; gap: 32px; margin-bottom: 20px; align-items: start; }
-.build-hero { background: #f4f3ee; border: 0.5px solid #e5e5e5; border-radius: 6px; aspect-ratio: 16/10; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
+/* Square, not 16/10. Build photos come off phones and are mostly portrait —
+   the Icarus hero is 1201x1600 — so a 16:10 box with overflow:hidden threw
+   away 53% of the frame and cut the gun in half on the one page a builder
+   sends people to. Compared against square+contain and natural height on the
+   live page: cover wins because the gun stays fully visible AND large, and
+   what crops out of a square is background sheet. contain keeps everything
+   but shrinks well-framed photos for no gain. */
+.build-hero { background: #f4f3ee; border: 0.5px solid #e5e5e5; border-radius: 6px; aspect-ratio: 1/1; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; }
 .build-hero span { font-size: 12px; color: #b8b5ac; letter-spacing: 0.06em; }
+/* The hero image's fit lives HERE, not inline on the element renderBuild
+   writes. One place, so a future change to the box cannot be silently
+   overridden by a style attribute a few hundred lines away. */
+.build-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .build-gallery { display: flex; gap: 8px; margin-bottom: 36px; }
 .gallery-thumb { width: 90px; height: 68px; border-radius: 6px; overflow: hidden; border: 0.5px solid #e5e5e5; flex-shrink: 0; }
 .gallery-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -766,7 +777,7 @@ function renderBuild(b) {
   document.getElementById('build-parts-sub').textContent = partsCount ? partsCount+' part'+(partsCount!==1?'s':'')+' listed' : 'No parts listed yet';
 
   document.getElementById('build-hero').innerHTML = hero
-    ? '<img src="'+photoUrl(hero.storage_path)+'" alt="" style="width:100%;height:100%;object-fit:cover;" />'
+    ? '<img src="'+photoUrl(hero.storage_path)+'" alt="" />'
     : '<span>No hero photo yet</span>';
 
   var galleryEl = document.getElementById('build-gallery');
