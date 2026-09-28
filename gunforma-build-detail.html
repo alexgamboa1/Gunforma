@@ -148,7 +148,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card:hover { border-color: #cfcdc4; }
 .part-card-top { display: flex; gap: 14px; padding: 16px 18px; align-items: flex-start; }
 .part-thumb { flex-shrink: 0; width: 88px; height: 88px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.part-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* contain, not cover, matching the post-build picker: these are product
+   shots at the manufacturer's aspect ratio, and cropping one to fill an
+   88px square hides the part it is meant to identify. */
+.part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
 .part-thumb-fallback { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 4px; }
 .part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .part-type { font-size: 10px; color: #2a7bbd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
