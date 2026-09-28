@@ -174,97 +174,87 @@ function notFound() {
 // target's query string the way `netlify dev` does — the function gets an
 // empty param and every build 404s. Rather than depend on one mechanism, read
 // whichever source actually carries it.
-// Every source here can carry either /b/<uuid> or /b/<slug>-<uuid>, so each
-// one goes through buildIdFromPath rather than being treated as an id.
-// Returns null when nothing in the request contains a uuid.
+//
+// Returns { id, source }. The source is not decoration: which of these
+// actually fires in production was guessed wrong once already (see the
+// x-nf-original-path note in CLAUDE.md, "Netlify redirects"), and a guess
+// about routing is not something this file should be carrying. It is echoed
+// on the response as x-build-og-id-source so the answer can be read off a
+// real deploy with curl -I instead of inferred from behaviour.
 function extractId(req) {
   const url = new URL(req.url);
 
+  // The forwarded query. /b/* puts the id here via :splat; the legacy rule's
+  // `query = { id = ":id" }` match is forwarded here too.
   const fromQuery = url.searchParams.get('id') || url.searchParams.get('splat');
   if (fromQuery) {
     const id = buildIdFromPath(decodeURIComponent(fromQuery));
-    if (id) return id;
+    if (id) return { id, source: 'query' };
   }
 
   const fromPath = buildIdFromPath(decodeURIComponent(url.pathname));
-  if (fromPath) return fromPath;
+  if (fromPath) return { id: fromPath, source: 'path' };
 
-  // Set by Netlify to the pre-rewrite path, QUERY STRING INCLUDED — which is
-  // what makes it the reliable source here rather than a backstop. Two rules
-  // point at this function and neither can be trusted to deliver the id in
-  // the rewrite target:
-  //
-  //   /b/*                       named :placeholder values are not
-  //                              substituted into a rewrite target's query
-  //                              string in production, though netlify dev
-  //                              does substitute them, which hides it
-  //                              locally (see CLAUDE.md, Netlify redirects)
-  //   /gunforma-build-detail.html  matches on `query = { id = ":id" }`, and
-  //                              a param matched in `from` is not guaranteed
-  //                              to survive into the forwarded request
-  //
-  // So both the path and the query of the ORIGINAL url are searched, in that
-  // order: /b/<slug>-<uuid> carries the id in the path, the legacy URL
-  // carries it in ?id=.
+  // Netlify sets this to the pre-rewrite path on SOME rewrites. Measured on a
+  // deploy preview: absent on the forced exact-path rule with a query
+  // condition. Whether it is set on the /b/* splat rewrite is what
+  // x-build-og-id-source now answers rather than asserts.
   const original = req.headers.get('x-nf-original-path') || '';
   if (original) {
     const decoded = decodeURIComponent(original);
     const inPath = buildIdFromPath(decoded);
-    if (inPath) return inPath;
+    if (inPath) return { id: inPath, source: 'header-path' };
     // buildIdFromPath strips ?… before matching, so the query needs its own
-    // look — otherwise the legacy shape resolves to nothing here.
+    // look.
     const q = decoded.indexOf('?');
     if (q !== -1) {
       const idParam = new URLSearchParams(decoded.slice(q + 1)).get('id');
       const inQuery = buildIdFromPath(idParam);
-      if (inQuery) return inQuery;
+      if (inQuery) return { id: inQuery, source: 'header-query' };
     }
   }
 
-  return null;
+  return { id: null, source: 'none' };
 }
 
-// /b/<slug>-<uuid> is a share URL: a crawler that follows one to a build that
-// does not exist should get a real 404, never a soft one, and that is what
-// this function has always done.
+// Both routes 404 on an id that cannot be resolved.
 //
-// gunforma-build-detail.html?id=… is not that. It is the legacy URL, nothing
-// links to it any more, and before this function sat in front of it a bad or
-// missing id rendered the page's own "Build not found" with a 200. Turning
-// that into a hard 404 would be a behaviour change to old links for no gain —
-// the reason to route this URL through here at all is to strip the id-less
-// canonical, not to start refusing it. So on this path a failure serves the
-// page unadorned and lets the client render exactly what it rendered before.
+// There used to be a split here: /b/… hard-404, and the legacy
+// gunforma-build-detail.html?id=… soft-serving the page so the client could
+// render its own "Build not found", on the reasoning that an old link should
+// not start refusing. Two things killed it.
 //
-// No header (a direct function invocation) is treated as the share route, the
-// stricter of the two.
-function isShareRoute(req) {
-  const original = req.headers.get('x-nf-original-path');
-  if (!original) return true;
-  return original.split('?')[0].startsWith('/b/');
-}
+// It never ran. isShareRoute() read x-nf-original-path to tell the routes
+// apart, and that header is absent on the legacy rule in production — so the
+// function always took the share branch and the soft path was unreachable
+// from the moment it shipped. A synthetic Request supplies whatever header
+// the test author writes, so both the local suite and the reviewer's saw the
+// 200 that production never produced.
+//
+// And it was wrong anyway. A 200 carrying "Build not found" is a soft 404,
+// which Google penalises. Nothing links to the legacy shape any more, so
+// there is no old link to protect that is worth a soft 404 to protect it.
+//
+// The dead branch is gone rather than fixed. See CLAUDE.md, "Netlify
+// redirects".
 
-// The page exactly as it sits on disk: no meta injected, no canonical
-// stripped. What the legacy URL served before this function was in front of
-// it. no-store because what it represents is "we could not resolve this
-// right now", which must not be cached as an answer.
-async function unadorned() {
-  const page = await loadPage();
-  if (!page) return null;
-  return new Response(page, {
-    status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-  });
+// Copies a response, adding the diagnostics that make the routing observable
+// from outside. Cheap, non-secret, and the only way this file's assumptions
+// about Netlify can be checked against Netlify.
+function withDiag(res, source, req) {
+  const headers = new Headers(res.headers);
+  headers.set('x-build-og-id-source', source);
+  headers.set('x-build-og-orig', req.headers.get('x-nf-original-path') ? 'set' : 'absent');
+  return new Response(res.body, { status: res.status, headers });
 }
 
 export default async (req) => {
-  const requested = extractId(req);
-  const share = isShareRoute(req);
+  const { id: requested, source } = extractId(req);
+  const diag = (res) => withDiag(res, source, req);
 
-  // No uuid anywhere in the request — no DB round trip, which is also what
-  // keeps path input out of the PostgREST query below. A share URL 404s; the
-  // legacy URL gets the page, which is what it got before.
-  if (!requested) return share ? notFound() : (await unadorned()) || notFound();
+  // No uuid anywhere in the request — 404 without a DB round trip, which is
+  // also what keeps path input out of the PostgREST query below.
+  if (!requested) return diag(notFound());
 
   // platforms and profiles each have exactly one FK to builds, so those bare
   // embeds are correct. profiles is named anyway because builds has two FKs
@@ -292,31 +282,31 @@ export default async (req) => {
     // over it. Hand back the page unadorned and let the client render, which
     // re-runs the same RLS-protected query from the browser.
     const page = await loadPage();
-    if (!page) return notFound();
-    return new Response(page, {
+    if (!page) return diag(notFound());
+    return diag(new Response(page, {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-    });
+    }));
   }
 
-  // Unknown, unapproved, or deleted. Same split as above.
-  if (!build) return share ? notFound() : (await unadorned()) || notFound();
+  // Unknown, unapproved, or deleted.
+  if (!build) return diag(notFound());
 
   const page = await loadPage();
   if (!page) {
     console.error('[build-og] gunforma-build-detail.html not bundled — check included_files');
-    // NO auto-refresh here any more. It used to bounce to
+    // NO auto-refresh here. It used to bounce to
     // /gunforma-build-detail.html?id=…, which was fine while that URL served
-    // the file directly. It is now rewritten to THIS function, so the refresh
-    // would land back here, fail to load the page again, and emit the same
-    // refresh — an infinite loop in the reader's browser, on a path that only
-    // opens when the deploy is misconfigured.
+    // the file directly. That URL is now rewritten to THIS function, so the
+    // refresh would land back here, fail to load the page again, and emit the
+    // same refresh — an infinite loop in the reader's browser, on a path that
+    // only opens when the deploy is misconfigured.
     //
     // The meta block is what this branch is actually for: a crawler still
     // gets the full preview. A person gets a link they can see, and the error
     // above gets logged, which is the right way for a misconfiguration to
     // behave — visible, not spinning.
-    return new Response(
+    return diag(new Response(
       '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
       '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>' + metaBlock(build) +
       '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
@@ -326,7 +316,7 @@ export default async (req) => {
       '<div class="s">This build could not be rendered just now.</div>' +
       '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div></body></html>',
       { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } },
-    );
+    ));
   }
 
   // Swap the static <title> for the generated title + meta. Single anchored
@@ -350,11 +340,11 @@ export default async (req) => {
     .replace('<link rel="canonical" href="https://gunforma.com/gunforma-build-detail.html" />\n', '')
     .replace('<title>Gunforma build</title>', metaBlock(build));
 
-  return new Response(html, {
+  return diag(new Response(html, {
     status: 200,
     headers: {
       'Content-Type':  'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=600',
     },
-  });
+  }));
 };
