@@ -174,7 +174,12 @@ const PHOTOS_CSS = `
      should be cramped next to anything. The bottom padding clears the
      iPhone home indicator the same way the redact toolbar does. */
   .photo-preview-bar { padding: 12px 12px calc(20px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
-  .photo-preview-btn { flex: 1; min-width: 0; padding: 11px 6px; font-size: 11px; text-align: center; }
+  /* 44px minimum, the same floor the redact toolbar got — these were
+     37px, which is the size the redact modal's controls were before
+     they were measured on a phone. This is the overlay a builder is
+     squinting at to decide whether a serial is covered, and Remove
+     is one of the buttons on it. */
+  .photo-preview-btn { flex: 1; min-width: 0; min-height: 44px; padding: 0 6px; font-size: 11px; text-align: center; }
   .photo-preview-btn.primary { margin-left: 0; flex-basis: 100%; order: 9; }
 }
 
