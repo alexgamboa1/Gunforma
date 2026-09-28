@@ -451,7 +451,7 @@ function renderCard(b) {
       '<span class="fire-btn-count">'+b._fireCount+'</span>'+
     '</button>';
 
-  return '<a class="build-card" href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'">'+
+  return '<a class="build-card" href="/b/'+encodeURIComponent(b.id)+'">'+
       '<div class="build-card-photo">'+photoHtml+
         (platform ? '<div class="build-card-badge">'+escH(platform)+'</div>' : '')+
       '</div>'+

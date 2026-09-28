@@ -536,7 +536,7 @@ function renderMiniBuildCard(b) {
     ? '<img src="'+escH(photoUrl(hero.thumb_path || hero.storage_path))+'" alt=""/>'
     : '<div class="build-card-nophoto">No photo</div>';
   const platform = b.platforms ? b.platforms.name : '';
-  return '<a class="build-card" href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'">'+
+  return '<a class="build-card" href="/b/'+encodeURIComponent(b.id)+'">'+
       '<div class="build-card-photo">'+photoHtml+'</div>'+
       '<div class="build-card-body">'+
         '<div class="build-card-name">'+escH(b.name)+'</div>'+
@@ -594,7 +594,7 @@ async function loadMyBuilds() {
 // that page can do.
 function routeForBuild(b) {
   if (b.status === 'approved') {
-    return 'gunforma-build-detail.html?id=' + encodeURIComponent(b.id);
+    return '/b/' + encodeURIComponent(b.id);
   }
   if (b.status === 'draft' && isPartsOnlyDraft(b)) {
     return 'gunforma-armory.html?build=' + encodeURIComponent(b.id);
@@ -810,7 +810,7 @@ function renderSavedCard(b) {
     : '<div class="build-card-nophoto">No photo</div>';
   const platform = b.platforms ? b.platforms.name : '';
   return '<div class="build-card">'+
-      '<a href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'" style="color:inherit;text-decoration:none;display:block;">'+
+      '<a href="/b/'+encodeURIComponent(b.id)+'" style="color:inherit;text-decoration:none;display:block;">'+
         '<div class="build-card-photo">'+photoHtml+'</div>'+
         '<div class="build-card-body"><div class="build-card-name">'+escH(b.name)+'</div><div class="build-card-sub">'+escH(platform)+'</div></div>'+
       '</a>'+

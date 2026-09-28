@@ -1015,7 +1015,7 @@ async function publishBuild() {
     return;
   }
 
-  const detailUrl = 'gunforma-build-detail.html?id=' + encodeURIComponent(result.buildId);
+  const detailUrl = '/b/' + encodeURIComponent(result.buildId);
   // Goes through setResultNote so a success after a failed attempt resets the
   // red styling and the title, instead of showing "Publish failed" in red
   // above a successful publish.

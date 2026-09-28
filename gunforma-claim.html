@@ -274,7 +274,7 @@ function renderForm() {
             '<div class="build-preview-name">'+escH(LINKED_BUILD.name)+'</div>'+
             (LINKED_BUILD.platform ? '<div class="build-preview-platform">'+escH(LINKED_BUILD.platform)+'</div>' : '')+
           '</div>'+
-          '<a class="build-preview-link" href="gunforma-build-detail.html?id='+encodeURIComponent(LINKED_BUILD.id)+'" target="_blank" rel="noopener">View your build →</a>'+
+          '<a class="build-preview-link" href="/b/'+encodeURIComponent(LINKED_BUILD.id)+'" target="_blank" rel="noopener">View your build →</a>'+
         '</div>'+
       '</div>';
   }
@@ -406,7 +406,7 @@ async function handleClaim() {
 
   // Success — send them straight to their build if we found one, otherwise home.
   if (LINKED_BUILD && LINKED_BUILD.id) {
-    window.location.href = 'gunforma-build-detail.html?id=' + encodeURIComponent(LINKED_BUILD.id);
+    window.location.href = '/b/' + encodeURIComponent(LINKED_BUILD.id);
   } else {
     window.location.href = 'index.html';
   }
