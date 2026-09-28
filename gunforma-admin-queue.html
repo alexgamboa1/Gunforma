@@ -275,6 +275,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><div class="toast-dot green" id="toast-dot"></div><span id="toast-msg">Done</span></div>
 
+<script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script>
 // admin nav is intentionally NOT the shared nav (distinct admin-only links +
@@ -564,7 +565,7 @@ function renderDetail(b) {
     (editedPartCount ? ' We corrected '+editedPartCount+' part'+(editedPartCount!==1?'s':'')+' on your build for accuracy — view what changed.' : '');
 
   var reviewedBanner = '';
-  if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="/b/'+encodeURIComponent(b.id)+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
+  if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="'+buildPath(b.id, b.name)+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
   if (b.status==='rejected') reviewedBanner='<div class="reviewed-banner rejected"><div><div class="rb-text">Rejected — '+escH(b.rejection_reason||'')+'</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+'</div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
 
   var html =

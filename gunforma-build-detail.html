@@ -11,41 +11,28 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Gunforma build</title>
 <link rel="canonical" href="https://gunforma.com/gunforma-build-detail.html" />
-<!-- The canonical line ABOVE is matched byte for byte by build-og.mjs, which
-     strips it at /b/:id before injecting a per-build one. Changing it — even
-     the spacing or the trailing newline — makes that strip a silent no-op and
-     the page ships two canonicals. If it has to change, change the replace in
+<!-- The canonical line ABOVE is matched byte for byte by build-og.mjs,
+     which strips it at /b/... before injecting a per-build one. Changing it
+     — even the spacing or the trailing newline — makes that strip a silent
+     no-op and the page ships two canonicals, while looking completely
+     normal in a browser. If it has to change, change the replace in
      build-og.mjs in the same commit.
 
      It has no id, and it cannot have one: this one file is served for every
-     build. Left alone it means every build on the site declares the same
-     canonical URL, pointing at a page with no build on it. So the id is
-     applied at runtime, below.
+     build. The real canonical is /b/<slug>-<uuid>, and the slug comes from
+     the build's NAME — which is not known at parse time, only after the
+     data loads. So nothing is written here. setCanonical() in the page
+     script does it once renderBuild() has the build.
 
-     This script MUTATES the existing <link> rather than appending one, so the
-     document can never carry two canonicals. At /b/:id it finds the canonical
-     build-og.mjs injected and writes the identical URL over it — a deliberate
-     no-op, and the reason the URL here must match metaBlock() in
-     build-og.mjs exactly. It earns its place at the query-string URL, which
-     old links still use, and in the case where build-og falls back to serving
-     this page unadorned.
+     Deliberately NOT writing /b/<uuid> here as a placeholder: that is a
+     second, different canonical for the same content, which is exactly the
+     duplicate the /b/ work exists to remove. A canonical that is briefly
+     absent is a canonical a crawler falls back from; a canonical that is
+     wrong is one it believes.
 
-     Not og:* as well: social scrapers do not run JS, so runtime OG tags would
-     buy nothing. Previews are fixed by linking to /b/:id in the first place,
-     which every internal link now does. -->
-<script>
-(function () {
-  // Same resolution order as loadBuild() further down: path first, then query.
-  var m = window.location.pathname.match(/^\/b\/([^/]+)\/?$/);
-  var id = m ? decodeURIComponent(m[1])
-             : new URLSearchParams(window.location.search).get('id');
-  if (!id) return;                                  // nothing to point at
-  var link = document.querySelector('link[rel="canonical"]');
-  if (!link) return;                                // nothing to correct
-  // Apex host, never location.origin — see the SEO invariants in CLAUDE.md.
-  link.href = 'https://gunforma.com/b/' + encodeURIComponent(id);
-})();
-</script>
+     Not og:* either: social scrapers do not run JS, so runtime OG tags buy
+     nothing. Previews are fixed by linking to /b/<slug>-<uuid> in the first
+     place, which every internal link does. -->
 <meta name="description" content="View a complete pistol build — every part, every photo, total cost, and affiliate links to buy." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -375,6 +362,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span id="toast-msg">Done</span></div>
 
+<script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
@@ -436,6 +424,23 @@ function showToast(msg) {
 //
 // This also drops any #c-<comment> anchor, which is correct here: the button
 // says "Copy link" for the build, and inbox deep links are their own thing.
+// The one place the page writes its canonical. Called from renderBuild(),
+// because the slug comes from the build's name and nothing before that has
+// it. MUTATES the existing <link> rather than appending, so the document can
+// never carry two.
+//
+// At /b/... build-og.mjs has already injected this exact URL — both sides
+// call the same builder over the same id and name (js/build-url.js and
+// netlify/functions/_build-url.mjs, kept in step by
+// scripts/build-url.test.mjs), so writing it again is a deliberate no-op.
+// It earns its place at gunforma-build-detail.html?id=..., which old links
+// still use, and when build-og falls back to serving this page unadorned.
+function setCanonical(b) {
+  var link = document.querySelector('link[rel="canonical"]');
+  if (!link || !b || !b.id) return;
+  link.href = buildUrl(b.id, b.name);
+}
+
 function shareUrl() {
   var link = document.querySelector('link[rel="canonical"]');
   var href = link && link.href;
@@ -468,10 +473,11 @@ async function loadBuild() {
   // which injects the OG meta) and gunforma-build-detail.html?id=... (the
   // original, still supported so old links never break). Same resolution
   // order gunforma-profile.html uses for /u/:username.
-  const fromPath = window.location.pathname.match(/^\/b\/([^/]+)\/?$/);
-  const id = fromPath
-    ? decodeURIComponent(fromPath[1])
-    : new URLSearchParams(window.location.search).get('id');
+  // buildIdFromPath takes the LAST 8-4-4-4-12 group, so /b/<uuid> and
+  // /b/<slug>-<uuid> both resolve and a renamed build's old URL keeps
+  // working. Same function the server uses — see js/build-url.js.
+  const id = buildIdFromPath(window.location.pathname)
+    || new URLSearchParams(window.location.search).get('id');
   if (!id) { renderNotFound(); return; }
 
   // No status filter needed here — RLS's "Public can view approved builds"
@@ -736,6 +742,7 @@ function renderNotFound() {
 
 function renderBuild(b) {
   document.title = b.name + ' — Gunforma';
+  setCanonical(b);            // the slug needs the name; this is the first point we have it
 
   var platformName = b.platforms ? b.platforms.name : 'Unknown pistol';
   var username = b.profiles ? b.profiles.username : 'unknown';

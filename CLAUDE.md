@@ -560,6 +560,50 @@ Romeo variants whose `reticle` was swapped between the 3 MOA and 6 MOA rows.
 
 `variant_label` overrides the computed label verbatim when non-empty.
 
+### A build's URL is built in two places, on purpose
+
+`/b/:id` is really `/b/<name-slug>-<uuid>`. **The uuid at the end is what
+resolves**; the slug is decoration, so renaming a build never breaks a link
+and two builds with the same name never collide. `/b/<uuid>` with no slug
+keeps working forever — plenty of those are already out there.
+
+The slug function lives in two files, the same split and for the same reason
+as `js/category-map.js` ↔ `netlify/functions/_category-meta.mjs`:
+
+- `js/build-url.js` — the browser copy, a plain `<script>` global. Loaded by
+  every page that renders a build card or sends a reader to a build.
+- `netlify/functions/_build-url.mjs` — the server copy, ESM, imported by
+  `build-og.mjs`.
+
+**Do not inline the slug logic anywhere else.** Call `buildPath(id, name)`
+for an href and `buildUrl(id, name)` for an absolute URL.
+
+**This pair is stricter than the category one.** A category out of sync ships
+a link that 404s, and somebody notices. This pair produces the **canonical
+tag** — `build-og.mjs` emits it server-side, and the page re-emits it from the
+browser copy once the build data loads. If the two disagree by one character
+the build declares two different canonical URLs over one page load, renders
+perfectly, and quietly re-creates the duplicate-URL problem `/b/` exists to
+fix. `scripts/build-url.test.mjs` runs both copies over the same inputs and
+fails if they differ — run it after touching either.
+
+Three things about that canonical are load-bearing:
+
+- **Extraction takes the LAST 8-4-4-4-12 group**, never the whole path
+  segment. Every slug contains hyphens, some contain hex, and a build can be
+  named after a uuid — anchoring at the end is what keeps all of those from
+  being mistaken for the id.
+- **`gunforma-build-detail.html` writes nothing at parse time.** It has only
+  the id then, and the slug needs the name. It must not emit `/b/<uuid>` as a
+  placeholder: that is a second, different canonical for the same content. A
+  canonical that is briefly absent is one a crawler falls back from; a
+  canonical that is wrong is one it believes. `setCanonical()` runs from
+  `renderBuild()`.
+- **The static `<link rel="canonical">` on line 13 of that page is matched
+  byte for byte** by `build-og.mjs`, which strips it before injecting its
+  own. Change the line without changing the replace and `/b/` pages ship two
+  canonicals and look completely normal in a browser.
+
 ### Neither is the photo uploader
 
 `js/photos.js` owns the build-photo uploader — the four slots, the

@@ -390,6 +390,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
+<script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
@@ -1160,7 +1161,7 @@ async function publishBuild() {
   // back to check on status as it moves pending → approved.
   // location.replace so Back doesn't return them to the submit form.
   setTimeout(function () {
-    window.location.replace('/b/' + encodeURIComponent(result.buildId));
+    window.location.replace(buildPath(result.buildId, state.name));
   }, 700);
 }
 

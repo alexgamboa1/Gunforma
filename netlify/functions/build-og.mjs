@@ -30,6 +30,7 @@
 // Routing lives in netlify.toml ([[redirects]] /b/* -> here with ?id=:splat).
 // -----------------------------------------------------------------------------
 import { readFile } from 'node:fs/promises';
+import { buildUrl, buildIdFromPath } from './_build-url.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -40,7 +41,9 @@ const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
 
 // Builds are keyed by uuid. Anything that is not one 404s without a DB round
 // trip, which is also what keeps path input out of the PostgREST query.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// buildIdFromPath in _build-url.mjs does the matching now — it takes the LAST
+// 8-4-4-4-12 group, so /b/<uuid> and /b/<slug>-<uuid> both resolve and a slug
+// full of hyphens (they all are) cannot be mistaken for the id.
 
 const PAGE_CANDIDATES = [
   'gunforma-build-detail.html',
@@ -115,7 +118,10 @@ function metaBlock(build) {
   const title = buildTitle(build);
   const desc  = buildDescription(build);
   const image = buildImage(build);
-  const url   = SITE + '/b/' + encodeURIComponent(build.id);
+  // The shared builder, not a local string. The page re-emits this exact
+  // URL from js/build-url.js once its data loads; if the two ever disagree
+  // the build declares two canonicals in one page load. See _build-url.mjs.
+  const url   = buildUrl(build.id, build.name);
   return [
     // The page is served at /b/<id> but every script src and nav href in it is
     // root-relative-less ("js/nav.js", "gunforma-builds.html"), which would
@@ -168,27 +174,32 @@ function notFound() {
 // target's query string the way `netlify dev` does — the function gets an
 // empty param and every build 404s. Rather than depend on one mechanism, read
 // whichever source actually carries it.
+// Every source here can carry either /b/<uuid> or /b/<slug>-<uuid>, so each
+// one goes through buildIdFromPath rather than being treated as an id.
+// Returns null when nothing in the request contains a uuid.
 function extractId(req) {
   const url = new URL(req.url);
 
   const fromQuery = url.searchParams.get('id') || url.searchParams.get('splat');
-  if (fromQuery) return fromQuery;
+  if (fromQuery) {
+    const id = buildIdFromPath(decodeURIComponent(fromQuery));
+    if (id) return id;
+  }
 
-  const fromPath = url.pathname.match(/^\/b\/([^/]+)\/?$/);
-  if (fromPath) return decodeURIComponent(fromPath[1]);
+  const fromPath = buildIdFromPath(decodeURIComponent(url.pathname));
+  if (fromPath) return fromPath;
 
   // Set by Netlify to the pre-rewrite path.
   const original = req.headers.get('x-nf-original-path') || '';
-  const fromHeader = original.match(/^\/b\/([^/?#]+)/);
-  if (fromHeader) return decodeURIComponent(fromHeader[1]);
-
-  return '';
+  return buildIdFromPath(decodeURIComponent(original));
 }
 
 export default async (req) => {
   const requested = extractId(req);
 
-  if (!UUID_RE.test(requested)) return notFound();
+  // No uuid anywhere in the request — 404 without a DB round trip, which is
+  // also what keeps path input out of the PostgREST query below.
+  if (!requested) return notFound();
 
   // platforms and profiles each have exactly one FK to builds, so those bare
   // embeds are correct. profiles is named anyway because builds has two FKs
