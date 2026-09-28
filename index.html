@@ -66,7 +66,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .builds-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .build-card { background: #ffffff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
 .build-card:hover { border-color: #4a9edd; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-.build-img { height: 110px; background: #f4f3ee; display: flex; align-items: center; justify-content: center; border-bottom: 0.5px solid #e5e5e5; position: relative; overflow: hidden; }
+/* BUILD photo — the owner's own photo of their gun, so object-fit stays
+   cover below. The box was the problem: a fixed 110px height against a card
+   that is 332px wide at 390px and 400px at 1280px made a 3.0-3.6:1 letterbox,
+   and build photos come off phones and are mostly portrait. Measured against
+   the real 360x480 heroes on this page, that box threw away 75-79% of them.
+   4/3 keeps 56%, which is not a number invented here: it is the ratio
+   build-og.mjs already serves share cards at (OG_W 1200 x OG_H 900), chosen
+   there by measuring the same trade-off against a real portrait hero.
+   build-detail's .build-hero is 1/1 and keeps more still, but that is a
+   full-width hero; a square in a three-up card grid gets very tall. */
+.build-img { aspect-ratio: 4/3; background: #f4f3ee; display: flex; align-items: center; justify-content: center; border-bottom: 0.5px solid #e5e5e5; position: relative; overflow: hidden; }
 .build-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .build-img span { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; }
 .build-bookmark { position: absolute; top: 8px; right: 8px; background: rgba(255,255,255,0.9); border: 0.5px solid #d9d6cc; width: 26px; height: 26px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #888; font-size: 13px; }
