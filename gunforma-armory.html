@@ -82,10 +82,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
 .category-block.open .category-toggle { color: #6fb4e8; border-color: #3a3b3e; background: rgba(255,255,255,0.06); }
 
-.added-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fafaf8; }
-.added-chip { display: flex; align-items: center; gap: 6px; background: #eaf5ee; border: 0.5px solid #86cfad; border-radius: 20px; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #166534; }
-.added-chip-x { background: none; border: none; cursor: pointer; color: #86a292; font-size: 14px; line-height: 1; padding: 0; font-family: inherit; }
-.added-chip-x:hover { color: #c25d3a; }
+/* Parts already added to this category. A card each rather than a text chip:
+   the point of the strip is confirming the right product was picked, and a
+   name alone does not do that when a catalog carries four near-identical
+   compensators. Keeps the green "added" accent the chips had. */
+.selected-parts-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fafaf8; }
+.selected-part { display: flex; align-items: center; gap: 10px; background: #fff; border: 0.5px solid #86cfad; border-radius: 6px; padding: 6px 8px; }
+/* 72x54 = 4:3, the same ratio as .part-card-photo, so a product shot is
+   framed identically whether it is in the grid or already picked. */
+.selected-part-thumb { flex-shrink: 0; width: 72px; height: 54px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.selected-part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; box-sizing: border-box; background: #fff; display: block; }
+.selected-part-thumb-label { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 2px; }
+.selected-part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.selected-part-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.selected-part-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
+.selected-part-price { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+.selected-part-price.na { color: #bbb; font-weight: 500; }
+.selected-part-pending { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: #8a6d3b; }
+.selected-part-dot { width: 7px; height: 7px; border-radius: 50%; background: #f9b860; flex-shrink: 0; }
+.selected-part-remove { flex-shrink: 0; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; cursor: pointer; color: #888; font-size: 10.5px; font-weight: 700; padding: 5px 10px; font-family: inherit; transition: all 0.15s; }
+.selected-part-remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
 
 .picker-panel { display: none; background: #fafaf8; }
 .category-block.open .picker-panel { display: block; }
@@ -100,7 +116,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card.favorited { border-color: #d85a30; }
 .part-card.favorited.added { border-color: #22a06b; }
 .part-card-photo { position: relative; aspect-ratio: 4/3; background: #f4f3ee; overflow: hidden; }
-.part-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* contain, not cover. These are product shots at the manufacturer's ratio —
+   mostly ~16:9 — and cover in a 4:3 box scales them to fill by height, which
+   pushes the width 33% past the box and slices 12.5% off each end. On a
+   barrel or a compensator that is both ends of the part. contain fits the
+   whole thing; the white keeps it from floating on the grey placeholder
+   colour, which is there for the no-photo state. */
+.part-card-photo img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
 .part-card-nophoto { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 10px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
 .part-card-fav-badge { position: absolute; top: 6px; right: 6px; font-size: 10px; color: #d85a30; background: rgba(255,255,255,0.94); border: 0.5px solid #d85a30; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.04em; }
 .part-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
@@ -145,6 +167,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .guide-parts-list .part-affiliate { padding: 6px 8px; margin-top: 0; }
 .guide-parts-list .part-affiliate-price { font-size: 12px; }
 .guide-parts-list .part-affiliate-btn { font-size: 10px; padding: 5px 9px; }
+
+/* In-card affiliate row — stacked, because the side-by-side layout has no
+   room here. Scoped to .part-card on purpose: .guide-parts-list above and
+   gunforma-build-detail.html both render the same markup in a container wide
+   enough for price-and-button on one line, and neither should change. Same
+   approach gunforma-parts-catalog.html takes with its own
+   `.part-card .part-affiliate-btn` override.
+   
+   Why it is worst on a big monitor, which is the counterintuitive part:
+   .part-grid is auto-fill minmax(200px, 1fr), so a WIDER window packs MORE
+   columns and each one gets NARROWER. The button is flex-shrink: 0 and the
+   label is as long as the partner name ("Buy at OpticsPlanet ↗" = 143.6px),
+   so it takes what it needs and the price lives on the remainder. Measured
+   before this rule, same product throughout: at a 1425px layout viewport,
+   4 columns, 232.5px card, 143.6px button, 32.9px left for the price — which
+   put "From" and "$65.49" on separate lines and made the row 88px tall. At
+   390px, 1 column, the same button leaves 124.4px and the row is 47px.
+   
+   Stacking removes the competition: the price line gets the full inner width
+   at every viewport, so the button length stops being the price's problem. */
+.part-card .part-affiliate { flex-direction: column; align-items: stretch; gap: 6px; }
+/* The range moves up beside the price instead of onto its own line — it is a
+   continuation of the same number, and the row has the width for it now. */
+.part-card .part-affiliate-info { flex-direction: row; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0 6px; }
+.part-card .part-affiliate-range { margin-left: 0; }
+/* text-align because this is an <a>, which does not inherit the centring the
+   .part-card-btn siblings get. */
+.part-card .part-affiliate-btn { display: block; width: 100%; text-align: center; padding: 7px 8px; box-sizing: border-box; }
 
 .picker-empty { padding: 20px 16px; font-size: 12px; color: #888; text-align: center; }
 
@@ -1132,11 +1182,8 @@ function renderCategoryBlock(cat) {
     else rest.push(p);
   });
 
-  var chipsHtml = addedInCat.length
-    ? '<div class="added-strip">' + addedInCat.map(function (p) {
-        return '<div class="added-chip">' + esc(p.brand + ' ' + p.name) +
-          '<button class="added-chip-x" data-uid="' + p.uid + '" title="Remove">×</button></div>';
-      }).join('') + '</div>'
+  var selectedHtml = addedInCat.length
+    ? '<div class="selected-parts-list">' + addedInCat.map(selectedPartHtml).join('') + '</div>'
     : '';
 
   var picker = '';
@@ -1164,7 +1211,48 @@ function renderCategoryBlock(cat) {
       '</div>' +
       '<button class="category-toggle">' + (isOpen ? 'Close ✕' : '+ Add part') + '</button>' +
     '</div>' +
-    chipsHtml + picker +
+    selectedHtml + picker +
+  '</div>';
+}
+
+// One row per part already added to this category: photo, brand, name, price
+// and Remove. Replaces the text chips, which named a part without ever showing
+// it — no use at all when a category holds four near-identical compensators.
+//
+// The image comes from the live catalog rather than from the part, because
+// STATE.parts has no image field and adding one would not help: a part
+// hydrated from a saved draft or a remixed guide is rebuilt from
+// parts_snapshot, which has no image either.
+//
+// Three cases, and the last two are why this does not just read
+// PRODUCTS_BY_ID[p.refId].image directly:
+//   - refId in the catalog        -> the product photo
+//   - refId NOT in the catalog     -> "No photo". Happens for real: the draft
+//     was saved under another platform, or the product has since been
+//     retired or unpublished. rebuildCatalogForPlatform() runs before both
+//     hydration paths, so PRODUCTS_BY_ID holds only the CURRENT platform.
+//   - refId null (pending custom part, authored on gunforma-post-build.html
+//     and carried in on a draft) -> "Pending", with the amber dot below.
+// Price is read from the part, not the catalog, so this agrees with
+// totalMsrp() in the summary — which sums the same p.price.
+function selectedPartHtml(p) {
+  var live = p.refId ? PRODUCTS_BY_ID[p.refId] : null;
+  var thumb = live && live.image
+    ? '<div class="selected-part-thumb"><img src="' + escAttr(live.image) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '" loading="lazy" ' +
+        'onerror="this.parentElement.innerHTML=\'<div class=&quot;selected-part-thumb-label&quot;>No photo</div>\'"/></div>'
+    : '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' + (p.pending ? 'Pending' : 'No photo') + '</div></div>';
+  var priceHtml = p.pending
+    ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
+    : (p.price != null
+        ? '<div class="selected-part-price">$' + p.price.toFixed(p.price < 100 ? 2 : 0) + '</div>'
+        : '<div class="selected-part-price na">Price N/A</div>');
+  return '<div class="selected-part">' + thumb +
+    '<div class="selected-part-body">' +
+      '<div class="selected-part-brand">' + esc(p.brand) + '</div>' +
+      '<div class="selected-part-name">'  + esc(p.name)  + '</div>' +
+      priceHtml +
+    '</div>' +
+    '<button type="button" class="selected-part-remove" data-uid="' + escAttr(p.uid) + '" title="Remove">Remove</button>' +
   '</div>';
 }
 
@@ -1232,12 +1320,23 @@ function wireCategoryHandlers() {
       removePartByRefId(el.dataset.removeRef);
     });
   });
-  document.querySelectorAll('.added-chip-x').forEach(function (el) {
+  // Same data-uid -> removePartByUid contract the chips used; only the class
+  // the button carries changed.
+  document.querySelectorAll('.selected-part-remove').forEach(function (el) {
     el.addEventListener('click', function (e) {
       e.stopPropagation();
       removePartByUid(el.dataset.uid);
     });
   });
+}
+
+// renderPartsSection() replaces the whole section, so the block has to be
+// looked up AFTER the re-render — hence the deferred lookup by data-cat.
+function scrollCategoryIntoView(cat) {
+  setTimeout(function () {
+    var el = document.querySelector('[data-cat="' + cat + '"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 60);
 }
 
 function addPartByRefId(refId, cat) {
@@ -1246,13 +1345,30 @@ function addPartByRefId(refId, cat) {
   // Silently ignore duplicate adds (belt-and-braces — the UI hides Add and
   // shows Remove when the item is present, but a fast double click could race).
   if (STATE.parts.some(function (p) { return p.refId === refId; })) return;
+  var addedCat = cat || product.category;
   STATE.parts.push({
-    uid: 'p' + (partUid++), refId: refId, category: cat || product.category,
+    uid: 'p' + (partUid++), refId: refId, category: addedCat,
     brand: product.brand, name: product.name, pending: false, price: product.price,
   });
+  // Collapse the category now the pick is made. The panel used to stay open
+  // over a grid of forty cards where the one just clicked had flipped to
+  // "Remove" somewhere off-screen — no confirmation the add had landed. The
+  // new selected-part card above the fold is that confirmation, so scroll the
+  // block back to it; collapsing alone drops the page out from under the user.
+  //
+  // Same behaviour as closePickerAfterAdd() in gunforma-post-build.html,
+  // written against this page's own state rather than shared with it — the
+  // two pickers are different implementations (auto-fill grid, favorites,
+  // affiliate rows, delegated handlers) and only the behaviour is common.
+  //
+  // This is the page's ONLY path into STATE.parts.push — there is no custom
+  // or manual add here. Pending parts exist in the data model but arrive
+  // through parts_snapshot hydration, which sets openCategory itself.
+  STATE.openCategory = null;
   renderPartsSection();
   renderSummary();
   updateActionButtons();
+  scrollCategoryIntoView(addedCat);
 }
 function removePartByRefId(refId) {
   STATE.parts = STATE.parts.filter(function (p) { return p.refId !== refId; });
