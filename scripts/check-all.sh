@@ -75,6 +75,13 @@ NOT_BUILD_CHECKS=(
   # .github/workflows/refresh-affiliate-prices.yml before the nightly sync,
   # which is where its dependency actually exists.
   scripts/gtin-norm.test.mjs
+
+  # Fetches /sitemap.xml from a live origin and cross-checks every /b/ URL
+  # against the canonical that URL actually serves. Cannot run at build time:
+  # the site is not serving during its own build, and fetching the previous
+  # deploy would grade the wrong artifact. Runs from
+  # .github/workflows/check-sitemap.yml.
+  scripts/check-sitemap.mjs
 )
 
 # ── the audit: a check file that is not registered fails the build ─────────

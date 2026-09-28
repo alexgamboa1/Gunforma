@@ -75,7 +75,25 @@ by a Netlify function. Two working precedents to copy from:
 Both are dependency-free (plain `fetch` against PostgREST, no `supabase-js`), use the anon
 key only, and return a real 404 for unknown slugs rather than a soft 404.
 
-`netlify/functions/build-og.mjs` is the third, and it holds to the same rule.
+`netlify/functions/sitemap.mjs` is a third, `/sitemap.xml`, generated from the
+database. Two things about it are load-bearing:
+
+- It builds `/b/` URLs with `buildUrl()` from `_build-url.mjs` — the same
+  module `build-og.mjs` uses for the canonical it injects into that page. **A
+  sitemap that disagreed with the canonical it points at is worse than no
+  sitemap**: it hands a crawler two URLs for one document and then contradicts
+  itself on arrival. Sharing the builder makes that impossible by construction
+  rather than by review. `scripts/check-sitemap.mjs` asserts it on the wire.
+- On any query failure it returns **503, never a partial sitemap**. A crawler
+  keeps the last good one on a 5xx and acts on a 200 — and a 200 that has
+  quietly dropped 231 product URLs is how a catalogue gets deindexed with
+  nothing having failed.
+
+Only approved builds appear (`status=eq.approved`, redundant with RLS on
+purpose, same as `build-og.mjs`), and a profile is listed only if it has one —
+a `/u/` page with nothing on it is a thin page.
+
+`netlify/functions/build-og.mjs` is the fourth, and it holds to the same rule.
 Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
 `/gunforma-build-detail.html?id=<uuid>`, the legacy one, routed here so both
 emit the same canonical instead of one declaring the id-less one until its
@@ -500,7 +518,10 @@ so a local pass is not sufficient evidence on its own.
 ## SEO invariants
 
 Canonical tags, `og:url`, `sitemap.xml`, `robots.txt` and JSON-LD always use
-`https://gunforma.com`, never the current origin. The site is reachable at several
+`https://gunforma.com`, never the current origin. `sitemap.xml` is generated
+by `netlify/functions/sitemap.mjs` — the static file is **deleted**, not left
+in place, so nothing can shadow the route and keep serving a stale list that
+looks perfectly healthy. The site is reachable at several
 `*.netlify.app` hostnames; `netlify/edge-functions/canonical-host.js` redirects the
 production mirrors to the apex and marks previews `noindex`. Emitting a non-apex URL in any
 of those places undoes that.

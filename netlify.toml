@@ -173,6 +173,27 @@
   status = 200
   force = true
 
+# /sitemap.xml is generated now — see netlify/functions/sitemap.mjs. It was a
+# static file listing 231 product pages and 10 static pages, and no builds at
+# all, so the only content unique to this site was never submitted anywhere.
+#
+# THE STATIC FILE IS DELETED, NOT LEFT IN PLACE WITH force = true.
+# A rule without `force` only applies when no file exists at the path, so a
+# leftover sitemap.xml would shadow this silently and keep serving the stale
+# list — the trap #73 hit, and the worst possible failure here because a stale
+# sitemap looks exactly like a working one. With the file gone there is
+# nothing to shadow it, and a misconfiguration becomes a loud 404 instead.
+#
+# Exact path, so it can only ever match itself; nothing above matches it and
+# nothing below wants it. First-match-wins is satisfied wherever it sits.
+#
+# robots.txt still points at https://gunforma.com/sitemap.xml, unchanged — the
+# URL is the same, only what answers it has changed.
+[[redirects]]
+  from = "/sitemap.xml"
+  to = "/.netlify/functions/sitemap"
+  status = 200
+
 [[redirects]]
   from = "/field-notes"
   to = "/field-notes.html"
