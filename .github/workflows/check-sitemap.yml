@@ -1,0 +1,52 @@
+name: Check sitemap
+
+# Asserts /sitemap.xml against a REAL deployed origin.
+#
+# sitemap.xml stopped being a static file and became
+# netlify/functions/sitemap.mjs. The risk that swap introduces is a sitemap
+# that is generated, well-formed, served with a 200, and wrong — 231 product
+# URLs silently missing, or a /b/ URL that disagrees with the canonical that
+# page actually serves. Neither shows up anywhere a person looks, and both
+# cost indexing.
+#
+# So the check runs against a URL, not a mock: it fetches the sitemap, then
+# fetches each /b/ page in it and compares canonicals. Only a real deploy can
+# answer that — which is also why it is not in scripts/check-all.sh (the site
+# is not serving during its own build).
+#
+# Separate from check-routes.yml on purpose: they assert different things and
+# either one failing must not stop the other from reporting.
+
+on:
+  schedule:
+    # :23 past, once a day. Odd minute for the same measured reason as the
+    # other workflows here — GitHub deprioritises jobs at the top of the hour
+    # and they routinely run late.
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: 'Origin to check (e.g. a deploy-preview URL). Defaults to production.'
+        required: false
+        default: 'https://gunforma.com'
+
+concurrency:
+  group: check-sitemap-${{ github.event.inputs.origin || 'production' }}
+  cancel-in-progress: false
+
+jobs:
+  sitemap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # No install step: check-sitemap.mjs imports nothing but the repo's own
+      # _build-url.mjs.
+      - name: Check sitemap
+        env:
+          DEPLOY_URL: ${{ github.event.inputs.origin || 'https://gunforma.com' }}
+        run: node scripts/check-sitemap.mjs "$DEPLOY_URL"
