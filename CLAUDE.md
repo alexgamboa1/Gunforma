@@ -833,3 +833,58 @@ so there was no way to blur a serial when posting on someone else's
 behalf — the case where it matters most, because the photo came from the
 builder and the admin may never have looked closely. The fix was to extract
 the one copy, not to grow a second.
+
+### Nor is the part picker
+
+`js/part-picker.js` owns the picker's **card layer**: `partImageHtml`,
+`partCardHtml`, `selectedPartThumbHtml`, `selectedPartHtml`,
+`selectedPartsHtml`, `findCatalogItem`, `scrollToCategory` and
+`closePickerAfterAdd`, plus the ~100 CSS rules they render into. It injects
+its own CSS into `<head>` on init and is loaded by the same two pages as the
+uploader and the redact modal.
+
+```js
+PartPicker.init({
+  catalog:  () => CATALOG,      // reassigned wholesale by loadCatalog()
+  state:    () => state,        // the page still owns the store
+  render:   renderParts,
+  onChange: renderSidebar,      // optional
+});
+```
+
+Functions again, and for a live reason this time: `loadCatalog()` does
+`CATALOG = grouped` and the admin page's `postAnother()` does `CATALOG = {}`,
+so a captured reference keeps serving the previous platform's parts into the
+next build. Mount it **before the first `renderParts()`** — it injects the
+CSS those cards are styled by. Unlike `PhotoUploader` it needs nothing from
+the auth gate, so it does not wait for one.
+
+**The page must define two globals**, `addCatalogPart(catKey, itemId)` and
+`removePart(uid)`: the emitted markup names them in inline `onclick`
+attributes. `init()` throws if either is missing, because the alternative is
+a card that renders perfectly and does nothing when clicked.
+
+This is the fourth thing extracted rather than copied, and it is the one that
+proves the rule costs something every time it is ignored. `#81` fixed three
+defects in `gunforma-post-build.html` — the picker not closing on a pick,
+product photos cropped to a 100px letterbox, added parts as text chips with
+no photo to check them against. The byte-identical code in
+`gunforma-admin-post.html` kept all three, plus the inline
+`style="object-fit:cover"` that made the CSS fix a no-op. Same shape as the
+uploader and the redact modal before it: the page nobody is looking at keeps
+the old behaviour, and nothing fails.
+
+**What is still duplicated**, and is the obvious next extraction — these live
+in both pages and must be changed in both: `renderParts`,
+`buildCategoryBlock`, `categoryPickerState`, `customFormFieldsHtml`,
+`filterCards`, `togglePicker`, `toggleCustomForm`, `addCatalogPart`,
+`addCustomPart`, `removePart`, `loadCatalog`, and the `CATEGORIES` list.
+
+**`gunforma-armory.html` is not a third copy and must not be made one.** It
+renders a different card that happens to share class names — `.part-card`,
+`.part-card-body`, `.part-card-brand`, `.part-card-name`, `.part-card-price`
+— with its own values, its own `.part-card-photo` slot, favourites, affiliate
+actions and a stretched-link overlay. It does not load `js/part-picker.js`,
+and it should not: the module's injected CSS would land on those shared
+selectors and restyle the armory grid. Extracting the armory card is a
+separate question from extracting the picker.
