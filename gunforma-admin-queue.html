@@ -235,9 +235,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <span class="nav-admin-tag">Admin</span>
   </div>
   <div class="nav-right">
+    <!-- Catalog and Users used to sit here as href="#" placeholders for admin
+         sections that were never built — there is no admin catalog page and no
+         admin users page in this repo. Post build replaces them: it is the one
+         route that was actually missing, since gunforma-admin-post.html links
+         back here but nothing here linked there. -->
+    <a href="/admin-post" class="nav-right-link">Post build</a>
     <a href="gunforma-builds.html" class="nav-right-link">Builds</a>
-    <a href="#" class="nav-right-link">Catalog</a>
-    <a href="#" class="nav-right-link">Users</a>
     <a href="index.html" class="nav-right-link">← Site</a>
   </div>
 </nav>
