@@ -100,24 +100,37 @@ Named `:placeholder` values are **not** substituted into a rewrite target's quer
 production, though `netlify dev` does substitute them — which hides the bug locally. Use
 `:splat`, and have the function fall back to parsing the path and `x-nf-original-path`.
 
-**`x-nf-original-path` is not set on every rewrite.** Measured on production:
-absent on a forced exact-path rule with a `query` condition
-(`/gunforma-build-detail.html` → `build-og`). A function that reads it to tell
-which rule routed it will silently take the same branch every time. `netlify
-dev` and any synthetic `Request` supply whatever header the caller writes, so
-a local test cannot see this — both a local suite and a reviewer's local run
-passed against a branch that never executed in production.
+**A function receives the ORIGINAL request URL, not the rewrite target.**
+Measured on a deploy preview, by having `build-og.mjs` report where it found
+the id:
 
-The same rule's matched `query` param **is** forwarded to the target, which is
-how that route resolves its id at all.
+| request | `x-build-og-id-source` | `x-nf-original-path` |
+|---|---|---|
+| `/b/<slug>-<uuid>` | `path` | **absent** |
+| `/gunforma-build-detail.html?id=<uuid>` | `query` | **absent** |
 
-So: **do not branch on which rule routed a request.** If a function genuinely
-needs to know, derive it from something in the request every route carries, or
-split it into two functions. And if a function's behaviour depends on Netlify's
-plumbing, make the plumbing observable from outside — `build-og.mjs` returns
-`x-build-og-id-source` and `x-build-og-orig` for exactly that, and
-`scripts/check-routes.mjs` prints them on every run so the next person reads a
-measurement instead of guessing.
+So `req.url` inside the function is what the reader asked for: `url.pathname`
+is `/b/<slug>-<uuid>`, and `url.searchParams` is the reader's own query. **A
+rewrite target does not need to carry the id** — the pre-rewrite path is
+already there.
+
+**`x-nf-original-path` was absent on both routes and has never been observed
+set anywhere in this repo.** Anything reading it is insurance, not a source.
+A function that branches on it to tell which rule routed a request will
+silently take the same branch every time — `netlify dev` and any synthetic
+`Request` supply whatever header the caller writes, so no local test can see
+this. That shipped once: an `isShareRoute()` branch in `build-og.mjs` that
+never executed, with two local suites green over it.
+
+Corollary: **do not branch on which rule routed a request.** Derive what you
+need from the request itself, or split into two functions.
+
+And when behaviour depends on Netlify's plumbing, **make the plumbing
+observable from outside.** `build-og.mjs` returns `x-build-og-id-source` and
+`x-build-og-orig`, and `scripts/check-routes.mjs` prints them on every run, so
+this table stays a measurement instead of reverting to a belief. Both of the
+guesses it replaced — mine and a reviewer's — were wrong, and in different
+ways.
 
 That is twice now that a rewrite behaved differently in production than
 locally, and twice that a green local test covered it. A rewrite's behaviour
