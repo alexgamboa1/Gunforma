@@ -75,6 +75,28 @@ by a Netlify function. Two working precedents to copy from:
 Both are dependency-free (plain `fetch` against PostgREST, no `supabase-js`), use the anon
 key only, and return a real 404 for unknown slugs rather than a soft 404.
 
+`netlify/functions/build-og.mjs` is the third, and it is the one with an
+exception to that last rule. Two routes reach it:
+
+- `/b/<slug>-<uuid>` — the share URL. An unknown or unapproved build gets a
+  **real 404**, same as the other two.
+- `/gunforma-build-detail.html?id=<uuid>` — the legacy URL, routed here so it
+  emits the same canonical instead of declaring the id-less one until its
+  fetch lands. A bad or missing id here serves **the page unadorned, 200**,
+  and the client renders its own "Build not found" — exactly what that URL did
+  before the function sat in front of it.
+
+The split is deliberate: nothing links to the legacy URL any more, so the
+reason to route it is to fix its canonical, not to start refusing old links
+that used to show something. `isShareRoute()` reads `x-nf-original-path` to
+tell them apart, and treats a header-less direct invocation as the share
+route — the stricter of the two.
+
+That function is also why its no-bundle fallback no longer auto-refreshes. It
+used to bounce to `/gunforma-build-detail.html?id=…`, which is now rewritten
+back to the function: with the page missing, that is an infinite loop in the
+reader's browser. It serves the OG meta plus a visible link instead.
+
 ## Netlify redirects
 
 Rules are **first-match-wins**, and `netlify.toml` takes precedence over `_redirects`. A

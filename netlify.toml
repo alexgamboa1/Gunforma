@@ -142,6 +142,37 @@
   to = "/.netlify/functions/build-og?id=:splat"
   status = 200
 
+# The legacy build URL, server-rendered by the same function so BOTH shapes
+# get the injected per-build canonical and the static id-less one stripped.
+# Without this, gunforma-build-detail.html?id=… declares the id-less canonical
+# from parse until renderBuild() finishes its fetch — a narrow window, but the
+# exact duplicate /b/ exists to remove, and the last one left.
+#
+# force = true is REQUIRED: a real file sits at this path, and without force a
+# rule only applies when nothing does.
+#
+# query = { id = ":id" } is what keeps force safe. The rule matches only when
+# an id is present, so a bare /gunforma-build-detail.html still serves the
+# file — no function, no behaviour change, nothing to get wrong.
+#
+# The target carries NO placeholder on purpose. Named :placeholder values are
+# not substituted into a rewrite target's query string in production, though
+# netlify dev does substitute them, which hides it locally (see CLAUDE.md,
+# "Netlify redirects"). A param matched in `from` is also not guaranteed to
+# survive into the forwarded request. build-og.mjs therefore reads the id out
+# of x-nf-original-path, which Netlify sets to the pre-rewrite path WITH its
+# query string — the same fallback the /b/* rule above relies on.
+#
+# Shadowing: this is an exact path, so it can only ever match itself. Nothing
+# above it matches that path and nothing below it wants to. First-match-wins
+# is satisfied wherever it sits; it is here to be read next to /b/*.
+[[redirects]]
+  from = "/gunforma-build-detail.html"
+  query = { id = ":id" }
+  to = "/.netlify/functions/build-og"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/field-notes"
   to = "/field-notes.html"

@@ -189,17 +189,82 @@ function extractId(req) {
   const fromPath = buildIdFromPath(decodeURIComponent(url.pathname));
   if (fromPath) return fromPath;
 
-  // Set by Netlify to the pre-rewrite path.
+  // Set by Netlify to the pre-rewrite path, QUERY STRING INCLUDED — which is
+  // what makes it the reliable source here rather than a backstop. Two rules
+  // point at this function and neither can be trusted to deliver the id in
+  // the rewrite target:
+  //
+  //   /b/*                       named :placeholder values are not
+  //                              substituted into a rewrite target's query
+  //                              string in production, though netlify dev
+  //                              does substitute them, which hides it
+  //                              locally (see CLAUDE.md, Netlify redirects)
+  //   /gunforma-build-detail.html  matches on `query = { id = ":id" }`, and
+  //                              a param matched in `from` is not guaranteed
+  //                              to survive into the forwarded request
+  //
+  // So both the path and the query of the ORIGINAL url are searched, in that
+  // order: /b/<slug>-<uuid> carries the id in the path, the legacy URL
+  // carries it in ?id=.
   const original = req.headers.get('x-nf-original-path') || '';
-  return buildIdFromPath(decodeURIComponent(original));
+  if (original) {
+    const decoded = decodeURIComponent(original);
+    const inPath = buildIdFromPath(decoded);
+    if (inPath) return inPath;
+    // buildIdFromPath strips ?… before matching, so the query needs its own
+    // look — otherwise the legacy shape resolves to nothing here.
+    const q = decoded.indexOf('?');
+    if (q !== -1) {
+      const idParam = new URLSearchParams(decoded.slice(q + 1)).get('id');
+      const inQuery = buildIdFromPath(idParam);
+      if (inQuery) return inQuery;
+    }
+  }
+
+  return null;
+}
+
+// /b/<slug>-<uuid> is a share URL: a crawler that follows one to a build that
+// does not exist should get a real 404, never a soft one, and that is what
+// this function has always done.
+//
+// gunforma-build-detail.html?id=… is not that. It is the legacy URL, nothing
+// links to it any more, and before this function sat in front of it a bad or
+// missing id rendered the page's own "Build not found" with a 200. Turning
+// that into a hard 404 would be a behaviour change to old links for no gain —
+// the reason to route this URL through here at all is to strip the id-less
+// canonical, not to start refusing it. So on this path a failure serves the
+// page unadorned and lets the client render exactly what it rendered before.
+//
+// No header (a direct function invocation) is treated as the share route, the
+// stricter of the two.
+function isShareRoute(req) {
+  const original = req.headers.get('x-nf-original-path');
+  if (!original) return true;
+  return original.split('?')[0].startsWith('/b/');
+}
+
+// The page exactly as it sits on disk: no meta injected, no canonical
+// stripped. What the legacy URL served before this function was in front of
+// it. no-store because what it represents is "we could not resolve this
+// right now", which must not be cached as an answer.
+async function unadorned() {
+  const page = await loadPage();
+  if (!page) return null;
+  return new Response(page, {
+    status: 200,
+    headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
+  });
 }
 
 export default async (req) => {
   const requested = extractId(req);
+  const share = isShareRoute(req);
 
-  // No uuid anywhere in the request — 404 without a DB round trip, which is
-  // also what keeps path input out of the PostgREST query below.
-  if (!requested) return notFound();
+  // No uuid anywhere in the request — no DB round trip, which is also what
+  // keeps path input out of the PostgREST query below. A share URL 404s; the
+  // legacy URL gets the page, which is what it got before.
+  if (!requested) return share ? notFound() : (await unadorned()) || notFound();
 
   // platforms and profiles each have exactly one FK to builds, so those bare
   // embeds are correct. profiles is named anyway because builds has two FKs
@@ -234,16 +299,33 @@ export default async (req) => {
     });
   }
 
-  if (!build) return notFound();
+  // Unknown, unapproved, or deleted. Same split as above.
+  if (!build) return share ? notFound() : (await unadorned()) || notFound();
 
   const page = await loadPage();
   if (!page) {
     console.error('[build-og] gunforma-build-detail.html not bundled — check included_files');
+    // NO auto-refresh here any more. It used to bounce to
+    // /gunforma-build-detail.html?id=…, which was fine while that URL served
+    // the file directly. It is now rewritten to THIS function, so the refresh
+    // would land back here, fail to load the page again, and emit the same
+    // refresh — an infinite loop in the reader's browser, on a path that only
+    // opens when the deploy is misconfigured.
+    //
+    // The meta block is what this branch is actually for: a crawler still
+    // gets the full preview. A person gets a link they can see, and the error
+    // above gets logged, which is the right way for a misconfiguration to
+    // behave — visible, not spinning.
     return new Response(
-      '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' + metaBlock(build) +
-      '<meta http-equiv="refresh" content="0;url=' + SITE + '/gunforma-build-detail.html?id=' + encodeURIComponent(build.id) + '"/>' +
-      '</head><body></body></html>',
-      { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
+      '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>' + metaBlock(build) +
+      '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+      'background:#0e0f11;color:#e8e6e1;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:center}' +
+      'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
+      '</head><body><div><div style="font-size:20px;font-weight:700">' + esc(buildTitle(build)) + '</div>' +
+      '<div class="s">This build could not be rendered just now.</div>' +
+      '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div></body></html>',
+      { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } },
     );
   }
 
