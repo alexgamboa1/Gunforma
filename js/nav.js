@@ -19,6 +19,15 @@
 // beside it. Refreshes on every auth-state change so multi-tab sign-outs
 // propagate.
 //
+// It is also ROLE-aware. An admin gets Queue (/admin) and Post build
+// (/admin-post) added to the bar and to the hamburger menu, because nothing
+// on the site linked to either and an admin otherwise had to remember two
+// URLs. Convenience only: requireAdmin() on those pages and is_admin()/RLS
+// underneath it are what actually protect them, and neither is touched by
+// any of this. The entries are built from scratch when the role says admin
+// and REMOVED — not hidden — otherwise, so there is nothing in a
+// non-admin's DOM to find.
+//
 // Depends on window.sb (from supabase-client.js). Load order in HTML:
 //   1. @supabase/supabase-js CDN
 //   2. supabase-client.js
@@ -51,6 +60,78 @@ var NAV_MENU =
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
     '<a href="gunforma-armory.html">Armory</a>' +
   '</div>';
+
+// Admin entries. Convenience only — /admin and /admin-post are protected by
+// requireAdmin() on the page and by is_admin()/RLS underneath it, and nothing
+// here changes either. This just means an admin does not have to remember two
+// URLs that nothing on the site links to.
+// The width below which a nav carrying admin entries collapses to the
+// hamburger. One constant because it is needed in two places — the injected
+// media query and wireNavToggle's resize handler — and a mismatch between
+// them would leave an open menu at a width where it is still the only route
+// to /admin. Measured on index.html with a username, Inbox, Sign out and the
+// Post CTA all present: 1024px still wraps a button label onto two lines,
+// 1100px does not.
+var ADMIN_COLLAPSE_AT = 1099;
+
+var ADMIN_LINKS = [
+  { id: 'nav-admin-queue', href: '/admin',
+    label: 'Queue',      title: 'Admin only — the build review queue' },
+  { id: 'nav-admin-post',  href: '/admin-post',
+    label: 'Post build', title: 'Admin only — post a build on a builder\'s behalf' },
+];
+
+// The nav's own CSS is copied into all sixteen pages that load this file, so
+// a new nav class cannot be added there without adding it sixteen times —
+// which is the drift CLAUDE.md keeps a list of. Injected once instead, the
+// same way js/redact.js and js/photos.js carry theirs. Amber is already this
+// codebase's admin colour (see .nav-admin-tag on the admin pages) and reads
+// as privileged against a nav that is otherwise white and blue.
+function ensureAdminNavStyles() {
+  if (document.getElementById('nav-admin-styles')) return;
+  var style = document.createElement('style');
+  style.id = 'nav-admin-styles';
+  style.textContent =
+    '.nav-btn.nav-admin { color: #f9b860; border-color: #6b4a1e;' +
+    '  background: rgba(249,184,96,0.08); white-space: nowrap; }' +
+    '.nav-btn.nav-admin:hover { color: #ffd79a; border-color: #a87433;' +
+    '  background: rgba(249,184,96,0.16); }' +
+    // Two admin entries make the right-hand cluster about 150px wider than
+    // a normal one, and that does not fit between the hamburger breakpoint
+    // and ADMIN_COLLAPSE_AT: measured on index.html, the bar overflowed by
+    // 127px at 840px and still wrapped a label onto two lines at 1024px,
+    // with the labels already as short as they usefully get. So a nav
+    // carrying admin entries collapses to the
+    // hamburger earlier than one that is not — the menu group below is the
+    // route in for that whole band, and nothing becomes unreachable. The
+    // rules are the page's own ≤820px ones; they are repeated here because
+    // the nav's CSS is copied into all sixteen pages that load this file and
+    // this is the one copy that is not.
+    '@media (max-width: ' + ADMIN_COLLAPSE_AT + 'px) {' +
+    '  nav.nav-admin-on .nav-links { display: none; }' +
+    '  nav.nav-admin-on .nav-signin-inline { display: none; }' +
+    '  nav.nav-admin-on .nav-profile { display: flex; }' +
+    '  nav.nav-admin-on .nav-toggle { display: block; }' +
+    '  nav.nav-admin-on .nav-menu { position: absolute; top: 52px; left: 0; right: 0;' +
+    '    background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column;' +
+    '    padding: 8px 0; z-index: 99; }' +
+    '  nav.nav-admin-on .nav-menu.open { display: flex; }' +
+    '  nav.nav-admin-on .nav-menu a { padding: 13px 28px; font-size: 13px;' +
+    '    letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff;' +
+    '    text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }' +
+    // Must come after, and out-specify, the rule right above it — that one
+    // is (0,2,2) and would otherwise repaint the admin entries white in
+    // exactly the band where the menu is the only way to reach them.
+    '  nav.nav-admin-on .nav-menu a.admin { color: #f9b860; }' +
+    '}' +
+    // The admin colouring in the menu applies wherever the menu is shown —
+    // the page's own ≤820px block and the ≤1023px one above.
+    '.nav-menu .nav-menu-label { padding: 12px 28px 5px; font-size: 8.5px; font-weight: 700;' +
+    '  letter-spacing: 0.14em; text-transform: uppercase; color: #f9b860;' +
+    '  border-top: 0.5px solid #2a2b2e; }' +
+    '.nav-menu a.admin { color: #f9b860; }';
+  document.head.appendChild(style);
+}
 
 (function () {
   var mount = document.getElementById('nav-mount');
@@ -174,7 +255,11 @@ function wireNavToggle() {
   // CSS no longer displays; the next drop below 820px would then show it
   // already open. Clearing it here keeps the two widths consistent.
   window.addEventListener('resize', function () {
-    if (window.innerWidth > 820) close();
+    // An admin nav collapses to this menu from 1023px down, not 820px, so
+    // the width at which the panel stops being the route in — and an open
+    // one should therefore be closed — moves with it.
+    var collapseAt = document.querySelector('nav.nav-admin-on') ? ADMIN_COLLAPSE_AT : 820;
+    if (window.innerWidth > collapseAt) close();
   });
 }
 
@@ -208,8 +293,14 @@ async function updateNavAuth() {
   // getElementById, because concurrent invocations can duplicate the id
   // and getElementById only ever returns the first match).
   if (!user) {
-    document.querySelectorAll('#nav-signout, #nav-inbox').forEach(function (el) { el.remove(); });
-    document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox').forEach(function (el) { el.remove(); });
+    document.querySelectorAll('#nav-signout, #nav-inbox, #nav-admin-queue, #nav-admin-post')
+      .forEach(function (el) { el.remove(); });
+    // .admin rather than a.admin: the group's label is a div, and it has to
+    // go with the links it labels.
+    document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox, .nav-menu .admin')
+      .forEach(function (el) { el.remove(); });
+    document.querySelectorAll('nav.nav-admin-on')
+      .forEach(function (el) { el.classList.remove('nav-admin-on'); });
     signInEl.textContent = 'Sign in';
     signInEl.setAttribute('href', 'gunforma-signin.html');
     signInEl.style.cursor = '';
@@ -219,12 +310,24 @@ async function updateNavAuth() {
   }
 
   // Signed-in state: show username in place of Sign in, insert Sign out next to it.
+  //
+  // One RPC, not the old `from('profiles').select('username')` plus a second
+  // read for the role. get_my_profile() already returns both, it is what
+  // CLAUDE.md names as the way role is read, and it is the same call
+  // gunforma-admin-post.html's requireAdmin() makes. `role` is deliberately
+  // NOT in the column grants that `authenticated` holds on profiles, so a
+  // direct read of it would come back empty rather than wrong — which is
+  // exactly the sort of quiet nothing that is hard to notice in a nav.
+  // Failure falls through to `profile = null`: email for the name, and not
+  // an admin. Fails closed, which is the right direction even for something
+  // that is only convenience.
   var profile = null;
   try {
-    var res = await window.sb.from('profiles').select('username').eq('id', user.id).maybeSingle();
+    var res = await window.sb.rpc('get_my_profile').maybeSingle();
     profile = res.data;
-  } catch (e) { /* nav degrades gracefully to email */ }
+  } catch (e) { /* nav degrades gracefully to email, and to non-admin */ }
   var displayName = (profile && profile.username) || user.email || 'Signed in';
+  var isAdmin = !!(profile && profile.role === 'admin');
   signInEl.textContent = displayName;
   signInEl.setAttribute('href', 'gunforma-profile.html');
   signInEl.style.cursor = 'pointer';
@@ -247,13 +350,53 @@ async function updateNavAuth() {
   // them. Sweeping right before insertion, with querySelectorAll (not
   // getElementById, which stops at the first match), is what keeps this
   // idempotent under the race.
-  document.querySelectorAll('#nav-signout, #nav-inbox').forEach(function (el) { el.remove(); });
-  document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox').forEach(function (el) { el.remove(); });
+  document.querySelectorAll('#nav-signout, #nav-inbox, #nav-admin-queue, #nav-admin-post')
+    .forEach(function (el) { el.remove(); });
+  document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox, .nav-menu .admin')
+    .forEach(function (el) { el.remove(); });
+  document.querySelectorAll('nav.nav-admin-on')
+    .forEach(function (el) { el.classList.remove('nav-admin-on'); });
 
   async function doSignOut(e) {
     e.preventDefault();
     await window.sb.auth.signOut();
     location.reload();
+  }
+
+  // Admin entries, inline. Inserted before Inbox so the bar reads
+  //   ADMIN  Queue  Post build  Inbox  Sign out  <username>
+  // and the two privileged links sit together behind one label rather than
+  // being mistaken for ordinary nav. They take signInEl's className so they
+  // hide below 820px along with everything else in .nav-signin-inline; the
+  // menu group further down is the mobile route in.
+  //
+  // Nothing is rendered at all unless isAdmin — there is no hidden copy, no
+  // display:none entry, nothing in the DOM for a non-admin to find. That is
+  // not the access control (requireAdmin() and RLS are), it just means the
+  // markup does not claim something the server would refuse.
+  if (isAdmin) {
+    ensureAdminNavStyles();
+    // Marks the nav as carrying admin entries, which is what the earlier
+    // collapse breakpoint keys on. Removed again in both sweeps.
+    var navRoot = signInEl.closest('nav');
+    if (navRoot) navRoot.classList.add('nav-admin-on');
+
+    // Amber is this codebase's admin colour — .nav-admin-tag on the admin
+    // pages is the same treatment — so against a bar that is otherwise
+    // white and blue these read as privileged at a glance. There is no
+    // separate "Admin" pill inline: measured, it cost ~66px and pushed the
+    // bar over the edge below 1100px. The word is carried by title and
+    // aria-label instead, and the hamburger group spells it out in full.
+    ADMIN_LINKS.forEach(function (link) {
+      var a = document.createElement('a');
+      a.id = link.id;
+      a.href = link.href;
+      a.className = signInEl.className + ' nav-admin';
+      a.textContent = link.label;
+      a.title = link.title;
+      a.setAttribute('aria-label', link.title);
+      signInEl.parentNode.insertBefore(a, signInEl);
+    });
   }
 
   // Inbox, inline. Takes signInEl's className so it hides below 820px with
@@ -281,7 +424,28 @@ async function updateNavAuth() {
   // is appended here rather than shipped in the static markup. Swept just
   // above, in the same idempotent pass as #nav-signout.
   if (menuEl) {
-    // Inbox first, so the menu reads Builds / Parts / Armory / Inbox / Sign out.
+    // Admin group first, under its own label: below 820px the inline entries
+    // are hidden with .nav-signin-inline, so this is the only way in. Swept
+    // in the same idempotent pass as the rest.
+    if (isAdmin) {
+      ensureAdminNavStyles();
+
+      var menuLabel = document.createElement('div');
+      menuLabel.className = 'nav-menu-label admin';
+      menuLabel.textContent = 'Admin';
+      menuEl.appendChild(menuLabel);
+
+      ADMIN_LINKS.forEach(function (link) {
+        var a = document.createElement('a');
+        a.className = 'admin';
+        a.href = link.href;
+        a.textContent = link.label;
+        menuEl.appendChild(a);
+      });
+    }
+
+    // Then Inbox, so the menu reads
+    // Builds / Parts / Armory / [Admin: Queue, Post build] / Inbox / Sign out.
     var menuInbox = document.createElement('a');
     menuInbox.className = 'inbox';
     menuInbox.href = 'gunforma-notifications.html';
