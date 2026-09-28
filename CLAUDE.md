@@ -51,7 +51,8 @@ broken twice. Before pushing:
 scripts/check-embeds.sh
 ```
 
-The check covers both directions and runs as the Netlify build command.
+The check covers both directions and runs on every deploy — see **Build-time
+guards** below.
 
 Embeds from `affiliate_links` and `variant_images` each have exactly one FK to
 `product_variants`, so their bare embeds are correct — do not "fix" those.
@@ -390,6 +391,48 @@ writer in this repo, it caused the mismatch above, and the sort has a
 deterministic tiebreak now instead. See `supabase/retire_is_primary.sql`; the
 values are archived in `affiliate_links_is_primary_archive`.
 
+## Build-time guards
+
+`publish = "."` means there is no compile step, so the Netlify build command's
+only job is to **refuse to ship a broken tree**. It runs
+`bash scripts/check-all.sh`, and anything that exits non-zero fails the deploy.
+
+Registered today:
+
+| check | catches |
+|---|---|
+| `scripts/check-embeds.sh` | ambiguous PostgREST embeds (PGRST201) |
+| `scripts/build-url.test.mjs` | `js/build-url.js` and `_build-url.mjs` drifting apart |
+| `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
+
+Every one of those guards a failure that **renders perfectly in a browser**.
+That is the entry criterion: a guard here earns its place by catching
+something nobody would otherwise see until a user mentioned it.
+
+**Adding a check is one line.** Write `scripts/check-<thing>.{sh,mjs}` or
+`scripts/<thing>.test.mjs`, then add a `check` line to the registry in
+`check-all.sh`. Do not chain commands in `netlify.toml` — the second failure
+would hide the third, and every new guard would mean editing deploy config.
+
+**Forgetting that line fails the build.** `check-all.sh` ends with an audit
+that finds every `check-*.{sh,mjs}` and `*.test.mjs` in `scripts/` and refuses
+to pass if one is neither registered nor listed under `NOT_BUILD_CHECKS` with
+a reason. That audit exists because the thing it prevents already happened:
+three checks were written and one ran. `scripts/build-url.test.mjs` passed on
+a laptop and nowhere else for a whole PR, and a test nothing runs is a comment.
+
+`scripts/gtin-norm.test.mjs` is the one deliberate exclusion — it imports
+`csv-parse`, which nothing installs during the site build, so it runs in
+`.github/workflows/refresh-affiliate-prices.yml` before the nightly sync
+instead, where its dependency exists.
+
+**All checks run, every time.** No early exit: one deploy surfaces every
+problem rather than the first.
+
+**A guard nobody has watched fail is not a guard.** Each of these was proved
+by breaking the thing it protects and confirming a non-zero exit — see the PR
+that introduced the runner.
+
 ## Verifying changes
 
 Anything that touches the database must be verified **signed in, on the deploy preview**,
@@ -585,7 +628,7 @@ browser copy once the build data loads. If the two disagree by one character
 the build declares two different canonical URLs over one page load, renders
 perfectly, and quietly re-creates the duplicate-URL problem `/b/` exists to
 fix. `scripts/build-url.test.mjs` runs both copies over the same inputs and
-fails if they differ — run it after touching either.
+fails if they differ. It runs on every deploy — see **Build-time guards**.
 
 Three things about that canonical are load-bearing:
 
