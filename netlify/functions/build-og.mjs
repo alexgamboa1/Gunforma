@@ -39,6 +39,33 @@ const SITE       = 'https://gunforma.com';
 const OG_DEFAULT = SITE + '/og-default.png';
 const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
 
+// The card size every scraper except Twitter picks from the image's ACTUAL
+// pixels: roughly 1.91:1 and at least 600px wide gets the full-width card,
+// anything portrait or square gets a ~160px thumbnail with text beside it.
+// twitter:card=summary_large_image is Twitter-only and does not help Facebook,
+// iMessage, Slack or LinkedIn. Build photos come off phones and are mostly
+// portrait, so every shared build was rendering as the thumbnail.
+//
+// One pair of constants because three things have to agree: the transform,
+// og:image:width and og:image:height. A declared size that does not match the
+// bytes is a worse lie than no declaration.
+const OG_W = 1200;
+const OG_H = 630;
+
+// Netlify Image CDN. The source host is allowlisted in netlify.toml under
+// [images] — scoped to the build-photos object path, not the whole Supabase
+// host. Absolute apex URL, per the SEO invariants in CLAUDE.md: og:image is
+// one of the places a non-apex URL would undo canonical-host.js.
+//
+// NOTE FOR PREVIEWS: this points at gunforma.com even when served from a
+// deploy preview, which is correct — but it means the transform a preview
+// emits is executed by PRODUCTION. To check a preview's own transform, swap
+// the origin. scripts/check-og-image.mjs does exactly that.
+function ogTransform(sourceUrl, fit = 'cover') {
+  return SITE + '/.netlify/images?url=' + encodeURIComponent(sourceUrl) +
+         '&w=' + OG_W + '&h=' + OG_H + '&fit=' + fit;
+}
+
 // Builds are keyed by uuid. Anything that is not one 404s without a DB round
 // trip, which is also what keeps path input out of the PostgREST query.
 // buildIdFromPath in _build-url.mjs does the matching now — it takes the LAST
@@ -105,13 +132,43 @@ function buildDescription(build) {
 // Hero photo, full size — a preview card wants the big image, not the thumb.
 // Falls back to any photo, then to the site default, so a build with no photo
 // still previews as something rather than nothing.
-function buildImage(build) {
+// The hero photo's own URL, or null when there isn't one.
+//
+// storage_path ONLY — thumb_path is deliberately not a fallback any more.
+// Measured: storage_path images are up to 1600px on the long edge (1201x1600
+// for the portrait hero used in testing), thumb_path images are capped at 480
+// (360x480 for the same photo). Feeding a 480px thumb to w=1200 upscales it
+// 3.3x, and a blurry card is worse than the thumbnail card this change
+// exists to fix. og-default.png is 1200x630 and sharp, so falling through to
+// it is strictly better than upscaling.
+//
+// Not a live branch either way: no build_photos row has a null storage_path,
+// and processFile in js/photos.js uploads the display copy before it writes
+// the row. This is about what happens if that ever stops being true.
+function heroPhotoUrl(build) {
   const photos = Array.isArray(build.build_photos) ? build.build_photos : [];
-  if (!photos.length) return OG_DEFAULT;
+  if (!photos.length) return null;
   const hero = photos.find((p) => p.is_hero) ||
                photos.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0];
-  const path = hero && (hero.storage_path || hero.thumb_path);
-  return path ? PHOTO_BASE + path : OG_DEFAULT;
+  return hero && hero.storage_path ? PHOTO_BASE + hero.storage_path : null;
+}
+
+function buildImage(build) {
+  const photo = heroPhotoUrl(build);
+  // og-default.png is left alone: it is already 1200x630 and already on the
+  // apex, so a transform would add a hop and a cache entry for no gain.
+  return photo ? ogTransform(photo) : OG_DEFAULT;
+}
+
+// Describes the IMAGE, not the page — so it says what the card is showing
+// rather than repeating the title a scraper already has.
+function buildImageAlt(build) {
+  const platform = build.platforms && build.platforms.name;
+  const name     = (build.name || '').trim() || 'Untitled build';
+  const suffix   = platform ? ', a ' + platform + ' build' : '';
+  return heroPhotoUrl(build)
+    ? 'Photo of ' + name + suffix
+    : name + suffix + ' on Gunforma';
 }
 
 function metaBlock(build) {
@@ -136,6 +193,12 @@ function metaBlock(build) {
     '<meta property="og:title" content="' + esc(title) + '"/>',
     '<meta property="og:description" content="' + esc(desc) + '"/>',
     '<meta property="og:image" content="' + esc(image) + '"/>',
+    // Declared so a scraper can lay the card out before it has fetched the
+    // image, and so the ones that trust the declaration over a fetch get the
+    // large card rather than guessing from a portrait source.
+    '<meta property="og:image:width" content="' + OG_W + '"/>',
+    '<meta property="og:image:height" content="' + OG_H + '"/>',
+    '<meta property="og:image:alt" content="' + esc(buildImageAlt(build)) + '"/>',
     '<meta property="og:url" content="' + esc(url) + '"/>',
     '<meta name="twitter:card" content="summary_large_image"/>',
     '<meta name="twitter:title" content="' + esc(title) + '"/>',

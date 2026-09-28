@@ -73,3 +73,14 @@ jobs:
                 || github.event.deployment_status.environment_url
                 || 'https://gunforma.com' }}
         run: node scripts/check-routes.mjs "$DEPLOY_URL"
+
+      # always(): these assert different things, and a routing failure must
+      # not hide a share card that has quietly gone back to a thumbnail.
+      - name: Check share-card image
+        if: always()
+        env:
+          DEPLOY_URL: >-
+            ${{ github.event.inputs.origin
+                || github.event.deployment_status.environment_url
+                || 'https://gunforma.com' }}
+        run: node scripts/check-og-image.mjs "$DEPLOY_URL"

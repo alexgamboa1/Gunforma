@@ -16,6 +16,21 @@
   # the build floats on whatever the Noble image happens to default to.
   NODE_VERSION = "20"
 
+# Netlify Image CDN. Only reason it is on: a shared build link rendered as a
+# ~160px square thumbnail instead of the full-width card, because Facebook,
+# iMessage, Slack and LinkedIn pick the layout from the image's ACTUAL pixels
+# — roughly 1.91:1 and >=600px wide gets the big card — and build photos come
+# off phones and are mostly portrait. build-og.mjs now serves the hero through
+# /.netlify/images at 1200x630. See ogTransform() there.
+#
+# SCOPED TO THE BUCKET PATH, NOT THE HOST. remote_images entries are anchored
+# full-match regexes, so this permits exactly the public build-photos objects
+# and nothing else on lagjjcpclvzrjlrswojt.supabase.co — not other buckets,
+# not the REST API. A single-quoted TOML string so the backslashes are the
+# regex's own and the dots stay literal.
+[images]
+  remote_images = ['https://lagjjcpclvzrjlrswojt\.supabase\.co/storage/v1/object/public/build-photos/.+']
+
 [functions]
   directory = "netlify/functions"
 
