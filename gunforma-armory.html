@@ -895,7 +895,7 @@ async function loadBuildById(buildId) {
   }
   if (b.status !== 'draft') {
     draftLoadError('That build has already been submitted, so it can\'t be edited here.',
-      'gunforma-build-detail.html?id=' + encodeURIComponent(b.id), 'View the build');
+      '/b/' + encodeURIComponent(b.id), 'View the build');
     return false;
   }
 

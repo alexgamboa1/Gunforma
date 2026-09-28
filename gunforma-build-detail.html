@@ -11,6 +11,41 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Gunforma build</title>
 <link rel="canonical" href="https://gunforma.com/gunforma-build-detail.html" />
+<!-- The canonical line ABOVE is matched byte for byte by build-og.mjs, which
+     strips it at /b/:id before injecting a per-build one. Changing it — even
+     the spacing or the trailing newline — makes that strip a silent no-op and
+     the page ships two canonicals. If it has to change, change the replace in
+     build-og.mjs in the same commit.
+
+     It has no id, and it cannot have one: this one file is served for every
+     build. Left alone it means every build on the site declares the same
+     canonical URL, pointing at a page with no build on it. So the id is
+     applied at runtime, below.
+
+     This script MUTATES the existing <link> rather than appending one, so the
+     document can never carry two canonicals. At /b/:id it finds the canonical
+     build-og.mjs injected and writes the identical URL over it — a deliberate
+     no-op, and the reason the URL here must match metaBlock() in
+     build-og.mjs exactly. It earns its place at the query-string URL, which
+     old links still use, and in the case where build-og falls back to serving
+     this page unadorned.
+
+     Not og:* as well: social scrapers do not run JS, so runtime OG tags would
+     buy nothing. Previews are fixed by linking to /b/:id in the first place,
+     which every internal link now does. -->
+<script>
+(function () {
+  // Same resolution order as loadBuild() further down: path first, then query.
+  var m = window.location.pathname.match(/^\/b\/([^/]+)\/?$/);
+  var id = m ? decodeURIComponent(m[1])
+             : new URLSearchParams(window.location.search).get('id');
+  if (!id) return;                                  // nothing to point at
+  var link = document.querySelector('link[rel="canonical"]');
+  if (!link) return;                                // nothing to correct
+  // Apex host, never location.origin — see the SEO invariants in CLAUDE.md.
+  link.href = 'https://gunforma.com/b/' + encodeURIComponent(id);
+})();
+</script>
 <meta name="description" content="View a complete pistol build — every part, every photo, total cost, and affiliate links to buy." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>

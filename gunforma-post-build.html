@@ -1160,7 +1160,7 @@ async function publishBuild() {
   // back to check on status as it moves pending → approved.
   // location.replace so Back doesn't return them to the submit form.
   setTimeout(function () {
-    window.location.replace('gunforma-build-detail.html?id=' + encodeURIComponent(result.buildId));
+    window.location.replace('/b/' + encodeURIComponent(result.buildId));
   }, 700);
 }
 

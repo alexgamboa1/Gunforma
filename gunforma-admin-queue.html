@@ -564,7 +564,7 @@ function renderDetail(b) {
     (editedPartCount ? ' We corrected '+editedPartCount+' part'+(editedPartCount!==1?'s':'')+' on your build for accuracy — view what changed.' : '');
 
   var reviewedBanner = '';
-  if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="gunforma-build-detail.html?id='+b.id+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
+  if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="/b/'+encodeURIComponent(b.id)+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
   if (b.status==='rejected') reviewedBanner='<div class="reviewed-banner rejected"><div><div class="rb-text">Rejected — '+escH(b.rejection_reason||'')+'</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+'</div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
 
   var html =

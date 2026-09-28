@@ -367,7 +367,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       const total = (b.parts_snapshot || []).reduce((s, p) => s + (p.refId && msrpByProduct[p.refId] || 0), 0);
       const totalHtml = total > 0 ? '~$'+total.toFixed(0)+' total' : (b.parts_snapshot||[]).length+' parts';
 
-      return '<a href="gunforma-build-detail.html?id='+encodeURIComponent(b.id)+'" style="text-decoration:none;color:inherit;display:block;"><div class="build-card">'+
+      return '<a href="/b/'+encodeURIComponent(b.id)+'" style="text-decoration:none;color:inherit;display:block;"><div class="build-card">'+
         '<div class="build-img">'+photoHtml+'<div class="build-bookmark">◇</div></div>'+
         '<div class="build-body">'+
           '<div class="build-name">'+escH(b.name)+'</div>'+

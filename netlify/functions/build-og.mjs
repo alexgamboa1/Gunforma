@@ -243,6 +243,16 @@ export default async (req) => {
   // The page also ships a static <link rel="canonical"> for its direct URL
   // (/gunforma-build-detail.html). At /b/:id the injected canonical must win,
   // so strip the static one before appending the meta block.
+  //
+  // This is an exact-string replace, so a whitespace change to that line in
+  // gunforma-build-detail.html makes it a silent no-op and the page ships
+  // two canonicals. The page carries a comment saying the same thing on its
+  // side; change the two together.
+  //
+  // That page also sets its canonical from the id at runtime, for the
+  // query-string URL. At /b/:id that script finds THIS canonical and writes
+  // the same URL over it, so the two must agree byte for byte — metaBlock()
+  // builds SITE + '/b/' + encodeURIComponent(id), and so does the page.
   const html = page
     .replace('<link rel="canonical" href="https://gunforma.com/gunforma-build-detail.html" />\n', '')
     .replace('<title>Gunforma build</title>', metaBlock(build));
