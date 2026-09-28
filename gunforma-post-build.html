@@ -134,13 +134,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 12px; border-radius: 4px; cursor: pointer; transition: all 0.15s; white-space: nowrap; }
 .category-block.open .category-toggle { color: #6fb4e8; border-color: #3a3b3e; background: rgba(255,255,255,0.06); }
 
-/* Added parts strip */
-.added-parts-strip { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fff; }
-.added-chip { display: flex; align-items: center; gap: 6px; background: #f4f3ee; border: 0.5px solid #e5e2d8; border-radius: 20px; padding: 4px 10px 4px 8px; font-size: 11px; font-weight: 600; color: #333; }
-.added-chip-dot { width: 8px; height: 8px; border-radius: 50%; background: #4a9edd; flex-shrink: 0; }
-.added-chip-dot.pending { background: #f9b860; }
-.added-chip-remove { background: none; border: none; cursor: pointer; color: #bbb; font-size: 14px; line-height: 1; padding: 0 0 0 2px; font-family: inherit; }
-.added-chip-remove:hover { color: #c25d3a; }
+/* Selected parts — one card per added part.
+   Deliberately not a chip: a chip says "something is in this slot", and the
+   whole point of this strip is confirming the builder picked the RIGHT
+   product, which needs the photo they recognised it by. Replaced
+   .added-parts-strip / .added-chip*. */
+.selected-parts-list { display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fff; }
+.selected-part { display: flex; align-items: center; gap: 12px; background: #fafaf8; border: 0.5px solid #e5e2d8; border-radius: 8px; padding: 8px; }
+.selected-part-thumb { flex-shrink: 0; width: 72px; height: 72px; background: #f0f2f5; border: 0.5px solid #eee; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+/* Same contain treatment as .part-card-img img — a product shot cropped to
+   fill tells the builder less than the whole product on white does. */
+.selected-part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
+.selected-part-thumb-label { font-size: 9px; color: #bbb; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 4px; }
+.selected-part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.selected-part-brand { font-size: 9px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.selected-part-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
+.selected-part-price { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+.selected-part-pending { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #8a6d3b; }
+.selected-part-dot { width: 8px; height: 8px; border-radius: 50%; background: #f9b860; flex-shrink: 0; }
+.selected-part-remove { flex-shrink: 0; align-self: center; background: none; border: 0.5px solid #e5e2d8; border-radius: 4px; cursor: pointer; color: #888; font-size: 11px; font-weight: 700; padding: 6px 12px; font-family: inherit; transition: all 0.15s; }
+.selected-part-remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
 
 /* Picker panel — expanded */
 .picker-panel { display: none; background: #fafaf8; border-top: 0.5px solid #e5e5e5; }
@@ -159,7 +172,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card:hover { border-color: #4a9edd; box-shadow: 0 2px 12px rgba(74,158,221,0.1); }
 .part-card.added { border-color: #22a06b; background: #f6fdf9; }
 
-.part-card-img { height: 100px; background: #f0f2f5; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; flex-shrink: 0; }
+/* Square, not a 100px letterbox. These are product shots at whatever aspect
+   ratio the manufacturer shipped, in a 2-column grid — a short wide box plus
+   object-fit:cover cropped the top and bottom off most of them, which is the
+   one thing a picker must not do. aspect-ratio keeps the cells square at
+   every width, including 390px phones where the columns are ~170px.
+   The background stays grey here because it is what the "Photo coming soon"
+   placeholder sits on; the img below paints its own white. */
+.part-card-img { aspect-ratio: 1 / 1; height: auto; background: #f0f2f5; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; flex-shrink: 0; }
+/* contain + padding + white, so the whole product is visible and nothing is
+   cropped. partImageHtml() must NOT re-declare object-fit inline: an inline
+   style beats this rule and the crop comes straight back. */
+.part-card-img img { width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; background: #fff; display: block; }
 .part-card-img-bg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; }
 .part-card-img-label { font-size: 9px; color: #bbb; letter-spacing: 0.06em; text-transform: uppercase; }
 .part-card.added .part-card-img { background: #e8f5ee; }
@@ -172,7 +196,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 .part-card-footer { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; }
 .part-card-price { font-size: 13px; font-weight: 700; color: #1a1a1a; }
-.part-card-add { font-size: 11px; font-weight: 700; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-family: inherit; border: none; transition: all 0.15s; letter-spacing: 0.04em; }
+/* nowrap: at 390px the two columns are ~116px, and without it "+ Add"
+   breaks across two lines inside the button. */
+.part-card-add { font-size: 11px; font-weight: 700; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; border: none; transition: all 0.15s; letter-spacing: 0.04em; white-space: nowrap; }
 .part-card-add.add    { background: #4a9edd; color: #fff; }
 .part-card-add.add:hover { background: #2a7bbd; }
 .part-card-add.remove { background: #f4f3ee; color: #888; border: 0.5px solid #e5e2d8; }
@@ -236,7 +262,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
   .sidebar { position: static; }
-  .part-cards-grid { grid-template-columns: 1fr; }
+  /* The picker grid deliberately stays at 2 columns here. It used to collapse
+     to 1, which at 390px makes each card a full-width square — a ~350px tall
+     product photo, one part visible at a time, and a scroll for every option.
+     Two columns keeps the cards ~165px and a comparison rather than a slideshow. */
 }
 
 .nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
@@ -567,7 +596,9 @@ async function loadPlatforms() {
 // then only offers the custom-part form for them.
 // Product-thumbnail slot HTML. Uses the default variant's primary_image_url
 // when we have one, else falls back to the "Photo coming soon" placeholder.
-// object-fit:cover in the CSS keeps mixed aspect ratios rendering cleanly.
+// Sizing and fit live entirely in the .part-card-img img rule — this used to
+// carry style="...object-fit:cover..." inline, which silently outranked the
+// stylesheet and made any CSS change here a no-op. Don't put it back.
 function partImageHtml(item) {
   if (!item || !item.image) {
     return '<div class="part-card-img"><div class="part-card-img-bg">'+
@@ -577,9 +608,85 @@ function partImageHtml(item) {
   var alt = ((item.brand ? item.brand+' ' : '') + (item.name || '')).replace(/"/g, '&quot;');
   return '<div class="part-card-img">'+
            '<img src="'+item.image+'" alt="'+alt+'" loading="lazy" '+
-             'style="width:100%;height:100%;object-fit:cover;display:block;" '+
              'onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-img-bg&quot;><div class=&quot;part-card-img-label&quot;>No photo</div></div>\'"/>'+
          '</div>';
+}
+
+// Resolve a products.id back to its catalog row, across every category.
+//
+// The selected-part cards need an image and a price, and state.parts carries
+// neither on purpose: parts_snapshot has no image or price column, so a part
+// hydrated from an armory draft or from an edit would render a blank
+// thumbnail and no price if the card read from state. So look them up here,
+// at render time. Both hydration paths await loadCatalog() before they call
+// renderParts(), which is what makes this safe — and is the thing to
+// re-check if a third hydration path ever appears.
+//
+// Searches all categories rather than taking a category key, because a
+// snapshot's category has been through normalizePartCategory() and need not
+// be the key this product was bucketed under. refId is a products.id, so it
+// is unique across the whole catalog either way.
+function findCatalogItem(refId) {
+  if (!refId) return null;
+  var keys = Object.keys(CATALOG);
+  for (var i = 0; i < keys.length; i++) {
+    var hit = (CATALOG[keys[i]] || []).find(function (item) { return item.id === refId; });
+    if (hit) return hit;
+  }
+  return null;
+}
+
+// The one copy of the picker card. buildCategoryBlock() and filterCards()
+// both render these, and they used to hold their own near-identical strings —
+// which had already drifted (the search results printed a bare "$0" where
+// the initial grid printed an em dash). One helper, so a card looks the same
+// however the user got to it.
+function partCardHtml(catKey, item) {
+  return '<div class="part-card">' +
+    partImageHtml(item) +
+    '<div class="part-card-body">' +
+      '<div class="part-card-brand">' + item.brand + '</div>' +
+      '<div class="part-card-name">'  + item.name  + '</div>' +
+      '<div class="part-card-desc">'  + item.desc  + '</div>' +
+    '</div>' +
+    '<div class="part-card-footer">' +
+      (item.price ? '<div class="part-card-price">$' + item.price + '</div>' : '<div class="part-card-price">&mdash;</div>') +
+      '<button class="part-card-add add" onclick="addCatalogPart(\''+catKey+'\',\''+item.id+'\')">+ Add</button>' +
+    '</div>' +
+  '</div>';
+}
+
+// Thumbnail for a part the user has already added. A pending custom part has
+// no catalog row to photograph, so it says so rather than showing an empty
+// grey square that reads like a broken image.
+function selectedPartThumbHtml(part, item) {
+  if (!item || !item.image) {
+    return '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' +
+             (part.pending ? 'Pending' : 'No photo') + '</div></div>';
+  }
+  var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
+  return '<div class="selected-part-thumb">' +
+           '<img src="'+item.image+'" alt="'+alt+'" loading="lazy" ' +
+             'onerror="this.parentElement.innerHTML=\'<div class=&quot;selected-part-thumb-label&quot;>No photo</div>\'"/>' +
+         '</div>';
+}
+
+// One row per added part: photo, brand, name, price, and a remove button.
+// Price comes from the catalog, not from the part, so it is absent rather
+// than wrong for a pending part or a product that has since lost its MSRP.
+function selectedPartHtml(part) {
+  var item = findCatalogItem(part.refId);
+  return '<div class="selected-part">' +
+    selectedPartThumbHtml(part, item) +
+    '<div class="selected-part-body">' +
+      '<div class="selected-part-brand">' + part.brand + '</div>' +
+      '<div class="selected-part-name">'  + part.name  + '</div>' +
+      (part.pending
+        ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
+        : (item && item.price ? '<div class="selected-part-price">$' + item.price + '</div>' : '')) +
+    '</div>' +
+    '<button class="selected-part-remove" onclick="removePart(\''+part.uid+'\')">Remove</button>' +
+  '</div>';
 }
 
 async function loadCatalog(platformId) {
@@ -747,35 +854,17 @@ function buildCategoryBlock(cat) {
   const isCust = state.customOpen === cat.key;
   const mode   = categoryPickerState(cat);
 
-  // Added chips strip
-  const chipsHtml = added.length
-    ? '<div class="added-parts-strip">' + added.map(p =>
-        '<div class="added-chip">' +
-          '<div class="added-chip-dot' + (p.pending?' pending':'') + '"></div>' +
-          p.brand + ' ' + p.name +
-          '<button class="added-chip-remove" onclick="removePart(\''+p.uid+'\')">×</button>' +
-        '</div>'
-      ).join('') + '</div>'
+  // Selected parts — a real card each, so the builder can see they picked
+  // the right product and not just a name that looked close.
+  const selectedHtml = added.length
+    ? '<div class="selected-parts-list">' + added.map(selectedPartHtml).join('') + '</div>'
     : '';
 
   // Cards grid — only in browsing mode
   const available = (CATALOG[cat.key]||[]).filter(item => !state.parts.some(p => p.refId===item.id));
   const cardsHtml = mode === 'browsing'
     ? (available.length
-        ? available.map(item =>
-            '<div class="part-card">' +
-              partImageHtml(item) +
-              '<div class="part-card-body">' +
-                '<div class="part-card-brand">' + item.brand + '</div>' +
-                '<div class="part-card-name">'  + item.name  + '</div>' +
-                '<div class="part-card-desc">'  + item.desc  + '</div>' +
-              '</div>' +
-              '<div class="part-card-footer">' +
-                (item.price ? '<div class="part-card-price">$' + item.price + '</div>' : '<div class="part-card-price">—</div>') +
-                '<button class="part-card-add add" onclick="addCatalogPart(\''+cat.key+'\',\''+item.id+'\')">+ Add</button>' +
-              '</div>' +
-            '</div>'
-          ).join('')
+        ? available.map(item => partCardHtml(cat.key, item)).join('')
         : '<div class="picker-empty-state">All parts in this category have been added.</div>')
     : '';
 
@@ -800,9 +889,10 @@ function buildCategoryBlock(cat) {
         '<span class="category-name">' + cat.label + '</span>' +
         (added.length ? '<span class="category-added-count">'+added.length+' added</span>' : '') +
       '</div>' +
-      '<button class="category-toggle">' + (isOpen ? 'Close ✕' : '+ Add part') + '</button>' +
+      '<button class="category-toggle">' +
+        (isOpen ? 'Close ✕' : (added.length ? '+ Add another' : '+ Add part')) + '</button>' +
     '</div>' +
-    chipsHtml +
+    selectedHtml +
     '<div class="picker-panel' + (isOpen?' open':'') + '">' +
       toolbarHtml +
       modeNote +
@@ -820,16 +910,31 @@ function buildCategoryBlock(cat) {
   '</div>';
 }
 
+// renderParts() replaces the whole section, so the element has to be looked
+// up after the re-render, not before it — hence the deferred lookup by id.
+function scrollToCategory(k) {
+  setTimeout(() => {
+    const el = document.getElementById('cat-'+k);
+    if (el) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+  }, 60);
+}
+
 function togglePicker(k) {
   state.openPicker = state.openPicker===k ? null : k;
   state.customOpen = null;
   renderParts();
-  if (state.openPicker===k) {
-    setTimeout(() => {
-      const el = document.getElementById('cat-'+k);
-      if (el) el.scrollIntoView({ behavior:'smooth', block:'nearest' });
-    }, 60);
-  }
+  if (state.openPicker===k) scrollToCategory(k);
+}
+
+// Collapse the picker after a successful add and put the user back on the
+// category they just added to. Without this the panel stayed open over a grid
+// that had just lost the card they clicked, which reads as "did that work?"
+// — and the collapse alone would scroll the page out from under them.
+function closePickerAfterAdd(k) {
+  state.openPicker = null;
+  state.customOpen = null;
+  renderParts(); renderSidebar();
+  scrollToCategory(k);
 }
 function toggleCustomForm(k) { state.customOpen = state.customOpen===k ? null : k; renderParts(); }
 
@@ -839,13 +944,7 @@ function filterCards(k, q) {
   const filtered  = q ? available.filter(i => (i.brand+' '+i.name+' '+i.desc).toLowerCase().includes(q)) : available;
   document.getElementById('picker-count-'+k).textContent = filtered.length + ' options';
   document.getElementById('cards-'+k).innerHTML = filtered.length
-    ? filtered.map(item =>
-        '<div class="part-card">' +
-          partImageHtml(item) +
-          '<div class="part-card-body"><div class="part-card-brand">'+item.brand+'</div><div class="part-card-name">'+item.name+'</div><div class="part-card-desc">'+item.desc+'</div></div>' +
-          '<div class="part-card-footer"><div class="part-card-price">$'+item.price+'</div><button class="part-card-add add" onclick="addCatalogPart(\''+k+'\',\''+item.id+'\')">+ Add</button></div>' +
-        '</div>'
-      ).join('')
+    ? filtered.map(item => partCardHtml(k, item)).join('')
     : '<div class="picker-empty-state">No matches — try the custom part option below.</div>';
 }
 
@@ -853,7 +952,7 @@ function addCatalogPart(k, itemId) {
   const item = (CATALOG[k]||[]).find(i => i.id===itemId);
   if (!item) return;
   state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false });
-  renderParts(); renderSidebar();
+  closePickerAfterAdd(k);
 }
 function addCustomPart(k) {
   const cat = CATEGORIES.find(function (c) { return c.key === k; });
@@ -883,8 +982,7 @@ function addCustomPart(k) {
       brand: vals.shop, name: name, pending: !!custom.pending,
       finish: { shop: vals.shop, color: vals.color, stipple: vals.stipple },
     });
-    state.customOpen = null;
-    renderParts(); renderSidebar();
+    closePickerAfterAdd(k);
     return;
   }
 
@@ -892,8 +990,7 @@ function addCustomPart(k) {
   const name  = (document.getElementById('cn-'+k).value||'').trim();
   if (!brand||!name) return;
   state.parts.push({ uid:'p'+(uid++), refId:null, category:k, brand, name, pending:true });
-  state.customOpen = null;
-  renderParts(); renderSidebar();
+  closePickerAfterAdd(k);
 }
 function removePart(partUid) {
   state.parts = state.parts.filter(p => p.uid!==partUid);
