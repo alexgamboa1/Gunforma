@@ -1,9 +1,14 @@
 [build]
   # There is no compile step — the repo root IS the artifact, and publish = "."
   # reproduces exactly what the site published before this command existed.
-  # The command exists solely to run the PGRST201 embed guard, which exits
-  # non-zero and so fails the deploy. See scripts/check-embeds.sh.
-  command = "bash scripts/check-embeds.sh"
+  # The command exists solely to run the build-time guards, every one of which
+  # exits non-zero and so fails the deploy.
+  #
+  # This was `bash scripts/check-embeds.sh` — one guard, when three existed.
+  # It is a runner now so that adding a fourth is one line in that file rather
+  # than an edit to deploy config, and so that one deploy reports every
+  # failure instead of only the first. See scripts/check-all.sh.
+  command = "bash scripts/check-all.sh"
   publish = "."
 
 [build.environment]
