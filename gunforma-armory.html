@@ -1359,10 +1359,19 @@ async function saveDraft() {
   var btn = document.getElementById('btn-save-draft');
   btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Saving…';
 
-  // The name to persist on an INSERT: what the user typed, or the generated
-  // one when they left the field alone. Computed once so the row and
+  // The name to persist on an INSERT: whatever the title field holds, or the
+  // generated one when it is empty. Computed once so the row and
   // STATE.buildName below cannot disagree.
-  var newName = (nameTouched && STATE.buildName) ? STATE.buildName : defaultBuildName();
+  //
+  // Deliberately NOT gated on nameTouched, unlike the UPDATE branch. That
+  // flag exists to stop a STALE name being written over a row that may have
+  // been renamed elsewhere — an INSERT has no such row, so there is nothing
+  // to clobber and whatever is in STATE.buildName simply IS this build's
+  // name. Gating it here would break remixGuide(), which pre-names the
+  // builder from the guide's title without setting the flag: the field would
+  // read "Sig P365 Concealed Carry" and the row would save as
+  // "SIG P365 build".
+  var newName = STATE.buildName || defaultBuildName();
 
   var res;
   try {
@@ -1600,6 +1609,39 @@ function remixGuide(guideId) {
   if (!g) return;
   var plat = PLATFORMS_BY_ID[g.platform_id];
   if (!plat) { toast('Guide platform unavailable'); return; }
+
+  // Ask BEFORE replacing anything. A remix overwrites the whole builder, and
+  // the work it overwrites may never have been saved — losing that silently
+  // is worse than making someone click once. Asked after the guide and its
+  // platform check out, so we never prompt and then fail anyway.
+  if (!confirmDiscardIfDirty('Remix this guide')) return;
+
+  // A REMIX IS A NEW, UNSAVED BUILD — so the identity has to be dropped along
+  // with the parts.
+  //
+  // This used to set platform and parts and nothing else, leaving buildId
+  // pointing at whatever draft happened to be open. Open a draft, go to
+  // Guides, Remix, Save as draft, and saveDraft() took its UPDATE branch
+  // against THAT draft's id, replacing its parts_snapshot and its
+  // platform_id with the guide's. No error — .eq('status','draft') passes,
+  // because it really is a draft — and the header went on showing the old
+  // draft's name over the guide's parts.
+  STATE.buildId   = null;
+  savedSignature  = null;   // nothing saved yet; this is not an edit of a row
+  scrubBuildParam();        // drop ?build=<id> so a refresh can't reopen it
+
+  // Arrive pre-named from the guide instead of carrying the previous draft's
+  // title, which would be doubly wrong now the header is an editable field.
+  //
+  // nameTouched stays FALSE: this is a generated name, not one the user
+  // typed, and the flag's whole job is telling those apart on UPDATE. It
+  // costs nothing here because the INSERT path takes STATE.buildName
+  // whatever the flag says — see the note on newName in saveDraft(). If this
+  // build is later saved and reopened, the name is the server's and the flag
+  // is correctly false for it.
+  STATE.buildName = g.title || null;
+  nameTouched     = false;
+
   // Clone into user's My Build state — never mutate the guide row itself.
   STATE.platform = plat;
   rebuildCatalogForPlatform();
