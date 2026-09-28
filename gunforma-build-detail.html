@@ -159,6 +159,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-model { font-size: 12px; color: #666; }
 .part-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 .part-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
+/* Variant note reads as the builder's own words, so it keeps its casing
+   rather than being upper-cased like the structural tags beside it. */
+.part-tag-variant { color: #2a7bbd; background: #f2f8fd; border-color: #cfe0f0; text-transform: none; letter-spacing: 0; font-size: 9.5px; font-weight: 600; }
 .part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 0.5px solid #eee; background: #fafaf8; border-radius: 0 0 6px 6px; }
 .part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .part-affiliate-price { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
@@ -923,6 +926,11 @@ function renderParts(b) {
 function renderPartCard(build, part, idx) {
   var history = partHistory(build, idx);
   var pendingTag = part.pending ? '<span class="part-tag" style="color:#b45309;background:#fef3e2;border-color:#f9b860;">Pending catalog review</span>' : '';
+  // The builder's own note for a colour/variant the catalog does not carry —
+  // free text, so escaped like any other user string. Shares .part-tags with
+  // the pending tag so one part can show both.
+  var variantTag = part.variant
+    ? '<span class="part-tag part-tag-variant">'+escH(part.variant)+'</span>' : '';
   var verifiedHtml = history.length ? buildVerifiedHtml(build.id, idx, history) : '';
   var affiliateHtml = renderAffiliateRow(part);
 
@@ -941,7 +949,7 @@ function renderPartCard(build, part, idx) {
         '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
         '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
         '<div class="part-model">'+escH(part.name||'Unnamed part')+'</div>'+
-        (pendingTag ? '<div class="part-tags">'+pendingTag+'</div>' : '')+
+        ((pendingTag || variantTag) ? '<div class="part-tags">'+variantTag+pendingTag+'</div>' : '')+
         verifiedHtml+
       '</div>'+
     '</div>'+

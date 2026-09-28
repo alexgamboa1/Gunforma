@@ -90,6 +90,42 @@
     return null;
   }
 
+  // Attribute-safe escaping. Used for the variant field's value, which is
+  // free text the builder typed. (brand/name around it are interpolated raw,
+  // inherited from the pages this was extracted from — not widened here.)
+  function escAttr(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  // Longest a variant note may be. Enforced here as well as by maxlength,
+  // because maxlength is a UI hint a paste or a devtools edit walks straight
+  // past, and this value goes into parts_snapshot.
+  var VARIANT_MAX = 60;
+
+  // Writes the variant straight to the matching state.parts entry and
+  // RE-RENDERS NOTHING.
+  //
+  // That is the whole point: renderParts() rebuilds the section's innerHTML,
+  // so re-rendering per keystroke would destroy the input the user is typing
+  // into and drop focus on the first character. The input keeps its own
+  // value; only the trimmed copy goes to state, so trailing spaces mid-word
+  // still type normally.
+  function noteVariant(uid, value) {
+    var st = need().state();
+    var parts = (st && st.parts) || [];
+    var v = String(value == null ? '' : value).trim().slice(0, VARIANT_MAX);
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].uid === uid) {
+        // undefined, not '' — buildPartsSnapshot() tests truthiness and must
+        // omit the key entirely when the field is blank.
+        parts[i].variant = v || undefined;
+        return;
+      }
+    }
+  }
+
   // ===== CARD MARKUP =====
 
   // Product-thumbnail slot. Uses the default variant's primary_image_url when
@@ -160,6 +196,20 @@
         (part.pending
           ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
           : (item && item.price ? '<div class="selected-part-price">$' + item.price + '</div>' : '')) +
+        // Free text on purpose: the catalog has no variant coverage yet, so a
+        // builder who owns this product in a colour we do not carry has
+        // nowhere else to say so. Named `variant` rather than `variantId`
+        // precisely so it will not collide when real product_variants
+        // coverage lands.
+        // Not offered on custom/pending parts — the builder typed the full
+        // name there already.
+        (part.pending ? '' :
+          '<input type="text" class="selected-part-variant" maxlength="' + VARIANT_MAX + '"' +
+            ' value="' + escAttr(part.variant || '') + '"' +
+            ' data-uid="' + escAttr(part.uid) + '"' +
+            ' placeholder="Variant / colour (optional) — e.g. FDE, Coyote, 2-tone"' +
+            ' aria-label="Variant or colour for ' + escAttr(part.name) + '"' +
+            ' oninput="PartPicker.noteVariant(this.dataset.uid, this.value)" />') +
       '</div>' +
       '<button class="selected-part-remove" onclick="removePart(\'' + part.uid + '\')">Remove</button>' +
     '</div>';
@@ -238,6 +288,12 @@
 .selected-part-brand { font-size: 9px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .selected-part-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
 .selected-part-price { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+/* Variant note. Deliberately quiet until focused — it is optional, and most
+   parts will not need it, so it should not shout on every row. */
+.selected-part-variant { width: 100%; margin-top: 3px; font-family: inherit; font-size: 11px; color: #1a1a1a; background: #fff; border: 0.5px solid #e5e2d8; border-radius: 4px; padding: 4px 7px; box-sizing: border-box; }
+.selected-part-variant::placeholder { color: #b8b5ac; }
+.selected-part-variant:hover { border-color: #d5d3ca; }
+.selected-part-variant:focus { outline: none; border-color: #4a9edd; }
 .selected-part-pending { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #8a6d3b; }
 .selected-part-dot { width: 8px; height: 8px; border-radius: 50%; background: #f9b860; flex-shrink: 0; }
 .selected-part-remove { flex-shrink: 0; align-self: center; background: none; border: 0.5px solid #e5e2d8; border-radius: 4px; cursor: pointer; color: #888; font-size: 11px; font-weight: 700; padding: 6px 12px; font-family: inherit; transition: all 0.15s; }
@@ -372,5 +428,6 @@
     selectedPartsHtml: selectedPartsHtml,
     scrollToCategory: scrollToCategory,
     closePickerAfterAdd: closePickerAfterAdd,
+    noteVariant: noteVariant,
   };
 })(window);

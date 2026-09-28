@@ -842,6 +842,11 @@ function buildPartsSnapshot() {
     // Only finish-style entries carry this. Build detail, build-og and the
     // armory all render brand + name, so the row stays readable to them.
     if (p.finish) row.finish = p.finish;
+    // Optional free-text variant/colour note. OMITTED entirely when blank —
+    // js/part-picker.js stores undefined rather than '' for exactly this, so
+    // an untouched part's row is byte-identical to what it was before this
+    // field existed.
+    if (p.variant) row.variant = p.variant;
     return row;
   });
 }
@@ -1149,6 +1154,7 @@ async function hydrateFromArmoryHandoff() {
       category: normalizePartCategory(part.category),
       brand: part.brand || 'Unknown', name: part.name || '', pending: !!part.pending,
       finish: part.finish || undefined,
+      variant: part.variant || undefined,
     });
   });
   renderParts(); renderSidebar();
@@ -1346,6 +1352,7 @@ async function hydrateFromEditMode() {
       name: part.name || '',
       pending: !!part.pending,
       finish: part.finish || undefined,
+      variant: part.variant || undefined,
     });
   });
 

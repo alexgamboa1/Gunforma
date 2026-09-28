@@ -101,6 +101,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .simple-part-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .simple-part-thumb-fallback { font-size: 8px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 2px; }
 .simple-part-brand { font-size: 10px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.simple-part-variant { display: inline-block; margin-left: 6px; font-size: 9.5px; color: #555; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 1px 6px; border-radius: 20px; font-weight: 600; letter-spacing: 0; text-transform: none; }
 .simple-part-pending-tag { font-size: 9px; color: #b45309; background: #fef3e2; border: 0.5px solid #f9b860; padding: 2px 6px; border-radius: 20px; font-weight: 700; margin-left: 6px; }
 .no-parts-note { font-size: 12px; color: #999; padding: 16px; text-align: center; background: #fafaf8; border-radius: 6px; border: 0.5px solid #e5e5e5; }
 
@@ -504,6 +505,11 @@ function renderDetail(b) {
       var dCat   = currentPartValue(b, i, 'category', p.category);
       var dBrand = currentPartValue(b, i, 'brand', p.brand);
       var dName  = currentPartValue(b, i, 'name', p.name);
+      // The builder's free-text variant/colour note. Resolved through
+      // currentPartValue() like the other three, which works because
+      // partHistory/currentPartValue/doSaveEdit are all data-driven on the
+      // field NAME — nothing is hard-coded to the original three.
+      var dVar   = currentPartValue(b, i, 'variant', p.variant);
       var isEditOpen = editOpenKey === (b.id+'-'+i);
 
       var editBtnHtml = isPending
@@ -524,6 +530,7 @@ function renderDetail(b) {
               '<div><label class="part-edit-label">Brand</label><input class="part-edit-input" type="text" id="pe-brand-'+b.id+'-'+i+'" value="'+escH(dBrand)+'" /></div>'+
             '</div>'+
             '<div><label class="part-edit-label">Part name</label><input class="part-edit-input" type="text" id="pe-name-'+b.id+'-'+i+'" value="'+escH(dName)+'" /></div>'+
+            '<div style="margin-top:8px;"><label class="part-edit-label">Variant / colour</label><input class="part-edit-input" type="text" maxlength="60" id="pe-variant-'+b.id+'-'+i+'" value="'+escH(dVar)+'" /></div>'+
             '<div class="part-edit-actions">'+
               '<button class="btn-edit-save" onclick="doSaveEdit(\''+b.id+'\','+i+')">Save correction →</button>'+
               '<button class="btn-edit-close" onclick="doToggleEdit(\''+b.id+'\','+i+')">Cancel</button>'+
@@ -545,7 +552,8 @@ function renderDetail(b) {
           thumbHtml +
           '<div class="simple-part-cat">'+escH(dCat||'—')+'</div>'+
           '<div><div class="simple-part-name">'+escH(dName||'Unnamed part')+(p.pending?'<span class="simple-part-pending-tag">Pending catalog review</span>':'')+(history.length?'<span class="edited-flag">Edited</span>':'')+'</div>'+
-          '<div class="simple-part-brand">'+escH(dBrand||'')+'</div></div>'+
+          '<div class="simple-part-brand">'+escH(dBrand||'')+
+            (dVar ? '<span class="simple-part-variant">'+escH(dVar)+'</span>' : '')+'</div></div>'+
         '</div>'+
         '<div class="simple-part-actions">'+editBtnHtml+'</div>'+
         editPanelHtml+
@@ -814,6 +822,7 @@ async function doSaveEdit(buildId, idx) {
     { key: 'category', inputId: 'pe-cat-'+buildId+'-'+idx },
     { key: 'brand',     inputId: 'pe-brand-'+buildId+'-'+idx },
     { key: 'name',      inputId: 'pe-name-'+buildId+'-'+idx },
+    { key: 'variant',   inputId: 'pe-variant-'+buildId+'-'+idx },
   ];
 
   var newEntries = [];

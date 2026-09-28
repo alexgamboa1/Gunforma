@@ -97,6 +97,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .selected-part-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .selected-part-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
 .selected-part-price { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+.selected-part-variant { width: 100%; margin-top: 3px; font-family: inherit; font-size: 11px; color: #1a1a1a; background: #fff; border: 0.5px solid #e5e2d8; border-radius: 4px; padding: 4px 7px; box-sizing: border-box; }
+.selected-part-variant::placeholder { color: #b8b5ac; }
+.selected-part-variant:hover { border-color: #d5d3ca; }
+.selected-part-variant:focus { outline: none; border-color: #4a9edd; }
 .selected-part-price.na { color: #bbb; font-weight: 500; }
 .selected-part-pending { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: #8a6d3b; }
 .selected-part-dot { width: 7px; height: 7px; border-radius: 50%; background: #f9b860; flex-shrink: 0; }
@@ -1009,6 +1013,8 @@ async function loadBuildById(buildId) {
       brand: part.brand || (live ? live.brand : 'Unknown'),
       name:  part.name  || (live ? live.name  : ''),
       pending: !!part.pending,
+      // Carried, or it is gone on the next save — see buildPartsSnapshot().
+      variant: part.variant || undefined,
       price: live ? live.price : null,
     };
   });
@@ -1307,6 +1313,17 @@ function selectedPartHtml(p) {
       '<div class="selected-part-brand">' + esc(p.brand) + '</div>' +
       '<div class="selected-part-name">'  + esc(p.name)  + '</div>' +
       priceHtml +
+      // Free-text variant/colour note, the same field post-build offers. This
+      // page renders its own card rather than js/part-picker.js's — the two
+      // pickers are different implementations — so the input is declared
+      // here too and must stay in step.
+      // Not on pending/custom parts: the builder typed the full name there.
+      (p.pending ? '' :
+        '<input type="text" class="selected-part-variant" maxlength="60"' +
+          ' value="' + escAttr(p.variant || '') + '"' +
+          ' data-variant-uid="' + escAttr(p.uid) + '"' +
+          ' placeholder="Variant / colour (optional) — e.g. FDE, Coyote, 2-tone"' +
+          ' aria-label="Variant or colour for ' + escAttr(p.name) + '" />') +
     '</div>' +
     '<button type="button" class="selected-part-remove" data-uid="' + escAttr(p.uid) + '" title="Remove">Remove</button>' +
   '</div>';
@@ -1374,6 +1391,23 @@ function wireCategoryHandlers() {
       e.preventDefault();
       e.stopPropagation();
       removePartByRefId(el.dataset.removeRef);
+    });
+  });
+  // Variant note. Writes straight to STATE.parts and re-renders NOTHING —
+  // renderPartsSection() rebuilds this whole section's innerHTML, so a
+  // re-render per keystroke would destroy the input being typed into. The
+  // dirty badge is refreshed on its own because buildSignature() includes
+  // the snapshot, and a variant edit IS an unsaved change.
+  document.querySelectorAll('[data-variant-uid]').forEach(function (el) {
+    el.addEventListener('input', function () {
+      var uid = el.getAttribute('data-variant-uid');
+      var v = (el.value || '').trim().slice(0, 60);
+      var part = STATE.parts.find(function (p) { return p.uid === uid; });
+      if (!part) return;
+      part.variant = v || undefined;      // undefined so the key is omitted
+      var d = document.getElementById('builder-dirty');
+      if (d) d.hidden = !isDirty();
+      updateActionButtons();
     });
   });
   // Same data-uid -> removePartByUid contract the chips used; only the class
@@ -1464,9 +1498,24 @@ function updateActionButtons() {
   document.getElementById('btn-post').disabled       = !canSubmit;
 }
 
+// WHITELIST. Every key a part carries has to be named here or this page
+// DELETES it on the next save — silently, with no error, because the write
+// succeeds and the row simply comes back smaller.
+//
+// Known gap, deliberately not fixed in this PR: post-build's own
+// buildPartsSnapshot() also emits `finish` (the paint-job/cerakote object)
+// and this one does not, so a finish authored there is dropped the first
+// time the draft is saved from the Armory. Latent rather than live today —
+// checked against the database and 0 builds currently carry a finish key.
+// Reported rather than folded in; the fix is one line here plus one in each
+// mapper below.
 function buildPartsSnapshot() {
   return STATE.parts.map(function (p) {
-    return { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+    var row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+    // Omitted when blank, matching post-build, so an untouched part round
+    // trips through this page byte-identical.
+    if (p.variant) row.variant = p.variant;
+    return row;
   });
 }
 
@@ -1785,6 +1834,8 @@ function remixGuide(guideId) {
       brand: part.brand || (live ? live.brand : 'Unknown'),
       name:  part.name  || (live ? live.name  : ''),
       pending: !!part.pending,
+      // Carried, or it is gone on the next save — see buildPartsSnapshot().
+      variant: part.variant || undefined,
       price: live ? live.price : null,
     };
   });
