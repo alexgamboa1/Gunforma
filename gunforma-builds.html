@@ -52,7 +52,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* CARD */
 .build-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, transform 0.15s; text-decoration: none; color: inherit; }
 .build-card:hover { border-color: #cfcdc4; transform: translateY(-1px); }
-.build-card-photo { position: relative; aspect-ratio: 16/10; background: #f4f3ee; overflow: hidden; }
+/* 4/3, the same box a build photo gets everywhere else. object-fit stays
+   cover — this is the owner's own photo, and filling the frame is right for
+   it; only the RATIO changed.
+   The point is that a build's photo is cropped identically wherever it turns
+   up: the share card (build-og.mjs, OG_W 1200 x OG_H 900 = 4/3 exactly), the
+   homepage strip, this grid and the profile. It used to be three ratios
+   across four surfaces, which was drift rather than a decision — the same
+   photo lost a different 20% of itself depending on which page you were on.
+   Measured on a real 360x480 hero: 16/10 kept 46.9%, 4/3 keeps 56.3%.
+   It costs density — the box is 25% taller, so fewer cards per screen. That
+   is the trade, and it was made knowingly. */
+.build-card-photo { position: relative; aspect-ratio: 4/3; background: #f4f3ee; overflow: hidden; }
 .build-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .build-card-nophoto { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 11px; color: #b8b5ac; letter-spacing: 0.06em; }
 .build-card-badge { position: absolute; top: 10px; left: 10px; font-size: 9px; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 3px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; backdrop-filter: blur(4px); }
