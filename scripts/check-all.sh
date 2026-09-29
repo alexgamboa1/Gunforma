@@ -55,6 +55,10 @@ RUN_FILES=()
 # ── the registry ───────────────────────────────────────────────────────────
 check "PostgREST embed ambiguity"  scripts/check-embeds.sh
 check "build URL copies agree"     scripts/build-url.test.mjs
+check "variant label copies agree" scripts/variant-label.test.mjs
+check "shared globals loaded"      scripts/check-script-order.mjs
+check "snapshot whitelists agree" scripts/check-snapshot-fields.mjs
+check "affiliate module runs"      scripts/affiliate-render.test.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
@@ -96,6 +100,14 @@ NOT_BUILD_CHECKS=(
   # the wrong lever. Runs from .github/workflows/check-price-freshness.yml on
   # the smoke-test cadence, and raises a GitHub issue when it trips.
   scripts/check-price-freshness.mjs
+
+  # Reads live product_variants to ask whether any variant is illustrated with
+  # a sibling variant's photo. Same reason as the line above: time-dependent,
+  # not tree-dependent. The thing that breaks it is a CSV import, not a commit,
+  # so failing an unrelated deploy would put the alert in front of whoever is
+  # deploying rather than whoever maintains the catalogue. Runs daily from
+  # .github/workflows/check-variant-images.yml and raises an issue.
+  scripts/check-variant-image-sku.mjs
 
   # NOT a unit test, despite the name. It signs in as a real user and writes
   # to live Storage, so it needs SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD and a

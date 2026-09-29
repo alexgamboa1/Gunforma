@@ -292,6 +292,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
+<!-- Before the page code: loadCatalog calls window.variantLabel. -->
+<script src="js/variant-label.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/redact.js"></script>
@@ -424,7 +426,7 @@ async function loadCatalog(platformId) {
       'product_platforms!inner(platform_id), '+
       // Named FK to avoid the products↔product_variants ambiguity from
       // products.lowest_price_variant_id also referencing product_variants.id.
-      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
+      'product_variants!product_variants_product_id_fkey(id, msrp, is_default, primary_image_url, color, finish, variant_label)'
     )
     // Retired variants are not offerable on a new build, so they stay out of
     // the picker's price/image lookup too.
@@ -453,6 +455,20 @@ async function loadCatalog(platformId) {
         desc:  r.description || '',
         price: price,
         image: dv && dv.primary_image_url ? dv.primary_image_url : null,
+        // The default variant's identity, written into parts_snapshot when
+        // this item is added. PR A has no picker, so every catalog pick
+        // records the default; PR B lets the builder choose another and only
+        // has to change what fills these five fields.
+        //
+        // `dv` can be null — a product with no live variant at all. Measured
+        // 2026-09-29: zero of 231 products are in that state, and every one
+        // has exactly one default. The null guards stay anyway, because
+        // "currently zero" is a fact about today's data, not an invariant,
+        // and a retired last variant would produce it.
+        variantId:     dv ? dv.id : null,
+        variantLabel:  dv ? window.variantLabel(dv) : '',
+        variantColor:  dv && dv.color  ? dv.color  : null,
+        variantFinish: dv && dv.finish ? dv.finish : null,
       };
     });
   });
@@ -656,7 +672,10 @@ function filterCards(k, q) {
 function addCatalogPart(k, itemId) {
   const item = (CATALOG[k]||[]).find(i => i.id===itemId);
   if (!item) return;
-  state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false });
+  state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false,
+    variantId: item.variantId, variantLabel: item.variantLabel,
+    variantColor: item.variantColor, variantFinish: item.variantFinish,
+    imageUrl: item.image });
   PartPicker.closePickerAfterAdd(k);
 }
 function addCustomPart(k) {
@@ -747,6 +766,24 @@ function setCheck(id,done) {
 function buildPartsSnapshot() {
   return state.parts.map(function(p) {
     const row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+    // WHICH VARIANT. Denormalised on purpose: variantId is resolved live at
+    // read time for image and label, but a variant can be retired or renamed
+    // later and the build is a record of what was on the gun, so the row has
+    // to still render without it.
+    //
+    // NOT `color` / `finish`. `finish` is already the Paint Job & Finish
+    // OBJECT ({shop, color, stipple}) written below, which carries its own
+    // nested `color`. These two are prefixed so neither can collide with a
+    // field that already means something else.
+    //
+    // Omitted when absent, matching the `finish`/`variant` convention right
+    // below, so a pending part and a pre-existing row round trip unchanged
+    // rather than gaining a pile of nulls.
+    if (p.variantId)     row.variantId     = p.variantId;
+    if (p.variantLabel)  row.variantLabel  = p.variantLabel;
+    if (p.variantColor)  row.variantColor  = p.variantColor;
+    if (p.variantFinish) row.variantFinish = p.variantFinish;
+    if (p.imageUrl)      row.imageUrl      = p.imageUrl;
     // Only finish-style entries carry this. Build detail, build-og and the
     // armory all render brand + name, so the row stays readable to them.
     if (p.finish) row.finish = p.finish;
@@ -876,13 +913,83 @@ function setResultNote(kind, title, bodyHtml) {
   note.style.display = 'block';
 }
 
+// A throw out of submitBuild() leaves us without its return value, so the
+// build row it may already have inserted is not in hand. Find it by the name
+// we just tried to publish and roll it back, using the same verified-delete
+// rule as the photo-failure path: an RLS-filtered DELETE that matches nothing
+// returns success with zero rows, so the row count is what decides.
+//
+// Scoped hard — this admin's own ownerless, approved, photo-less row with this
+// exact name. It must never be able to delete a real build.
+async function recoverFromThrow(thrown) {
+  const isNetwork = thrown instanceof TypeError ||
+                    /failed to fetch|networkerror|load failed/i.test(thrown && thrown.message || '');
+  const base = {
+    error: {
+      message: isNetwork
+        ? 'The request never reached the server. Your session may have expired, or the connection dropped — ' +
+          'sign in again and check the queue before retrying, in case the build landed.'
+        : (thrown && thrown.message) || String(thrown),
+      code: isNetwork ? 'network' : (thrown && thrown.name) || 'exception',
+    },
+    stage: 'threw',
+    thrown: true,
+  };
+
+  let orphan = null;
+  try {
+    const { data } = await sb.from('builds')
+      .select('id')
+      .eq('name', state.name.trim())
+      .eq('status', 'approved')
+      .is('user_id', null)
+      .order('created_at', { ascending: false })
+      .limit(1);
+    orphan = data && data[0] ? data[0].id : null;
+  } catch (e) { /* the lookup can fail the same way; fall through and say so */ }
+
+  if (!orphan) {
+    // Either nothing was inserted, or we cannot see it. Both are reported
+    // honestly rather than as a clean rollback.
+    return Object.assign(base, { rolledBack: false,
+      rollbackError: { message: 'could not confirm whether a build row was created — check the admin queue' } });
+  }
+
+  try {
+    const { data: deleted, error: rollbackErr } =
+      await sb.from('builds').delete().eq('id', orphan).select('id');
+    const rolledBack = !rollbackErr && Array.isArray(deleted) && deleted.length === 1;
+    return Object.assign(base, { buildId: orphan, rolledBack: rolledBack,
+      rollbackError: rollbackErr || (rolledBack ? null : { message: 'delete removed no rows — build may still be live' }) });
+  } catch (e) {
+    return Object.assign(base, { buildId: orphan, rolledBack: false,
+      rollbackError: { message: 'rollback also failed to reach the server — build ' + orphan + ' may be live' } });
+  }
+}
+
 async function publishBuild() {
   const btn = document.getElementById('publish-btn');
   if (btn.disabled) return;
   btn.disabled = true;
   btn.textContent = 'Publishing…';
 
-  const result = await submitBuild();
+  // submitBuild() reports PostgREST refusals by RETURNING {error}. It can also
+  // THROW — supabase-js raises `TypeError: Failed to fetch` for anything that
+  // fails below HTTP: a dropped connection, a blocked request, or the fetch
+  // being aborted because the page navigated. The session watchdog above does
+  // exactly that on a failed token refresh, mid-submit.
+  //
+  // Until now nothing caught it. An uncaught throw here left the button stuck
+  // on "Publishing…" forever, printed only a console trace, and — if it landed
+  // on the build_photos insert rather than the builds insert — skipped the
+  // rollback, which is how one failed publish became seven orphaned public
+  // builds on 2026-09-26. The rollback is only reached on a RETURNED photoErr.
+  let result;
+  try {
+    result = await submitBuild();
+  } catch (thrown) {
+    result = await recoverFromThrow(thrown);
+  }
 
   if (result.error) {
     console.error(result.error, result.rollbackError || '');
@@ -893,12 +1000,18 @@ async function publishBuild() {
     // and this is the text an admin needs to read, copy and act on. The
     // rollback line is the load-bearing one — it says whether a retry starts
     // clean or whether something is already live and needs deleting by hand.
+    // BOTH failure stages, not just 'photos'. The throw path can also leave a
+    // row behind, and it is the one where we are least certain what happened —
+    // so it is the last place to go quiet about it.
     let rollbackLine = '';
-    if (result.stage === 'photos') {
+    if (result.stage === 'photos' || result.stage === 'threw') {
       rollbackLine = result.rolledBack
         ? '<div style="margin-top:6px;">The build row was rolled back — nothing was published, so a retry starts clean.</div>'
-        : '<div style="margin-top:6px;"><strong>Rollback failed.</strong> Build <code style="font-size:10px;">' + esc(result.buildId) +
-          '</code> may still be live and needs deleting by hand: ' + esc(describeError(result.rollbackError)) + '</div>';
+        : '<div style="margin-top:6px;"><strong>Rollback failed.</strong> ' +
+          (result.buildId
+            ? 'Build <code style="font-size:10px;">' + esc(result.buildId) + '</code> may still be live and needs deleting by hand: '
+            : 'Check the admin queue before retrying: ') +
+          esc(describeError(result.rollbackError)) + '</div>';
     }
 
     setResultNote('fail', 'Publish failed',
