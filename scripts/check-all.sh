@@ -57,6 +57,7 @@ check "PostgREST embed ambiguity"  scripts/check-embeds.sh
 check "build URL copies agree"     scripts/build-url.test.mjs
 check "variant label copies agree" scripts/variant-label.test.mjs
 check "shared globals loaded"      scripts/check-script-order.mjs
+check "snapshot whitelists agree" scripts/check-snapshot-fields.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
