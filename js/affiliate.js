@@ -160,7 +160,6 @@
       AFFILIATE_BY_PRODUCT_ID[productId] = {
         hero: listings[0],
         listings: listings,
-        activeAxes: activeAxes,
         minPrice: priceSet.length ? Math.min.apply(null, priceSet) : null,
         maxPrice: priceSet.length ? Math.max.apply(null, priceSet) : null,
         anyInStock: listings.some(function (l) { return l.in_stock === true; }),
@@ -235,9 +234,7 @@
     var optionsLabel = 'See all ' + aff.listings.length + ' options';
     var headerRow =
       '<div class="part-affiliate-variant-header">' +
-        (aff.activeAxes.length
-          ? '<div class="part-affiliate-variant-header-label">' + esc(aff.activeAxes.map(function (a) { return a.label; }).join(' / ')) + '</div>'
-          : '') +
+        '<div class="part-affiliate-variant-header-label">Option</div>' +
         '<div class="part-affiliate-variant-header-note">Prices and availability may vary based on promotions and in-stock items.</div>' +
       '</div>';
     var variantRows = aff.listings.map(function (l) {

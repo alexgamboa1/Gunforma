@@ -16,6 +16,17 @@
 // to handle. The `feed_may_fill` column says which side of that a row is on,
 // so an early run is still readable rather than quietly wrong.
 //
+// `feed_may_fill` is a HEURISTIC and reads slightly optimistic. It knows only
+// whether a link carries a stored identifier; it cannot see two things the
+// sync does:
+//   • whether the matched feed row actually has an image
+//   • whether the link is WITHHELD for a candidate conflict or identifier
+//     drift, in which case the sync deposits no image either — a contested
+//     match must not deposit a photo any more than it deposits a price
+// Measured 2026-09-29: this script said 149 fillable, the sync said 147. One
+// had no feed image, one was withheld (Tyrant CNC Takedown Lever, a recurring
+// same-MPN conflict). Trust the sync's own count over this column.
+//
 // Until an image exists the picker and the build row show a colour swatch
 // with the label — never the default variant's photo standing in for the
 // chosen colour. A Black barrel's photo above the words "Gold / TiN" is a
@@ -81,7 +92,7 @@ const out = rows.map((v) => {
     mpn: (link && link.op_mpn) || v.sku || '',
     merchant_product_id: (link && link.op_merchant_product_id) || '',
     affiliate_url: link ? (link.affiliate_url || link.url) : '',
-    feed_may_fill: withId ? 'likely — sync should cover this' : (live.length ? 'no — link has no stored identifier' : 'no — no live link'),
+    feed_may_fill: withId ? 'likely — unless withheld or the feed row has no image' : (live.length ? 'no — link has no stored identifier' : 'no — no live link'),
     variant_id: v.id,
     product_page: p.slug ? `https://gunforma.com/parts/${p.category || ''}/${p.slug}` : '',
   };
@@ -95,7 +106,8 @@ await mkdir(dirname(OUT), { recursive: true });
 await writeFile(OUT, csv, 'utf8');
 
 console.log(`${out.length} live variant(s) with no primary_image_url`);
-console.log(`  ${mayFill} have a link with a stored identifier — the sync should fill these`);
+console.log(`  ${mayFill} have a link with a stored identifier — the sync should fill MOST of these`);
+console.log(`     (the sync's own dry-run count is authoritative; it also excludes withheld links)`);
 console.log(`  ${noIdentifier} have a live link but no stored identifier`);
 console.log(`  ${noLink} have no live link at all`);
 console.log(`\n  -> ${noIdentifier + noLink} need a human either way`);
