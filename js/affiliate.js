@@ -24,53 +24,20 @@
 (function (global) {
   var AFFILIATE_BY_PRODUCT_ID = {};
 
-  var VARIANT_AXES = [
-    { key: 'reticle',               label: 'Reticle'       },
-    { key: 'reticle_color',         label: 'Reticle Color' },
-    { key: 'color',                 label: 'Color'         },
-    { key: 'optic_cut',             label: 'Optic Cut'     },
-    { key: 'bundle',                label: 'Bundle'        },
-    { key: 'clamp',                 label: 'Clamp'         },
-    { key: 'manual_safety_variant', label: 'Manual Safety' },
-  ];
+  // VARIANT_AXES, extractVariantAxes, computeActiveAxes and
+  // formatVariantLabel used to live here. The label now comes from
+  // js/variant-label.js — the same file netlify/functions/_variant-label.mjs
+  // mirrors, with scripts/variant-label.test.mjs failing the deploy if the
+  // two disagree. This file's copy was one of three, and they had drifted:
+  // `finish` was a label axis on the server-rendered product page and not
+  // here, so True Precision P365-FUSE read "Black / DLC" at
+  // /parts/slides/true-precision-p365-fuse and "Black" twice — $375.25 and
+  // $318.99 — in this renderer.
+  //
+  // Read window.variantLabel AT CALL TIME, never captured into a var here.
+  // js/variant-label.js is a separate <script> and this IIFE body runs at
+  // load; a captured reference would be whatever existed then.
 
-  function extractVariantAxes(v) {
-    return {
-      reticle:               v.reticle || null,
-      reticle_color:         v.reticle_color || null,
-      color:                 v.color || null,
-      finish:                v.finish || null,
-      optic_cut:             v.optic_cut || null,
-      bundle:                v.bundle || null,
-      clamp:                 v.clamp || null,
-      manual_safety_variant: v.manual_safety_variant === true ? 'Yes'
-                           : v.manual_safety_variant === false ? 'No'
-                           : null,
-    };
-  }
-  // An axis shows only when listings disagree on it — except reticle on
-  // optics, which is key purchase info even when every variant shares it.
-  function computeActiveAxes(listings) {
-    var isOptic = listings.some(function (l) { return l.category === 'optic'; });
-    return VARIANT_AXES.filter(function (axis) {
-      var seen = new Set();
-      listings.forEach(function (l) { seen.add(l.axes[axis.key]); });
-      if (axis.key === 'reticle' && isOptic &&
-          listings.some(function (l) { return l.axes.reticle; })) return true;
-      return seen.size > 1;
-    });
-  }
-  // variant_label is a hand-set override (e.g. "2 MOA Red Dot") for variants
-  // that differ on things the axis columns don't capture. Axis logic is the
-  // fallback; "Standard" is the last resort.
-  function formatVariantLabel(axes, activeAxes, customLabel) {
-    if (typeof customLabel === 'string' && customLabel.trim()) return customLabel.trim();
-    if (!activeAxes.length) return 'Standard';
-    return activeAxes.map(function (a) {
-      var val = axes[a.key];
-      return val != null && val !== '' ? val : '—';
-    }).join(' / ');
-  }
   // DB stores retailer + network like "OpticsPlanet (Awin)"; shoppers only
   // need the retailer, so strip anything trailing in parens.
   // A price we can stand behind is one a FEED verified within the window.
@@ -148,12 +115,13 @@
       var links = v.affiliate_links || [];
       if (!links.length) return;
       if (!byProduct[v.product_id]) byProduct[v.product_id] = [];
-      var axes = extractVariantAxes(v);
+      // The label function takes the variant row itself — {variant_label,
+      // color, finish} — so the row travels instead of a derived axes bag.
+      var variant = { variant_label: v.variant_label, color: v.color, finish: v.finish };
       links.forEach(function (l) {
         byProduct[v.product_id].push({
           variantId:   v.id,
-          axes:        axes,
-          customLabel: v.variant_label,
+          variant:     variant,
           category:    v.products ? v.products.category : null,
           isDefault:   !!v.is_default,
           url:         l.affiliate_url || l.url,
@@ -167,8 +135,9 @@
 
     Object.keys(byProduct).forEach(function (productId) {
       var listings = byProduct[productId];
-      var activeAxes = computeActiveAxes(listings);
-      listings.forEach(function (l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes, l.customLabel); });
+      // No active-axis pass: a label is a property of the variant alone now,
+      // so it no longer changes when a sibling variant is added or retired.
+      listings.forEach(function (l) { l.variantLabel = global.variantLabel(l.variant); });
       // Fresh price first, then in-stock, then cheapest, then a DETERMINISTIC
       // tiebreak. PostgREST returns embedded rows in arbitrary order, so
       // without that last key two equally-priced listings swap hero between

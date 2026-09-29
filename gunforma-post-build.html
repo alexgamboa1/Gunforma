@@ -324,6 +324,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
+<!-- Before the page code: loadCatalog calls window.variantLabel. -->
+<script src="js/variant-label.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -517,7 +519,7 @@ async function loadCatalog(platformId) {
       'product_platforms!inner(platform_id), '+
       // Named FK to avoid the products↔product_variants ambiguity from
       // products.lowest_price_variant_id also referencing product_variants.id.
-      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
+      'product_variants!product_variants_product_id_fkey(id, msrp, is_default, primary_image_url, color, finish, variant_label)'
     )
     // Same as the admin picker: a retired variant is not something a builder
     // can pick, so it must not price or illustrate a catalog row here.
@@ -546,6 +548,20 @@ async function loadCatalog(platformId) {
         desc:  r.description || '',
         price: price,
         image: dv && dv.primary_image_url ? dv.primary_image_url : null,
+        // The default variant's identity, written into parts_snapshot when
+        // this item is added. PR A has no picker, so every catalog pick
+        // records the default; PR B lets the builder choose another and only
+        // has to change what fills these five fields.
+        //
+        // `dv` can be null — a product with no live variant at all. Measured
+        // 2026-09-29: zero of 231 products are in that state, and every one
+        // has exactly one default. The null guards stay anyway, because
+        // "currently zero" is a fact about today's data, not an invariant,
+        // and a retired last variant would produce it.
+        variantId:     dv ? dv.id : null,
+        variantLabel:  dv ? window.variantLabel(dv) : '',
+        variantColor:  dv && dv.color  ? dv.color  : null,
+        variantFinish: dv && dv.finish ? dv.finish : null,
       };
     });
   });
@@ -746,7 +762,10 @@ function filterCards(k, q) {
 function addCatalogPart(k, itemId) {
   const item = (CATALOG[k]||[]).find(i => i.id===itemId);
   if (!item) return;
-  state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false });
+  state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false,
+    variantId: item.variantId, variantLabel: item.variantLabel,
+    variantColor: item.variantColor, variantFinish: item.variantFinish,
+    imageUrl: item.image });
   PartPicker.closePickerAfterAdd(k);
 }
 function addCustomPart(k) {
@@ -839,6 +858,24 @@ function setCheck(id,done) {
 function buildPartsSnapshot() {
   return state.parts.map(function(p) {
     const row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+    // WHICH VARIANT. Denormalised on purpose: variantId is resolved live at
+    // read time for image and label, but a variant can be retired or renamed
+    // later and the build is a record of what was on the gun, so the row has
+    // to still render without it.
+    //
+    // NOT `color` / `finish`. `finish` is already the Paint Job & Finish
+    // OBJECT ({shop, color, stipple}) written below, which carries its own
+    // nested `color`. These two are prefixed so neither can collide with a
+    // field that already means something else.
+    //
+    // Omitted when absent, matching the `finish`/`variant` convention right
+    // below, so a pending part and a pre-existing row round trip unchanged
+    // rather than gaining a pile of nulls.
+    if (p.variantId)     row.variantId     = p.variantId;
+    if (p.variantLabel)  row.variantLabel  = p.variantLabel;
+    if (p.variantColor)  row.variantColor  = p.variantColor;
+    if (p.variantFinish) row.variantFinish = p.variantFinish;
+    if (p.imageUrl)      row.imageUrl      = p.imageUrl;
     // Only finish-style entries (Paint Job & Finish) carry this, and it is an
     // OBJECT, not a string.
     //

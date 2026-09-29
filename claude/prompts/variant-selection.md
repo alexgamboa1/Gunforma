@@ -1,5 +1,6 @@
 # Prompt — variant selection (updated 2026-09-29, post share-test)
 
+Work from main (currently d04ff2d), not gallery-swap.
 Send this to Claude Code AFTER the first five claim messages are out
 (see claude/launch-handoff.md §1). Run it BEFORE posting the remaining ~15 builds.
 

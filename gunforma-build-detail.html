@@ -162,6 +162,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* Variant note reads as the builder's own words, so it keeps its casing
    rather than being upper-cased like the structural tags beside it. */
 .part-tag-variant { color: #2a7bbd; background: #f2f8fd; border-color: #cfe0f0; text-transform: none; letter-spacing: 0; font-size: 9.5px; font-weight: 600; }
+/* The variant the builder actually picked, from the catalog — distinct from
+   .part-tag-variant, which is their free-text note for a colour the catalog
+   does not carry. A part can carry both. */
+.part-tag-chosen { color: #1f4d33; background: #eaf5ee; border-color: #8fc9a8; font-weight: 700; }
+/* The live variant row is gone (retired or deleted) and this label came from
+   the snapshot. Muted rather than hidden: the build is a record of what was
+   on the gun, so the part does not stop being true when the listing ends. */
+.part-tag-chosen.part-tag-archived { color: #6b6b6b; background: #f2f1ee; border-color: #d8d5cd; }
+/* MSRP must never sit next to a bare number where a buy price is expected. */
+.part-affiliate-msrp-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
+  color: #6b6b6b; background: #f2f1ee; border: 0.5px solid #d8d5cd; border-radius: 3px; padding: 1px 4px; margin-left: 5px; vertical-align: 2px; }
 .part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 18px; border-top: 0.5px solid #eee; background: #fafaf8; border-radius: 0 0 6px 6px; }
 .part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .part-affiliate-price { font-size: 15px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
@@ -391,6 +402,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span id="toast-msg">Done</span></div>
 
+<!-- Before the render code: the part rows call window.variantLabel. -->
+<script src="js/variant-label.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -496,6 +509,14 @@ var AFFILIATE_BY_PRODUCT_ID = {};
 // AFFILIATE_BY_PRODUCT_ID because a product can have an image without any
 // affiliate link (and vice-versa).
 var IMAGE_BY_PRODUCT_ID = {};
+// Every LIVE variant by id, whether or not it has a listing. The buy-row
+// grouping below deliberately drops variants with no affiliate_links, but a
+// build can name one: Icarus Precision A.C.E. XL EVO sells in FDE, Gray and
+// ODG with a listing on none of them. Those still need an image, a label and
+// an MSRP. A variant missing from here is retired or deleted — the top-level
+// .is('retired_at', null) filter is what removes it — and the row then falls
+// back to the denormalised snapshot fields.
+var VARIANT_BY_ID = {};
 
 async function loadBuild() {
   // Served at two URLs: /b/:id (the shareable one, rewritten to build-og.mjs
@@ -603,6 +624,7 @@ async function loadAffiliates(build) {
     if (v.is_default && v.primary_image_url && !IMAGE_BY_PRODUCT_ID[v.product_id]) {
       IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
     }
+    VARIANT_BY_ID[v.id] = v;
   });
 
   // Group variants by product, flatten to (variant, link) rows, drop
@@ -613,12 +635,10 @@ async function loadAffiliates(build) {
     var links = v.affiliate_links || [];
     if (!links.length) return;
     if (!byProduct[v.product_id]) byProduct[v.product_id] = [];
-    var axes = extractVariantAxes(v);
     links.forEach(function(l) {
       byProduct[v.product_id].push({
         variantId:   v.id,
-        axes:        axes,
-        customLabel: v.variant_label,
+        variant:     { variant_label: v.variant_label, color: v.color, finish: v.finish },
         category:    v.products ? v.products.category : null,
         isDefault:   !!v.is_default,
         url:         l.affiliate_url || l.url,
@@ -632,8 +652,11 @@ async function loadAffiliates(build) {
 
   Object.keys(byProduct).forEach(function(productId) {
     var listings = byProduct[productId];
-    var activeAxes = computeActiveAxes(listings);
-    listings.forEach(function(l) { l.variantLabel = formatVariantLabel(l.axes, activeAxes, l.customLabel); });
+    // No active-axis pass: a label is a property of the variant alone now, so
+    // it no longer changes when a sibling variant is added or retired. That
+    // mattered here more than anywhere — this page writes the label it shows
+    // into parts_snapshot.
+    listings.forEach(function(l) { l.variantLabel = window.variantLabel(l.variant); });
     // Sort: fresh price first, then in-stock, then cheapest, then partner/URL.
     listings.sort(function(a, b) {
       // Fresh-and-priced first, so listings[0] IS the listing whose price is
@@ -654,7 +677,6 @@ async function loadAffiliates(build) {
     AFFILIATE_BY_PRODUCT_ID[productId] = {
       hero: hero,
       listings: listings,
-      activeAxes: activeAxes,
       minPrice: priceSet.length ? Math.min.apply(null, priceSet) : null,
       maxPrice: priceSet.length ? Math.max.apply(null, priceSet) : null,
       anyInStock: listings.some(function(l){ return l.in_stock === true; }),
@@ -663,60 +685,18 @@ async function loadAffiliates(build) {
   });
 }
 
-// Distinguishing axes a product's variants can differ on. Order here is
-// the order columns show in the expanded list header + row values.
-var VARIANT_AXES = [
-  { key: 'reticle',               label: 'Reticle'       },
-  { key: 'reticle_color',         label: 'Reticle Color' },
-  { key: 'color',                 label: 'Color'         },
-  { key: 'optic_cut',             label: 'Optic Cut'     },
-  { key: 'bundle',                label: 'Bundle'        },
-  { key: 'clamp',                 label: 'Clamp'         },
-  { key: 'manual_safety_variant', label: 'Manual Safety' },
-];
-
-function extractVariantAxes(v) {
-  return {
-    reticle:               v.reticle || null,
-    reticle_color:         v.reticle_color || null,
-    color:                 v.color || null,
-    finish:                v.finish || null,
-    optic_cut:             v.optic_cut || null,
-    bundle:                v.bundle || null,
-    clamp:                 v.clamp || null,
-    manual_safety_variant: v.manual_safety_variant === true ? 'Yes'
-                         : v.manual_safety_variant === false ? 'No'
-                         : null,
-  };
-}
-
-// An axis is "active" for a product only if at least two of its listings
-// disagree on it — an axis every variant shares carries no information for
-// the shopper and just clutters the header + rows. Exception: reticle on
-// optics always shows — it's key purchase info even when every variant
-// shares it.
-function computeActiveAxes(listings) {
-  var isOptic = listings.some(function(l) { return l.category === 'optic'; });
-  return VARIANT_AXES.filter(function(axis) {
-    var seen = new Set();
-    listings.forEach(function(l) { seen.add(l.axes[axis.key]); });
-    if (axis.key === 'reticle' && isOptic &&
-        listings.some(function(l) { return l.axes.reticle; })) return true;
-    return seen.size > 1;
-  });
-}
-
-// variant_label is a hand-set override (e.g. "2 MOA Red Dot") for variants
-// that differ on things the axis columns don't capture. Axis logic is the
-// fallback; "Standard" is the last resort.
-function formatVariantLabel(axes, activeAxes, customLabel) {
-  if (typeof customLabel === 'string' && customLabel.trim()) return customLabel.trim();
-  if (!activeAxes.length) return 'Standard';
-  return activeAxes.map(function(a) {
-    var val = axes[a.key];
-    return val != null && val !== '' ? val : '—';
-  }).join(' / ');
-}
+// VARIANT_AXES, extractVariantAxes, computeActiveAxes and
+// formatVariantLabel used to live here — the third of three hand-maintained
+// copies. The label now comes from js/variant-label.js (mirrored by
+// netlify/functions/_variant-label.mjs, parity-tested by
+// scripts/variant-label.test.mjs). Read window.variantLabel at CALL time;
+// it is a separate <script> and this one's body runs at load.
+//
+// The copies had drifted, and this page was on the wrong side of it:
+// `finish` was a label axis only in product-page.mjs, so True Precision
+// P365-FUSE listed "Black" twice here — $375.25 and $318.99 — while
+// /parts/slides/true-precision-p365-fuse read "Black / DLC" and
+// "Black / Nitride" for the same two rows.
 
 // The DB stores the underlying affiliate network alongside the retailer
 // (e.g. "OpticsPlanet (Awin)") for internal accounting. Shoppers only
@@ -929,12 +909,28 @@ function renderPartCard(build, part, idx) {
   // the pending tag so one part can show both.
   var variantTag = part.variant
     ? '<span class="part-tag part-tag-variant">'+escH(part.variant)+'</span>' : '';
+  // Resolved once, used by the chip, the thumbnail and the buy row below.
+  // Declared before its first use on purpose: `var` hoists the NAME but not
+  // the value, so reading vr.label above this line would throw at render.
+  var vr = resolveVariant(part);
+  // The picked variant, from the catalog. Distinct from `part.variant` above,
+  // which is the builder's free text for a colour the catalog does not carry —
+  // the two coexist on purpose and a part can show both. A row whose live
+  // variant is gone still gets a label here, off the snapshot.
+  var chosenTag = vr.label
+    ? '<span class="part-tag part-tag-chosen'+(vr.live ? '' : ' part-tag-archived')+'">'+escH(vr.label)+'</span>' : '';
   var verifiedHtml = history.length ? buildVerifiedHtml(build.id, idx, history) : '';
-  var affiliateHtml = renderAffiliateRow(part);
+  var affiliateHtml = renderAffiliateRow(part, vr);
 
-  // Thumbnail: default variant's primary_image_url when we have a real
-  // product; hand-typed pending parts have no refId and get the fallback slot.
-  var thumbUrl = part.refId ? IMAGE_BY_PRODUCT_ID[part.refId] : null;
+  // Thumbnail, in preference order: the CHOSEN variant's own photo, then the
+  // photo captured in the snapshot when it was picked, then the product's
+  // default-variant photo. The last step is a deliberate compromise and the
+  // reason the picker (PR B) shows a swatch instead: 244 of 649 live variants
+  // have no image of their own, and showing a Black barrel's photo next to a
+  // row labelled "Gold / TiN" is worse than showing no photo. Here the label
+  // sits directly beside it, so the photo reads as the product rather than as
+  // a claim about the colour.
+  var thumbUrl = vr.imageUrl || (part.refId ? IMAGE_BY_PRODUCT_ID[part.refId] : null);
   var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
   var thumbHtml = thumbUrl
     ? '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>'
@@ -947,7 +943,7 @@ function renderPartCard(build, part, idx) {
         '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
         '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
         '<div class="part-model">'+escH(part.name||'Unnamed part')+'</div>'+
-        ((pendingTag || variantTag) ? '<div class="part-tags">'+variantTag+pendingTag+'</div>' : '')+
+        ((pendingTag || variantTag || chosenTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+'</div>' : '')+
         verifiedHtml+
       '</div>'+
     '</div>'+
@@ -955,38 +951,137 @@ function renderPartCard(build, part, idx) {
   '</div>';
 }
 
+// ── The chosen variant ──────────────────────────────────────────────────
+// A part names one variant. Resolve it LIVE for image and label so a
+// renamed or re-photographed variant updates everywhere; fall back to the
+// denormalised snapshot fields when the live row is gone (retired variants
+// are filtered out of the query, so "gone" and "retired" land here alike).
+//
+// variantId is null for two legitimate reasons and both must render: an
+// off-catalog pending part has no product at all, and a build posted before
+// this shipped has no variantId on any row. Neither is an error.
+function resolveVariant(part) {
+  var live = part.variantId ? VARIANT_BY_ID[part.variantId] : null;
+  if (live) {
+    return {
+      live: true,
+      id: live.id,
+      label: window.variantLabel(live),
+      imageUrl: live.primary_image_url || null,
+      msrp: live.msrp != null ? Number(live.msrp) : null,
+    };
+  }
+  // Snapshot fallback. The label is recomputed from the stored color/finish
+  // rather than trusting the stored label string, so a formula change reaches
+  // old rows too; the stored variantLabel is the last resort, for rows whose
+  // colour/finish we never captured.
+  // variantColor / variantFinish, NOT color / finish. `finish` on a snapshot
+  // row is already taken: it is the Paint Job & Finish OBJECT from #86
+  // ({shop, color, stipple}), which has its own nested `color`. Reusing
+  // either key would collide with a field the armory whitelist exists to
+  // protect, so the variant's two axes are prefixed.
+  var fromSnapshot = window.variantLabel({
+    variant_label: part.variantLabel, color: part.variantColor, finish: part.variantFinish,
+  });
+  return {
+    live: false,
+    id: part.variantId || null,
+    label: fromSnapshot || '',
+    imageUrl: part.imageUrl || null,
+    msrp: null,          // never stored in the snapshot; MSRP moves
+  };
+}
+
+// Every live listing for ONE variant, cheapest-fresh first (the array is
+// already sorted that way by loadAffiliates).
+function listingsForVariant(productId, variantId) {
+  var aff = AFFILIATE_BY_PRODUCT_ID[productId];
+  if (!aff || !variantId) return [];
+  return aff.listings.filter(function(l) { return l.variantId === variantId; });
+}
+
 // Only rendered when the part maps to a real product that has at least one
 // affiliate listing across any of its variants. Hand-typed pending parts
 // have no refId; products without seller coverage have no lookup entry;
 // both silently omit the CTA row.
-function renderAffiliateRow(part) {
+function renderAffiliateRow(part, vr) {
   if (!part.refId) return '';
   var aff = AFFILIATE_BY_PRODUCT_ID[part.refId];
-  if (!aff || !aff.hero) return '';
+  if (!aff || !aff.hero) {
+    // No listing anywhere on the product. MSRP is the only number there is,
+    // so it shows — labelled, and with no Buy button to misread it against.
+    if (vr && vr.msrp != null) {
+      return '<div class="part-affiliate">'+
+        '<div class="part-affiliate-info">'+
+          '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
+          '<span class="part-affiliate-msrp-tag">MSRP</span>'+
+        '</div></div>';
+    }
+    return '';
+  }
 
-  var hero = aff.hero;
+  // ── THE THREE TIERS ───────────────────────────────────────────────────
+  // In order, per spec. The load-bearing change from the previous version is
+  // tier 1: a listing on the CHOSEN variant, priced and linked. Before this,
+  // a build page quoted a product-wide range — "From $157.49 up to $164.49"
+  // on a Streamlight TLR-7 X — and the reader could not tell which of the two
+  // was on the gun. 424 of 649 live variants have a fresh feed-verified price
+  // of their own, so for most parts the exact number is simply available.
+  //
+  // "Fresh" is isStalePrice()'s rule, not just a date: a link no feed has
+  // ever matched (op_last_matched_by null) is never treated as priced, or a
+  // hand-typed last_checked would pass as verification.
+  var mine = listingsForVariant(part.refId, vr && vr.id);
+  var minePriced = mine.filter(function(l){ return l.price != null && !l.stale; });
+  var tier1 = minePriced.length ? minePriced[0] : null;
+
   var multi = aff.listings.length > 1;
+  var hero  = tier1 || aff.hero;   // the row the button goes to
+  var priceHtml, msrpNote = '';
 
-  // Price label: single listing → exact price, multi with a range → "From $X",
-  // no price we can stand behind (missing, or stale per isStalePrice) →
-  // "Check price".
-  var priceHtml;
-  if (aff.minPrice != null && multi && aff.maxPrice !== aff.minPrice) {
-    priceHtml = '<span class="part-affiliate-price">From $'+aff.minPrice.toFixed(2)+'</span>'+
-                '<span class="part-affiliate-range">up to $'+aff.maxPrice.toFixed(2)+'</span>';
+  if (tier1) {
+    // TIER 1 — this variant's own live listing. Price and destination are
+    // the same row, which is the invariant the whole sort order exists for.
+    priceHtml = '<span class="part-affiliate-price">$'+tier1.price.toFixed(2)+'</span>';
+  } else if (vr && vr.msrp != null) {
+    // TIER 2 — no listing on this variant. MSRP, always LABELLED, with the
+    // product's own live price beside it so the reader has something real to
+    // compare against. Never an unlabelled number where a buy price belongs:
+    // Icarus A.C.E. XL EVO in FDE is $415 MSRP with no listing, while the
+    // Black one sells at $379.99 — quoting either alone is misleading.
+    priceHtml = '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
+                '<span class="part-affiliate-msrp-tag">MSRP</span>';
+    if (aff.minPrice != null) {
+      msrpNote = '<span class="part-affiliate-range">from $'+aff.minPrice.toFixed(2)+
+                 (hero.partnerName ? ' at '+escH(hero.partnerName) : '')+'</span>';
+    }
   } else if (aff.minPrice != null) {
-    priceHtml = '<span class="part-affiliate-price">$'+aff.minPrice.toFixed(2)+'</span>';
-  } else if (hero.price != null && !hero.stale) {
-    priceHtml = '<span class="part-affiliate-price">$'+hero.price.toFixed(2)+'</span>';
+    // TIER 3 — no variant listing, no MSRP. The product's live price, with
+    // "from" wording, because it is explicitly not this variant's price.
+    priceHtml = '<span class="part-affiliate-price">From $'+aff.minPrice.toFixed(2)+'</span>'+
+                (aff.maxPrice !== aff.minPrice
+                  ? '<span class="part-affiliate-range">up to $'+aff.maxPrice.toFixed(2)+'</span>'
+                  : '');
   } else {
     priceHtml = '<span class="part-affiliate-price">Check price</span>';
   }
 
-  var stockHtml = aff.anyInStock
-    ? '<span class="part-affiliate-stock in">In stock</span>'
-    : (aff.listings.every(function(l){ return l.in_stock === false; })
+  // Stock follows the row the button goes to when that row is this variant's;
+  // otherwise it stays a product-level statement, as before.
+  var stockHtml;
+  if (tier1) {
+    stockHtml = tier1.in_stock === true
+      ? '<span class="part-affiliate-stock in">In stock</span>'
+      : tier1.in_stock === false
         ? '<span class="part-affiliate-stock out">Out of stock</span>'
-        : '');
+        : '';
+  } else {
+    stockHtml = aff.anyInStock
+      ? '<span class="part-affiliate-stock in">In stock</span>'
+      : (aff.listings.every(function(l){ return l.in_stock === false; })
+          ? '<span class="part-affiliate-stock out">Out of stock</span>'
+          : '');
+  }
 
   var partnerHtml = hero.partnerName
     ? '<span class="part-affiliate-partner">at <strong>'+escH(hero.partnerName)+'</strong>'+stockHtml+'</span>'
@@ -995,7 +1090,7 @@ function renderAffiliateRow(part) {
   var btnLabel = hero.partnerName ? 'Buy at '+escH(hero.partnerName)+' ↗' : 'View listing ↗';
 
   var mainRow = '<div class="part-affiliate">'+
-      '<div class="part-affiliate-info">'+priceHtml+partnerHtml+'</div>'+
+      '<div class="part-affiliate-info">'+priceHtml+msrpNote+partnerHtml+'</div>'+
       '<a class="part-affiliate-btn" href="'+escH(hero.url)+'" target="_blank" rel="noopener sponsored nofollow">'+btnLabel+'</a>'+
     '</div>';
 
@@ -1004,9 +1099,7 @@ function renderAffiliateRow(part) {
   var optionsLabel = 'See all '+aff.listings.length+' options';
   var headerRow =
     '<div class="part-affiliate-variant-header">'+
-      (aff.activeAxes.length
-        ? '<div class="part-affiliate-variant-header-label">'+escH(aff.activeAxes.map(function(a){ return a.label; }).join(' / '))+'</div>'
-        : '')+
+      '<div class="part-affiliate-variant-header-label">Option</div>'+
       '<div class="part-affiliate-variant-header-note">Prices and availability may vary based on promotions and in-stock items.</div>'+
     '</div>';
   var variantRows = aff.listings.map(function(l) {
