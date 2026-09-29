@@ -141,10 +141,34 @@ Server-side machinery is already solved: `netlify/functions/build-og.mjs` render
 cards through the Netlify Image CDN at 1200×900 (4:3), with routes and canonicals done.
 A loadout card is the same machinery with a different composition.
 
-**Image hosting:** all 231 catalog images are hotlinked from external CDNs
-(opticsplanet 82, bigcommerce 87, sigsauer 65, and others). Nothing is in Supabase
-storage. AG's decision is to keep hotlinking for now. Be aware this is a single point
-of failure across the catalog with nothing watching it.
+**Image hosting:** all 231 catalog images are hotlinked from external hosts, spread
+across **26 distinct domains**. Nothing is in Supabase storage. Counted per product,
+over the default variant each page actually renders — an earlier version of this
+paragraph quoted per-*variant* figures (82 / 87 / 65) against the 231-product
+denominator, and they summed to 234, more than the total they were a subset of.
+
+| host | products | share |
+|---|---|---|
+| `cdn11.bigcommerce.com` | 86 | **37%** |
+| `www.opticsplanet.com` | 35 | 15% |
+| `www.sigsauer.com` | 15 | 6.5% |
+| 23 other hosts | 95 | 41% |
+
+**BigCommerce is the concentration, but it is not one retailer.**
+`cdn11.bigcommerce.com` is multi-tenant: the 86 images sit under **12 different store
+paths** (`/s-<hash>/`), so they are twelve independent merchants' storefronts sharing
+one CDN hostname, not one shop. The largest single store is `s-t13gqpo9l1` with 40
+products (17% of the catalog); the rest tail off from 14 down to 1.
+
+That matters for what the risk actually is. A BigCommerce outage takes 37% of the
+catalog's images at once, but so does any one of those twelve merchants
+re-platforming, re-slugging their product URLs, or simply closing — and each of those
+is far likelier than the CDN going down. There is no single throat to choke and
+nothing watching any of it.
+
+AG's decision is to keep hotlinking for now. The cheap mitigation, when it is worth
+doing, is a scheduled HEAD-check across all 231 URLs that reports breakage, rather
+than a migration into Supabase storage.
 
 ---
 
