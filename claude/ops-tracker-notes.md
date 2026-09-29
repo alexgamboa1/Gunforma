@@ -120,6 +120,50 @@ loader, and `remixGuide()`'s own cloner. The brief said two. A field missing
 from any one of them is deleted on the next save, silently, which is how
 `finish` was lost before #86.
 
+### The AvantLink gap, counted — 83 variants nobody pays us for
+
+The image backfill surfaced a commercial number, not a technical one. Of the
+244 live variants with no photo, **83 have no live retailer link at all** — so
+no feed carries them, no photo can be fetched, and **no click on them can earn
+anything**. They are variants of products that ARE live on the site.
+
+Eleven brands, by variant count:
+
+| brand | variants | products |
+|---|---|---|
+| Norsso | 19 | 8 |
+| Grayguns | 13 | 3 |
+| Icarus Precision | 13 | 5 |
+| ECM Precision | 9 | 3 |
+| Armory Craft | 6 | 3 |
+| Zaffiri Precision | 6 | 4 |
+| Tactical Development | 5 | 1 |
+| True Precision | 4 | 3 |
+| MCARBO | 3 | 2 |
+| Sig Sauer | 3 | 2 |
+| Parker Mountain Machine | 2 | 2 |
+
+**Read it as the AvantLink case, not a backlog.** Every one of these is a
+colour someone might build with and we cannot monetise, because the only
+network we are on is Awin and OpticsPlanet does not stock them. Norsso alone
+is 19 variants across all 8 of its products — a brand we list in full and earn
+nothing from. Grayguns and Icarus Precision are 13 each, and Icarus is in one
+of the two real builds on the site.
+
+The shape of the argument for an application: *these are the products our
+builders actually pick, the ones your merchants already carry, and here is the
+per-variant coverage we can prove.* That is a stronger pitch than a catalogue
+count, and it is now a measured list rather than an impression.
+
+**Not being hand-filled.** Until a variant has its own photo the picker and
+the build row show a colour swatch with the label — never the default
+variant's photo standing in for the chosen colour. The swatch is a correct
+answer; a wrong photo is not. Hand-filling 83 images to decorate variants that
+earn nothing is the wrong order of work.
+
+Regenerate the list with `node scripts/export-missing-variant-images.mjs` —
+the "no live link" rows in the CSV are exactly this set.
+
 **Still not done, and it is the same item as the last three sessions.** The
 claim walk has still not been run end to end by a second account in one
 sitting. The real build count went into this session at 2 and came out at 2.
