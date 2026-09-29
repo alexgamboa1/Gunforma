@@ -294,6 +294,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <!-- Before the page code: loadCatalog calls window.variantLabel. -->
 <script src="js/variant-label.js"></script>
+<!-- After variant-label.js: the swatch labels its own alt text. -->
+<script src="js/variant-swatch.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/redact.js"></script>
@@ -465,6 +467,11 @@ async function loadCatalog(platformId) {
         // has exactly one default. The null guards stay anyway, because
         // "currently zero" is a fact about today's data, not an invariant,
         // and a retired last variant would produce it.
+        // Every LIVE variant, for the color step. The query already returns
+        // them all — only the default was being read. Retired ones are
+        // excluded by .is('product_variants.retired_at', null) above, so a
+        // retired color cannot be offered.
+        variants:      (r.product_variants || []),
         variantId:     dv ? dv.id : null,
         variantLabel:  dv ? window.variantLabel(dv) : '',
         variantColor:  dv && dv.color  ? dv.color  : null,
@@ -669,14 +676,53 @@ function filterCards(k, q) {
     : '<div class="picker-empty-state">No matches — try the custom part option below.</div>';
 }
 
+// Two-step for a product with a color choice, one-step for everything else.
+// openColorStep() returns false when there is nothing to choose — 81 of 231
+// products have exactly one live variant — so those add in a single click
+// exactly as before, and the button still reads "+ Add" for them.
 function addCatalogPart(k, itemId) {
   const item = (CATALOG[k]||[]).find(i => i.id===itemId);
   if (!item) return;
-  state.parts.push({ uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false,
-    variantId: item.variantId, variantLabel: item.variantLabel,
-    variantColor: item.variantColor, variantFinish: item.variantFinish,
-    imageUrl: item.image });
+  if (PartPicker.openColorStep(k, item)) return;
+  addPartWithVariant(k, item, item.variantId);
+}
+
+// The one place a catalog part is pushed onto state.parts, reached from both
+// the single-variant path and the color step. Keeping it single means the five
+// snapshot fields cannot be set correctly on one path and forgotten on the
+// other.
+function addPartWithVariant(k, item, variantId) {
+  const chosen = (item.variants || []).find(v => v.id === variantId) || null;
+  state.parts.push({
+    uid:'p'+(uid++), refId:item.id, category:k, brand:item.brand, name:item.name, pending:false,
+    variantId:     chosen ? chosen.id : (item.variantId || null),
+    // Recomputed from the chosen row rather than copied off the item, which
+    // carries the DEFAULT variant's label.
+    variantLabel:  chosen ? window.variantLabel(chosen) : (item.variantLabel || ''),
+    variantColor:  chosen ? (chosen.color  || null) : (item.variantColor  || null),
+    variantFinish: chosen ? (chosen.finish || null) : (item.variantFinish || null),
+    // The CHOSEN variant's own photo, or nothing. Never the default's — a
+    // Black barrel's photo above the words "Gold / TiN" looks like an answer.
+    // The build row falls back to a swatch, which is honest.
+    imageUrl:      chosen ? (chosen.primary_image_url || null) : (item.image || null),
+  });
   PartPicker.closePickerAfterAdd(k);
+}
+
+// Named in the color step's inline onclick, so PartPicker.init() asserts both
+// exist at mount rather than letting a renamed function ship a row that looks
+// right and does nothing.
+function pickVariant(k, itemId, variantId) {
+  const item = (CATALOG[k]||[]).find(i => i.id===itemId);
+  if (!item) return;
+  addPartWithVariant(k, item, variantId);
+}
+
+// Back to the grid. A full re-render rather than restoring saved markup: the
+// available list may have changed while the step was open.
+function cancelVariantPick(k) {
+  renderParts();
+  PartPicker.scrollToCategory(k);
 }
 function addCustomPart(k) {
   const cat = CATEGORIES.find(function (c) { return c.key === k; });

@@ -151,6 +151,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* contain, not cover, matching the post-build picker: these are product
    shots at the manufacturer's aspect ratio, and cropping one to fill an
    88px square hides the part it is meant to identify. */
+.part-thumb.part-thumb-swatch { padding: 0; background: #fff; }
+.part-thumb-swatch-fill { display: block; width: 100%; height: 100%; }
 .part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
 .part-thumb-fallback { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 4px; }
 .part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -165,6 +167,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* The variant the builder actually picked, from the catalog — distinct from
    .part-tag-variant, which is their free-text note for a colour the catalog
    does not carry. A part can carry both. */
+/* "See other options" rows now carry a swatch or photo, so they need the
+   media slot the picker uses. Same 46px box, same contain fit. */
+.part-affiliate-variant-row .variant-media { flex-shrink: 0; width: 40px; height: 40px; border-radius: 4px; background: #f7f7f5; border: 0.5px solid #eee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.part-affiliate-variant-row .variant-media img { width: 100%; height: 100%; object-fit: contain; padding: 3px; box-sizing: border-box; background: #fff; display: block; }
+.part-affiliate-variant-row .variant-media-swatch { display: block; width: 100%; height: 100%; }
+.part-affiliate-variant-row.is-chosen { background: #f4faf6; }
+.part-affiliate-variant-mine { font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1f4d33; background: #eaf5ee; border: 0.5px solid #8fc9a8; border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: 1px; }
+.part-affiliate-variant-none { font-size: 10px; color: #a8a5a0; font-style: italic; white-space: nowrap; }
 .part-tag-chosen { color: #1f4d33; background: #eaf5ee; border-color: #8fc9a8; font-weight: 700; }
 /* The live variant row is gone (retired or deleted) and this label came from
    the snapshot. Muted rather than hidden: the build is a record of what was
@@ -404,6 +414,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
+<script src="js/variant-swatch.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -508,7 +519,6 @@ var AFFILIATE_BY_PRODUCT_ID = {};
 // productId -> primary_image_url from the default variant. Separate from
 // AFFILIATE_BY_PRODUCT_ID because a product can have an image without any
 // affiliate link (and vice-versa).
-var IMAGE_BY_PRODUCT_ID = {};
 // Every LIVE variant by id, whether or not it has a listing. The buy-row
 // grouping below deliberately drops variants with no affiliate_links, but a
 // build can name one: Icarus Precision A.C.E. XL EVO sells in FDE, Gray and
@@ -517,6 +527,11 @@ var IMAGE_BY_PRODUCT_ID = {};
 // .is('retired_at', null) filter is what removes it — and the row then falls
 // back to the denormalised snapshot fields.
 var VARIANT_BY_ID = {};
+// Same rows, grouped by product, for the "See other options" panel. That panel
+// lists EVERY live color, not only the ones with a listing — Icarus Precision
+// A.C.E. XL EVO sells in FDE, Gray and ODG with a listing on none of them, and
+// a panel that hid them would tell a reader the part comes in one color.
+var VARIANTS_BY_PRODUCT_ID = {};
 
 async function loadBuild() {
   // Served at two URLs: /b/:id (the shareable one, rewritten to build-og.mjs
@@ -621,10 +636,14 @@ async function loadAffiliates(build) {
   // Cache the default variant's image per product — used by the part-card
   // thumbnail regardless of whether the product also has affiliate links.
   (data || []).forEach(function(v) {
-    if (v.is_default && v.primary_image_url && !IMAGE_BY_PRODUCT_ID[v.product_id]) {
-      IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
-    }
+    // NOTE: the product's default-variant photo is deliberately NOT cached
+    // any more. It existed only as a thumbnail fallback, and that fallback is
+    // the thing this feature must not do — see renderPartCard below. Leaving
+    // a populated-but-unread cache here would just invite someone to wire it
+    // back up.
     VARIANT_BY_ID[v.id] = v;
+    if (!VARIANTS_BY_PRODUCT_ID[v.product_id]) VARIANTS_BY_PRODUCT_ID[v.product_id] = [];
+    VARIANTS_BY_PRODUCT_ID[v.product_id].push(v);
   });
 
   // Group variants by product, flatten to (variant, link) rows, drop
@@ -922,19 +941,36 @@ function renderPartCard(build, part, idx) {
   var verifiedHtml = history.length ? buildVerifiedHtml(build.id, idx, history) : '';
   var affiliateHtml = renderAffiliateRow(part, vr);
 
-  // Thumbnail, in preference order: the CHOSEN variant's own photo, then the
-  // photo captured in the snapshot when it was picked, then the product's
-  // default-variant photo. The last step is a deliberate compromise and the
-  // reason the picker (PR B) shows a swatch instead: 244 of 649 live variants
-  // have no image of their own, and showing a Black barrel's photo next to a
-  // row labelled "Gold / TiN" is worse than showing no photo. Here the label
-  // sits directly beside it, so the photo reads as the product rather than as
-  // a claim about the colour.
-  var thumbUrl = vr.imageUrl || (part.refId ? IMAGE_BY_PRODUCT_ID[part.refId] : null);
+  // Thumbnail, in strict preference order:
+  //   1. the CHOSEN variant's own photo — live first, so a re-photographed
+  //      variant updates everywhere, then the copy stored in the snapshot
+  //   2. a COLOUR SWATCH built from that variant's colour
+  //   3. only for a part with no variant at all (an off-catalog pending part):
+  //      the "Pending" / "No photo" slot
+  //
+  // It used to fall back to the product's DEFAULT-variant photo. That is
+  // the one thing this feature must not do: it puts a Black barrel's photo above the words "Gold / TiN", which
+  // looks like an answer. 244 of 649 live variants have no photo of their own,
+  // so it was not a rare path, and seven default variants were themselves
+  // carrying the wrong colour's photo until 2026-09-29.
+  //
+  // A swatch plus the label is a complete answer. Same renderer as the picker
+  // and the options panel, so all three agree about what a colour looks like.
+  var chosenColor = vr.live
+    ? (VARIANT_BY_ID[vr.id] || null)
+    : { color: part.variantColor, finish: part.variantFinish, variant_label: part.variantLabel,
+        primary_image_url: part.imageUrl || null };
+  var thumbUrl = vr.imageUrl || null;
   var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
-  var thumbHtml = thumbUrl
-    ? '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>'
-    : '<div class="part-thumb"><div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div></div>';
+  var thumbHtml;
+  if (thumbUrl) {
+    thumbHtml = '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>';
+  } else if (chosenColor && (chosenColor.color || chosenColor.variant_label)) {
+    var sw = window.variantSwatch(chosenColor.color);
+    thumbHtml = '<div class="part-thumb part-thumb-swatch"><span class="part-thumb-swatch-fill" style="'+sw.css+'"></span></div>';
+  } else {
+    thumbHtml = '<div class="part-thumb"><div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div></div>';
+  }
 
   return '<div class="part-card">'+
     '<div class="part-card-top">'+
@@ -1035,7 +1071,6 @@ function renderAffiliateRow(part, vr) {
   var minePriced = mine.filter(function(l){ return l.price != null && !l.stale; });
   var tier1 = minePriced.length ? minePriced[0] : null;
 
-  var multi = aff.listings.length > 1;
   var hero  = tier1 || aff.hero;   // the row the button goes to
   var priceHtml, msrpNote = '';
 
@@ -1094,29 +1129,76 @@ function renderAffiliateRow(part, vr) {
       '<a class="part-affiliate-btn" href="'+escH(hero.url)+'" target="_blank" rel="noopener sponsored nofollow">'+btnLabel+'</a>'+
     '</div>';
 
-  if (!multi) return mainRow;
+  // ── "See other options" — every live color, not only the buyable ones ──
+  // Same rows, same swatch and same label as the picker's color step: one
+  // design, two mount points. A color with no listing still appears, with its
+  // MSRP and no button, because the alternative is telling the reader this
+  // part comes in one color.
+  //
+  // Ordered default-first then by label, matching PartPicker.variantsOf().
+  // PostgREST returns embedded rows in arbitrary order, so the second key is
+  // what stops the list reshuffling between requests.
+  var allVariants = (VARIANTS_BY_PRODUCT_ID[part.refId] || []).slice().sort(function(a, b) {
+    if (!!b.is_default !== !!a.is_default) return a.is_default ? -1 : 1;
+    var al = window.variantLabel(a), bl = window.variantLabel(b);
+    return al < bl ? -1 : al > bl ? 1 : (a.id < b.id ? -1 : 1);
+  });
 
-  var optionsLabel = 'See all '+aff.listings.length+' options';
+  // Nothing to open when there is only one color. 81 of 231 products are in
+  // that state and a one-row "see other options" panel is a control that
+  // opens to say nothing.
+  if (allVariants.length < 2) return mainRow;
+
+  var optionsLabel = 'See all ' + allVariants.length + ' colors';
   var headerRow =
     '<div class="part-affiliate-variant-header">'+
-      '<div class="part-affiliate-variant-header-label">Option</div>'+
+      '<div class="part-affiliate-variant-header-label">Color</div>'+
       '<div class="part-affiliate-variant-header-note">Prices and availability may vary based on promotions and in-stock items.</div>'+
     '</div>';
-  var variantRows = aff.listings.map(function(l) {
-    var lPrice = (l.price != null && !l.stale) ? '$'+l.price.toFixed(2) : 'Check price';
-    var lStock = l.in_stock === true
-      ? '<span class="part-affiliate-stock in">In stock</span>'
-      : l.in_stock === false
-        ? '<span class="part-affiliate-stock out">Out of stock</span>'
-        : '';
-    var lPartner = l.partnerName ? 'at <strong>'+escH(l.partnerName)+'</strong>' : '';
-    var lBtn = l.partnerName ? escH(l.partnerName)+' ↗' : 'View ↗';
-    return '<div class="part-affiliate-variant-row">'+
+
+  var variantRows = allVariants.map(function(v) {
+    var vLabel = window.variantLabel(v) || 'This color';
+    var mine   = vr && vr.id === v.id;
+    // Cheapest fresh listing on THIS variant — the same tier-1 rule the main
+    // row uses, so the two cannot disagree about a color's price.
+    var own    = listingsForVariant(part.refId, v.id)
+                   .filter(function(l){ return l.price != null && !l.stale; });
+    var lst    = own.length ? own[0] : null;
+    var anyLink = listingsForVariant(part.refId, v.id)[0] || null;
+
+    var priceHtml, btnHtml;
+    if (lst) {
+      priceHtml = '$' + lst.price.toFixed(2) +
+                  (lst.partnerName ? ' at <strong>' + escH(lst.partnerName) + '</strong>' : '') +
+                  (lst.in_stock === true
+                    ? '<span class="part-affiliate-stock in">In stock</span>'
+                    : lst.in_stock === false
+                      ? '<span class="part-affiliate-stock out">Out of stock</span>' : '');
+      btnHtml = '<a class="part-affiliate-variant-btn" href="'+escH(lst.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+                  (lst.partnerName ? escH(lst.partnerName)+' ↗' : 'View ↗')+'</a>';
+    } else if (v.msrp != null) {
+      // Tier 2, labelled. Never a bare number where a buy price is expected.
+      priceHtml = '$' + Number(v.msrp).toFixed(2) + '<span class="part-affiliate-msrp-tag">MSRP</span>';
+      btnHtml = anyLink
+        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+            (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
+        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+    } else {
+      priceHtml = 'Check price';
+      btnHtml = anyLink
+        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+            (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
+        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+    }
+
+    return '<div class="part-affiliate-variant-row'+(mine ? ' is-chosen' : '')+'">'+
+        window.variantMediaHtml(v, 'variant-media')+
         '<div class="part-affiliate-variant-info">'+
-          '<span class="part-affiliate-variant-label">'+escH(l.variantLabel)+'</span>'+
-          '<span class="part-affiliate-variant-sub">'+lPrice+' '+lPartner+' '+lStock+'</span>'+
+          '<span class="part-affiliate-variant-label">'+escH(vLabel)+
+            (mine ? '<span class="part-affiliate-variant-mine">On this build</span>' : '')+'</span>'+
+          '<span class="part-affiliate-variant-sub">'+priceHtml+'</span>'+
         '</div>'+
-        '<a class="part-affiliate-variant-btn" href="'+escH(l.url)+'" target="_blank" rel="noopener sponsored nofollow">'+lBtn+'</a>'+
+        btnHtml+
       '</div>';
   }).join('');
 

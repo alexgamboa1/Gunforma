@@ -163,7 +163,11 @@
       '</div>' +
       '<div class="part-card-footer">' +
         (item.price ? '<div class="part-card-price">$' + item.price + '</div>' : '<div class="part-card-price">&mdash;</div>') +
-        '<button class="part-card-add add" onclick="addCatalogPart(\'' + catKey + '\',\'' + item.id + '\')">+ Add</button>' +
+        // "Choose color →" when a choice follows, "+ Add" when it does not.
+        // A button promising an add and then asking a question is the small
+        // dishonesty that makes people stop trusting a control.
+        '<button class="part-card-add add" onclick="addCatalogPart(\'' + catKey + '\',\'' + item.id + '\')">' +
+          (hasColorChoice(item) ? 'Choose color &rarr;' : '+ Add') + '</button>' +
       '</div>' +
     '</div>';
   }
@@ -247,6 +251,104 @@
     c.render();
     if (c.onChange) c.onChange();
     scrollToCategory(k);
+  }
+
+  // ===== COLOR STEP =====
+  //
+  // WHERE IT SITS IN THE FLOW
+  // Open a category -> grid of product cards -> "Choose color →" -> this list
+  // -> the part is added and the picker closes, exactly as a single-variant
+  // "+ Add" does today. It replaces the contents of #cards-<catKey>, which is
+  // the same container filterCards() already rewrites — so neither page's
+  // buildCategoryBlock() needs to change, and the two copies of it stay
+  // identical rather than drifting on a change like this.
+  //
+  // NOT inline inside the card. The grid is sized to its photo and collapses
+  // to one column under 560px (#82, after #81 shipped 1:1 cards that painted a
+  // barrel at 98x55 on a phone). A variable-height swatch row inside a card
+  // reintroduces exactly that problem and reflows the grid around whichever
+  // card is open. A full-width row per color gives each one a swatch, a label
+  // and a price without fighting for space.
+  //
+  // And it is the same list as gunforma-build-detail.html's "See other
+  // options" panel — same rows, same swatch, same label. Designed once.
+
+  // Live variants for a catalog item, default first, then by label so the
+  // order is stable between renders. PostgREST returns embedded rows in
+  // arbitrary order; without the second key the list reshuffles per request.
+  function variantsOf(item) {
+    var vs = (item && item.variants) || [];
+    return vs.slice().sort(function (a, b) {
+      if (!!b.is_default !== !!a.is_default) return a.is_default ? -1 : 1;
+      var al = global.variantLabel(a), bl = global.variantLabel(b);
+      return al < bl ? -1 : al > bl ? 1 : (a.id < b.id ? -1 : 1);
+    });
+  }
+
+  // THE SINGLE-VARIANT RULE. 81 of 231 products have exactly one live variant,
+  // and for those this step must not exist: "+ Add" adds in one click and
+  // records that sole variant. Keyed on LIVE variants, so a product that drops
+  // to one through retirement stops offering a choice with nobody editing a
+  // flag.
+  function hasColorChoice(item) {
+    return variantsOf(item).length > 1;
+  }
+
+  function priceLineFor(v) {
+    // MSRP only, and labelled. The picker has no listing data — affiliate.js
+    // is not loaded on the post pages — so quoting a bare number here would
+    // put an unlabelled MSRP where a builder reads a buy price. The live
+    // retailer price belongs on the build page, which has the listings.
+    if (v.msrp == null || v.msrp === '') return '';
+    return '<span class="variant-row-price">$' + Number(v.msrp).toFixed(2) +
+           '<span class="variant-row-msrp">MSRP</span></span>';
+  }
+
+  function variantRowHtml(catKey, item, v) {
+    var label = global.variantLabel(v);
+    return '<button type="button" class="variant-row" ' +
+             'onclick="pickVariant(\'' + catKey + '\',\'' + escAttr(item.id) + '\',\'' + escAttr(v.id) + '\')">' +
+        global.variantMediaHtml(v, 'variant-media') +
+        '<span class="variant-row-body">' +
+          '<span class="variant-row-label">' + (label || 'This color') + '</span>' +
+          (v.is_default ? '<span class="variant-row-std">Standard</span>' : '') +
+        '</span>' +
+        priceLineFor(v) +
+        '<span class="variant-row-go">Add →</span>' +
+      '</button>';
+  }
+
+  // The whole step. Rendered into #cards-<catKey>; the page's back button
+  // restores the grid by re-rendering.
+  function variantListHtml(catKey, item) {
+    var vs = variantsOf(item);
+    return '<div class="variant-step">' +
+        '<div class="variant-step-head">' +
+          '<button type="button" class="variant-step-back" onclick="cancelVariantPick(\'' + catKey + '\')">← All options</button>' +
+          '<div class="variant-step-title">' +
+            '<span class="variant-step-brand">' + escAttr(item.brand || '') + '</span>' +
+            '<span class="variant-step-name">' + escAttr(item.name || '') + '</span>' +
+          '</div>' +
+          '<div class="variant-step-count">' + vs.length + ' colors</div>' +
+        '</div>' +
+        '<div class="variant-list">' + vs.map(function (v) {
+          return variantRowHtml(catKey, item, v);
+        }).join('') + '</div>' +
+      '</div>';
+  }
+
+  // Swap the grid for the color step. Returns false when the product has no
+  // choice to offer, so the caller adds straight away — the branch is here
+  // rather than in each page, because there are two pages.
+  function openColorStep(catKey, item) {
+    if (!hasColorChoice(item)) return false;
+    var host = document.getElementById('cards-' + catKey);
+    if (!host) return false;           // grid not open: caller falls through
+    host.innerHTML = variantListHtml(catKey, item);
+    var count = document.getElementById('picker-count-' + catKey);
+    if (count) count.textContent = variantsOf(item).length + ' colors';
+    host.scrollIntoView({ block: 'nearest' });
+    return true;
   }
 
   // ===== CSS =====
@@ -378,6 +480,51 @@
 @media (max-width: 560px) {
   .part-cards-grid { grid-template-columns: 1fr; }
 }
+
+/* ============ COLOR STEP ============ */
+/* Replaces the card grid inside #cards-<k>. Full-width rows, not a grid: each
+   color gets a swatch, a label and a price without competing for width, and
+   the same shape is reused by the build page's "See other options" panel. */
+.variant-step { padding: 4px 0 2px; }
+.variant-step-head { display: flex; align-items: center; gap: 12px; padding: 4px 4px 12px; border-bottom: 0.5px solid #e8e8e8; margin-bottom: 8px; }
+.variant-step-back { background: none; border: 0; padding: 4px 6px; margin-left: -6px; font: inherit; font-size: 11px; font-weight: 600; color: #4a9edd; cursor: pointer; border-radius: 4px; }
+.variant-step-back:hover { background: #f2f8fd; }
+.variant-step-back:focus-visible { outline: 2px solid #4a9edd; outline-offset: 1px; }
+.variant-step-title { flex: 1; min-width: 0; }
+.variant-step-brand { display: block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a8a5a0; }
+.variant-step-name { display: block; font-size: 12.5px; font-weight: 600; color: #1a1a1a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.variant-step-count { font-size: 10px; color: #a8a5a0; white-space: nowrap; }
+
+.variant-list { display: flex; flex-direction: column; gap: 6px; }
+
+/* A row is a button: the whole thing is the target, so there is no small
+   "add" link to miss on a phone. */
+.variant-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 8px 10px; background: #fff; border: 0.5px solid #e8e8e8; border-radius: 6px; cursor: pointer; text-align: left; font: inherit; transition: border-color 0.12s, background 0.12s; }
+.variant-row:hover { border-color: #4a9edd; background: #fbfdff; }
+.variant-row:focus-visible { outline: 2px solid #4a9edd; outline-offset: 1px; }
+
+/* The media slot. object-fit: contain, never cover — a catalog shot on white
+   identifies the part, and cropping hides the thing being chosen by. Build
+   photos are the opposite case and stay cover; see CLAUDE.md. */
+.variant-media { flex-shrink: 0; width: 46px; height: 46px; border-radius: 4px; background: #f7f7f5; border: 0.5px solid #eee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.variant-media img { width: 100%; height: 100%; object-fit: contain; padding: 3px; box-sizing: border-box; background: #fff; display: block; }
+/* The swatch fills its slot. A swatch plus the label is a complete answer;
+   an empty box is a bug. */
+.variant-media-swatch { display: block; width: 100%; height: 100%; }
+
+.variant-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.variant-row-label { font-size: 12.5px; font-weight: 600; color: #1a1a1a; }
+.variant-row-std { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #6b6b6b; }
+.variant-row-price { font-size: 12px; font-weight: 700; color: #1a1a1a; white-space: nowrap; }
+.variant-row-msrp { font-size: 8.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #6b6b6b; background: #f2f1ee; border: 0.5px solid #d8d5cd; border-radius: 3px; padding: 1px 3px; margin-left: 4px; vertical-align: 1px; }
+.variant-row-go { font-size: 11px; font-weight: 700; color: #4a9edd; white-space: nowrap; }
+
+@media (max-width: 560px) {
+  .variant-step-count { display: none; }
+  .variant-row { padding: 7px 8px; gap: 9px; }
+  .variant-media { width: 40px; height: 40px; }
+  .variant-row-go { display: none; }   /* the whole row is the target anyway */
+}
 `;
 
   var cssInjected = false;
@@ -409,7 +556,7 @@
     // Fail at mount rather than at first click. These are the two globals the
     // emitted onclick attributes name; a page that renamed one would ship
     // cards that look right and do nothing.
-    ['addCatalogPart', 'removePart'].forEach(function (fn) {
+    ['addCatalogPart', 'removePart', 'pickVariant', 'cancelVariantPick'].forEach(function (fn) {
       if (typeof global[fn] !== 'function') {
         throw new Error('PartPicker.init: the page must define a global ' + fn + '()');
       }
@@ -429,5 +576,9 @@
     scrollToCategory: scrollToCategory,
     closePickerAfterAdd: closePickerAfterAdd,
     noteVariant: noteVariant,
+    hasColorChoice: hasColorChoice,
+    variantsOf: variantsOf,
+    variantListHtml: variantListHtml,
+    openColorStep: openColorStep,
   };
 })(window);

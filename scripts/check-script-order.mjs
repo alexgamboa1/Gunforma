@@ -26,7 +26,14 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // global -> [file that defines it, files that consume it]
 const RULES = [
-  { global: 'variantLabel', defines: 'js/variant-label.js', consumers: ['js/affiliate.js'] },
+  { global: 'variantLabel', defines: 'js/variant-label.js',
+    consumers: ['js/affiliate.js', 'js/variant-swatch.js', 'js/part-picker.js'] },
+  // variant-swatch.js calls window.variantLabel for its alt text, and
+  // part-picker.js calls window.variantMediaHtml for the color step. Both are
+  // call-time reads, so a wrong ORDER survives today — the check enforces it
+  // anyway, because "it happens to work because of when we call it" is not a
+  // thing to leave to memory.
+  { global: 'variantMediaHtml', defines: 'js/variant-swatch.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
 ];
 
