@@ -1,4 +1,4 @@
-# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-09-28)
+# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-09-29)
 
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
@@ -36,6 +36,93 @@ by Claude through the artifact database tool. The "manual deploy log" was never 
 This file was wrong for two weeks and nothing surfaced it. Same failure the START-HERE
 doc warns about, inside the notes file for the tool built to prevent it. Re-read the
 artifact before trusting any description of it, including this one.
+
+---
+
+## Changes made 2026-09-29 (variant selection, PRs #93–#94)
+
+**Share card: it was never the transform.** The og:image URL answers a
+redditbot UA in 0.18s — 200, `image/jpeg`, 124,716 bytes, edge-cached. What
+was broken is that **`twitter:image` has been the literal string
+`[object Object]` on every `/b/` page**, from `esc(image)` where the og:image
+line correctly reads `esc(image.url)`. `buildImage()` returned a string until
+og:image:width/height needed the dimensions, and one call site was missed.
+iMessage reads og:image and was fine, which is why the symptom arrived as
+"Reddit doesn't render it" and pointed at the wrong layer. Fixed in `#93`,
+with `og:image:type` added — which needed `fm=jpg` on the transform, because
+the Image CDN content-negotiates (`*/*` → jpeg, `image/webp,…` → **webp**),
+so any declared type is otherwise wrong for half the callers.
+
+`scripts/check-og-image.mjs` could not have caught it: it matched
+`<meta property=` only, and `twitter:*` are `name=`. **The check written to
+catch exactly this class of bug was structurally blind to the tag.** That is
+the third instance of the family this file keeps recording — the guard exists,
+runs, passes, and is looking slightly to the left of the problem.
+
+**Sync check to do, not a bug.** `True Precision P365 3.1" Non-Threaded
+Barrels` in Black/Nitride has been stale since **09-21** while its other six
+colours matched nightly. Cause found: two feed rows share MPN `TPP365BXBL` —
+the True Precision listing (`mid 2524871`, $144.99) and a **Faxon
+Firearms-branded duplicate of the same barrel** (`mid 5045176`, $161.49) — so
+the candidate-conflict guard correctly refused to guess and withheld the
+write. `sync_drift_review` id **84**. The link had been pinned to the Faxon
+row, so its last written price was $161.49 for a $144.99 barrel; the buy URL
+was always the correct True Precision page.
+
+Re-pointed by hand — one row, `op_gtin = 00719104536178` (the only identifier
+that distinguishes the two; the Faxon row carries none), `op_mpn` cleared per
+CLAUDE.md's re-point procedure, `op_merchant_product_id = 2524871`. Confirmed
+on the next run: conflicts 11 → 10, matched 414 → 415, and `TPP365BXBL`
+appears zero times in the conflict log against twice before.
+
+**And it will come back.** T1 matches on stored `op_mpn`, the sync refills a
+null identifier, and both feed rows carry the same MPN — so one good run, then
+the conflict returns. A durable fix needs the sync to prefer a
+gtin-confirmed row over an mpn-confirmed one, which is a sync change and was
+deliberately out of scope. **There is no tier that matches on
+`op_merchant_product_id` at all** — it is written for audit and never read,
+which is worth knowing before anyone tries to fix a mapping by setting it.
+
+**Two test builds became one.** The tracker's long-standing "two real builds,
+two fixtures in public" is now two real builds and nothing else: the older
+fixtures are gone, and `TEST MONKEY` (alt account `tjmiller`, posted 09-29 to
+walk post → approve → claim → share) was set to `status = 'pending'` rather
+than deleted, so the claim history survives. Sitemap 245 → 243; `/u/tjmiller`
+went with it, since a profile is only listed if it has an approved build.
+
+**The feed carries one row per colour, and the sync already maps them.** This
+was the open question that decided whether per-variant pricing is ever
+possible, and the answer is that it already works: `affiliate_links.variant_id`
+is `NOT NULL`, **326 of 493 live links hang off a non-default variant**, and
+424 of 649 live variants have a fresh feed-verified price. The brief's premise
+— "affiliate links are per product, no per-variant links exist" — was wrong,
+and it was load-bearing: it is why the buy link was going to stay
+product-level. A TLR-7 X read "From $157.49 up to $164.49" with no way to tell
+which of the two lights was on the gun.
+
+**Three label copies had drifted, in production.** `finish` was a label axis
+in `product-page.mjs` and in neither of the other two, so True Precision
+P365-FUSE read `Black / DLC` and `Black / Nitride` at
+`/parts/slides/true-precision-p365-fuse` and **`Black` twice — $375.25 and
+$318.99, indistinguishable** — in the catalog buy row and on every build page.
+Now one parity-tested pair. Also made absolute rather than differential: the
+old formula showed only the axes a product's listings disagreed on, so a
+label's meaning changed when a sibling variant was added or retired, and that
+label is now written into `parts_snapshot`.
+
+**Build guards 3 → 6.** `variant label copies agree`, `shared globals loaded`,
+`snapshot whitelists agree`. Each was watched failing on the real bug it
+guards, not a synthetic one. `shared globals loaded` caught two pages
+unprompted during the work.
+
+**The armory has three snapshot whitelists, not two** — the writer, the draft
+loader, and `remixGuide()`'s own cloner. The brief said two. A field missing
+from any one of them is deleted on the next save, silently, which is how
+`finish` was lost before #86.
+
+**Still not done, and it is the same item as the last three sessions.** The
+claim walk has still not been run end to end by a second account in one
+sitting. The real build count went into this session at 2 and came out at 2.
 
 ---
 
