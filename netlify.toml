@@ -87,6 +87,25 @@
   status = 404
   force = true
 
+# claude/ — the working notes, the Loadouts spec and the session prompts. Added
+# 2026-09-29 as a new directory, WITHOUT a rule here, and served 200 on
+# gunforma.com from that moment: the ops tracker's artifact URL, the launch
+# reasoning, the AvantLink gap, which builds were test fixtures.
+#
+# Nothing linked to them and they are not in sitemap.xml, so discovery needed a
+# crawler to guess the path — but robots.txt is `Allow: /` with no
+# x-robots-tag, so nothing stopped one either.
+#
+# This is precisely the trap the comment below already warned about — "a NEW
+# .md ... will be publicly served until it gets a rule here" — and the warning
+# did not save us, because it is written about ROOT-level files and this was a
+# new directory. Read it as being about both.
+[[redirects]]
+  from = "/claude/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
 # Extension wildcards do NOT work here. Netlify only treats "*" as a splat at
 # the END of a path, so "/*.md" matches nothing — verified on deploy preview
 # 13, where both .md files still returned 200 under such a rule. (It does not
