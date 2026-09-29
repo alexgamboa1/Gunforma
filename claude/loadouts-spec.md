@@ -194,3 +194,46 @@ Independent of the five invites — those go out regardless.
 6. **OG collage function**, modelled on `build-og.mjs`.
 
 Steps 1–2 touch no front-end code and can run in parallel with anything else.
+
+---
+
+## 9. Variant selection landed first — what Loadouts inherits
+
+Added 2026-09-29, after PRs #94 and #95.
+
+`parts_snapshot` now carries which VARIANT a part is, not just which product:
+`variantId`, `variantLabel`, `variantColor`, `variantFinish`, `imageUrl`.
+Loadouts reuses `parts_snapshot`'s shape (§4), so it inherits these for free —
+and it inherits one bug with them.
+
+**Not `color` / `finish`.** Both names were already taken on a snapshot row:
+`finish` is the Paint Job & Finish OBJECT from #86 (`{shop, color, stipple}`),
+which carries its own nested `color`. The variant's two axes are prefixed for
+that reason. Anything reading these rows must use the prefixed names.
+
+**The armory PRESERVES the chosen colour but DISPLAYS the wrong one.**
+Verified by running its own whitelist functions over a real non-default
+snapshot: `variantId`, `variantLabel`, `variantColor` and `variantFinish` all
+survive a save with no changes, even with `PRODUCTS_BY_ID` empty — the three
+whitelists pass them through rather than recomputing from the product default.
+
+But `selectedPartHtml()` renders `PRODUCTS_BY_ID[p.refId].image`, which is the
+**default variant's** photo, and prints no colour label at all. So a build
+whose barrel is Gold shows the Black photo, with nothing on screen saying
+Gold. The data is right and the picture is wrong.
+
+This is not worth fixing in the parked page — the whole point of parking it is
+that it is coming back rebuilt — but **Loadouts must not copy that renderer**.
+Use the chosen variant's own photo, and a colour swatch when it has none:
+`js/variant-swatch.js` is the shared module for exactly this, already used by
+`js/part-picker.js`'s colour step and by the build page's "See other options"
+panel. 244 of 649 live variants have no photo, so the swatch is the common
+case rather than the fallback, and every one of the 54 distinct colour values
+in the catalogue resolves to something drawable.
+
+**And never the default variant's photo as a stand-in.** That fallback was in
+`gunforma-build-detail.html` until #95 and was removed rather than kept: it
+puts a Black barrel's photo above the words "Gold / TiN", which looks like an
+answer. Seven DEFAULT variants were themselves carrying another colour's photo
+until 2026-09-29 — `scripts/check-variant-image-sku.mjs` now watches for that
+daily.
