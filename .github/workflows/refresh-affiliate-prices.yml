@@ -61,7 +61,19 @@ jobs:
 
       - name: Unit tests
         working-directory: scripts
-        run: node --test
+        # The glob is load-bearing — do NOT go back to a bare `node --test`.
+        # With no file arguments Node uses its OWN discovery patterns, which
+        # are wider than this repo's `*.test.mjs` convention: they also match
+        # `*-test.mjs`, `*_test.mjs` and `test-*.mjs`. So bare `node --test`
+        # picked up scripts/smoke-test.mjs — a live signed-in end-to-end test
+        # owned by .github/workflows/smoke-test.yml, whose SMOKE_TEST_* secrets
+        # this workflow does not have and should not have. Node runs each
+        # discovered file as a child process and counts a non-zero exit as a
+        # failed test, so the step exited 1 and the sync below never ran.
+        # That silently killed the nightly price refresh from 2026-09-25 to
+        # 2026-09-29 — four missed runs, no price_history rows, and the job
+        # failing for a reason that had nothing to do with prices.
+        run: node --test *.test.mjs
 
       - name: Refresh affiliate prices
         working-directory: scripts
