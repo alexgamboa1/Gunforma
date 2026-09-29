@@ -89,8 +89,13 @@ for (const [label, path] of BUILDS) {
   ok(page.status === 200, '  page returns 200', page.status);
 
   const tag = (prop) => (html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`)) || [])[1];
+  // twitter:* are name=, not property=. A property-only reader is exactly how
+  // twitter:image sat broken through every check this file already had.
+  const nameTag = (n) => (html.match(new RegExp(`<meta name="${n}" content="([^"]*)"`)) || [])[1];
   const img = (tag('og:image') || '').replace(/&amp;/g, '&');
   const w = tag('og:image:width'), h = tag('og:image:height'), alt = tag('og:image:alt');
+  const declaredType = tag('og:image:type');
+  const twImg = (nameTag('twitter:image') || '').replace(/&amp;/g, '&');
 
   ok(!!img, '  og:image present');
   ok(img.startsWith(SITE + '/'), '  og:image is an absolute apex URL', img.slice(0, 60) + '…');
@@ -106,6 +111,15 @@ for (const [label, path] of BUILDS) {
      `  og:image:width/height declared`, `${w}x${h}, expected ${expectW}x${expectH}`);
   ok(!!alt && alt.length > 3, '  og:image:alt present', alt);
 
+  // twitter:image shipped as the literal string "[object Object]" — the tag
+  // was present, non-empty, and worthless. "present and non-empty" is not
+  // the assertion; "is a URL, and that URL answers" is. Checked as its own
+  // tag rather than assumed equal to og:image, because the bug was exactly
+  // the two disagreeing.
+  ok(/^https:\/\//.test(twImg), '  twitter:image is an https URL',
+     twImg === '' ? '<missing>' : twImg.slice(0, 60) + (twImg.length > 60 ? '…' : ''));
+  ok(twImg === img, '  twitter:image matches og:image');
+
   // Swap the origin so a preview tests ITS OWN transform, not production's.
   const fetchUrl = img.replace(SITE, origin);
   if (fetchUrl !== img) note('fetching from this origin instead of the apex', origin);
@@ -120,8 +134,36 @@ for (const [label, path] of BUILDS) {
     headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' },
   });
   ok(res.status === 200, '  og:image returns 200 to an anonymous crawler', res.status);
-  ok((res.headers.get('content-type') || '').startsWith('image/'), '  served as an image',
-     res.headers.get('content-type'));
+  const servedType = (res.headers.get('content-type') || '').split(';')[0].trim();
+  ok(servedType.startsWith('image/'), '  served as an image', servedType);
+
+  // og:image:type against the bytes' own header, not against a constant.
+  // The Image CDN content-negotiates on Accept unless the format is pinned,
+  // so this also fails if fm=jpg is ever dropped from ogTransform — which is
+  // the change that would quietly turn this declaration into a lie.
+  ok(!!declaredType, '  og:image:type present', declaredType);
+  ok(declaredType === servedType, '  og:image:type matches what the server sent',
+     `declared ${declaredType}, served ${servedType}`);
+
+  // The crawler that actually motivated this: it prefers the Twitter tags.
+  // Only fetched when the tag parsed as a URL — a malformed tag has already
+  // been reported above, and letting fetch() throw on it would replace four
+  // legible FAIL lines with a stack trace, which reads as "the check is
+  // broken" rather than "the page is broken". A guard must fail loudly and
+  // still finish.
+  if (/^https:\/\//.test(twImg)) {
+    let twStatus;
+    try {
+      const twRes = await fetch(twImg.replace(SITE, origin), {
+        redirect: 'follow', credentials: 'omit',
+        headers: { 'User-Agent': 'Mozilla/5.0 (compatible; redditbot/1.0; +http://www.reddit.com/feedback)' },
+      });
+      twStatus = twRes.status;
+    } catch (e) {
+      twStatus = 'fetch failed: ' + e.message;
+    }
+    ok(twStatus === 200, '  twitter:image returns 200 to an anonymous crawler', twStatus);
+  }
 
   if (res.status === 200) {
     const buf = Buffer.from(await res.arrayBuffer());
