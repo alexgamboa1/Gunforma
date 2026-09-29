@@ -58,7 +58,6 @@ var NAV_MENU =
   '<div class="nav-menu" id="nav-menu">' +
     '<a href="gunforma-builds.html">Builds</a>' +
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-    '<a href="gunforma-armory.html">Armory</a>' +
   '</div>';
 
 // Admin entries. Convenience only — /admin and /admin-post are protected by
@@ -187,7 +186,6 @@ function ensureAdminNavStyles() {
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-          '<a class="nav-link' + activeIf('gunforma-armory.html')        + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" id="nav-signin">…</a>' +
@@ -205,7 +203,6 @@ function ensureAdminNavStyles() {
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-          '<a class="nav-link' + activeIf('gunforma-armory.html')        + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +

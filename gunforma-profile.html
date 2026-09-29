@@ -207,7 +207,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <a class="nav-link" href="index.html">Home</a>
     <a class="nav-link" href="gunforma-builds.html">Builds</a>
     <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
-    <a class="nav-link" href="gunforma-armory.html">Armory</a>
   </div>
   <div class="nav-right">
     <a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>
@@ -218,7 +217,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div class="nav-menu" id="nav-menu">
     <a href="gunforma-builds.html">Builds</a>
     <a href="gunforma-parts-catalog.html">Parts Catalog</a>
-    <a href="gunforma-armory.html">Armory</a>
   </div>
 </nav>
 
@@ -638,15 +636,23 @@ function routeForBuild(b) {
   if (b.status === 'approved') {
     return buildPath(b.id, b.name);
   }
-  if (b.status === 'draft' && isPartsOnlyDraft(b)) {
-    return 'gunforma-armory.html?build=' + encodeURIComponent(b.id);
-  }
+  // A parts-only draft used to open in the Armory. While the Armory is
+  // hidden (see CLAUDE.md, "The Armory is parked") every draft goes to
+  // post-build's edit mode instead, which hydrates from parts_snapshot and
+  // handles a draft with no photos or description perfectly well.
+  // Checked before removing: 0 draft builds exist, so nothing was orphaned.
+  // Restore this branch when the Armory comes back as Loadouts.
   return 'gunforma-post-build.html?id=' + encodeURIComponent(b.id) + '&mode=edit';
 }
 
 // True only when the draft holds nothing post-build owns. Conservative by
 // construction: any photo, any story, or any activity tag keeps it in
 // post-build so nothing a user wrote becomes unreachable.
+//
+// CURRENTLY UNCALLED, on purpose. Its only caller was routeForBuild()'s
+// Armory branch, which is commented out while the Armory is parked (see
+// CLAUDE.md, "The Armory is parked"). Kept so restoring that branch is a
+// revert and not a rewrite — this is not dead code to tidy away.
 function isPartsOnlyDraft(b) {
   const photos = Array.isArray(b.build_photos) ? b.build_photos.length : 0;
   const hasStory = typeof b.description === 'string' && b.description.trim() !== '';
