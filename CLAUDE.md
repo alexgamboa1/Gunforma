@@ -154,6 +154,30 @@ That is twice now that a rewrite behaved differently in production than
 locally, and twice that a green local test covered it. A rewrite's behaviour
 is not verified until it has been observed on a deploy.
 
+### The nav exists in 14 places, two of which are functions
+
+**Changing the site nav means changing fourteen files.** Every root HTML page
+carries its own hardcoded copy — desktop `.nav-links` *and* the mobile
+`.nav-menu`, so two links per page — and on top of those:
+
+- `js/nav.js`, for the pages that mount it rather than hardcoding
+- **`netlify/functions/product-page.mjs`** — server-renders `/parts/:category/:slug`
+- **`netlify/functions/parts-index.mjs`** — server-renders `/parts`
+
+The last two are the ones that get missed. They are Netlify functions, so they
+do not turn up when you sweep `*.html`, and they cannot be checked with
+`netlify dev` alone the way a static page can — but they render real nav to
+real crawlers on two of the most crawled routes on the site.
+
+Worked example: removing the Armory link (this repo's "park the Armory"
+change). Every HTML page and `js/nav.js` came back clean while **production
+`/parts` still served the link**, because those two functions hold their own
+copy. The sweep that found it was `grep -rn` across `*.html`, `*.js` AND
+`*.mjs` — not a sweep of the pages.
+
+Verify a nav change by fetching the *served* HTML of a `/parts/...` URL on a
+deploy preview, not by reading the page sources.
+
 ## Deploy previews and auth
 
 `js/site-url.js` returns the preview origin on
@@ -952,3 +976,60 @@ perfectly clean draft still loses every catalog part to a platform switch,
 and `isDirty()` is false for it — so the dirty check waves through exactly
 the case where *saved* work is on the line. Key the prompt to what would
 actually be destroyed.
+
+## The Armory is parked — do not restore it by accident
+
+`gunforma-armory.html` is **deliberately hidden and deliberately still in the
+repo**. It has no nav link on any page, it is not in `sitemap.mjs`, and it
+carries `<meta name="robots" content="noindex">`. It still works, and it still
+answers on its own URL — no 404, no redirect, no auth gate.
+
+**None of that is a bug.** A future session finding a working page with no way
+to reach it will want to helpfully wire the nav back up. Don't.
+
+**Why it is parked:** the page works — `#83`–`#86` fixed its picker, save,
+remix and photos — but it is the wrong object. It produces *draft builds*,
+which is what `gunforma-post-build.html` already owns. It is coming back
+rebuilt as **Loadouts**: a distinct object with its own `loadouts` table,
+rather than another producer of rows in `builds`. That is the whole reason it
+is parked — not that it is broken, but that "a saved parts list" and "a posted
+build" are the same row today and should not be. The full spec is being
+written up separately; this paragraph is the rationale until it lands.
+
+**What went with it, on purpose:**
+
+- The **four published guides** — Sig P365 Concealed Carry / Home Defense /
+  Range & Competition / Duty — go dark, because the Armory's Guides tab is
+  their only surface. **The rows, the `guides` table and the rendering code
+  are all intact.** Verified at the time: `gunforma-armory.html` holds the
+  only `from('guides')` query anywhere — no other page, no Netlify function,
+  no script, and nothing in `sitemap.xml` or `_redirects`. Nothing has an FK
+  to `guides` and no view is built on it. Those titles become content pieces
+  later.
+- **Add to Armory build** on the parts-catalog detail panel — element, handler
+  and `.detail-btn.armory` CSS all removed. A control that opens nothing is
+  worse than no control.
+- The profile's **parts-only-draft** route (`routeForBuild()`), which sent
+  those drafts to the Armory. Every draft now goes to post-build's edit mode,
+  which handles one with no photos or description. `isPartsOnlyDraft()` is
+  kept, uncalled, so restoring that branch is a revert and not a rewrite.
+
+**What is untouched, because it is how this comes back:** post-build's
+`ARMORY_POST_KEY` handshake, the Armory's own `?prefill=` and `?build=`
+handling, the `guides` table and its four rows, everything under
+`part_favorites`, and `/gunforma-armory.html` in `auth-callback.html`'s
+`ALLOWED_NEXT` — that last one is a redirect allowlist, not a nav surface, and
+dropping it would break sign-in return for anyone who reaches the parked page
+directly.
+
+**Favourites are NOT part of this.** `part_favorites` is a standalone
+watchlist that will back price-drop emails. The heart lives on
+`gunforma-parts-catalog.html` (the only write path), the catalog has a
+"My Favorites" tab, and the profile has a "Favorite parts" tab — all three
+read the table directly and none of them needs the Armory. The Armory only
+ever *read* favourites, to sort them first in its picker. Leave all of it
+alone.
+
+**The whole change is one commit** so that restoring it is one `git revert`.
+Keep it that way: if you park or unpark something else here, don't spread it
+across commits.

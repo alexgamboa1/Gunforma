@@ -11,6 +11,12 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Armory — Gunforma</title>
 <link rel="canonical" href="https://gunforma.com/gunforma-armory.html" />
+<!-- Parked, not removed. The page still works and still answers on its own
+     URL — no 404, no redirect, no auth gate — but it is out of the nav and
+     out of sitemap.mjs, so noindex is what drops it from search cleanly
+     rather than leaving orphaned indexed URLs. Remove this line when the
+     Armory returns as Loadouts. See CLAUDE.md, "The Armory is parked". -->
+<meta name="robots" content="noindex" />
 <meta name="description" content="Gunforma Armory — assemble a build from the parts catalog, save drafts, and remix curated guides." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>

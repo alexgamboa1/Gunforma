@@ -334,8 +334,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-btn.buy     { background: #4a9edd; color: #fff; }
 .detail-btn.buy:hover { background: #2a7bbd; }
 .detail-btn.buy.disabled { background: #efece3; color: #999; cursor: not-allowed; pointer-events: none; }
-.detail-btn.armory  { background: #fff; color: #1a1a1a; border: 1px solid #d5d3ca; padding: 11px 16px; }
-.detail-btn.armory:hover { border-color: #4a9edd; color: #2a7bbd; }
 
 @media (max-width: 600px) {
   .detail-panel { max-width: none; }
@@ -416,7 +414,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <a class="nav-link" href="index.html">Home</a>
     <a class="nav-link" href="gunforma-builds.html">Builds</a>
     <a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>
-    <a class="nav-link" href="gunforma-armory.html">Armory</a>
   </div>
   <div class="nav-right">
     <a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>
@@ -427,7 +424,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div class="nav-menu" id="nav-menu">
     <a href="gunforma-builds.html">Builds</a>
     <a href="gunforma-parts-catalog.html">Parts Catalog</a>
-    <a href="gunforma-armory.html">Armory</a>
   </div>
 </nav>
 
@@ -555,14 +551,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="detail-platform-chips" id="detail-platform-chips"></div>
     </div>
   </div>
-  <!-- Footer actions are secondary now — the primary Buy CTA lives in the
-       affiliate block up in detail-body. Kept: favorite, Armory hand-off,
-       bookkeeping actions. -->
-  <div class="detail-actions" style="flex-direction:column; align-items:stretch;">
-    <div style="display:flex; gap:10px; align-items:center; width:100%;">
-      <button type="button" class="detail-fav-btn" id="detail-fav" aria-label="Favorite" aria-pressed="false">♡</button>
-      <button type="button" class="detail-btn armory" id="detail-armory">Add to Armory build</button>
-    </div>
+  <!-- Footer actions are secondary — the primary Buy CTA lives in the
+       affiliate block up in detail-body. Just the favourite heart now: the
+       "Add to Armory build" button next to it was removed when the Armory was
+       hidden (see CLAUDE.md, "The Armory is parked"). The two inline-styled
+       wrappers went with it — they existed only to sit two controls side by
+       side, and .detail-actions is already the flex row this needs. -->
+  <div class="detail-actions">
+    <button type="button" class="detail-fav-btn" id="detail-fav" aria-label="Favorite" aria-pressed="false">♡</button>
   </div>
 </aside>
 
@@ -1913,14 +1909,6 @@ function renderDetail(p) {
   favEl.classList.toggle('active', isFav);
   favEl.setAttribute('aria-pressed', String(isFav));
   favEl.onclick = function () { toggleFavoriteFromDetail(p.id); };
-
-  // Add-to-Armory hands the product id off via a URL param; Armory reads
-  // ?prefill=<uuid> on load, auto-selects the platform, and adds the part.
-  var armoryEl = document.getElementById('detail-armory');
-  armoryEl.onclick = function () {
-    if (!CURRENT_USER) { toast('Sign in to add parts to a build', 'gunforma-signin.html', 'Sign in'); return; }
-    window.location.href = 'gunforma-armory.html?prefill=' + encodeURIComponent(p.id);
-  };
 
 }
 

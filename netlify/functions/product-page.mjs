@@ -566,7 +566,6 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     '<a class="nav-link" href="index.html">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
     '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-    '<a class="nav-link" href="gunforma-armory.html">Armory</a>' +
   '</div>' +
   '<div class="nav-right">' +
     '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
@@ -577,7 +576,6 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
 '<div class="nav-menu" id="nav-menu">' +
   '<a href="gunforma-builds.html">Builds</a>' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
-  '<a href="gunforma-armory.html">Armory</a>' +
 '</div>' +
 '</nav>' +
 '<div class="breadcrumb">' +

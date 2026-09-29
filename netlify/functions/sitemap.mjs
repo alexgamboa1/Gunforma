@@ -42,7 +42,6 @@ const STATIC_PATHS = [
   '/',
   '/gunforma-builds.html',
   '/gunforma-parts-catalog.html',
-  '/gunforma-armory.html',
   '/parts',
   '/field-notes.html',
   '/gunforma-legal.html',
