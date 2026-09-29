@@ -165,6 +165,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* The variant the builder actually picked, from the catalog — distinct from
    .part-tag-variant, which is their free-text note for a colour the catalog
    does not carry. A part can carry both. */
+/* "See other options" rows now carry a swatch or photo, so they need the
+   media slot the picker uses. Same 46px box, same contain fit. */
+.part-affiliate-variant-row .variant-media { flex-shrink: 0; width: 40px; height: 40px; border-radius: 4px; background: #f7f7f5; border: 0.5px solid #eee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.part-affiliate-variant-row .variant-media img { width: 100%; height: 100%; object-fit: contain; padding: 3px; box-sizing: border-box; background: #fff; display: block; }
+.part-affiliate-variant-row .variant-media-swatch { display: block; width: 100%; height: 100%; }
+.part-affiliate-variant-row.is-chosen { background: #f4faf6; }
+.part-affiliate-variant-mine { font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1f4d33; background: #eaf5ee; border: 0.5px solid #8fc9a8; border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: 1px; }
+.part-affiliate-variant-none { font-size: 10px; color: #a8a5a0; font-style: italic; white-space: nowrap; }
 .part-tag-chosen { color: #1f4d33; background: #eaf5ee; border-color: #8fc9a8; font-weight: 700; }
 /* The live variant row is gone (retired or deleted) and this label came from
    the snapshot. Muted rather than hidden: the build is a record of what was
@@ -404,6 +412,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
+<script src="js/variant-swatch.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -517,6 +526,11 @@ var IMAGE_BY_PRODUCT_ID = {};
 // .is('retired_at', null) filter is what removes it — and the row then falls
 // back to the denormalised snapshot fields.
 var VARIANT_BY_ID = {};
+// Same rows, grouped by product, for the "See other options" panel. That panel
+// lists EVERY live color, not only the ones with a listing — Icarus Precision
+// A.C.E. XL EVO sells in FDE, Gray and ODG with a listing on none of them, and
+// a panel that hid them would tell a reader the part comes in one color.
+var VARIANTS_BY_PRODUCT_ID = {};
 
 async function loadBuild() {
   // Served at two URLs: /b/:id (the shareable one, rewritten to build-og.mjs
@@ -625,6 +639,8 @@ async function loadAffiliates(build) {
       IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
     }
     VARIANT_BY_ID[v.id] = v;
+    if (!VARIANTS_BY_PRODUCT_ID[v.product_id]) VARIANTS_BY_PRODUCT_ID[v.product_id] = [];
+    VARIANTS_BY_PRODUCT_ID[v.product_id].push(v);
   });
 
   // Group variants by product, flatten to (variant, link) rows, drop
@@ -1035,7 +1051,6 @@ function renderAffiliateRow(part, vr) {
   var minePriced = mine.filter(function(l){ return l.price != null && !l.stale; });
   var tier1 = minePriced.length ? minePriced[0] : null;
 
-  var multi = aff.listings.length > 1;
   var hero  = tier1 || aff.hero;   // the row the button goes to
   var priceHtml, msrpNote = '';
 
@@ -1094,29 +1109,76 @@ function renderAffiliateRow(part, vr) {
       '<a class="part-affiliate-btn" href="'+escH(hero.url)+'" target="_blank" rel="noopener sponsored nofollow">'+btnLabel+'</a>'+
     '</div>';
 
-  if (!multi) return mainRow;
+  // ── "See other options" — every live color, not only the buyable ones ──
+  // Same rows, same swatch and same label as the picker's color step: one
+  // design, two mount points. A color with no listing still appears, with its
+  // MSRP and no button, because the alternative is telling the reader this
+  // part comes in one color.
+  //
+  // Ordered default-first then by label, matching PartPicker.variantsOf().
+  // PostgREST returns embedded rows in arbitrary order, so the second key is
+  // what stops the list reshuffling between requests.
+  var allVariants = (VARIANTS_BY_PRODUCT_ID[part.refId] || []).slice().sort(function(a, b) {
+    if (!!b.is_default !== !!a.is_default) return a.is_default ? -1 : 1;
+    var al = window.variantLabel(a), bl = window.variantLabel(b);
+    return al < bl ? -1 : al > bl ? 1 : (a.id < b.id ? -1 : 1);
+  });
 
-  var optionsLabel = 'See all '+aff.listings.length+' options';
+  // Nothing to open when there is only one color. 81 of 231 products are in
+  // that state and a one-row "see other options" panel is a control that
+  // opens to say nothing.
+  if (allVariants.length < 2) return mainRow;
+
+  var optionsLabel = 'See all ' + allVariants.length + ' colors';
   var headerRow =
     '<div class="part-affiliate-variant-header">'+
-      '<div class="part-affiliate-variant-header-label">Option</div>'+
+      '<div class="part-affiliate-variant-header-label">Color</div>'+
       '<div class="part-affiliate-variant-header-note">Prices and availability may vary based on promotions and in-stock items.</div>'+
     '</div>';
-  var variantRows = aff.listings.map(function(l) {
-    var lPrice = (l.price != null && !l.stale) ? '$'+l.price.toFixed(2) : 'Check price';
-    var lStock = l.in_stock === true
-      ? '<span class="part-affiliate-stock in">In stock</span>'
-      : l.in_stock === false
-        ? '<span class="part-affiliate-stock out">Out of stock</span>'
-        : '';
-    var lPartner = l.partnerName ? 'at <strong>'+escH(l.partnerName)+'</strong>' : '';
-    var lBtn = l.partnerName ? escH(l.partnerName)+' ↗' : 'View ↗';
-    return '<div class="part-affiliate-variant-row">'+
+
+  var variantRows = allVariants.map(function(v) {
+    var vLabel = window.variantLabel(v) || 'This color';
+    var mine   = vr && vr.id === v.id;
+    // Cheapest fresh listing on THIS variant — the same tier-1 rule the main
+    // row uses, so the two cannot disagree about a color's price.
+    var own    = listingsForVariant(part.refId, v.id)
+                   .filter(function(l){ return l.price != null && !l.stale; });
+    var lst    = own.length ? own[0] : null;
+    var anyLink = listingsForVariant(part.refId, v.id)[0] || null;
+
+    var priceHtml, btnHtml;
+    if (lst) {
+      priceHtml = '$' + lst.price.toFixed(2) +
+                  (lst.partnerName ? ' at <strong>' + escH(lst.partnerName) + '</strong>' : '') +
+                  (lst.in_stock === true
+                    ? '<span class="part-affiliate-stock in">In stock</span>'
+                    : lst.in_stock === false
+                      ? '<span class="part-affiliate-stock out">Out of stock</span>' : '');
+      btnHtml = '<a class="part-affiliate-variant-btn" href="'+escH(lst.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+                  (lst.partnerName ? escH(lst.partnerName)+' ↗' : 'View ↗')+'</a>';
+    } else if (v.msrp != null) {
+      // Tier 2, labelled. Never a bare number where a buy price is expected.
+      priceHtml = '$' + Number(v.msrp).toFixed(2) + '<span class="part-affiliate-msrp-tag">MSRP</span>';
+      btnHtml = anyLink
+        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+            (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
+        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+    } else {
+      priceHtml = 'Check price';
+      btnHtml = anyLink
+        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+            (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
+        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+    }
+
+    return '<div class="part-affiliate-variant-row'+(mine ? ' is-chosen' : '')+'">'+
+        window.variantMediaHtml(v, 'variant-media')+
         '<div class="part-affiliate-variant-info">'+
-          '<span class="part-affiliate-variant-label">'+escH(l.variantLabel)+'</span>'+
-          '<span class="part-affiliate-variant-sub">'+lPrice+' '+lPartner+' '+lStock+'</span>'+
+          '<span class="part-affiliate-variant-label">'+escH(vLabel)+
+            (mine ? '<span class="part-affiliate-variant-mine">On this build</span>' : '')+'</span>'+
+          '<span class="part-affiliate-variant-sub">'+priceHtml+'</span>'+
         '</div>'+
-        '<a class="part-affiliate-variant-btn" href="'+escH(l.url)+'" target="_blank" rel="noopener sponsored nofollow">'+lBtn+'</a>'+
+        btnHtml+
       '</div>';
   }).join('');
 
