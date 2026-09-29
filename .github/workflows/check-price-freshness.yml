@@ -1,0 +1,147 @@
+name: Price freshness
+
+# Asks the catalogue what it is actually carrying, rather than asking the sync
+# how it went. See scripts/check-price-freshness.mjs for the full reasoning.
+#
+# THE NOTIFICATION LIVES HERE, NOT ON THE SYNC — deliberately.
+#
+# refresh-affiliate-prices.yml says failure is already covered: "if this
+# workflow fails, the account owner gets an email; no separate alerting to wire
+# up." It failed four nights running and nobody heard. GitHub sends that mail
+# ONCE per workflow and then stays quiet until it goes green again, and it
+# defaults to not mailing at all for runs you did not trigger — which is every
+# scheduled run. Nobody had ever watched it fire, which by this repo's own
+# standard means it was not a guard.
+#
+# Hanging the alert on the SYNC would have repeated that mistake in a new place:
+# it would still be the failing thing reporting on itself, and it would still
+# say nothing in the case that actually costs money — a sync that exits 0 having
+# written almost nothing. So the alert hangs on the independent observer, and it
+# fires on the state of the data, whatever the cause.
+#
+# It raises a GitHub ISSUE rather than sending mail. Three reasons: it needs no
+# secret and no third-party account, so there is nothing to provision or let
+# rot; an open issue is a standing signal that does not go quiet on the second
+# day; and issue notifications in your own repo are on by default, unlike
+# workflow-failure mail for runs you did not trigger. It comments on the
+# existing open issue rather than opening a second one, so a week of failures
+# is one thread with seven entries.
+
+on:
+  schedule:
+    # Same cadence and the same odd-minute habit as smoke-test.yml, offset to
+    # :41 so the two do not queue together. 02:41, 08:41, 14:41, 20:41 UTC.
+    #
+    # 08:41 UTC is the load-bearing one: the sync fires at 07:23 and takes about
+    # a minute, so this is the first check after each night's run and the gap
+    # between a failed sync and a raised issue is roughly an hour. Against the
+    # four days it took this time.
+    - cron: '41 2,8,14,20 * * *'
+  workflow_dispatch:
+    inputs:
+      drill:
+        description: 'Drill — force a failure to prove the alert path delivers. Does not touch data.'
+        required: false
+        type: boolean
+        default: false
+      threshold:
+        description: 'Override the stale-percentage threshold (blank = use the measured default, 15)'
+        required: false
+        type: string
+        default: ''
+
+# An issue-raising job that overlapped itself could open two issues for one
+# condition.
+concurrency:
+  group: check-price-freshness
+  cancel-in-progress: false
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      # Least privilege: the built-in GITHUB_TOKEN, contents read for checkout
+      # and issues write for the alert. No repo secret is involved anywhere in
+      # this workflow — see the script's header for why that is the point.
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # No `npm ci`. The script imports nothing and uses the public anon key,
+      # so it cannot fail on a dependency install or a missing secret — the two
+      # ways a monitor most often dies quietly alongside the thing it watches.
+
+      - name: Check price freshness
+        id: check
+        env:
+          DRILL:               ${{ inputs.drill == true && 'true' || 'false' }}
+          STALE_PCT_THRESHOLD: ${{ inputs.threshold }}
+        run: |
+          set -o pipefail
+          node scripts/check-price-freshness.mjs 2>&1 | tee freshness.log
+
+      - name: Raise or update the alert issue
+        if: failure() && steps.check.outcome == 'failure'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const log = fs.readFileSync('freshness.log', 'utf8');
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const drill = process.env.DRILL_FLAG === 'true';
+
+            // A stable marker, not the title — the title carries the current
+            // percentage and therefore changes between runs. Matching on it
+            // would open a fresh issue every time the number moved, which is
+            // exactly the noise that gets alerting muted.
+            const MARKER = '<!-- price-freshness-alert -->';
+            const title = drill
+              ? 'DRILL — price freshness alert path test'
+              : 'Price freshness degraded — stale share over threshold';
+
+            const body = [
+              MARKER,
+              drill
+                ? '**This is a drill.** It was triggered by hand to prove this alert path actually delivers. Nothing is wrong with price freshness — the real reading is in the log below. Close this issue.'
+                : 'The share of live `affiliate_links` carrying prices older than 48h is over the threshold. This check reads the table directly and does not depend on the sync reporting its own success, so a sync that exited 0 having written nothing will land here too.',
+              '',
+              '```',
+              log.trim(),
+              '```',
+              '',
+              `[Run](${runUrl})`,
+            ].join('\n');
+
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const existing = open.data.find(i => (i.body || '').includes(MARKER));
+
+            if (existing) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: existing.number,
+                body,
+              });
+              core.notice(`Commented on existing alert issue #${existing.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+              });
+              core.notice(`Opened alert issue #${created.data.number}`);
+            }
+        env:
+          DRILL_FLAG: ${{ inputs.drill == true && 'true' || 'false' }}

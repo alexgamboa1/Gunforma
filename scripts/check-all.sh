@@ -89,6 +89,14 @@ NOT_BUILD_CHECKS=(
   # .github/workflows/check-routes.yml.
   scripts/check-og-image.mjs
 
+  # Reads live affiliate_links to ask what share of the catalogue is carrying
+  # stale prices. Not a build guard: it is time-dependent, not tree-dependent,
+  # so a deploy that changed nothing could fail it and a deploy that broke the
+  # sync would pass. Refusing a deploy because last night's prices are old is
+  # the wrong lever. Runs from .github/workflows/check-price-freshness.yml on
+  # the smoke-test cadence, and raises a GitHub issue when it trips.
+  scripts/check-price-freshness.mjs
+
   # NOT a unit test, despite the name. It signs in as a real user and writes
   # to live Storage, so it needs SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD and a
   # serving origin. Runs from .github/workflows/smoke-test.yml, 4x daily.
