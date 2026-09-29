@@ -1070,6 +1070,31 @@ async function submitBuildEdit(status) {
   return { error: null, buildId: editState.buildId };
 }
 
+// submitBuild() reports refusals by RETURNING {error}, but supabase-js THROWS
+// for anything that fails below HTTP — `TypeError: Failed to fetch` for a
+// dropped connection, a blocked request, or a fetch aborted because the page
+// navigated (the session watchdog does exactly that on a failed token
+// refresh). Uncaught, that left the submit button stuck on "Submitting…" with
+// only a console trace.
+//
+// Deliberately NO rollback here, unlike gunforma-admin-post.html. That page
+// inserts status:'approved', so a half-finished publish is immediately public
+// and has to be deleted. This one inserts 'pending' or 'draft' — not public,
+// visible in the admin queue, and safe to leave for a human. Inventing a
+// delete on this page would be a new destructive path for no gain.
+async function submitOrDescribeThrow(status) {
+  try {
+    return await submitBuild(status);
+  } catch (thrown) {
+    const isNetwork = thrown instanceof TypeError ||
+                      /failed to fetch|networkerror|load failed/i.test(thrown && thrown.message || '');
+    console.error('submitBuild threw', thrown);
+    return { error: { message: isNetwork
+      ? 'The request never reached the server. Your session may have expired — reload and sign in, then check your profile before retrying in case it saved.'
+      : (thrown && thrown.message) || String(thrown) } };
+  }
+}
+
 async function publishBuild() {
   const btn = document.getElementById('publish-btn');
   if (btn.disabled) return;
@@ -1077,7 +1102,7 @@ async function publishBuild() {
   btn.disabled = true;
   btn.textContent = 'Submitting…';
 
-  const result = await submitBuild('pending');
+  const result = await submitOrDescribeThrow('pending');
 
   if (result.error) {
     // Only re-enable on failure so the user can retry. On success the button
@@ -1150,7 +1175,7 @@ async function saveDraft() {
     showToast('Rejected builds must be resubmitted for review');
     return;
   }
-  const result = await submitBuild('draft');
+  const result = await submitOrDescribeThrow('draft');
   if (result.error) {
     console.error(result.error);
     showToast(result.error.message || 'Something went wrong — try again');
