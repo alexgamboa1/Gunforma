@@ -76,9 +76,20 @@ export const OG_DEFAULT_H = 630;
 // deploy preview, which is correct — but it means the transform a preview
 // emits is executed by PRODUCTION. To check a preview's own transform, swap
 // the origin. scripts/check-og-image.mjs does exactly that.
+// fm=jpg is load-bearing, not tidying. WITHOUT it the Image CDN content-
+// negotiates on Accept and returns image/webp to anything that asks for it,
+// image/jpeg to anything that doesn't — measured on production:
+//
+//   Accept: */*                                -> image/jpeg
+//   Accept: image/avif,image/webp,image/*,*/*  -> image/webp
+//
+// which makes og:image:type unanswerable: whatever we declare is wrong for
+// half the callers. Pinning the format makes the declaration a fact for
+// every caller. Same rule as og:image:width/height — see the OG_W comment
+// above. Do not drop fm=jpg without also dropping og:image:type.
 function ogTransform(sourceUrl, fit = 'cover') {
   return SITE + '/.netlify/images?url=' + encodeURIComponent(sourceUrl) +
-         '&w=' + OG_W + '&h=' + OG_H + '&fit=' + fit;
+         '&w=' + OG_W + '&h=' + OG_H + '&fit=' + fit + '&fm=jpg';
 }
 
 // Builds are keyed by uuid. Anything that is not one 404s without a DB round
@@ -178,11 +189,17 @@ function heroPhotoUrl(build) {
 // only created a problem while the meta tags were hardcoded — so the tags
 // follow the image instead. A declared size the bytes do not have is the one
 // thing this whole change is trying not to ship.
+// type travels WITH the image for the same reason w and h do: the two cards
+// are different formats. The transform is pinned to JPEG (see ogTransform);
+// og-default.png is a PNG and is served unmodified. A hardcoded 'image/jpeg'
+// here would be correct for every build that has a photo and a lie for every
+// build that does not — which is the harder case to notice, because it is the
+// emptier one.
 function buildImage(build) {
   const photo = heroPhotoUrl(build);
   return photo
-    ? { url: ogTransform(photo), w: OG_W,         h: OG_H }
-    : { url: OG_DEFAULT,         w: OG_DEFAULT_W, h: OG_DEFAULT_H };
+    ? { url: ogTransform(photo), w: OG_W,         h: OG_H,         type: 'image/jpeg' }
+    : { url: OG_DEFAULT,         w: OG_DEFAULT_W, h: OG_DEFAULT_H, type: 'image/png'  };
 }
 
 // Describes the IMAGE, not the page — so it says what the card is showing
@@ -223,12 +240,19 @@ function metaBlock(build) {
     // large card rather than guessing from a portrait source.
     '<meta property="og:image:width" content="' + image.w + '"/>',
     '<meta property="og:image:height" content="' + image.h + '"/>',
+    '<meta property="og:image:type" content="' + esc(image.type) + '"/>',
     '<meta property="og:image:alt" content="' + esc(buildImageAlt(build)) + '"/>',
     '<meta property="og:url" content="' + esc(url) + '"/>',
     '<meta name="twitter:card" content="summary_large_image"/>',
     '<meta name="twitter:title" content="' + esc(title) + '"/>',
     '<meta name="twitter:description" content="' + esc(desc) + '"/>',
-    '<meta name="twitter:image" content="' + esc(image) + '"/>',
+    // image.url, not image. buildImage() returns {url,w,h,type}; this line
+    // stringified the whole object and shipped content="[object Object]" on
+    // every /b/ page — invisible in a browser, invisible to og:-only checks,
+    // and a broken card on any scraper that prefers the Twitter tags. It was
+    // a string here until og:image:width/height needed the dimensions.
+    // scripts/check-og-image.mjs now asserts this tag resolves and 200s.
+    '<meta name="twitter:image" content="' + esc(image.url) + '"/>',
     '<link rel="canonical" href="' + esc(url) + '"/>',
   ].join('\n');
 }
