@@ -41,6 +41,15 @@
 // is listed under NOT_BUILD_CHECKS with this reason.
 //
 //   node scripts/check-variant-image-sku.mjs
+//   DRILL=true node scripts/check-variant-image-sku.mjs   # force a failure
+//
+// DRILL exists because a green check proves the SCRIPT works and says nothing
+// about whether the ALERT is delivered. This one has only ever passed, so its
+// issue-raising branch had never executed — which by this repo's own standard
+// ("a guard nobody has watched fail is not a guard") made the alert path an
+// assumption. The drill forces the failure exit WITHOUT touching data, so the
+// path can be exercised on demand. Same idea as check-price-freshness.yml's.
+const DRILL = process.env.DRILL === 'true';
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
@@ -102,6 +111,13 @@ for (const f of findings) {
   console.log(`        variant "${f.shows}"${f.isDefault ? '  [DEFAULT]' : ''}  sku ${f.ownSku}`);
   console.log(`        photo is sku ${f.photoSku} = "${f.photoIs}"`);
   console.log(`        variant_id ${f.variantId}`);
+}
+
+if (DRILL) {
+  console.log('DRILL — forcing a failure to prove the alert path delivers.');
+  console.log(`The real reading is above: ${findings.length} finding(s) across ${checked} variants.`);
+  console.log('Nothing was read or written differently. Close the issue this opens.');
+  process.exit(1);
 }
 
 if (!findings.length) {

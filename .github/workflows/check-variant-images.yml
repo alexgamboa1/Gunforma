@@ -24,6 +24,12 @@ on:
     # grades the settled state rather than a half-written one.
     - cron: '11 9 * * *'
   workflow_dispatch:
+    inputs:
+      drill:
+        description: 'Drill — force a failure to prove the alert path delivers. Does not touch data.'
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
   group: check-variant-images
@@ -47,6 +53,8 @@ jobs:
       # public anon key, so it cannot die on a dependency or a missing secret.
       - name: Check variant image colours
         id: check
+        env:
+          DRILL: ${{ inputs.drill == true && 'true' || 'false' }}
         run: |
           set -o pipefail
           node scripts/check-variant-image-sku.mjs 2>&1 | tee variant-images.log
@@ -64,7 +72,16 @@ jobs:
             // matching on the title would open a fresh issue every time it
             // moved, which is the noise that gets alerting muted.
             const MARKER = '<!-- variant-image-colour-alert -->';
-            const body = [
+            const drill = process.env.DRILL_FLAG === 'true';
+            const body = drill ? [
+              MARKER,
+              '**This is a drill.** It was triggered by hand to prove this alert path actually delivers. ',
+              'Nothing is wrong with the catalogue — the real reading is in the log below, and no data was ',
+              'read or written differently. Close this issue.',
+              '',
+              '```', log.trim(), '```', '',
+              `[Run](${runUrl})`,
+            ].join('\n') : [
               MARKER,
               'One or more product variants are illustrated with a **different colour\'s photo**. ',
               'The image filename carries a sibling variant\'s SKU and not its own, which is provable rather than a guess.',
@@ -98,8 +115,12 @@ jobs:
             } else {
               const created = await github.rest.issues.create({
                 owner: context.repo.owner, repo: context.repo.repo,
-                title: 'A variant is illustrated with the wrong colour\'s photo',
+                  title: drill
+                  ? 'DRILL — variant image alert path test'
+                  : 'A variant is illustrated with the wrong colour\'s photo',
                 body,
               });
               core.notice(`Opened alert issue #${created.data.number}`);
             }
+        env:
+          DRILL_FLAG: ${{ inputs.drill == true && 'true' || 'false' }}
