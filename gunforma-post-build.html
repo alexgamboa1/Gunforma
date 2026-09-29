@@ -1065,13 +1065,34 @@ async function publishBuild() {
     : (state.parts.length ? 'Submitted — pending review' : 'Submitted — add parts to get it live'));
   btn.textContent = isResubmit ? 'Resubmitted — redirecting…' : 'Submitted — redirecting…';
 
-  // Send them to the just-submitted build's detail page. RLS lets owners
-  // see their own build regardless of status (auth.uid() = user_id), so
-  // a pending build renders fine here — and this is where they'll come
-  // back to check on status as it moves pending → approved.
+  // NOT /b/<slug>-<id>. That route is SERVER-RENDERED by
+  // netlify/functions/build-og.mjs, which makes its own PostgREST call with
+  // no user session and filters `status=eq.approved` — so a build that was
+  // pending one second ago gets a hard 404, "Build not found". Every builder
+  // who posted their own build landed there.
+  //
+  // The comment that used to be here is what caused it: it said RLS lets
+  // owners see their own build regardless of status, so a pending build
+  // renders fine. True of a query made by the BROWSER. Irrelevant to this
+  // route, which never has the owner's session. The legacy
+  // gunforma-build-detail.html?id=… shape 404s for the same reason, so
+  // neither detail route is a valid destination for a pending build.
+  // Third time a route has behaved differently in production than its author
+  // assumed — see "Netlify redirects" in CLAUDE.md.
+  //
+  // The profile renders builds client-side, under the caller's own session,
+  // where "Owners can view their own builds" (auth.uid() = user_id, no
+  // status clause) applies — so a pending build is readable and shows with
+  // an "In review" badge. ?tab=my-builds because the default Overview tab
+  // filters status=approved and would greet a fresh submission with
+  // "No live builds yet".
+  //
+  // Covers the resubmit path too: a rejected build that is resubmitted goes
+  // back to `pending`, so it is no more approved than a first submission.
+  //
   // location.replace so Back doesn't return them to the submit form.
   setTimeout(function () {
-    window.location.replace(buildPath(result.buildId, state.name));
+    window.location.replace('gunforma-profile.html?tab=my-builds');
   }, 700);
 }
 

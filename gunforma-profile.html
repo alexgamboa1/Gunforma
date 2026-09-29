@@ -387,6 +387,27 @@ async function renderShell() {
       (IS_OWN_PROFILE ? '<div class="tab-panel" id="panel-account"></div>' : '')+
     '</div>';
 
+  // ?tab=<name> opens that tab instead of the default Overview.
+  //
+  // WHITELISTED, not passed through. This value reaches a DOM lookup and the
+  // tab switcher, so it is matched against a fixed list of known tab names
+  // and anything else falls through to the default — a raw param must never
+  // select the element or drive switchTab().
+  //
+  // The second check is not redundant: `saved`, `favorites` and `account`
+  // are real tab names but only exist on your OWN profile, so a link
+  // carrying one to somebody else's profile must fall through too.
+  //
+  // Added for gunforma-post-build.html, which sends a builder here after a
+  // submit. Overview filters status=approved, so a just-submitted PENDING
+  // build is not on it; `my-builds` is the tab that shows one.
+  var ALLOWED_TABS = ['overview', 'my-builds', 'saved', 'favorites', 'account'];
+  var wantedTab = new URLSearchParams(window.location.search).get('tab');
+  if (ALLOWED_TABS.indexOf(wantedTab) !== -1 &&
+      document.querySelector('.tab-btn[data-tab="' + wantedTab + '"]')) {
+    switchTab(wantedTab);
+  }
+
   await loadOverview(buildsCount, firesReceived);
   await loadMyBuilds();
   if (IS_OWN_PROFILE) {
