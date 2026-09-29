@@ -77,8 +77,17 @@ const STALE_DAYS = 2;
 // it knowing you are trading away partner-skip detection.
 const DEFAULT_STALE_PCT_THRESHOLD = 15;
 
-const THRESHOLD = Number(process.env.STALE_PCT_THRESHOLD ?? DEFAULT_STALE_PCT_THRESHOLD);
-const DRILL     = process.env.DRILL === 'true';
+// `??` is NOT enough here and this is not hypothetical — the first drill run
+// caught it. A workflow_dispatch input left blank, and any `${{ inputs.x }}`
+// on a SCHEDULED run, arrives as an empty string rather than unset. The env
+// var is therefore set-but-empty, `??` does not fall back, and `Number('')`
+// is 0 — so every scheduled run would have compared against a 0% threshold,
+// failed, and opened an alert every six hours until someone muted it. Treat
+// blank and unparseable as "not supplied".
+const rawThreshold = (process.env.STALE_PCT_THRESHOLD ?? '').trim();
+const parsed       = rawThreshold === '' ? NaN : Number(rawThreshold);
+const THRESHOLD    = Number.isFinite(parsed) ? parsed : DEFAULT_STALE_PCT_THRESHOLD;
+const DRILL        = process.env.DRILL === 'true';
 
 // Whole UTC days, matching the SQL form `last_checked < current_date - N`.
 // Comparing elapsed milliseconds makes the boundary drift with the time of day
