@@ -608,7 +608,7 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,reticle,reticle_color,color,finish,optic_cut,bundle,clamp,manual_safety_variant,is_default,primary_image_url,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
+    .select('id,product_id,variant_label,color,finish,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
