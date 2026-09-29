@@ -16,7 +16,8 @@
 // rather than inventing a second pattern.
 //
 // The variant label is NOT computed here any more. It comes from
-// js/variant-label.mjs, imported below and shared verbatim with the browser.
+// _variant-label.mjs, imported below. Its browser mirror is js/variant-label.js
+// and scripts/variant-label.test.mjs fails the deploy if the two disagree.
 // This file used to carry its own near-copy of js/affiliate.js's axis logic,
 // justified as "a small subset" — and it drifted: `finish` was an axis here
 // and in neither of the other two copies, so True Precision P365-FUSE read
@@ -29,7 +30,7 @@
 // why this pair of functions doesn't need the browser-vs-ESM duplication
 // that js/category-map.js still requires.
 import { CATEGORY_META } from './_category-meta.mjs';
-import { variantLabel } from '../../js/variant-label.mjs';
+import { variantLabel } from './_variant-label.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -159,7 +160,7 @@ const SPEC_TABLES = {
 };
 
 // VARIANT_AXES, extractAxes, computeActiveAxes and variantLabel used to
-// live here. They are gone: the label comes from js/variant-label.mjs and
+// live here. They are gone: the label comes from _variant-label.mjs and
 // no longer depends on what a variant's SIBLINGS look like, so there is
 // nothing per-product to compute. esc() moved up, it is still needed.
 function esc(s) {

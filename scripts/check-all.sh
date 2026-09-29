@@ -55,6 +55,7 @@ RUN_FILES=()
 # ── the registry ───────────────────────────────────────────────────────────
 check "PostgREST embed ambiguity"  scripts/check-embeds.sh
 check "build URL copies agree"     scripts/build-url.test.mjs
+check "variant label copies agree" scripts/variant-label.test.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
