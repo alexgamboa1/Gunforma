@@ -151,6 +151,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* contain, not cover, matching the post-build picker: these are product
    shots at the manufacturer's aspect ratio, and cropping one to fill an
    88px square hides the part it is meant to identify. */
+.part-thumb.part-thumb-swatch { padding: 0; background: #fff; }
+.part-thumb-swatch-fill { display: block; width: 100%; height: 100%; }
 .part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
 .part-thumb-fallback { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 4px; }
 .part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
@@ -517,7 +519,6 @@ var AFFILIATE_BY_PRODUCT_ID = {};
 // productId -> primary_image_url from the default variant. Separate from
 // AFFILIATE_BY_PRODUCT_ID because a product can have an image without any
 // affiliate link (and vice-versa).
-var IMAGE_BY_PRODUCT_ID = {};
 // Every LIVE variant by id, whether or not it has a listing. The buy-row
 // grouping below deliberately drops variants with no affiliate_links, but a
 // build can name one: Icarus Precision A.C.E. XL EVO sells in FDE, Gray and
@@ -635,9 +636,11 @@ async function loadAffiliates(build) {
   // Cache the default variant's image per product — used by the part-card
   // thumbnail regardless of whether the product also has affiliate links.
   (data || []).forEach(function(v) {
-    if (v.is_default && v.primary_image_url && !IMAGE_BY_PRODUCT_ID[v.product_id]) {
-      IMAGE_BY_PRODUCT_ID[v.product_id] = v.primary_image_url;
-    }
+    // NOTE: the product's default-variant photo is deliberately NOT cached
+    // any more. It existed only as a thumbnail fallback, and that fallback is
+    // the thing this feature must not do — see renderPartCard below. Leaving
+    // a populated-but-unread cache here would just invite someone to wire it
+    // back up.
     VARIANT_BY_ID[v.id] = v;
     if (!VARIANTS_BY_PRODUCT_ID[v.product_id]) VARIANTS_BY_PRODUCT_ID[v.product_id] = [];
     VARIANTS_BY_PRODUCT_ID[v.product_id].push(v);
@@ -938,19 +941,36 @@ function renderPartCard(build, part, idx) {
   var verifiedHtml = history.length ? buildVerifiedHtml(build.id, idx, history) : '';
   var affiliateHtml = renderAffiliateRow(part, vr);
 
-  // Thumbnail, in preference order: the CHOSEN variant's own photo, then the
-  // photo captured in the snapshot when it was picked, then the product's
-  // default-variant photo. The last step is a deliberate compromise and the
-  // reason the picker (PR B) shows a swatch instead: 244 of 649 live variants
-  // have no image of their own, and showing a Black barrel's photo next to a
-  // row labelled "Gold / TiN" is worse than showing no photo. Here the label
-  // sits directly beside it, so the photo reads as the product rather than as
-  // a claim about the colour.
-  var thumbUrl = vr.imageUrl || (part.refId ? IMAGE_BY_PRODUCT_ID[part.refId] : null);
+  // Thumbnail, in strict preference order:
+  //   1. the CHOSEN variant's own photo — live first, so a re-photographed
+  //      variant updates everywhere, then the copy stored in the snapshot
+  //   2. a COLOUR SWATCH built from that variant's colour
+  //   3. only for a part with no variant at all (an off-catalog pending part):
+  //      the "Pending" / "No photo" slot
+  //
+  // It used to fall back to the product's DEFAULT-variant photo. That is
+  // the one thing this feature must not do: it puts a Black barrel's photo above the words "Gold / TiN", which
+  // looks like an answer. 244 of 649 live variants have no photo of their own,
+  // so it was not a rare path, and seven default variants were themselves
+  // carrying the wrong colour's photo until 2026-09-29.
+  //
+  // A swatch plus the label is a complete answer. Same renderer as the picker
+  // and the options panel, so all three agree about what a colour looks like.
+  var chosenColor = vr.live
+    ? (VARIANT_BY_ID[vr.id] || null)
+    : { color: part.variantColor, finish: part.variantFinish, variant_label: part.variantLabel,
+        primary_image_url: part.imageUrl || null };
+  var thumbUrl = vr.imageUrl || null;
   var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
-  var thumbHtml = thumbUrl
-    ? '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>'
-    : '<div class="part-thumb"><div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div></div>';
+  var thumbHtml;
+  if (thumbUrl) {
+    thumbHtml = '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>';
+  } else if (chosenColor && (chosenColor.color || chosenColor.variant_label)) {
+    var sw = window.variantSwatch(chosenColor.color);
+    thumbHtml = '<div class="part-thumb part-thumb-swatch"><span class="part-thumb-swatch-fill" style="'+sw.css+'"></span></div>';
+  } else {
+    thumbHtml = '<div class="part-thumb"><div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div></div>';
+  }
 
   return '<div class="part-card">'+
     '<div class="part-card-top">'+
