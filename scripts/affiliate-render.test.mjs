@@ -44,31 +44,31 @@ const today = new Date().toISOString().slice(0, 10);
 const ROWS = [
   { id: 'v-black-dlc', product_id: PRODUCT, variant_label: null, color: 'Black', finish: 'DLC',
     is_default: true, primary_image_url: 'https://img/black-dlc.jpg', products: { category: 'slide' },
-    affiliate_links: [{ url: 'https://shop/black-dlc', affiliate_url: 'https://aff/black-dlc',
+    affiliate_links: [{ id: 'l-black-dlc', url: 'https://shop/black-dlc', affiliate_url: 'https://aff/black-dlc',
       street_price: 375.25, in_stock: true, last_checked: today, op_last_matched_by: 'stored_op_mpn',
       partners: { name: 'OpticsPlanet (Awin)' } }] },
   { id: 'v-black-nit', product_id: PRODUCT, variant_label: null, color: 'Black', finish: 'Nitride',
     is_default: false, primary_image_url: null, products: { category: 'slide' },
-    affiliate_links: [{ url: 'https://shop/black-nit', affiliate_url: null,
+    affiliate_links: [{ id: 'l-black-nit', url: 'https://shop/black-nit', affiliate_url: null,
       street_price: 318.99, in_stock: true, last_checked: today, op_last_matched_by: 'stored_op_mpn',
       partners: { name: 'OpticsPlanet (Awin)' } }] },
   // Stale: a feed matched it once, but not inside the window. Must not price.
   { id: 'v-fde', product_id: PRODUCT, variant_label: null, color: 'FDE', finish: 'Cerakote',
     is_default: false, primary_image_url: null, products: { category: 'slide' },
-    affiliate_links: [{ url: 'https://shop/fde', affiliate_url: null,
+    affiliate_links: [{ id: 'l-fde', url: 'https://shop/fde', affiliate_url: null,
       street_price: 999.99, in_stock: true, last_checked: '2020-01-01', op_last_matched_by: 'stored_op_mpn',
       partners: { name: 'OpticsPlanet (Awin)' } }] },
   // Never feed-verified: op_last_matched_by null. Also must not price, even
   // though last_checked is today — that is the whole point of the rule.
   { id: 'v-gold', product_id: PRODUCT, variant_label: null, color: 'Gold', finish: 'TiN',
     is_default: false, primary_image_url: null, products: { category: 'slide' },
-    affiliate_links: [{ url: 'https://shop/gold', affiliate_url: null,
+    affiliate_links: [{ id: 'l-gold', url: 'https://shop/gold', affiliate_url: null,
       street_price: 1.00, in_stock: true, last_checked: today, op_last_matched_by: null,
       partners: { name: 'OpticsPlanet (Awin)' } }] },
   // A hand-set override wins over color/finish.
   { id: 'v-override', product_id: PRODUCT, variant_label: '2 MOA Red Dot', color: 'Black', finish: 'DLC',
     is_default: false, primary_image_url: null, products: { category: 'slide' },
-    affiliate_links: [{ url: 'https://shop/ovr', affiliate_url: null,
+    affiliate_links: [{ id: 'l-ovr', url: 'https://shop/ovr', affiliate_url: null,
       street_price: 400.00, in_stock: false, last_checked: today, op_last_matched_by: 'stored_op_gtin',
       partners: { name: 'OpticsPlanet (Awin)' } }] },
 ];
@@ -123,6 +123,9 @@ test('the hero is the listing whose price is displayed', async () => {
   // Cheapest fresh in-stock wins, and its URL is what the button uses.
   assert.equal(aff.hero.variantId, 'v-black-nit');
   assert.equal(aff.hero.url, 'https://shop/black-nit', 'falls back to url when affiliate_url is null');
+  // The destination is still resolved the same way; what changed is that the
+  // BUTTON points at the click layer rather than at the retailer.
+  assert.equal(aff.hero.goUrl, '/go/l-black-nit');
 });
 
 test('both renderers produce markup with nothing undefined in it', async () => {
@@ -132,6 +135,12 @@ test('both renderers produce markup with nothing undefined in it', async () => {
     assert.ok(html && html.length > 40, `${fn} returned nothing`);
     assert.ok(!/undefined|\[object Object\]|NaN/.test(html), `${fn} leaked a placeholder`);
     assert.match(html, /rel="noopener sponsored nofollow"/, `${fn} lost the rel attributes`);
+    // Every buy anchor goes through /go/. A renderer that emitted the retailer
+    // URL directly would still sell the part and silently log nothing, which
+    // is exactly the failure scripts/check-buy-links.mjs exists to refuse.
+    for (const m of html.matchAll(/<a\b[^>]*sponsored[^>]*>/g)) {
+      assert.match(m[0], /href="\/go\//, `${fn} emitted a buy link that bypasses /go/: ` + m[0].slice(0, 110));
+    }
   }
   const block = win.affiliate.renderBlock(PRODUCT);
   assert.match(block, /Black \/ Nitride/, 'renderBlock did not print variant labels');

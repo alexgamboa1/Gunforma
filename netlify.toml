@@ -283,3 +283,19 @@
 [[edge_functions]]
   path = "/*"
   function = "canonical-host"
+
+# The outbound click layer. Declared AFTER canonical-host so the chain runs in
+# the right order: on a preview, canonical-host calls context.next(), this
+# returns the 302, and canonical-host tags it noindex on the way back out. On
+# the apex, canonical-host returns immediately and this runs next.
+#
+# An EDGE function, not a serverless one, because it sits on the money path:
+# context.waitUntil() lets the 302 go out before the click is logged, so the
+# reader never waits for Supabase. A serverless function cannot do that.
+#
+# No matching [[redirects]] rule: an edge function's own config.path is what
+# routes it. Adding a rewrite as well would put the redirect engine in front of
+# it for no gain.
+[[edge_functions]]
+  path = "/go/*"
+  function = "go"
