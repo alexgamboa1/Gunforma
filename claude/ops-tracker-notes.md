@@ -164,6 +164,63 @@ earn nothing is the wrong order of work.
 Regenerate the list with `node scripts/export-missing-variant-images.mjs` —
 the "no live link" rows in the CSV are exactly this set.
 
+### Three catalog data defects, and the guard that makes them findable
+
+**Seven default variants were illustrated with another colour's photo.** Found
+because the image filenames carry the variant SKU, so a variant whose URL
+contains a SIBLING's SKU and not its own is provably wrong:
+
+| brand / product | variant shown | photo actually was |
+|---|---|---|
+| Anarchy Outdoors Slide Plate | Black / Anodized | Purple |
+| True Precision P365 3.1" Threaded | Black / Nitride | Copper |
+| True Precision Fuse 4.3" NT | Black / Nitride | Gold |
+| True Precision Fuse 4.3" Threaded | Black / Nitride | Copper |
+| True Precision P365-FUSE | Black / DLC | Spectrum |
+| True Precision P365XL 3.7" NT | Black / DLC | Gold |
+| True Precision Slide Cap Plate | Stainless Steel | Gold TiN |
+
+All seven were `is_default`, which is the set a new build records. It had been
+live for as long as the rows existed and nothing could have caught it: the URL
+is valid, the image loads, it is the right product, only the colour is wrong.
+
+It surfaced through the variant work rather than by inspection — the first
+admin-post test build came back with a Black / DLC barrel carrying a filename
+reading `Barrel-Gold-TP-P365XLB-XG`. **That is the only reason it was
+noticed**, and it is exactly why a build storing `imageUrl` raises the stakes:
+`parts_snapshot` denormalises the photo, so a wrong one stops being a fixable
+catalog row and becomes permanent in someone's build.
+
+All seven nulled. They fall back to the colour swatch until the nightly sync
+refills them per-colour from the feed, which it can do for all seven — each has
+a live, non-withheld link with a stored `merchant_product_id`.
+
+`scripts/check-variant-image-sku.mjs` now checks the rule, daily, from
+`.github/workflows/check-variant-images.yml`. **Deliberately not a build
+check**: it reads live data, so it is time-dependent, and the thing that breaks
+it is a CSV import rather than a commit. Failing an unrelated deploy would put
+the alert in front of whoever happens to be deploying instead of whoever
+maintains the catalogue — the same reasoning that keeps
+`check-price-freshness.mjs` out of the build.
+
+**`FDEB` is not a colour.** The new guard's one remaining finding, and it is a
+different defect. Streamlight TLR-1 HL has three variants: `69260` Black,
+`69266` FDE, `69267` **FDEB**. The `-b-` in these filenames means *with
+batteries* — the Black row has it too — so `FDEB` is "FDE plus a battery
+config" typed into `color`. `product_variants.battery_type` exists and is where
+that belongs. Left alone pending a decision: correcting `color` to `FDE` would
+give two variants the same label, which is its own problem, so the fix is
+colour **and** battery_type together, not colour alone. The guard stays red on
+this one row until then, on purpose.
+
+**Sig Sauer P365 XL OEM Gray disagrees with itself.** Link `98ddd711` has no
+stored identifier, and the two records we hold do not agree on which SKU it is:
+the variant row says `8900757`, while the link's own URL `_iv_code` ends
+`-8900324` and the feed's Grey row is `8900324`. One of the two is wrong and
+nothing in the data says which, so no identifier was set — guessing would pin
+the link to a specific product permanently and the sync would re-confirm the
+wrong mapping every night. Needs a human to look at the retailer page.
+
 **Still not done, and it is the same item as the last three sessions.** The
 claim walk has still not been run end to end by a second account in one
 sitting. The real build count went into this session at 2 and came out at 2.

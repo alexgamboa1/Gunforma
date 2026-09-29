@@ -101,6 +101,14 @@ NOT_BUILD_CHECKS=(
   # the smoke-test cadence, and raises a GitHub issue when it trips.
   scripts/check-price-freshness.mjs
 
+  # Reads live product_variants to ask whether any variant is illustrated with
+  # a sibling variant's photo. Same reason as the line above: time-dependent,
+  # not tree-dependent. The thing that breaks it is a CSV import, not a commit,
+  # so failing an unrelated deploy would put the alert in front of whoever is
+  # deploying rather than whoever maintains the catalogue. Runs daily from
+  # .github/workflows/check-variant-images.yml and raises an issue.
+  scripts/check-variant-image-sku.mjs
+
   # NOT a unit test, despite the name. It signs in as a real user and writes
   # to live Storage, so it needs SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD and a
   # serving origin. Runs from .github/workflows/smoke-test.yml, 4x daily.
