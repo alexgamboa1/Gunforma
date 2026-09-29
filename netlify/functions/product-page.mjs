@@ -15,21 +15,21 @@
 // repo's one working server-render precedent, so this one follows its shape
 // rather than inventing a second pattern.
 //
-// The variant-label logic below duplicates a small slice of js/affiliate.js's
-// VARIANT_AXES on purpose rather than importing it: affiliate.js is browser
-// JS (DOM-free itself, but shipped and tested as a <script> global, not a
-// module) and its label logic is explicitly settled/do-not-refactor per the
-// project docs. This is a separate, server-side computation of the same
-// affiliate_links + product_variants rows, so a future edit to affiliate.js's
-// axis list won't need to touch this file, but also won't automatically be
-// picked up here — worth a comment update on both sides if that list changes.
-// -----------------------------------------------------------------------------
+// The variant label is NOT computed here any more. It comes from
+// js/variant-label.mjs, imported below and shared verbatim with the browser.
+// This file used to carry its own near-copy of js/affiliate.js's axis logic,
+// justified as "a small subset" — and it drifted: `finish` was an axis here
+// and in neither of the other two copies, so True Precision P365-FUSE read
+// "Black / DLC" on this page and "Black" twice, $56 apart, in the catalog buy
+// row and on every build page. Importing costs nothing (the module is pure,
+// dependency-free ESM) and removes the only way those can disagree.
 
 // category -> [URL segment, display label]. Shared with parts-index.mjs via
 // _category-meta.mjs rather than hand-copied — see that file's header for
 // why this pair of functions doesn't need the browser-vs-ESM duplication
 // that js/category-map.js still requires.
 import { CATEGORY_META } from './_category-meta.mjs';
+import { variantLabel } from '../../js/variant-label.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -158,50 +158,14 @@ const SPEC_TABLES = {
   ]],
 };
 
-// Small subset of js/affiliate.js's VARIANT_AXES — see file header.
-const VARIANT_AXES = [
-  { key: 'reticle',               label: 'Reticle'       },
-  { key: 'reticle_color',         label: 'Reticle Color' },
-  { key: 'color',                 label: 'Color'         },
-  { key: 'finish',                label: 'Finish'        },
-  { key: 'optic_cut',             label: 'Optic Cut'     },
-  { key: 'bundle',                label: 'Bundle'        },
-  { key: 'clamp_style',           label: 'Clamp'         },
-  { key: 'manual_safety_variant', label: 'Manual Safety' },
-];
-
+// VARIANT_AXES, extractAxes, computeActiveAxes and variantLabel used to
+// live here. They are gone: the label comes from js/variant-label.mjs and
+// no longer depends on what a variant's SIBLINGS look like, so there is
+// nothing per-product to compute. esc() moved up, it is still needed.
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
-}
-
-function extractAxes(v) {
-  return {
-    reticle: v.reticle || null,
-    reticle_color: v.reticle_color || null,
-    color: v.color || null,
-    finish: v.finish || null,
-    optic_cut: v.optic_cut || null,
-    bundle: v.bundle || null,
-    clamp_style: v.clamp_style || null,
-    manual_safety_variant: v.manual_safety_variant === true ? 'Yes'
-                          : v.manual_safety_variant === false ? 'No' : null,
-  };
-}
-
-function computeActiveAxes(variants, isOptic) {
-  return VARIANT_AXES.filter((axis) => {
-    const seen = new Set(variants.map((v) => v.axes[axis.key]));
-    if (axis.key === 'reticle' && isOptic && variants.some((v) => v.axes.reticle)) return true;
-    return seen.size > 1;
-  });
-}
-
-function variantLabel(v, activeAxes) {
-  if (typeof v.variant_label === 'string' && v.variant_label.trim()) return v.variant_label.trim();
-  if (!activeAxes.length) return 'Standard';
-  return activeAxes.map((a) => v.axes[a.key] || '—').join(' / ');
 }
 
 // A price we can stand behind is one a FEED verified within the window.
@@ -334,20 +298,18 @@ async function fetchSpecs(category, productId) {
 function renderPage({ product, specs, categorySegment, categoryLabel }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
-  const isOptic = product.category === 'optic';
 
   // Flatten to (variant, link) rows, same shape/ordering rule as affiliate.js.
   const rows = [];
   variants.forEach((v) => {
     const links = v.affiliate_links || [];
-    const axes = extractAxes(v);
     if (!links.length) {
-      rows.push({ v, axes, price: null, stale: true, url: null, in_stock: null, partnerName: null });
+      rows.push({ v, price: null, stale: true, url: null, in_stock: null, partnerName: null });
       return;
     }
     links.forEach((l) => {
       rows.push({
-        v, axes,
+        v,
         price: l.street_price != null ? Number(l.street_price) : null,
         stale: isStalePrice(l),
         url: l.affiliate_url || l.url,
@@ -356,11 +318,11 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
       });
     });
   });
-  // Active axes are computed over the flattened (variant, link) rows, same as
-  // affiliate.js does over its "listings" — not over raw variants, since a
-  // variant with no listings shouldn't count toward what differs.
-  const activeAxes = computeActiveAxes(rows, isOptic);
-  rows.forEach((r) => { r.label = variantLabel({ axes: r.axes, variant_label: r.v.variant_label }, activeAxes); });
+  // No active-axis pass any more: the label is a property of the variant
+  // alone, so it no longer changes when a sibling variant is added or
+  // retired. That instability was fine for a comparison table and wrong for
+  // a build page, where the same label gets written into parts_snapshot.
+  rows.forEach((r) => { r.label = variantLabel(r.v); });
   rows.sort((a, b) => {
     // Fresh-and-priced first, so the top buy row is the one the headline
     // price quotes; tieBreak keeps equal listings in a stable order.
