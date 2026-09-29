@@ -88,6 +88,19 @@ NOT_BUILD_CHECKS=(
   # which does not exist at build time. Runs from
   # .github/workflows/check-routes.yml.
   scripts/check-og-image.mjs
+
+  # NOT a unit test, despite the name. It signs in as a real user and writes
+  # to live Storage, so it needs SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD and a
+  # serving origin. Runs from .github/workflows/smoke-test.yml, 4x daily.
+  #
+  # It is listed here because `node --test` DISCOVERS it. Node's own globs
+  # match `*-test.mjs` as well as `*.test.mjs`, so any command that lets Node
+  # pick its own files will run this one and fail on the missing secrets.
+  # That is exactly what killed the nightly price refresh for four runs
+  # (2026-09-25 to 2026-09-29): refresh-affiliate-prices.yml ran a bare
+  # `node --test`, swept this file up, and exited 1 before the sync. Always
+  # pass an explicit `*.test.mjs` glob.
+  scripts/smoke-test.mjs
 )
 
 # ── the audit: a check file that is not registered fails the build ─────────
@@ -98,7 +111,19 @@ while IFS= read -r f; do
     [ "$f" = "$known" ] && continue 2
   done
   UNREGISTERED+=("$f")
-done < <(find scripts -maxdepth 1 \( -name 'check-*.sh' -o -name 'check-*.mjs' -o -name '*.test.mjs' \) | sort)
+#
+# The -name set deliberately MATCHES NODE'S OWN test-file discovery globs, not
+# just this repo's `*.test.mjs` convention. Node also treats `*-test.mjs`,
+# `*_test.mjs` and `test-*.mjs` as test files, and a file in that wider set
+# gets run by any bare `node --test` whether or not anyone intended it to be.
+# scripts/smoke-test.mjs sat in exactly that gap: it matched Node's globs and
+# not this audit's, so nothing here noticed when it was added, and it silently
+# broke the nightly price refresh for four runs. Keeping the two sets aligned
+# is what forces such a file to declare itself here at the moment it lands.
+done < <(find scripts -maxdepth 1 \( -name 'check-*.sh' -o -name 'check-*.mjs' \
+                                   -o -name '*.test.mjs' -o -name '*-test.mjs' \
+                                   -o -name '*_test.mjs' -o -name 'test-*.mjs' \
+                                   -o -name 'test.mjs' \) | sort)
 
 printf '\n\033[1m── registry audit\033[0m\n'
 if [ ${#UNREGISTERED[@]} -gt 0 ]; then
@@ -109,7 +134,7 @@ if [ ${#UNREGISTERED[@]} -gt 0 ]; then
   echo "       under NOT_BUILD_CHECKS with the reason it is excluded."
   FAILED+=("registry audit")
 else
-  echo "ok: every check-*.{sh,mjs} and *.test.mjs in scripts/ is either registered or explicitly excluded"
+  echo "ok: every check-*.{sh,mjs} and every file Node would discover as a test in scripts/ is either registered or explicitly excluded"
 fi
 
 # ── summary ────────────────────────────────────────────────────────────────
