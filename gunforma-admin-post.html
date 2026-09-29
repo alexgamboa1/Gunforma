@@ -750,6 +750,11 @@ function buildPartsSnapshot() {
     // Only finish-style entries carry this. Build detail, build-og and the
     // armory all render brand + name, so the row stays readable to them.
     if (p.finish) row.finish = p.finish;
+    // Same optional variant note the builder-facing page writes. This page
+    // renders the selected-part card through js/part-picker.js, so the input
+    // appears here too — an admin posting on someone's behalf can record
+    // "FDE" just as the builder would have.
+    if (p.variant) row.variant = p.variant;
     return row;
   });
 }
