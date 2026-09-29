@@ -993,8 +993,13 @@ which is what `gunforma-post-build.html` already owns. It is coming back
 rebuilt as **Loadouts**: a distinct object with its own `loadouts` table,
 rather than another producer of rows in `builds`. That is the whole reason it
 is parked — not that it is broken, but that "a saved parts list" and "a posted
-build" are the same row today and should not be. The full spec is being
-written up separately; this paragraph is the rationale until it lands.
+build" are the same row today and should not be.
+
+**`claude/loadouts-spec.md` is the canonical spec for that rebuild** — the
+taxonomy, the schema decision, the collage design, the five settled decisions
+and the build sequencing. Read it before starting any Loadouts work, and keep
+it current: a mirror exists outside the repo that agents cannot read, so this
+copy is the one that has to be right.
 
 **What went with it, on purpose:**
 
