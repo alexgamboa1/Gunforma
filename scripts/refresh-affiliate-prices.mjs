@@ -528,7 +528,10 @@ function processFeedRow(st, row, today) {
 // variant while carrying the red product's MPN, price and URL.
 //
 // Anything that contradicts a stored identifier is a review item, not a write.
-function resolveProposals(st, today) {
+// Exported for scripts/sync-gtin-tiebreak.test.mjs, on the same footing as
+// gtinNorm above: the test drives the REAL resolver rather than a copy, so
+// it cannot pass against logic that no longer ships.
+export function resolveProposals(st, today) {
   for (const [linkId, proposals] of st.proposals) {
     const target = st.byId.get(linkId);
     if (!target) continue;
@@ -570,6 +573,34 @@ function resolveProposals(st, today) {
     if (confirmingDistinct.length === 1) {
       if (candidates.length > 1) st.resolvedByStoredId++;
       candidates = [confirming.find(p => fingerprint(p) === confirmingDistinct[0])];
+    }
+
+    // ── A stored GTIN breaks a tie the MPN cannot ─────────────────────
+    // MPNs are not unique in the OpticsPlanet feed, and the collision is not
+    // always two different products: TPP365BXBL is carried twice, once as
+    // "True Precision ... Black Nitride" and once as a Faxon-branded listing
+    // of the same barrel. Both confirm a stored op_mpn, so the block above
+    // cannot separate them and the link is withheld every night, forever.
+    //
+    // A GTIN can separate them, because only one of the two carries one. When
+    // the link records a GTIN and exactly one surviving candidate matches it,
+    // that candidate is the answer — a GTIN identifies a product far more
+    // strongly than a manufacturer part number, which is only unique within a
+    // manufacturer.
+    //
+    // DELIBERATELY NARROW. It fires only when the link already HAS a stored
+    // GTIN (a hand correction, or a previous run's fill) and exactly one
+    // distinct candidate matches it. Nothing is guessed: if no candidate
+    // matches, or several do with different fingerprints, this does nothing
+    // and the conflict below withholds exactly as before. The rule adds a way
+    // to RESOLVE a tie; it never invents a winner.
+    if (candidates.length > 1 && storedGtin) {
+      const gtinMatch = candidates.filter(p => gtinNorm(p.rawGtin) === storedGtin);
+      const gtinDistinct = [...new Set(gtinMatch.map(fingerprint))];
+      if (gtinDistinct.length === 1) {
+        st.resolvedByStoredGtin++;
+        candidates = [gtinMatch.find(p => fingerprint(p) === gtinDistinct[0])];
+      }
     }
 
     // ── Conflict: the surviving rows still disagree ───────────────────
@@ -882,6 +913,7 @@ async function main() {
       conflicts: [],                 // two feed rows disagree about this link → not written
       withheldIds: new Set(),        // links found but deliberately not written
       withheldCeiling: cfg.withheldCeiling,
+      resolvedByStoredGtin: 0,       // MPN ties broken by a matching stored op_gtin
       filled: 0,                     // identifiers written into a previously-null column
       demoRowsDropped: 0,            // open-box / demo rows ignored beside a retail row
       resolvedByStoredId: 0,         // links saved from a conflict by their stored identifier

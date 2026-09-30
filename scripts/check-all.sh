@@ -82,6 +82,14 @@ NOT_BUILD_CHECKS=(
   # which is where its dependency actually exists.
   scripts/gtin-norm.test.mjs
 
+  # Same dependency, same reason. It imports resolveProposals from
+  # refresh-affiliate-prices.mjs, which imports csv-parse at the top level, so
+  # importing it at all needs scripts/node_modules — which nothing installs
+  # during the site build. It is picked up by the `node --test *.test.mjs`
+  # glob in .github/workflows/refresh-affiliate-prices.yml, which runs BEFORE
+  # the nightly sync and does have the dependency.
+  scripts/sync-gtin-tiebreak.test.mjs
+
   # Fetches /sitemap.xml from a live origin and cross-checks every /b/ URL
   # against the canonical that URL actually serves. Cannot run at build time:
   # the site is not serving during its own build, and fetching the previous
