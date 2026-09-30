@@ -131,11 +131,11 @@ async function fetchFitOptics(cutNames) {
   // moment optic_adapter_footprints exists. Found on the wire, not in
   // review — check-embeds.sh does not cover this pair.
   const cols =
-    'footprint_id,optic_type,dot_size_moa,window_size,battery_life,enclosed_emitter,shake_awake,solar_power,' +
+    'footprint_id,optic_type,reticle,dot_size_moa,window_size,battery_life,enclosed_emitter,shake_awake,solar_power,' +
     'footprints!optic_specs_footprint_id_fkey(slug,common_name),' +
     'products!optic_specs_product_id_fkey(id,slug,name,fitment_confidence,is_discontinued,' +
       'manufacturers!products_brand_id_fkey(name),' +
-      'product_variants!product_variants_product_id_fkey(id,msrp,is_default,' +
+      'product_variants!product_variants_product_id_fkey(id,msrp,is_default,primary_image_url,' +
         'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))))';
   const retiredFilters =
     '&products.product_variants.retired_at=is.null' +
@@ -169,7 +169,16 @@ async function fetchFitOptics(cutNames) {
       const dv = (p.product_variants || []).find((v) => v.is_default) || (p.product_variants || [])[0];
       return dv && dv.msrp != null ? Number(dv.msrp) : null;
     })();
+    // The default variant's photo, or any variant's — every optic in the
+    // catalog has one today, but a product without one renders text-only
+    // rather than a broken image.
+    const photo = (() => {
+      const dv = (p.product_variants || []).find((v) => v.is_default && v.primary_image_url) ||
+                 (p.product_variants || []).find((v) => v.primary_image_url);
+      return dv ? dv.primary_image_url : null;
+    })();
     optics.push({
+      photo,
       spec: r,
       slug: p.slug,
       name: p.name,
@@ -216,6 +225,17 @@ async function fetchBuildsUsing(productIds) {
   return out;
 }
 
+// The reticle column. optic_specs.reticle is prose that can carry a
+// multi-reticle truth ("2 MOA Dot & 32 MOA Circle (MRS)") that a single
+// dot_size_moa number cannot — the 507K X2 has no single MOA value, and
+// rendering one would be wrong, not incomplete. dot_size_moa is only the
+// fallback for a row whose reticle text is missing.
+function reticleCell(o) {
+  if (o.spec.reticle) return esc(o.spec.reticle);
+  if (o.spec.dot_size_moa != null) return esc(o.spec.dot_size_moa) + ' MOA';
+  return '—';
+}
+
 function priceCell(o) {
   if (o.hero && o.hero.price != null && !o.hero.stale) return '$' + o.hero.price.toFixed(2);
   if (o.hero) return 'Check price';
@@ -257,10 +277,12 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
   const tableRows = optics.map((o) => {
     const productHref = '/parts/' + familyMeta.categorySegment + '/' + o.slug;
     return '<tr>' +
-      '<td><a href="' + esc(productHref) + '">' + esc(o.name) + '</a>' +
-        (o.brand ? '<span class="t-brand">' + esc(o.brand) + '</span>' : '') + '</td>' +
+      '<td><div class="t-optic">' +
+        (o.photo ? '<img class="t-photo" src="' + esc(o.photo) + '" alt="' + esc(o.name) + '" loading="lazy" width="44" height="44"/>' : '') +
+        '<div><a href="' + esc(productHref) + '">' + esc(o.name) + '</a>' +
+        (o.brand ? '<span class="t-brand">' + esc(o.brand) + '</span>' : '') + '</div></div></td>' +
       '<td>' + esc(o.footprintName) + (o.mountFit === 'direct' ? '' : ' (plate)') + '</td>' +
-      '<td>' + (o.spec.dot_size_moa != null ? esc(o.spec.dot_size_moa) + ' MOA' : '—') + '</td>' +
+      '<td>' + reticleCell(o) + '</td>' +
       '<td>' + (o.spec.window_size ? esc(o.spec.window_size) : '—') + '</td>' +
       '<td>' + (o.spec.battery_life ? esc(o.spec.battery_life) : '—') + '</td>' +
       '<td class="t-price">' + priceCell(o) + '</td>' +
@@ -280,11 +302,12 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
     .filter((x) => x.o);
   const picksHtml = picks.map(({ pick, o }) =>
     '<div class="pick-card">' +
+      (o.photo ? '<img class="pick-photo" src="' + esc(o.photo) + '" alt="' + esc(o.name) + '" loading="lazy"/>' : '') +
       '<div class="pick-name"><a href="/parts/' + esc(familyMeta.categorySegment) + '/' + esc(o.slug) + '">' + esc(o.name) + '</a></div>' +
       (o.brand ? '<div class="pick-brand">' + esc(o.brand) + '</div>' : '') +
       '<div class="pick-why">' + esc(pick.why) + '</div>' +
       '<div class="pick-meta">' +
-        (o.spec.dot_size_moa != null ? esc(o.spec.dot_size_moa) + ' MOA · ' : '') +
+        (o.spec.reticle ? esc(o.spec.reticle) + ' · ' : '') +
         (o.spec.enclosed_emitter ? 'Enclosed emitter · ' : '') +
         '<strong>' + priceCell(o) + '</strong></div>' +
       buyCell(o) +
@@ -344,6 +367,7 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
         item: {
           '@type': 'Product', name: o.name,
           url: SITE + '/parts/' + familyMeta.categorySegment + '/' + o.slug,
+          ...(o.photo ? { image: o.photo } : {}),
           ...(o.brand ? { brand: { '@type': 'Brand', name: o.brand } } : {}),
           // Offer only when the price is feed-verified — a stale number
           // asserts something we cannot support (CLAUDE.md, "Prices we can
@@ -428,6 +452,9 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
 'td { padding: 10px 12px; border-bottom: 0.5px solid #efefec; vertical-align: middle; }' +
 'td a { color: #1a1a1a; font-weight: 600; text-decoration: none; } td a:hover { color: #4a9edd; }' +
 '.t-brand { display: block; font-size: 11px; color: #888; font-weight: 400; }' +
+'.t-optic { display: flex; align-items: center; gap: 10px; }' +
+'.t-photo { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 0.5px solid #ececec; background: #fff; flex: none; }' +
+'.pick-photo { width: 100%; aspect-ratio: 4/3; object-fit: contain; border-radius: 6px; border: 0.5px solid #ececec; background: #fff; }' +
 '.t-price { font-weight: 700; white-space: nowrap; }' +
 '.buy-btn { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; padding: 7px 12px; border-radius: 6px; text-decoration: none; white-space: nowrap; }' +
 '.buy-btn.disabled { background: #ddd; color: #888; }' +
@@ -479,7 +506,7 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
   likelyNote + noneNote +
   '<h2>Every red dot that fits the ' + esc(gunName) + '</h2>' +
   '<div class="table-wrap"><table><thead><tr>' +
-    '<th>Optic</th><th>Footprint</th><th>Dot</th><th>Window</th><th>Battery life</th><th>Price</th><th></th>' +
+    '<th>Optic</th><th>Footprint</th><th>Reticle</th><th>Window</th><th>Battery life</th><th>Price</th><th></th>' +
   '</tr></thead><tbody>' + tableRows + '</tbody></table></div>' +
   '<div class="disclosure">Prices update from retailer feeds; a listing we could not verify in the last 7 days shows &ldquo;Check price&rdquo;. Gunforma may earn a commission on purchases made through these links.</div>' +
   '<h2>Which optic cut does my ' + esc(gunName) + ' have?</h2>' +
