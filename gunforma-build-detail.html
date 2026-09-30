@@ -147,10 +147,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; transition: border-color 0.15s; display: flex; flex-direction: column; }
 .part-card:hover { border-color: #cfcdc4; }
 .part-card-top { display: flex; gap: 14px; padding: 16px 18px; align-items: flex-start; }
-.part-thumb { flex-shrink: 0; width: 88px; height: 88px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-/* contain, not cover, matching the post-build picker: these are product
-   shots at the manufacturer's aspect ratio, and cropping one to fill an
-   88px square hides the part it is meant to identify. */
+/* 160px wide, 4:3. Width + aspect-ratio rather than a width/height pair, the
+   same way .build-hero declares its square — one number to change, and no way
+   for the two to drift out of the ratio.
+   contain, not cover, matching the post-build picker: these are product shots
+   at the manufacturer's aspect ratio, and cropping one to fill the box hides
+   the part it is meant to identify. Nothing on this page sets object-fit or a
+   dimension inline, so this rule is the only thing sizing these photos —
+   checked, because an inline style="object-fit:cover" is exactly what made
+   the #82 fix a no-op on the admin page. */
+.part-thumb { flex-shrink: 0; width: 160px; aspect-ratio: 4 / 3; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+/* The photo opens the lightbox, so the box is a <button> whenever there is a
+   real photo behind it. It must add no layout of its own — the .part-thumb
+   rule above is still what sizes it. */
+.part-thumb-btn { padding: 0; font: inherit; color: inherit; cursor: zoom-in; }
+.part-thumb-btn:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; }
 .part-thumb.part-thumb-swatch { padding: 0; background: #fff; }
 .part-thumb-swatch-fill { display: block; width: 100%; height: 100%; }
 .part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
@@ -169,7 +180,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
    does not carry. A part can carry both. */
 /* "See other options" rows now carry a swatch or photo, so they need the
    media slot the picker uses. Same 46px box, same contain fit. */
-.part-affiliate-variant-row .variant-media { flex-shrink: 0; width: 40px; height: 40px; border-radius: 4px; background: #f7f7f5; border: 0.5px solid #eee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.part-affiliate-variant-row .variant-media { flex-shrink: 0; width: 72px; aspect-ratio: 4 / 3; border-radius: 4px; background: #f7f7f5; border: 0.5px solid #eee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+/* Wrapper button for a variant row's photo. It wraps rather than replaces the
+   .variant-media div because that markup comes from window.variantMediaHtml in
+   js/variant-swatch.js, which the post-build PICKER also renders — and there
+   the media sits inside an already-clickable card, so emitting a button from
+   the shared module would nest one control in another and hijack the picker's
+   own click. The wrapper keeps that change on this page only. */
+.variant-media-btn { flex-shrink: 0; display: block; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: zoom-in; }
+.variant-media-btn:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; border-radius: 5px; }
 .part-affiliate-variant-row .variant-media img { width: 100%; height: 100%; object-fit: contain; padding: 3px; box-sizing: border-box; background: #fff; display: block; }
 .part-affiliate-variant-row .variant-media-swatch { display: block; width: 100%; height: 100%; }
 .part-affiliate-variant-row.is-chosen { background: #f4faf6; }
@@ -290,6 +309,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .comment-edit-form, .comment-reply-form { margin-top: 8px; }
 .comment-edit-form textarea, .comment-reply-form textarea { width: 100%; min-height: 72px; resize: vertical; font: inherit; font-size: 13px; line-height: 1.5; border: 0.5px solid #cfcdc4; border-radius: 6px; padding: 8px 10px; }
 .comment-empty { text-align: center; color: #999; padding: 28px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; }
+
+/* PART PHOTO LIGHTBOX — read-only, and deliberately NOT js/photos.js's
+   .photo-preview. That one is the uploader's editor: a panel with Re-blur and
+   Delete wired to upload slots, on a page behind an auth gate. This is a
+   public build page showing a catalog photo somebody else's build links to,
+   so it borrows nothing but the idea.
+   The hero gallery keeps its thumbnail→big-image swap (see the note above
+   PHOTOS): the square hero is already a decent viewer, and that behaviour was
+   chosen on purpose. This lightbox is for the part rows only. */
+.part-lightbox { position: fixed; inset: 0; z-index: 950; background: rgba(14,15,17,0.92); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.part-lightbox[hidden] { display: none; }
+/* The image is shown at its natural size and only shrunk to fit, so a 1200px
+   catalog shot is not upscaled into mush on a big screen. */
+.part-lightbox img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; background: #fff; border-radius: 6px; display: block; }
+.part-lightbox-close { position: absolute; top: 14px; right: 16px; width: 40px; height: 40px; border-radius: 50%; border: 0.5px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.45); color: #fff; font: inherit; font-size: 20px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.part-lightbox-close:hover { background: rgba(0,0,0,0.7); }
+.part-lightbox-close:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; }
+
+@media (max-width: 600px) {
+  /* 120px on phones. The card is a 14px-gap flex row, so 160px next to a
+     brand, a model line and a tag row is too much of a 390px viewport. */
+  .part-thumb { width: 120px; }
+  .part-lightbox { padding: 12px; }
+  /* Thumb-sized targets are hard to hit on glass, and this one sits beside a
+     link. 44px is the floor, and the box is wider than that already. */
+  .part-lightbox-close { top: 8px; right: 8px; width: 44px; height: 44px; }
+}
 
 @media (max-width: 760px) {
   .build-header { grid-template-columns: 1fr; }
@@ -412,6 +458,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span id="toast-msg">Done</span></div>
 
+<!-- Part photo lightbox. Static markup rather than injected on first use: this
+     page already has its own <style> and its own body, so there is nothing for
+     a module to own here, and `hidden` keeps it inert until opened. -->
+<div class="part-lightbox" id="part-lightbox" role="dialog" aria-modal="true" aria-label="Part photo" hidden>
+  <button type="button" class="part-lightbox-close" id="part-lightbox-close" aria-label="Close photo">&times;</button>
+  <img id="part-lightbox-img" alt="">
+</div>
+
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
@@ -423,13 +477,45 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 var sb = window.sb;
 var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
 
+// EVERY key gunforma-post-build.html's CATEGORIES can write into
+// parts_snapshot needs an entry here, plus the raw products.category values an
+// Armory-saved part can arrive under. scripts/check-category-labels.mjs reads
+// both vocabularies out of the source and fails the build on a gap.
+//
+// `mag_release` and `other_parts` were both missing, and the symptom is worse
+// than a missing label: .part-type is `text-transform: uppercase`, so the raw
+// key rendered as "OTHER_PARTS" — which reads like a leaked enum, not a
+// heading. Two live builds were showing it.
 const CATEGORY_LABELS = {
   optics:'Optics', lights:'Weapon Lights', grips:'Grip Modules', slides:'Slides',
   barrels:'Barrels & Compensators', triggers:'Triggers', sights:'Sights',
   magwells:'Magwells', holsters:'Holsters', mags:'Magazines',
-  paintjob:'Paint Job & Finish', knife:'Tactical Knife', misc:'Miscellaneous'
+  mag_release:'Magazine Release', other_parts:'Other Parts',
+  paintjob:'Paint Job & Finish', knife:'Tactical Knife', misc:'Miscellaneous',
+  // Raw products.category values. A part added from the Armory is stored
+  // under the DB enum rather than the UI key, and this page does not
+  // normalize on read the way post-build does.
+  optic:'Optics', light:'Weapon Lights', frame:'Grip Modules', slide:'Slides',
+  barrel:'Barrels & Compensators', compensator:'Barrels & Compensators',
+  trigger:'Triggers', magwell:'Magwells', basepad:'Other Parts',
+  slide_release:'Other Parts', safety_selector:'Other Parts',
+  takedown_lever:'Other Parts', slide_plate:'Other Parts'
 };
-function categoryLabel(key) { return CATEGORY_LABELS[key] || key || 'Miscellaneous'; }
+
+// An unmapped key must never reach the page verbatim. Prettifying the
+// fallback — underscores to spaces, title case — is what stops the NEXT key
+// added to CATEGORIES from shipping as "SOME_NEW_THING" before anyone maps
+// it. Same fallback gunforma-parts-catalog.html and gunforma-armory.html
+// already use; this page was the one returning the key raw.
+function categoryLabel(key) {
+  if (CATEGORY_LABELS[key]) return CATEGORY_LABELS[key];
+  var pretty = String(key == null ? '' : key)
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, function (m) { return m.toUpperCase(); });
+  return pretty || 'Miscellaneous';
+}
 
 function escH(s) { return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
 function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
@@ -786,6 +872,76 @@ function photoAlt(i) {
   return (n > 1 ? 'photo ' + (i + 1) + ' of ' + n + ' — ' : 'photo of ') + PHOTO_SUBJECT;
 }
 
+// ── part photo lightbox ───────────────────────────────────────────────────
+// Opens a part row's photo at full size. Read-only: no Re-blur, no Delete,
+// nothing that writes — see the CSS note for why this is not js/photos.js's
+// .photo-preview.
+//
+// Scope is the PART ROWS only, both the selected part's photo and the photos
+// in "See all N colors". The hero gallery still swaps rather than opening
+// this, which is the behaviour the note above PHOTOS argues for.
+var LIGHTBOX_RETURN_FOCUS = null;   // the button that opened it
+var LIGHTBOX_BOUND = false;
+
+// Wraps a media slot in a button when there is a real photo to enlarge.
+// A SWATCH is not a photo — it is a flat fill this page generated, so blowing
+// it up to 900px says nothing and the control would be a lie.
+function clickablePhoto(mediaHtml, url, label) {
+  if (!url) return mediaHtml;
+  return '<button type="button" class="variant-media-btn" data-photo="'+escH(url)+'"'+
+    ' aria-label="'+escH(label || 'variant')+' — view larger">'+mediaHtml+'</button>';
+}
+
+function openLightbox(url, label, trigger) {
+  var box = document.getElementById('part-lightbox');
+  var img = document.getElementById('part-lightbox-img');
+  img.src = url;
+  img.alt = label || '';
+  box.hidden = false;
+  LIGHTBOX_RETURN_FOCUS = trigger || null;
+  document.getElementById('part-lightbox-close').focus();
+}
+
+function closeLightbox() {
+  var box = document.getElementById('part-lightbox');
+  if (box.hidden) return;
+  box.hidden = true;
+  // Dropping the src stops a large image decoding in the background and, more
+  // usefully, means the next open cannot flash the previous photo.
+  document.getElementById('part-lightbox-img').removeAttribute('src');
+  // Sending focus back to the thumbnail is the half that is easy to skip:
+  // without it a keyboard reader is dumped at the top of the document and has
+  // to tab through the whole parts list to get back to where they were.
+  if (LIGHTBOX_RETURN_FOCUS && document.contains(LIGHTBOX_RETURN_FOCUS)) {
+    LIGHTBOX_RETURN_FOCUS.focus();
+  }
+  LIGHTBOX_RETURN_FOCUS = null;
+}
+
+// Bound once on #parts-container, which renderBuild rewrites the innerHTML of
+// — the same reason bindGallery delegates. The <details> panel's rows are
+// inside it too, so a variant photo revealed later needs no rebinding.
+function bindLightbox() {
+  if (LIGHTBOX_BOUND) return;
+  LIGHTBOX_BOUND = true;
+
+  document.getElementById('parts-container').addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-photo]');
+    if (!btn) return;
+    openLightbox(btn.getAttribute('data-photo'), btn.getAttribute('aria-label'), btn);
+  });
+
+  var box = document.getElementById('part-lightbox');
+  document.getElementById('part-lightbox-close').addEventListener('click', closeLightbox);
+  // Backdrop only. e.target === box means the click landed on the padding
+  // around the image, not on the image itself — clicking the photo must not
+  // dismiss the thing you opened to look at.
+  box.addEventListener('click', function (e) { if (e.target === box) closeLightbox(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeLightbox();
+  });
+}
+
 // Delegated once on the container, which survives renderBuild rewriting its
 // innerHTML. <button> gives Enter and Space for free; there is deliberately
 // no keydown handler to get wrong.
@@ -900,6 +1056,7 @@ function renderBuild(b) {
   }
 
   document.getElementById('parts-container').innerHTML = renderParts(b);
+  bindLightbox();
 }
 
 function renderParts(b) {
@@ -966,7 +1123,20 @@ function renderPartCard(build, part, idx) {
   var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
   var thumbHtml;
   if (thumbUrl) {
-    thumbHtml = '<div class="part-thumb"><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"/></div>';
+    // A <button>, so Enter and Space come for free and it lands in the tab
+    // order — the same choice .gallery-thumb makes, and for the same reason:
+    // a div with a click handler is reachable by mouse only.
+    //
+    // onerror does TWO things. Replacing the contents with the "No photo" slot
+    // is the old behaviour; clearing data-photo and disabling the button is
+    // new and necessary — a dead image URL is common in this catalog, and
+    // without it the box would stay clickable and open a lightbox onto the
+    // same broken URL.
+    thumbHtml = '<button type="button" class="part-thumb part-thumb-btn" data-photo="'+escH(thumbUrl)+'"'+
+        ' aria-label="'+alt+' — view larger"'+
+        '><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy"'+
+        ' onerror="var b=this.parentElement;b.removeAttribute(\'data-photo\');b.disabled=true;b.removeAttribute(\'aria-label\');b.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"'+
+        '/></button>';
   } else if (chosenColor && (chosenColor.color || chosenColor.variant_label)) {
     var sw = window.variantSwatch(chosenColor.color);
     thumbHtml = '<div class="part-thumb part-thumb-swatch"><span class="part-thumb-swatch-fill" style="'+sw.css+'"></span></div>';
@@ -1194,7 +1364,7 @@ function renderAffiliateRow(part, vr) {
     }
 
     return '<div class="part-affiliate-variant-row'+(mine ? ' is-chosen' : '')+'">'+
-        window.variantMediaHtml(v, 'variant-media')+
+        clickablePhoto(window.variantMediaHtml(v, 'variant-media'), v.primary_image_url, vLabel)+
         '<div class="part-affiliate-variant-info">'+
           '<span class="part-affiliate-variant-label">'+escH(vLabel)+
             (mine ? '<span class="part-affiliate-variant-mine">On this build</span>' : '')+'</span>'+

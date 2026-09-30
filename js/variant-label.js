@@ -45,8 +45,48 @@
 //   {color:'Satin Stainless Steel'}       -> "Satin Stainless Steel"
 //   {color:'Black'}                       -> "Black"
 //   {variant_label:'2 MOA Red Dot', …}    -> "2 MOA Red Dot"
+//
+// THE FINISH IS OMITTED WHEN IT SAYS NOTHING NEW. Norsso ships
+// {color:'Satin Stainless Steel', finish:'Satin'}, which read as
+// "Satin Stainless Steel / Satin" — the reader is told "Satin" twice and the
+// second one adds no information. So a finish whose every word already
+// appears in the colour is dropped.
+//
+// WORD-LEVEL, AND EVERY WORD, both deliberately:
+//   - Word-level, not substring: a substring test would eat the "Tin" in
+//     "Nitride" and turn {color:'Nitride', finish:'TiN'} into "Nitride",
+//     losing a real second axis.
+//   - EVERY word, not any word: {color:'Black/Cherry', finish:'Cherry
+//     Anodized'} shares "Cherry" but still carries "Anodized", and dropping
+//     the whole finish would lose it. A partial overlap keeps both halves and
+//     reads slightly redundantly, which is the safe direction to be wrong in.
+//
+// This subsumes the old rule, which only collapsed an exact case-insensitive
+// match ("Satin" / "Satin"). That case is now just the one where the finish
+// has exactly one word and the colour is it.
 (function (global) {
   function clean(s) { return typeof s === 'string' ? s.trim() : ''; }
+
+  // Lowercased word list. Splitting on non-alphanumerics is what makes
+  // "Black/Cherry" two words rather than one, so a two-tone colour is
+  // compared a word at a time like any other.
+  function words(s) {
+    return s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  }
+
+  // Does `finish` tell the reader anything `color` has not already said?
+  function finishAddsNothing(color, finish) {
+    var fw = words(finish);
+    // A finish with no words at all — "—", "-", "/" are all real rows — has
+    // nothing to add by definition. Without this it would fall through as a
+    // vacuous subset anyway; stating it makes the intent legible.
+    if (!fw.length) return true;
+    var cw = words(color);
+    for (var i = 0; i < fw.length; i++) {
+      if (cw.indexOf(fw[i]) === -1) return false;
+    }
+    return true;
+  }
 
   global.variantLabel = function (v) {
     if (!v) return '';
@@ -57,10 +97,7 @@
     var finish = clean(v.finish);
 
     if (color && finish) {
-      // "Black / Black" and "Satin / Satin" are real rows here — colour and
-      // finish genuinely carry the same word on some variants. Printed twice
-      // it reads as a rendering bug, so collapse it.
-      if (color.toLowerCase() === finish.toLowerCase()) return color;
+      if (finishAddsNothing(color, finish)) return color;
       return color + ' / ' + finish;
     }
     return color || finish || '';

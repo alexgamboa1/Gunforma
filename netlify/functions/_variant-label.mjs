@@ -6,10 +6,26 @@
 // inputs and fails the deploy if they disagree.
 //
 //   variant_label, verbatim, when non-empty
-//   else  color + " / " + finish   (collapsed when the two are the same word)
+//   else  color + " / " + finish   (finish dropped when it says nothing new)
 //   else  whichever of the two is present
 //   else  ""
+//
+// "Says nothing new" means every WORD of the finish already appears in the
+// colour, so {color:'Satin Stainless Steel', finish:'Satin'} reads "Satin
+// Stainless Steel". Word-level and every-word are both load-bearing — see the
+// long note in js/variant-label.js for the two cases they protect.
 function clean(s) { return typeof s === 'string' ? s.trim() : ''; }
+
+function words(s) {
+  return s.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+function finishAddsNothing(color, finish) {
+  const fw = words(finish);
+  if (!fw.length) return true;
+  const cw = words(color);
+  return fw.every((w) => cw.includes(w));
+}
 
 export function variantLabel(v) {
   if (!v) return '';
@@ -20,7 +36,7 @@ export function variantLabel(v) {
   const finish = clean(v.finish);
 
   if (color && finish) {
-    if (color.toLowerCase() === finish.toLowerCase()) return color;
+    if (finishAddsNothing(color, finish)) return color;
     return color + ' / ' + finish;
   }
   return color || finish || '';
