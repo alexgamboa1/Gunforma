@@ -2,6 +2,15 @@
 
 Technical context for this repo. Read before making changes.
 
+Two companion files, both under `claude/` (blocked from the web by netlify.toml):
+
+- **`claude/operations.md`** — configuration that lives OUTSIDE this repo: Supabase
+  dashboard settings, Resend, Cloudflare DNS and Email Routing, where each secret
+  lives, and which security-advisor findings are deliberately accepted and why.
+  Read it before changing anything in a dashboard, and before "fixing" an advisor
+  warning — some of them are the intended design.
+- **`claude/loadouts-spec.md`** — the Loadouts project, parked.
+
 ## Stack
 
 - Static HTML + vanilla JS. **No framework, no bundler, no transpile step.** Pages are
