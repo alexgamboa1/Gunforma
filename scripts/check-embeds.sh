@@ -107,7 +107,14 @@ done)
 # name and was immediately defeated by its own documentation: a COMMENT
 # mentioning optic_adapter_footprints within the window marked the embed
 # safe. Watched failing before trusting, per the build-guards rule.
-SAFE_FOOTPRINT_PARENTS='(optic_cut_footprints|optic_adapter_footprints)[?]|from\([\047\042](optic_cut_footprints|optic_adapter_footprints)'
+SAFE_FOOTPRINT_PARENTS='(optic_cut_footprints|optic_adapter_footprints)[?]|from[(][\047\042](optic_cut_footprints|optic_adapter_footprints)'
+
+# A pattern the engine cannot compile must go RED, not read as clean. awk dies
+# mid-scan, the capture below comes back empty, and an empty capture is
+# indistinguishable from "no findings" — which is how this direction shipped
+# unable to fail for ANY input. Compile it at BEGIN time, where it is visible.
+awk -v SAFE="$SAFE_FOOTPRINT_PARENTS" 'BEGIN { x = ("" ~ SAFE) }' \
+  || { echo "error: direction-3 regex failed to compile — the guard cannot run"; exit 1; }
 matches_fp=$(printf '%s\n' "$files" | while IFS= read -r f; do
   [ -n "$f" ] || continue
   awk -v FNAME="$f" -v W="$WINDOW" -v SAFE="$SAFE_FOOTPRINT_PARENTS" '
