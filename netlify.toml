@@ -106,6 +106,18 @@
   status = 404
   force = true
 
+# brand/ holds the master artwork the site assets are re-exported FROM, plus the
+# README recording how (transparent, zero padding, 211px tall — the CSS pins the
+# nav logo to 22px, so a padded export renders it tiny). Nothing in here is
+# loaded by any page; assets/ is what the site uses. Blocked because masters are
+# not for download, and because the README itself says this directory is served
+# by default — which was true until this rule existed.
+[[redirects]]
+  from = "/brand/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
 # Extension wildcards do NOT work here. Netlify only treats "*" as a splat at
 # the END of a path, so "/*.md" matches nothing — verified on deploy preview
 # 13, where both .md files still returned 200 under such a rule. (It does not
