@@ -115,10 +115,7 @@ export default async (request, context) => {
     }
   } catch { /* unparseable referrer is simply not recorded */ }
 
-  // waitUntil, not await: the response is already on its way out. Errors are
-  // swallowed deliberately — there is nobody left to tell, and an unhandled
-  // rejection in an edge function is noise, not a signal.
-  const log = fetch(`${SB_URL}/rest/v1/link_clicks`, {
+  const insert = () => fetch(`${SB_URL}/rest/v1/link_clicks`, {
     method: "POST",
     headers: {
       apikey: serviceKey,
@@ -127,9 +124,39 @@ export default async (request, context) => {
       Prefer: "return=minimal",
     },
     body: JSON.stringify({ link_id: id, referrer_path: referrerPath }),
-  }).catch(() => {});
+  });
 
-  if (context && typeof context.waitUntil === "function") context.waitUntil(log);
+  // DEBUG PATH, request-header gated so no normal click can reach it.
+  // "queued" says the insert was HANDED to waitUntil. It does not say the
+  // insert worked, and the first real run proved the difference: the header
+  // read queued and the table stayed empty, because the failure was swallowed.
+  // That is this repo's own "a green result is not evidence" rule, reproduced
+  // in the thing built to measure it.
+  //
+  // So there is a way to ask. x-go-debug: 1 AWAITS the insert and reports its
+  // status and body instead of guessing. It costs the caller the round trip —
+  // which is exactly why it is opt-in and why normal traffic never takes it.
+  if (request.headers.get("x-go-debug") === "1") {
+    let status = "no-response", body = "";
+    try {
+      const r = await insert();
+      status = String(r.status);
+      if (!r.ok) body = (await r.text()).slice(0, 220);
+    } catch (e) {
+      status = "threw";
+      body = String((e && e.message) || e).slice(0, 220);
+    }
+    headers.set("x-go-log", "debug");
+    headers.set("x-go-insert-status", status);
+    if (body) headers.set("x-go-insert-body", body.replace(/[\r\n]+/g, " "));
+    headers.set("x-go-key-len", String(serviceKey.length));
+    return new Response(null, { status: 302, headers });
+  }
+
+  // waitUntil, not await: the response is already on its way out.
+  if (context && typeof context.waitUntil === "function") {
+    context.waitUntil(insert().catch(() => {}));
+  }
   headers.set("x-go-log", "queued");
   return new Response(null, { status: 302, headers });
 };
