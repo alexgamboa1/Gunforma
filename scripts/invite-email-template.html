@@ -1,15 +1,17 @@
 <!-- ============================================================
   Gunforma - Invite User email template
   Paste target:  Supabase Dashboard > Authentication > Email Templates > Invite user
-  Subject line:  Your build is live on Gunforma - claim your account
+  Subject line:  Your build is live on Gunforma
   Fired by:      admin.inviteUserByEmail() in BOTH supabase/functions/launch-invite
-                 and supabase/functions/invite-builder. redirectTo is
-                 /gunforma-claim.html.
+                 and supabase/functions/invite-builder.
   Variable:      {{ .ConfirmationURL }}
 
-  This is the only one of the three a stranger reads before ever seeing the
-  site. The 24-hour expiry below tracks Supabase's default mailer OTP expiry
-  (86400s); if that setting changes, change this copy too.
+  Subject carries the news, preheader carries the action - deliberately split.
+  An earlier version subjected "Your build is live on Gunforma - claim your
+  account" over a preheader that said the same thing, and the inbox row read
+  "build is live" twice before anyone opened it.
+
+  The 24-hour expiry tracks Supabase's default mailer OTP expiry (86400s).
 
   THE DASHBOARD IS THE SOURCE OF TRUTH. Editing this file changes nothing until
   it is pasted into Supabase. This file exists so the template is reviewable and
@@ -17,10 +19,16 @@
 
   Fragment, not a document - Supabase supplies the wrapper. Table layout and
   inline styles only (Gmail strips <style>, Outlook ignores flexbox).
+
   The logo is assets/email-logo.png, which bakes in the #0e0f11 page background:
   the site logo is light-on-transparent and disappears on a white panel.
+
+  The hidden div on the first line is the preheader - the grey preview text
+  beside the subject in an inbox list. It must EXTEND the subject, never repeat
+  it, and the trailing run of &zwnj;&nbsp; fills the client's preview buffer so
+  it stops scraping the logo alt text and headline in behind it.
 ============================================================ -->
-<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0e0f11;opacity:0;">Your Gunforma build is live. Set up your profile and claim it.</div>
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0e0f11;opacity:0;">Claim your account and set your username &mdash; takes about a minute. &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#0e0f11;padding:40px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
   <tr>
     <td align="center">
