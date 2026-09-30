@@ -176,8 +176,11 @@ failing. Treat any edit to that view as a security change.
 **`auth_otp_long_expiry` — WARN, accepted for now.** Direct consequence of the
 86400 decision above. Revisit after launch.
 
-**`auth_leaked_password_protection` — WARN, should be fixed.** One toggle under
-Auth → Passwords. Checks new passwords against HaveIBeenPwned. Free, no downside.
+**`auth_leaked_password_protection` — WARN, declined 2026-09-30.** One toggle under
+Auth → Passwords; checks new passwords against HaveIBeenPwned. AG's call is that it
+is not needed at current scale. Recorded as a decision, not an oversight — do not
+re-raise it as a finding. Revisit if signups open beyond hand-invited builders, or
+if any account is ever compromised.
 
 **`rls_enabled_no_policy` ×4** — `price_history`, `link_clicks`, `sync_drift_review`,
 `affiliate_links_is_primary_archive`. RLS on with no policy is deny-all, which is
