@@ -1,100 +1,65 @@
 <!-- ============================================================
-  Gunforma — Invite User email template
-  Paste into Supabase Dashboard → Authentication → Email Templates → Invite user
-  Set the Subject line to:  Your build is live on Gunforma — claim your account
-  Uses {{ .ConfirmationURL }} — the URL the invite redirectTo lands on.
-  Table-based layout + inline styles for maximum client compatibility
-  (Gmail strips <style>, Outlook ignores flexbox, Yahoo hates most things).
+  Gunforma - Invite User email template
+  Paste target:  Supabase Dashboard > Authentication > Email Templates > Invite user
+  Subject line:  Your build is live on Gunforma - claim your account
+  Fired by:      admin.inviteUserByEmail() in BOTH supabase/functions/launch-invite
+                 and supabase/functions/invite-builder. redirectTo is
+                 /gunforma-claim.html.
+  Variable:      {{ .ConfirmationURL }}
+
+  This is the only one of the three a stranger reads before ever seeing the
+  site. The 24-hour expiry below tracks Supabase's default mailer OTP expiry
+  (86400s); if that setting changes, change this copy too.
+
+  THE DASHBOARD IS THE SOURCE OF TRUTH. Editing this file changes nothing until
+  it is pasted into Supabase. This file exists so the template is reviewable and
+  diffable in git; it must be kept in sync by hand.
+
+  Fragment, not a document - Supabase supplies the wrapper. Table layout and
+  inline styles only (Gmail strips <style>, Outlook ignores flexbox).
+  The logo is assets/email-logo.png, which bakes in the #0e0f11 page background:
+  the site logo is light-on-transparent and disappears on a white panel.
 ============================================================ -->
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Claim your account on Gunforma</title>
-</head>
-<body style="margin:0;padding:0;background:#f4f3ee;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#1a1a1a;">
-  <!-- Preheader (hidden preview text shown in inbox lists) -->
-  <div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#f4f3ee;opacity:0;">
-    Your Gunforma build is live. Set your password and claim your profile.
-  </div>
-
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f3ee;">
-    <tr>
-      <td align="center" style="padding:32px 12px;">
-        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
-
-          <!-- Dark header with logo -->
-          <tr>
-            <td align="center" style="background:#0e0f11;padding:28px 24px;">
-              <a href="https://gunforma.com" style="text-decoration:none;">
-                <img src="https://gunforma.com/assets/email-logo.png"
-                     width="220" height="40" alt="GUNFORMA"
-                     style="display:block;width:220px;height:40px;border:0;outline:none;text-decoration:none;color:#e8e6e1;font-size:18px;font-weight:600;letter-spacing:0.12em;"/>
-              </a>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:36px 32px 8px 32px;">
-              <p style="margin:0 0 6px 0;font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#4a9edd;font-weight:700;">Welcome to Gunforma</p>
-              <h1 style="margin:0 0 14px 0;font-size:22px;line-height:1.25;font-weight:700;color:#1a1a1a;">Your build is live &mdash; claim your account.</h1>
-              <p style="margin:0 0 22px 0;font-size:14px;line-height:1.65;color:#444;">
-                You're one of the first builders on Gunforma. Your build is live and waiting for you. Click below to set up your profile and claim it.
-              </p>
-            </td>
-          </tr>
-
-          <!-- CTA button -->
-          <tr>
-            <td align="center" style="padding:0 32px 8px 32px;">
-              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-                <tr>
-                  <td align="center" bgcolor="#4a9edd" style="border-radius:6px;">
-                    <a href="{{ .ConfirmationURL }}"
-                       style="display:inline-block;padding:14px 28px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:14px;font-weight:700;letter-spacing:0.04em;color:#ffffff;text-decoration:none;border-radius:6px;">
-                      Claim My Account &rarr;
-                    </a>
-                  </td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-
-          <!-- Fallback plain link (some clients strip buttons) -->
-          <tr>
-            <td style="padding:20px 32px 8px 32px;">
-              <p style="margin:0;font-size:12px;line-height:1.6;color:#888;">
-                Button not working? Paste this link into your browser:
-              </p>
-              <p style="margin:6px 0 0 0;font-size:12px;line-height:1.6;color:#2a7bbd;word-break:break-all;">
-                <a href="{{ .ConfirmationURL }}" style="color:#2a7bbd;text-decoration:underline;">{{ .ConfirmationURL }}</a>
-              </p>
-            </td>
-          </tr>
-
-          <!-- Fine print -->
-          <tr>
-            <td style="padding:28px 32px 24px 32px;">
-              <hr style="border:none;border-top:1px solid #eee;margin:0 0 18px 0;"/>
-              <p style="margin:0;font-size:11.5px;line-height:1.6;color:#888;">
-                This invite is single-use and expires soon. Didn't sign up for Gunforma? You can safely ignore this email &mdash; no account will be created.
-              </p>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td align="center" style="background:#0e0f11;padding:20px 24px;">
-              <p style="margin:0;font-size:11px;letter-spacing:0.08em;color:#888780;">
-                &copy; 2026 <strong style="color:#e8e6e1;font-weight:600;">Gunforma</strong> &middot; Your pistol. Your loadout.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
+<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0e0f11;opacity:0;">Your Gunforma build is live. Set up your profile and claim it.</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0e0f11;padding:40px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
+        <!-- LOGO -->
+        <tr>
+          <td align="center" style="padding:0 0 32px;">
+            <a href="https://gunforma.com" style="text-decoration:none;">
+              <img src="https://gunforma.com/assets/email-logo.png" width="220" height="40" alt="GUNFORMA" style="display:block;width:220px;height:40px;border:0;outline:none;text-decoration:none;color:#e8e6e1;font-size:18px;font-weight:600;letter-spacing:0.12em;"/>
+            </a>
+          </td>
+        </tr>
+        <!-- CARD -->
+        <tr>
+          <td style="background:#ffffff;border-radius:8px;padding:36px 32px;border:1px solid #e5e5e5;">
+            <p style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#4a9edd;margin:0 0 8px;">Your build is live</p>
+            <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 16px;letter-spacing:-0.01em;">Claim your account</p>
+            <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 28px;">You're one of the first builders on Gunforma. Your build is already up on the site &mdash; click below to set up your profile and claim it as yours.</p>
+            <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+              <tr>
+                <td align="center" style="background:#4a9edd;border-radius:6px;">
+                  <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:13px 32px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:0.02em;">Claim my account &rarr;</a>
+                </td>
+              </tr>
+            </table>
+            <p style="font-size:12px;color:#999;line-height:1.6;margin:0 0 20px;">If the button doesn't work, copy and paste this link into your browser:</p>
+            <p style="font-size:11px;color:#4a9edd;word-break:break-all;line-height:1.5;margin:0 0 24px;">{{ .ConfirmationURL }}</p>
+            <div style="border-top:1px solid #e5e5e5;padding-top:20px;">
+              <p style="font-size:11px;color:#999;line-height:1.6;margin:0;">This invite is single-use and expires in 24 hours. If you weren't expecting it, you can safely ignore this email &mdash; no account will be created.</p>
+            </div>
+          </td>
+        </tr>
+        <!-- FOOTER -->
+        <tr>
+          <td align="center" style="padding:28px 0 0;">
+            <p style="font-size:10px;color:#555;letter-spacing:0.06em;margin:0;">&copy; 2026 Gunforma &middot; Your pistol. Your loadout.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
