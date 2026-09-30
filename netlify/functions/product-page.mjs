@@ -265,7 +265,7 @@ async function fetchProduct(slug) {
     'product_variants!product_variants_product_id_fkey(id,slug,sku,upc,msrp,is_default,primary_image_url,color,finish,' +
       'optic_cut,bundle,clamp_style,manual_safety_variant,reticle,reticle_color,variant_label,' +
       'variant_images(url,position,alt_text),' +
-      'affiliate_links(url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name)))',
+      'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name)))',
   ].join(',');
   // Embed filters, one per level: a retired variant drops out of the page, and
   // a retired listing drops out of its (live) variant's buy rows. Both are
@@ -314,6 +314,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
         price: l.street_price != null ? Number(l.street_price) : null,
         stale: isStalePrice(l),
         url: l.affiliate_url || l.url,
+        goUrl: '/go/' + l.id,
         in_stock: l.in_stock,
         partnerName: displayPartnerName(l.partners ? l.partners.name : null),
       });
@@ -426,7 +427,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
       : r.in_stock === false ? '<span class="stock out">Out of stock</span>' : '';
     const partner = r.partnerName ? ' at <strong>' + esc(r.partnerName) + '</strong>' : '';
     const btn = r.url
-      ? '<a class="buy-btn" href="' + esc(r.url) + '" target="_blank" rel="noopener sponsored nofollow">' +
+      ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' +
           (r.partnerName ? 'Buy at ' + esc(r.partnerName) + ' ↗' : 'View listing ↗') + '</a>'
       : '<span class="buy-btn disabled">No listing yet</span>';
     return '<div class="variant-row">' +

@@ -99,7 +99,7 @@
       .select('id, product_id, variant_label, reticle, reticle_color, color, finish, optic_cut, bundle, clamp, ' +
               'manual_safety_variant, is_default, primary_image_url, ' +
               'products!product_variants_product_id_fkey(category), ' +
-              'affiliate_links(url, affiliate_url, street_price, in_stock, ' +
+              'affiliate_links(id, url, affiliate_url, street_price, in_stock, ' +
               'last_checked, op_last_matched_by, partners(name))')
       // Retired rows never reach a buy surface. Top-level filter drops a
       // retired variant; the embed filter drops a retired listing while
@@ -124,7 +124,10 @@
           variant:     variant,
           category:    v.products ? v.products.category : null,
           isDefault:   !!v.is_default,
+          // The retailer destination, kept for reference; the BUTTON uses goUrl.
           url:         l.affiliate_url || l.url,
+          linkId:      l.id,
+          goUrl:       '/go/' + l.id,
           price:       l.street_price != null ? Number(l.street_price) : null,
           stale:       isStalePrice(l),
           in_stock:    l.in_stock,
@@ -211,7 +214,7 @@
     var btnLabel = hero.partnerName ? 'Buy at ' + esc(hero.partnerName) + ' ↗' : 'View listing ↗';
     return '<div class="part-affiliate">' +
         '<div class="part-affiliate-info">' + infoHtml + '</div>' +
-        '<a class="part-affiliate-btn" href="' + esc(hero.url) + '" target="_blank" rel="noopener sponsored nofollow">' + btnLabel + '</a>' +
+        '<a class="part-affiliate-btn" href="' + esc(hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' + btnLabel + '</a>' +
       '</div>';
   }
 
@@ -251,7 +254,7 @@
             '<span class="part-affiliate-variant-label">' + esc(l.variantLabel) + '</span>' +
             '<span class="part-affiliate-variant-sub">' + lPrice + ' ' + lPartner + ' ' + lStock + '</span>' +
           '</div>' +
-          '<a class="part-affiliate-variant-btn" href="' + esc(l.url) + '" target="_blank" rel="noopener sponsored nofollow">' + lBtn + '</a>' +
+          '<a class="part-affiliate-variant-btn" href="' + esc(l.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' + lBtn + '</a>' +
         '</div>';
     }).join('');
     return main +

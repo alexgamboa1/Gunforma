@@ -55,6 +55,9 @@ async function get(path) {
   return {
     status: res.status,
     body,
+    location: res.headers.get('location'),
+    goLog: res.headers.get('x-go-log'),
+    cacheControl: res.headers.get('cache-control'),
     idSource: res.headers.get('x-build-og-id-source'),
     origHeader: res.headers.get('x-build-og-orig'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
@@ -152,6 +155,62 @@ for (const [label, path] of [
   const r = await get(path);
   ok(r.status === 404, `${label}: hard 404, not a soft one`, r.status +
      (r.status === 200 && /Build not found/i.test(r.body) ? ' — SOFT 404' : ''));
+}
+
+
+// ── /go/ — the outbound click layer ────────────────────────────────────
+// Asserted against a REAL deploy, not locally, for the reason this whole file
+// exists: a rewrite's behaviour is not verified until it has been observed on
+// one, and this repo has been burned twice believing otherwise. An edge
+// function is worse than a redirect rule that way — netlify dev runs it in a
+// different runtime from production's.
+//
+// UNKNOWN AND RETIRED CONVERGE. The lookup carries retired_at=is.null, so a
+// retired link returns zero rows exactly as an unknown id does and falls
+// through the same branch. There were zero retired links when this was
+// written, so the retired case cannot be exercised with real data — the
+// assertion below covers the branch they share, and the filter itself is
+// asserted by reading the function's source rather than claimed.
+{
+  const goLive = await (async () => {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/affiliate_links?select=id,url,affiliate_url&retired_at=is.null&limit=1`,
+      { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  })();
+
+  console.log('\n── /go/ click layer');
+  ok(!!goLive, 'found a live affiliate link to exercise /go/ with');
+
+  if (goLive) {
+    const expected = goLive.affiliate_url || goLive.url;
+    const r = await get('/go/' + goLive.id);
+    ok(r.status === 302, `/go/<live id>: 302, not 200 and not a rewrite`, r.status);
+    // Byte-for-byte. A tracking URL that loses or reorders a query parameter
+    // still resolves to the right product page and silently stops earning.
+    ok(r.location === expected, '302 Location is affiliate_url byte for byte',
+       r.location === expected ? 'identical' : `got ${r.location}\n        want ${expected}`);
+    ok(/no-store/.test(r.cacheControl || ''),
+       'not cacheable — the sync can re-point a link under the same id', r.cacheControl);
+    // Reports what happened to the LOGGING, never to the redirect. 'queued'
+    // means the insert was handed to waitUntil; 'no-service-key' means the
+    // redirect worked and nothing was recorded, which is a configuration
+    // problem that must not be silent.
+    ok(r.goLog === 'queued', 'click was queued for logging', r.goLog);
+  }
+
+  for (const [label, path] of [
+    ['/go/nope (not a uuid)',   '/go/nope'],
+    ['/go/<unknown uuid>',      '/go/00000000-0000-4000-8000-000000000000'],
+    ['/go/ (no id at all)',     '/go/'],
+  ]) {
+    const r = await get(path);
+    ok(r.status === 404, `${label}: hard 404, never a redirect home`,
+       r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
+  }
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

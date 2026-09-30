@@ -1800,7 +1800,12 @@ function renderGuideCard(g) {
     // fallback to products.url. Renders as an empty span when no listing
     // exists so the 4-column grid layout stays intact.
     var buyCell = aff && aff.hero
-      ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.url) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>'
+      // /go/<link id>, like every other buy link — the click layer's whole
+      // point is that no buy button bypasses it. This page is parked (no nav,
+      // noindex) but it still answers on its own URL, and Loadouts inherits
+      // this renderer, so leaving it pointing straight at the retailer would
+      // ship an unlogged buy link into the rebuild.
+      ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>'
       : '<span></span>';
     return '<div class="guide-part">' +
       '<span class="guide-part-cat">' + esc(catLabel(part.category)) + '</span>' +

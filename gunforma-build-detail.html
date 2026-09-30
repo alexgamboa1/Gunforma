@@ -623,7 +623,7 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,color,finish,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
+    .select('id,product_id,variant_label,color,finish,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
@@ -661,6 +661,8 @@ async function loadAffiliates(build) {
         category:    v.products ? v.products.category : null,
         isDefault:   !!v.is_default,
         url:         l.affiliate_url || l.url,
+        linkId:      l.id,
+        goUrl:       '/go/' + l.id,
         price:       l.street_price != null ? Number(l.street_price) : null,
         stale:       isStalePrice(l),
         in_stock:    l.in_stock,
@@ -1126,7 +1128,7 @@ function renderAffiliateRow(part, vr) {
 
   var mainRow = '<div class="part-affiliate">'+
       '<div class="part-affiliate-info">'+priceHtml+msrpNote+partnerHtml+'</div>'+
-      '<a class="part-affiliate-btn" href="'+escH(hero.url)+'" target="_blank" rel="noopener sponsored nofollow">'+btnLabel+'</a>'+
+      '<a class="part-affiliate-btn" href="'+escH(hero.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+btnLabel+'</a>'+
     '</div>';
 
   // ── "See other options" — every live color, not only the buyable ones ──
@@ -1174,19 +1176,19 @@ function renderAffiliateRow(part, vr) {
                     ? '<span class="part-affiliate-stock in">In stock</span>'
                     : lst.in_stock === false
                       ? '<span class="part-affiliate-stock out">Out of stock</span>' : '');
-      btnHtml = '<a class="part-affiliate-variant-btn" href="'+escH(lst.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+      btnHtml = '<a class="part-affiliate-variant-btn" href="'+escH(lst.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
                   (lst.partnerName ? escH(lst.partnerName)+' ↗' : 'View ↗')+'</a>';
     } else if (v.msrp != null) {
       // Tier 2, labelled. Never a bare number where a buy price is expected.
       priceHtml = '$' + Number(v.msrp).toFixed(2) + '<span class="part-affiliate-msrp-tag">MSRP</span>';
       btnHtml = anyLink
-        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
             (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
         : '<span class="part-affiliate-variant-none">No retailer yet</span>';
     } else {
       priceHtml = 'Check price';
       btnHtml = anyLink
-        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.url)+'" target="_blank" rel="noopener sponsored nofollow">'+
+        ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
             (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
         : '<span class="part-affiliate-variant-none">No retailer yet</span>';
     }
