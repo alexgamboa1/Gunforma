@@ -29,6 +29,13 @@
 
 import { CATEGORY_META } from './_category-meta.mjs';
 import { buildUrl } from './_build-url.mjs';
+// Guide URLS COME FROM THE SAME REGISTRY guide-page.mjs SERVES — same
+// principle as buildUrl() above: the sitemap and the page's canonical are
+// derived from one module, so they cannot disagree by construction. A page
+// is listed exactly when guide-page.mjs would render it, and its lastmod is
+// the registry's `updated`, which is when its reviewed prose last changed
+// (live prices don't move lastmod; they are live on every fetch).
+import { GUIDE_PAGES, guidePath } from './_guide-meta.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -161,6 +168,7 @@ export default async () => {
     ]);
     entries = [
       ...STATIC_PATHS.map((p) => ({ loc: SITE + (p === '/' ? '/' : p) })),
+      ...GUIDE_PAGES.map((g) => ({ loc: SITE + guidePath(g.family, g.gun), lastmod: g.updated })),
       ...products,
       ...builds,
       ...profiles,

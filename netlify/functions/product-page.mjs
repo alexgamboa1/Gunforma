@@ -31,6 +31,12 @@
 // that js/category-map.js still requires.
 import { CATEGORY_META } from './_category-meta.mjs';
 import { variantLabel } from './_variant-label.mjs';
+// Stale-price rule and listing sort. These moved to _listing-rules.mjs when
+// guide-page.mjs arrived needing the same rules — two server renderers, one
+// copy, same reasoning as _variant-label.mjs. The browser copies
+// (js/affiliate.js, gunforma-build-detail.html) remain hand-synced; see
+// CLAUDE.md "Duplicated logic to keep in sync".
+import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -173,43 +179,8 @@ function esc(s) {
   ));
 }
 
-// A price we can stand behind is one a FEED verified within the window.
-// op_last_matched_by null means no feed ever matched this link, so its
-// street_price was hand-entered — a hand-typed last_checked must not pass as
-// verification, which is why both columns are checked and not just the date.
-//
-// Duplicated in js/affiliate.js and gunforma-build-detail.html — same
-// three-way rule, same window. Change one, change all three.
-const STALE_AFTER_DAYS = 7;
-function isStalePrice(l) {
-  if (!l || !l.last_checked || !l.op_last_matched_by) return true;
-  // last_checked is a DATE ('YYYY-MM-DD'); read as UTC midnight.
-  const checked = Date.parse(l.last_checked + 'T00:00:00Z');
-  if (Number.isNaN(checked)) return true;
-  // Whole DAYS, not elapsed milliseconds — same boundary as the SQL rule,
-  // last_checked < current_date - 7.
-  const now = new Date();
-  const todayUTC = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return checked < todayUTC - STALE_AFTER_DAYS * 86400000;
-}
-
-// Last resort, so a tie resolves the same way on every request and every page:
-// partner name, then URL. PostgREST returns embedded rows in arbitrary order.
-function tieBreak(a, b) {
-  const ap = a.partnerName || '', bp = b.partnerName || '';
-  if (ap !== bp) return ap < bp ? -1 : 1;
-  const au = a.url || '', bu = b.url || '';
-  return au === bu ? 0 : (au < bu ? -1 : 1);
-}
-
-// A stale price sorts as unknown rather than as its number — otherwise a stale
-// low price still leads the buy rows and only then renders as "Check price".
-function sortPrice(r) { return r.stale ? null : r.price; }
-
-function displayPartnerName(name) {
-  if (!name) return name;
-  return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
-}
+// isStalePrice, compareListingRows and displayPartnerName come from
+// _listing-rules.mjs — see the import at the top and that file's header.
 
 async function pgGet(path) {
   const res = await fetch(SB_URL + '/rest/v1/' + path, {
@@ -329,16 +300,10 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
   // retired. That instability was fine for a comparison table and wrong for
   // a build page, where the same label gets written into parts_snapshot.
   rows.forEach((r) => { r.label = variantLabel(r.v); });
-  rows.sort((a, b) => {
-    // Fresh-and-priced first, so the top buy row is the one the headline
-    // price quotes; tieBreak keeps equal listings in a stable order.
-    const af = (!a.stale && a.price != null), bf = (!b.stale && b.price != null);
-    if (af !== bf) return af ? -1 : 1;
-    if ((a.in_stock === true) !== (b.in_stock === true)) return a.in_stock ? -1 : 1;
-    const ap = sortPrice(a), bp = sortPrice(b);
-    if (ap != null && bp != null && ap !== bp) return ap - bp;
-    return tieBreak(a, b);
-  });
+  // Fresh-and-priced first, so the top buy row is the one the headline
+  // price quotes; the shared comparator keeps equal listings in a stable
+  // order. Full ordering documented in _listing-rules.mjs.
+  rows.sort(compareListingRows);
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
   // be anchored on a number no feed has confirmed.

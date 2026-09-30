@@ -284,6 +284,18 @@
   to = "/.netlify/functions/product-page?splat=:splat"
   status = 200
 
+# Fit guide pages — /fit/p365/<family>/<gun-slug>, server-rendered by
+# guide-page.mjs from the fitment tables. The function validates the WHOLE
+# path (unlike product-page's last-segment extraction) and hard-404s any
+# (family, gun) pair not declared in _guide-meta.mjs — a page is a
+# deliberate act, not a side effect of a database row. Distinct prefix, so
+# ordering relative to /parts/* is immaterial; kept beside it because the
+# two are siblings in spirit.
+[[redirects]]
+  from = "/fit/*"
+  to = "/.netlify/functions/guide-page?splat=:splat"
+  status = 200
+
 [[redirects]]
   from = "/field-notes/"
   to = "/field-notes.html"

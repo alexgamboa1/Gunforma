@@ -63,6 +63,8 @@ check "variant picker runs"        scripts/variant-picker.test.mjs
 check "buy links go through /go/"  scripts/check-buy-links.mjs
 check "category labels cover keys" scripts/check-category-labels.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
+check "listing rules pinned"       scripts/listing-rules.test.mjs
+check "guide registry + content"   scripts/check-guide-content.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

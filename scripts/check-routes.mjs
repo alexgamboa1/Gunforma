@@ -60,6 +60,8 @@ async function get(path) {
     cacheControl: res.headers.get('cache-control'),
     idSource: res.headers.get('x-build-og-id-source'),
     origHeader: res.headers.get('x-build-og-orig'),
+    guideOptics: res.headers.get('x-guide-optics'),
+    guideFresh: res.headers.get('x-guide-fresh-priced'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -210,6 +212,39 @@ for (const [label, path] of [
     const r = await get(path);
     ok(r.status === 404, `${label}: hard 404, never a redirect home`,
        r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
+  }
+}
+
+// ── /fit/ — the guide pages ────────────────────────────────────────────
+// The live set comes from the same registry guide-page.mjs serves and
+// sitemap.mjs lists, so this exercises exactly the pages that claim to
+// exist — a page added to the registry without content (or vice versa)
+// fails the build earlier, in scripts/check-guide-content.mjs.
+{
+  console.log('\n── /fit/ guide pages');
+  const { GUIDE_PAGES, guidePath } = await import('../netlify/functions/_guide-meta.mjs');
+
+  for (const p of GUIDE_PAGES) {
+    const path = guidePath(p.family, p.gun);
+    const r = await get(path);
+    ok(r.status === 200, `${path}: 200`, r.status);
+    ok(r.canon.length === 1, `${path}: exactly one canonical`, r.canon.length);
+    ok(r.canon[0] === 'https://gunforma.com' + path,
+       `${path}: canonical is the apex /fit/ form`, r.canon[0]);
+    ok(/application\/ld\+json/.test(r.body), `${path}: JSON-LD present`);
+    ok(r.body.includes('href="/go/'), `${path}: buy links go through /go/`);
+    // Recorded, not asserted — live counts are time-dependent facts.
+    note('optics on page', r.guideOptics + ' (' + r.guideFresh + ' fresh-priced)');
+  }
+
+  for (const [label, path] of [
+    ['/fit/p365/red-dots/<unknown gun>', '/fit/p365/red-dots/p999'],
+    ['/fit/p365/<unknown family>/p365-xl', '/fit/p365/nope/p365-xl'],
+    ['/fit/<wrong platform>/red-dots/p365-xl', '/fit/glock/red-dots/p365-xl'],
+    ['/fit/p365/red-dots (no gun)', '/fit/p365/red-dots'],
+  ]) {
+    const r = await get(path);
+    ok(r.status === 404, `${label}: hard 404`, r.status);
   }
 }
 
