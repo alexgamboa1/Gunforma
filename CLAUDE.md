@@ -913,6 +913,51 @@ and it should not: the module's injected CSS would land on those shared
 selectors and restyle the armory grid. Extracting the armory card is a
 separate question from extracting the picker.
 
+### Auth emails live in the dashboard, not in this repo
+
+The Supabase Auth email templates are configured in the Supabase dashboard
+(Authentication -> Email Templates). **Editing the files below changes nothing
+until someone pastes them in.** They are versioned mirrors, so the templates are
+reviewable and diffable in git — they are not the thing that sends.
+
+| Template | Fired by | Repo mirror |
+|---|---|---|
+| Confirm signup | `signUp()` and `resend({type:'signup'})` in `gunforma-signup.html` | `scripts/confirm-signup-email-template.html` |
+| Reset Password | `resetPasswordForEmail()` in `gunforma-signin.html` | `scripts/reset-password-email-template.html` |
+| Invite user | `admin.inviteUserByEmail()` in BOTH `supabase/functions/launch-invite` and `supabase/functions/invite-builder` | `scripts/invite-email-template.html` |
+
+Magic Link, Change Email Address and Reauthentication are unreachable — nothing
+calls `updateUser`, `signInWithOtp` or `verifyOtp`. If an email-change feature is
+ever added to the profile page, that template goes live as Supabase's stock
+default: no logo, no brand, no warning.
+
+This mirror drifted three times in a single day. Both directions fail silently:
+editing the repo file sends nothing, and editing the dashboard leaves the repo
+describing an email that does not exist. `check-all.sh` does not inspect these
+files and cannot — the live template is readable only through the Management
+API. The only guard is changing both in the same sitting.
+
+Two things inside those templates are load-bearing and look like decoration:
+
+- The logo is `assets/email-logo.png`, which **bakes the `#0e0f11` background
+  into the image**. `assets/gunforma-logo.png` is light-on-transparent — its
+  "GUN" half is cream `#f2efe8` — and vanishes on a white panel. Do not
+  substitute it, and do not regenerate it at a different size.
+- The hidden `<div>` on line 1 of each template is the **preheader**: the grey
+  preview text beside the subject in an inbox list. It must EXTEND the subject,
+  never repeat it. The trailing run of `&zwnj;&nbsp;` fills the client's preview
+  buffer so Gmail stops scraping the logo alt text and headline in behind it.
+
+**Sending and receiving are separate systems and fail independently.** Outbound
+is Resend as `build@gunforma.com`, which sends whether or not anything receives
+there. Inbound is Cloudflare Email Routing, which routes **per address** and
+drops mail to any address with no rule. `contact@gunforma.com` is published six
+times across `privacy-policy.html`, `terms-of-service.html` and
+`gunforma-legal.html` and had no routing rule at all until 2026-09-30 — every
+message ever sent to it was discarded, with nothing anywhere reporting a
+failure. A catch-all is now enabled. There is no dashboard that says "0 emails
+received"; the only way this surfaces is someone asking why you never replied.
+
 ## Replacing the builder's contents: identity, and asking first
 
 **Any action that REPLACES the builder's contents, or CHANGES which row it
