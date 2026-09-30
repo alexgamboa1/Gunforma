@@ -1,4 +1,4 @@
-# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-09-29)
+# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-09-30)
 
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
@@ -36,6 +36,126 @@ by Claude through the artifact database tool. The "manual deploy log" was never 
 This file was wrong for two weeks and nothing surfaced it. Same failure the START-HERE
 doc warns about, inside the notes file for the tool built to prevent it. Re-read the
 artifact before trusting any description of it, including this one.
+
+---
+
+## Changes made 2026-09-29 (late session, PRs #95–#98) — the launch
+
+**Five real builders' builds posted through admin-post and five claim
+messages sent.** Real builds 2 → 7. open-send-claim-invites is done.
+First session whose result is a business number, not a PR count.
+
+Corrections to what the 09-29 prompt claimed: affiliate links are
+per-VARIANT (326 of 493 on non-default variants) — the prompt asserted
+per-product on Alex's description of desired display, not a query.
+Inference-from-absence, by the coach. twitter:image was [object Object]
+on every build page; fixed, guard added. Reddit chat still shows no
+image — that's Reddit chat, not us. Seven default variants carried
+another colour's photo; nulled, sync refills, daily guard added.
+claude/ was publicly served ~4h after docs were committed for Claude
+Code to read; #97 blocks it. Rule: strategy docs stay in the claude.ai
+project; the relevant section gets pasted into the prompt.
+
+Price rule, three tiers: variant's own live listing → MSRP labelled +
+product "from" → product "from". Never MSRP unlabelled where a viewer
+expects a buy price. Buy link follows the variant when it has one.
+
+Images: 244 non-default variants had no photo. Feed fills ~160. 96 need
+a human; 83 of those have no retailer link at all — the AvantLink gap
+(Norsso 19, Grayguns 13, Icarus 13). Fill by demand: only variants that
+appear on real builds. The swatch is the design, not a bug.
+
+Attribution check from Friday: link_clicks vs Awin, per partner, three
+days summed, watch the ratio. 0.7–0.9 healthy; 0.0 means the tracking
+parameter is lost.
+
+Carried forward: imageUrl re-sync into live builds after the 07:23 UTC
+sync; remaining ~15 queued builds (messages held until the first five
+reply or 48h); sync GTIN-preference; two platform photos for loadouts;
+Sig P365 XL OEM Gray SKU conflict (98ddd711); gallery-swap's 29 local
+commits — triage, don't delete.
+
+### The technical record, #95–#98
+
+**#95 — the colour picker, and the fallback that had to go.** The picker
+gains a colour step between the product grid and the part being added; the
+button reads "Choose color →" only when a choice follows. It renders into
+`#cards-<catKey>`, the container `filterCards()` already rewrites, so neither
+page's `buildCategoryBlock()` changed and the two duplicated copies could not
+drift on it. Single-variant products (81 of 231) get no step at all, keyed on
+LIVE variants so a product that drops to one through retirement stops offering
+a choice with nobody editing a flag.
+
+`js/variant-swatch.js` is new and browser-only — one file, no parity test,
+unlike `variant-label` which the server also needs. Measured against all 54
+distinct `color` values in the catalogue: 94.8% solid, 3.2% two-tone split,
+1.7% iridescent (Spectrum, Rainbow), 0.3% Clear, **zero unknown**.
+
+Two defects found by looking at the rendered output rather than the diff:
+`Black/Cherry` rendered solid black, because "Cherry" was unmapped and the
+second half of a two-tone value silently fell away. And the build row was
+still falling back to `IMAGE_BY_PRODUCT_ID` — the product's DEFAULT variant
+photo — which is the one thing this feature must not do. Removed, and the
+cache deleted rather than left populated-but-unread, because a cache with no
+reader is an invitation to wire the banned fallback back up.
+
+**#96 — the drill.** `scripts/check-variant-image-sku.mjs` had only ever
+passed, so its issue-raising branch had never executed. A green run proves the
+SCRIPT works and says nothing about whether anyone would hear if it failed.
+`DRILL=true` forces the failure exit without touching data. Fired by hand
+2026-09-30: issue #99 opened, carrying the real reading. The alert path is now
+observed rather than assumed — the same standard the rest of this repo's
+guards are held to.
+
+**#97 — claude/ was publicly served.** `publish = "."` serves the repo root,
+so a new DIRECTORY is live the moment it is committed unless `netlify.toml`
+says otherwise. `/claude/ops-tracker-notes.md`, `/claude/loadouts-spec.md` and
+`/claude/prompts/variant-selection.md` all returned 200 while `/CLAUDE.md` and
+`/scripts/*` returned 404, because those had rules and the new directory did
+not. Narrow — nothing linked to them, they were not in `sitemap.xml` — but
+`robots.txt` is `Allow: /` with no `x-robots-tag`, so nothing stopped a
+crawler either. Confirmed 404 on production after deploy.
+
+The file already carried a warning about exactly this, and it did not save us:
+it is phrased about ROOT-LEVEL FILES, and this was a new directory. The new
+rule's comment covers both.
+
+**#98 — the /go/ click layer.** An EDGE function, not a serverless one,
+because it sits on the money path: a Netlify serverless function cannot
+respond-then-work, so the insert would sit in FRONT of the 302 and every buy
+click would pay for it. `context.waitUntil()` sends the redirect first.
+Measured on the preview: 0.168–0.304s, which is the destination LOOKUP, not
+the logging — adding the insert did not change it.
+
+`link_clicks` is private by design like `price_history`: RLS on, no policies,
+no grants, verified after creation, with CLAUDE.md's anon-write drift sweep
+returning zero rows. It records link id, timestamp and the ON-SITE path only.
+
+EIGHT emit sites, not the seven the brief listed. The eighth was
+`gunforma-armory.html` — the parked page, which is where the last four
+divergences in this repo also hid. And the affiliate link `id` was not
+selected anywhere, so the click layer's whole key had to be threaded through
+all three queries first.
+
+**Two failures worth keeping, both of the same family.**
+
+The service key read 15 characters and the insert 401'd. The value in Netlify
+was correct; the DEPLOY was stale. An environment change does not reach a
+deploy that already exists — `netlify env:list` showed the new value while the
+running function still held the old one. Rebuild after any env change, or the
+thing you are testing is not the thing you changed.
+
+And `x-go-log: queued` said the insert had been handed to `waitUntil`. It never
+said the insert SUCCEEDED, and for one run it read `queued` while the table
+stayed empty. That is this repo's own rule — a green result is not evidence the
+work happened — reproduced inside the thing built to measure clicks. The header
+was a witness to its own case. `x-go-debug: 1` now awaits the insert and
+reports its real status, which is how the 401 was found at all.
+
+**Guards went 3 → 9 across the four PRs**, each watched failing on the real bug
+it protects rather than a synthetic one: variant label parity, shared globals
+loaded, snapshot whitelists agree, affiliate module runs, variant picker runs,
+buy links go through /go/.
 
 ---
 
