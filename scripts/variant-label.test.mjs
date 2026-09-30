@@ -50,11 +50,33 @@ const CASES = [
   [{ color: 'Bronze/Black',  finish: null }, 'Bronze/Black'],
   [{ color: 'Black/Cherry',  finish: 'Anodized' }, 'Black/Cherry / Anodized'],
 
-  // Real row — Norsso. colour and finish are the same word; printed twice it
-  // reads as a rendering bug.
-  [{ color: 'Satin Stainless Steel', finish: 'Satin' }, 'Satin Stainless Steel / Satin'],
+  // Real row — Norsso. The finish repeats a word the colour already carries,
+  // so it is dropped: the reader was being told "Satin" twice.
+  // These two are the whole live blast radius of the rule, measured against
+  // product_variants on 2026-09-30: 14 variants on the first, 1 on the second.
+  [{ color: 'Satin Stainless Steel', finish: 'Satin' }, 'Satin Stainless Steel'],
+  [{ color: 'Stainless Steel', finish: 'Stainless' }, 'Stainless Steel'],
   [{ color: 'Satin', finish: 'Satin' }, 'Satin'],
   [{ color: 'satin', finish: 'SATIN' }, 'satin'],
+  // Word order and position do not matter — it is a set test, not a prefix one.
+  [{ color: 'Stainless Steel Satin', finish: 'Satin' }, 'Stainless Steel Satin'],
+  // A multi-word finish fully covered by the colour goes too.
+  [{ color: 'Satin Stainless Steel', finish: 'Satin Steel' }, 'Satin Stainless Steel'],
+
+  // …but EVERY word must be covered. A partial overlap keeps both halves,
+  // because the uncovered word is a real second axis.
+  [{ color: 'Black/Cherry', finish: 'Cherry Anodized' }, 'Black/Cherry / Cherry Anodized'],
+  [{ color: 'Stainless Steel', finish: 'Satin Stainless' }, 'Stainless Steel / Satin Stainless'],
+
+  // WORD-level, not substring. "TiN" is inside "Nitride" as a substring and a
+  // substring test would swallow it, losing a real finish.
+  [{ color: 'Nitride', finish: 'TiN' }, 'Nitride / TiN'],
+  [{ color: 'Blackout', finish: 'Black' }, 'Blackout / Black'],
+
+  // A finish with no words at all has nothing to add. These are real rows.
+  [{ color: 'Black', finish: '—' }, 'Black'],
+  [{ color: 'Black', finish: '-' }, 'Black'],
+  [{ color: 'Black', finish: '/' }, 'Black'],
 
   // variant_label overrides verbatim, whatever else is set.
   [{ variant_label: '2 MOA Red Dot', color: 'Black', finish: 'DLC' }, '2 MOA Red Dot'],
