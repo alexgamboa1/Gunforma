@@ -1,63 +1,7 @@
 <!-- ============================================================
-  Gunforma - "your build is live" email
-  Read at runtime by supabase/functions/send-build-approved/index.ts.
-
-  THIS FILE IS THE SOURCE OF TRUTH. Unlike the three Supabase Auth templates
-  in scripts/, nothing is pasted into a dashboard: the function reads
-  this file, so editing it and redeploying the function changes the live
-  email. See CLAUDE.md, "Auth emails live in the dashboard, not in this repo"
-  - this one is the exception to that rule.
-
-  Placeholders, substituted by the function:
-    {{BUILD_NAME}}  the build's name, HTML-escaped
-    {{BUILD_URL}}   https://gunforma.com/b/<uuid> - resolves and
-                    self-canonicalises to the slug URL, so this template is
-                    not a third place the build URL is constructed.
-
-  Table layout, inline styles only. Logo is assets/email-logo.png, which bakes
-  in the #0e0f11 background. The hidden div on line 1 of the body is the
-  preheader: it must EXTEND the subject, never repeat it.
+  MOVED. The email template is now inlined in index.ts as the EMAIL_TEMPLATE
+  constant. Supabase edge-function deploys bundle only the JS entrypoint and
+  its imports, so a sibling .html read at runtime with Deno.readTextFile fails
+  with ENOENT (observed 2026-10-01, HTTP 500). Edit the template in index.ts.
+  This file is kept only so the path in git history resolves; it is not read.
 ============================================================ -->
-<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0e0f11;opacity:0;">It&#39;s public now &mdash; here&#39;s the link to share. &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#0e0f11;padding:40px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-  <tr>
-    <td align="center">
-      <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
-        <!-- LOGO -->
-        <tr>
-          <td align="center" style="padding:0 0 32px;">
-            <a href="https://gunforma.com" style="text-decoration:none;">
-              <img src="https://gunforma.com/assets/email-logo.png" width="220" height="40" alt="GUNFORMA" style="display:block;width:220px;height:40px;border:0;outline:none;text-decoration:none;color:#e8e6e1;font-size:18px;font-weight:600;letter-spacing:0.12em;"/>
-            </a>
-          </td>
-        </tr>
-        <!-- CARD -->
-        <tr>
-          <td style="background:#ffffff;border-radius:8px;padding:36px 32px;border:1px solid #e5e5e5;">
-            <p style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#4a9edd;margin:0 0 8px;">Approved</p>
-            <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 16px;letter-spacing:-0.01em;">{{BUILD_NAME}} is live</p>
-            <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 28px;">We went through it part by part and it&#39;s on the site. Anyone can see it now, and the link below is yours to share wherever you want.</p>
-            <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
-              <tr>
-                <td align="center" style="background:#4a9edd;border-radius:6px;">
-                  <a href="{{BUILD_URL}}" target="_blank" style="display:inline-block;padding:13px 32px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:0.02em;">See your build &rarr;</a>
-                </td>
-              </tr>
-            </table>
-            <p style="font-size:12px;color:#999;line-height:1.6;margin:0 0 20px;">If the button doesn&#39;t work, copy and paste this link into your browser:</p>
-            <p style="font-size:11px;color:#4a9edd;word-break:break-all;line-height:1.5;margin:0 0 24px;">{{BUILD_URL}}</p>
-            <div style="border-top:1px solid #e5e5e5;padding-top:20px;">
-              <p style="font-size:11px;color:#999;line-height:1.6;margin:0;">Spotted something wrong with how we listed a part? Just reply &mdash; this address reaches a person. Reply &quot;unsubscribe&quot; and we&#39;ll stop sending these.</p>
-            </div>
-          </td>
-        </tr>
-        <!-- FOOTER -->
-        <tr>
-          <td align="center" style="padding:28px 0 0;">
-            <p style="font-size:10px;color:#555;letter-spacing:0.06em;margin:0;">&copy; 2026 Gunforma &middot; Your pistol. Your loadout.</p>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>

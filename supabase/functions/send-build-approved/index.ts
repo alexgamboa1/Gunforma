@@ -10,14 +10,15 @@
 //   SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY   auto-set by Supabase
 //   RESEND_API_KEY                            set by hand in Edge Function secrets
 //
-// Auth model: same as invite-builder. verify_jwt only proves the token is a
-// validly signed project JWT — the anon key is one of those and is published in
-// every page. The role claim is checked here.
+// THE EMAIL TEMPLATE IS INLINED BELOW, not read from a file. Supabase bundles
+// only the JS entrypoint and its imports on deploy — a sibling email.html is
+// NOT uploaded, and Deno.readTextFile on it fails at runtime with ENOENT.
+// This is the single source of truth for the email; edit EMAIL_TEMPLATE and
+// redeploy. (email.html in this folder is a stub pointing here.)
 //
 // IDEMPOTENCY lives in one place: email_sent_at. It is stamped only after
 // Resend returns 2xx. A send that succeeds and then fails to stamp will resend
-// next run — a duplicate is a smaller failure than silence, and is the right
-// way round for this to break.
+// next run — a duplicate is a smaller failure than silence.
 // -----------------------------------------------------------------------------
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -25,6 +26,48 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SITE = 'https://gunforma.com';
 const FROM = 'Gunforma <build@gunforma.com>';
 const BATCH = 50;
+
+const EMAIL_TEMPLATE = `<div style="display:none;max-height:0;overflow:hidden;font-size:1px;line-height:1px;color:#0e0f11;opacity:0;">It&#39;s public now &mdash; here&#39;s the link to share. &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;</div>
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#0e0f11;padding:40px 0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+  <tr>
+    <td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" style="max-width:480px;width:100%;">
+        <tr>
+          <td align="center" style="padding:0 0 32px;">
+            <a href="https://gunforma.com" style="text-decoration:none;">
+              <img src="https://gunforma.com/assets/email-logo.png" width="220" height="40" alt="GUNFORMA" style="display:block;width:220px;height:40px;border:0;outline:none;text-decoration:none;color:#e8e6e1;font-size:18px;font-weight:600;letter-spacing:0.12em;"/>
+            </a>
+          </td>
+        </tr>
+        <tr>
+          <td style="background:#ffffff;border-radius:8px;padding:36px 32px;border:1px solid #e5e5e5;">
+            <p style="font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:#4a9edd;margin:0 0 8px;">Approved</p>
+            <p style="font-size:22px;font-weight:700;color:#1a1a1a;margin:0 0 16px;letter-spacing:-0.01em;">{{BUILD_NAME}} is live</p>
+            <p style="font-size:14px;color:#555;line-height:1.7;margin:0 0 28px;">We went through it part by part and it&#39;s on the site. Anyone can see it now, and the link below is yours to share wherever you want.</p>
+            <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;">
+              <tr>
+                <td align="center" style="background:#4a9edd;border-radius:6px;">
+                  <a href="{{BUILD_URL}}" target="_blank" style="display:inline-block;padding:13px 32px;font-size:14px;font-weight:600;color:#ffffff;text-decoration:none;letter-spacing:0.02em;">See your build &rarr;</a>
+                </td>
+              </tr>
+            </table>
+            <p style="font-size:12px;color:#999;line-height:1.6;margin:0 0 20px;">If the button doesn&#39;t work, copy and paste this link into your browser:</p>
+            <p style="font-size:11px;color:#4a9edd;word-break:break-all;line-height:1.5;margin:0 0 24px;">{{BUILD_URL}}</p>
+            <div style="border-top:1px solid #e5e5e5;padding-top:20px;">
+              <p style="font-size:11px;color:#999;line-height:1.6;margin:0;">Spotted something wrong with how we listed a part? Just reply &mdash; this address reaches a person. Reply &quot;unsubscribe&quot; and we&#39;ll stop sending these.</p>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td align="center" style="padding:28px 0 0;">
+            <p style="font-size:10px;color:#555;letter-spacing:0.06em;margin:0;">&copy; 2026 Gunforma &middot; Your pistol. Your loadout.</p>
+          </td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+`;
 
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -72,11 +115,6 @@ Deno.serve(async (req) => {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  // The template is a file in this function's directory, not a dashboard
-  // template. Unlike the three Supabase Auth templates, THIS repo file is the
-  // source of truth — editing it and redeploying changes the live email.
-  const template = await Deno.readTextFile(new URL('./email.html', import.meta.url));
-
   const { data: rows, error: readErr } = await supabase
     .from('notifications')
     .select('id,user_id,build_id,builds(name),profiles!notifications_user_id_fkey(email_notifications)')
@@ -92,8 +130,6 @@ Deno.serve(async (req) => {
   const failures: Array<{ id: number; reason: string }> = [];
 
   for (const row of rows as any[]) {
-    // Opted out: stamp it so it is not reconsidered every ten minutes forever.
-    // The notification still exists in their in-app inbox.
     if (row.profiles && row.profiles.email_notifications === false) {
       if (!dryRun) await supabase.from('notifications').update({ email_sent_at: new Date().toISOString() }).eq('id', row.id);
       skipped++;
@@ -105,10 +141,8 @@ Deno.serve(async (req) => {
     if (userErr || !email) { failures.push({ id: row.id, reason: 'no email for user' }); continue; }
 
     const buildName = (row.builds && row.builds.name) || 'Your build';
-    // /b/<uuid> resolves and self-canonicalises to the slug URL, so this is
-    // NOT a third place the build URL is constructed. See CLAUDE.md.
     const buildUrl  = `${SITE}/b/${row.build_id}`;
-    const html = template
+    const html = EMAIL_TEMPLATE
       .replaceAll('{{BUILD_NAME}}', esc(buildName))
       .replaceAll('{{BUILD_URL}}', buildUrl);
 
