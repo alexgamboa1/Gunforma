@@ -1,0 +1,60 @@
+name: Send build-approved emails
+
+# Sweeps notifications where kind='approved' and email_sent_at is null.
+#
+# CADENCE WARNING. GitHub's scheduler delays and drops firings — measured on
+# this repo at 5-8 hours late for a daily cron and 2-3 runs a day against a
+# 4-a-day one (see claude/operations.md §6b). A 15-minute cron here is a
+# ceiling, not a promise. If approval emails need to feel immediate, the
+# admin approve action has to call the function directly and this becomes the
+# safety net rather than the delivery path.
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'List what would be sent without sending'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: send-build-approved
+  cancel-in-progress: false
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send
+        env:
+          SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          # A blank input is the empty string, not false — see PR #92, where a
+          # blank threshold parsed as 0 and alerted every six hours forever.
+          # Compare explicitly against 'true' rather than trusting falsiness.
+          DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SERVICE_KEY}" ]; then
+            echo "SUPABASE_SERVICE_ROLE_KEY is not set in repository secrets"; exit 1
+          fi
+          URL="https://lagjjcpclvzrjlrswojt.supabase.co/functions/v1/send-build-approved?dry_run=${DRY}"
+          echo "dry_run=${DRY}"
+          BODY=$(curl -sS -X POST "$URL" \
+            -H "Authorization: Bearer ${SERVICE_KEY}" \
+            -H 'Content-Type: application/json' \
+            -w '\n%{http_code}')
+          CODE=$(echo "$BODY" | tail -1)
+          JSON=$(echo "$BODY" | sed '$d')
+          echo "$JSON"
+          echo "## send-build-approved" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$JSON" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          if [ "$CODE" != "200" ]; then echo "HTTP $CODE"; exit 1; fi
+          # A 200 carrying failures is not a success. The whole point of this
+          # repo's doctrine is that a green result is not evidence.
+          echo "$JSON" | grep -q '"ok":true' || { echo "function reported failures"; exit 1; }

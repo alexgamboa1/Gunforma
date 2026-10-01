@@ -76,6 +76,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .notif-kind.like    { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
 .notif-kind.comment { color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; }
 .notif-kind.reply   { color: #166534; background: #e8f5ee; border: 0.5px solid #86cfad; }
+.notif-kind.approved{ color: #8a6116; background: #fdf3e0; border: 0.5px solid #e9cf9a; }
 .empty { text-align: center; color: #999; padding: 48px 20px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; line-height: 1.6; margin-top: 16px; }
 .empty a { color: #2a7bbd; text-decoration: none; }
 .load-more { display: block; margin: 20px auto 0; font: inherit; font-size: 11px; font-weight: 600; color: #666; background: #fff; border: 0.5px solid #e5e5e5; padding: 8px 14px; border-radius: 4px; cursor: pointer; }
@@ -178,7 +179,7 @@ async function loadPage(offset) {
 function render(hasMore) {
   var list = document.getElementById('notif-list');
   if (!ROWS.length) {
-    list.innerHTML = '<div class="empty">Nothing yet. When someone likes or comments on one of your builds, it shows up here.<br/>' +
+    list.innerHTML = '<div class="empty">Nothing yet. When a build of yours goes live, or someone likes or comments on one, it shows up here.<br/>' +
       '<a href="gunforma-builds.html">Browse builds</a> · <a href="gunforma-post-build.html">Post yours</a></div>';
     document.getElementById('notif-more').innerHTML = '';
     return;
@@ -189,6 +190,23 @@ function render(hasMore) {
 }
 
 function rowHtml(n) {
+  // 'approved' has no actor — the sender is Gunforma, not a person — so it
+  // renders its own line instead of falling through to the <actor> <verb>
+  // <build> shape below, where the verb ternary would default to 'commented
+  // on' and the name to 'Someone'.
+  if (n.kind === 'approved') {
+    var bname = n.builds ? n.builds.name : 'Your build';
+    return '<a class="notif' + (n.read_at ? '' : ' unread') + '" href="' +
+        escH(buildPath(n.build_id, n.builds && n.builds.name)) + '">' +
+      '<div class="notif-avatar">\u2605</div>' +
+      '<div>' +
+        '<div class="notif-line"><span class="notif-kind approved">approved</span>' +
+          '<strong>' + escH(bname) + '</strong> is live on Gunforma</div>' +
+        '<div class="notif-preview">Anyone can see it now — the link is yours to share.</div>' +
+      '</div>' +
+      '<div class="notif-time">' + relTime(n.created_at) + '</div>' +
+    '</a>';
+  }
   var actor = n.profiles || {};
   var name = actor.username || 'Someone';
   var build = n.builds ? n.builds.name : 'your build';
