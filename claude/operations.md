@@ -194,6 +194,32 @@ a trigger function and probably should not be callable over RPC at all. **Open.*
 
 ---
 
+## 6b. Scheduled workflows — the cron is not when they run
+
+Measured 2026-09-30 from `gh run list`. GitHub's scheduler both **delays and
+drops** firings, consistently and by a lot. Do not reason about freshness from
+the cron expression.
+
+| Workflow | Cron (UTC) | Observed |
+|---|---|---|
+| Refresh affiliate prices | `23 7 * * *` | 12:15–15:34 every day — **5 to 8 hours late**, never once near 07:23 |
+| Price freshness | `41 2,8,14,20 * * *` (4/day) | 2–3 runs/day, delays from 17 minutes to 5 hours |
+
+Both succeed. Nothing is broken. But an alert threshold tuned to "four freshness
+checks a day" is tuned to a cadence that does not happen, and anything that
+assumes prices refresh at 07:23 is about six hours wrong.
+
+The corollary: a workflow that has not run *yet today* is not evidence it is
+broken. On 2026-09-30 an incomplete `gh run list` paste was read as proof the
+sync had never run on a schedule; the full history showed it running daily, and
+succeeding on schedule the two days after its fix landed. Pull the full history
+for the specific workflow before concluding anything:
+
+    gh run list --workflow="<name>" --limit 50 --json event,conclusion,createdAt \
+      --jq '.[] | "\(.createdAt[0:16])  \(.event)  \(.conclusion)"'
+
+---
+
 ## 7. Secrets — where each one lives
 
 There is no single store. Each of these is a separate hand-typed copy, and a
