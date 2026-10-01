@@ -67,7 +67,6 @@ const SPEC_TABLES = {
   ]],
   frame: ['frame_specs', [
     ['housing_class', 'Housing Class'],
-    ['frame_material', 'Material'],
     ['has_rail', 'Accessory Rail', YESNO],
     ['grip_rail_type', 'Rail Type'],
     ['has_beaver_tail', 'Beavertail', YESNO],
