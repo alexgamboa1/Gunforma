@@ -81,9 +81,23 @@ ok(locs.every((u) => u.startsWith(SITE + '/')), 'every URL is an apex https://gu
    locs.find((u) => !u.startsWith(SITE + '/')) || 'all');
 
 // ── the 241 that are indexed today ─────────────────────────────────────
-const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'));
+// RETIRED. A path here was in the original static sitemap and has been
+// deliberately removed since. The baseline file itself is NOT edited: it is
+// the pinned record of what was indexed on day one, and editing it to clear a
+// failure is indistinguishable from editing it to hide a regression. Removals
+// are declared here instead, with the PR that made them, so the reason sits
+// where the failure would otherwise appear.
+//
+// Deleting an entry from this list puts that URL back under the guard — which
+// is what should happen when the Armory is un-parked (see claude/loadouts-spec.md).
+const RETIRED = new Set([
+  '/gunforma-armory.html',  // PR #88 — Armory parked: no nav, noindex, out of the sitemap
+]);
+
+const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'))
+  .filter((p) => !RETIRED.has(p));
 const missing = baseline.filter((p) => !locs.includes(SITE + p));
-ok(missing.length === 0, `all ${baseline.length} URLs from the static sitemap are still present`,
+ok(missing.length === 0, `all ${baseline.length} URLs from the static sitemap are still present (${RETIRED.size} retired)`,
    missing.length ? missing.slice(0, 5).join(', ') + (missing.length > 5 ? ` …(+${missing.length - 5})` : '') : 'none missing');
 
 // ── builds ─────────────────────────────────────────────────────────────
