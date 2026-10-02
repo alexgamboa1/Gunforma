@@ -1,4 +1,4 @@
-# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-09-30)
+# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-02)
 
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
@@ -39,7 +39,205 @@ artifact before trusting any description of it, including this one.
 
 ---
 
-## Changes made 2026-09-29 (late session, PRs #95–#98) — the launch
+## Changes made 2026-10-01/02 — database cleanup, Icarus refresh, catalog outage
+
+### Database — schema cleanup, applied directly to Supabase
+
+- Dropped `products.specs` (the JSONB catch-all). 81 blobs archived to
+  `_archive_products_specs` first — nothing deleted without a copy.
+- Replaced two free-text columns with lookup tables: `colors` (49 rows across 14
+  families), FK from `product_variants.color`; and `materials` (7 families), FK from a
+  new `products.material_family`. Dropped the now-redundant `frame_specs.frame_material`.
+- Added `create_variant()` — an admin RPC that writes a variant, its image, and its
+  affiliate link in **one atomic call**, so a half-made variant can't exist — and
+  `slugify()`.
+- Backfilled 644 `variant_label`s. Synced 47 optic materials from
+  `optic_specs.housing_material`. Filled all 7 remaining material gaps by hand from
+  vendor pages — `material_family` is now complete.
+- Loaded 80 variant images from the gap audit.
+- Added `magazine_families.capacity_note`; added housing classes `fuse-xl` and
+  `xmacro-sub`, each with its `rail_bridge` rows.
+
+### Icarus Precision — vendor changed stores mid-catalog
+
+Icarus moved to a series-based Magento store, which broke every link we held. Fixed 7
+dead URLs and 7 prices; renamed 7 products to the new series naming (old name preserved
+in `family` + description, so search and history still resolve). Corrected fitment that
+was wrong even before the move: XL EVO and Pro Elite were tagged `xmacro` but are
+`p365xl` and take X/XL mags; FUSE EVO → `fuse-xl`. Added 11 new grip modules.
+**Open:** Cerakote / manual-safety / brass price adders, and images for 14 new variants.
+Full detail in `claude/icarus-precision-refresh-2026-10.md`.
+
+### Frontend — on main (`d8b71ca` + `8367658` + a product-page fix)
+
+The catalog query no longer selects `specs` (it's gone). It now embeds `optic_specs`
+(with the disambiguated `footprints!optic_specs_footprint_id_fkey` embed) and
+`frame_specs → housing_classes → magazine_families`. The grip-module detail rows were
+rewritten — the old rows referenced columns that no longer exist and had been rendering
+**blank**. The product page now shows Housing Class and Magazines rows and
+`material_family`.
+
+### Incident — the catalog returned 400 for ~a day
+
+Production catalog 400'd for roughly a day. Cause: the frontend fix that stops selecting
+`specs` was committed to branch `contest-flags` **while the column was dropped in prod**
+— so live code was selecting a column that no longer existed. Resolved by cherry-picking
+the fix to `main`.
+
+**New rule, and it is the real output of this session:** no column drop or rename until
+the matching frontend commit is on `main` and published. Schema and the code that reads
+it ship together, schema **second**. Same family as every other failure in this file — a
+change correct in isolation, broken in the gap between two systems that were updated out
+of order.
+
+Also learned: the Supabase MCP **holds `DROP` and WHERE-less `UPDATE` statements waiting
+for a confirmation that never arrives** — they look hung but are blocked, and nothing
+says so. Run DROPs in the dashboard SQL editor instead.
+
+### Repo hygiene
+
+Deleted 45 merged local branches and pruned 4 remote. Remaining non-main branches:
+`feat/parts-index`, `fix/field-notes-star-rating`.
+
+### Gap audit — unchanged, still the headline
+
+71 products (31%) have zero affiliate links, concentrated in the direct-to-consumer
+brands: **Norsso 24**, ECM, Grayguns, Mischief Machine, Zaffiri, Armory Craft. These
+sell direct, not through the networks we are on, so it is a **partnership** problem, not
+a matching one. Outreach still pending — the single highest-leverage non-code move on
+the board.
+
+---
+
+## Changes made 2026-09-30 — email, a lost-folder scare, and two notification systems
+
+Began on "fix the email logo." Ended four PRs deep in an email backend. One long session.
+
+### The email system, end to end
+
+The brand's auth emails rendered GUNFORMA as a **text wordmark** because the site
+logo is light-on-transparent — "GUN" is cream #f2efe8, invisible on a white panel.
+Built `assets/email-logo.png` (440×80, #0e0f11 header background baked in so no
+client's dark mode can strand it) and put it on all three live auth templates:
+Confirm signup, Reset Password, Invite user.
+
+**Two of those three had no source in the repo at all** — they lived only in the
+Supabase dashboard, unversioned. Now mirrored at `scripts/*-email-template.html`, with
+the rule in CLAUDE.md: the dashboard is the source of truth, editing the repo file
+sends nothing, both fail silently. That mirror drifted **three separate times in one
+day**; the discipline is "change both in the same sitting."
+
+Inbox-row fix: the invite preview read "build is live / claim your account" five times
+over (subject, preheader, logo alt, eyebrow, headline all scraped into one line).
+Preheaders rewritten to *extend* the subject, with a `&zwnj;&nbsp;` spacer run that
+fills the client's preview buffer so it stops scraping body text.
+
+### contact@ had never received a single email
+
+Outbound was fine (Resend custom SMTP as `build@gunforma.com`, 30/hr). Inbound is
+Cloudflare Email Routing, which routes **per address** — and there was **no rule for
+`contact@gunforma.com`**, the address published six times across the privacy policy,
+terms, and legal pages. Every message ever sent there was silently discarded, no
+bounce. A compliance gap, not a UX one. Added rules for `contact@`, `build@`, and a
+catch-all. Sending and receiving are separate systems that fail independently; nothing
+reads "0 received."
+
+DNS verified on the wire: DKIM signs as the apex, SPF on `send.` points at amazonses
+(Resend's path), DMARC added (`p=none`). OTP expiry raised 3600→86400 so invite links
+survive overnight — trips `auth_otp_long_expiry` (accepted) and lengthens reset-link
+life to 24h too (one knob; revisit if separable). All three templates' copy now says
+24 hours.
+
+### operations.md — the config that lives outside the repo
+
+New doc `claude/operations.md`: the Supabase / Resend / Cloudflare / GitHub settings no
+code can show, which advisor findings are **accepted** vs unfixed, and §6b on the
+scheduler. Blocked from the web by the existing `/claude/*` rule.
+
+### The scheduler false alarm — my error, recorded
+
+I read an incomplete `gh run list` paste — from a terminal AG had **just said** was
+truncating — and concluded the price sync had *never* run on a schedule and that
+scheduling was dead repo-wide. Both false. The full history showed it running daily and
+succeeding on schedule the two days after its fix. Inference-from-absence, again, by the
+coach — the same failure this file keeps logging. What *is* true, now in operations.md
+§6b: GitHub's scheduler delays and drops firings badly — the 07:23 sync lands
+12:00–15:30 every day; the 4×/day freshness check gets 2–3 runs. The crons succeed, just
+nowhere near on time. **A workflow that hasn't run yet today is not evidence it's
+broken.**
+
+### The two-clone scare, and an accusation I got wrong
+
+This morning I told AG that Claude Code had fabricated a whole verification report — byte
+counts, greps, a passing suite — for files that didn't exist. **That was wrong, and it
+belongs on the record.** Claude Code was working in `~/Desktop/projects/Gunforma`; my
+bridge and AG's terminal were in a *second* clone, `~/code/Gunforma`. The files were
+real, in the other folder. Claude Code had **refused to invent five files** to make a
+task look done, and said so plainly — better discipline than I showed. The entire "work
+vanished" confusion was two directories, and I diagnosed it by asserting instead of
+checking. Consolidated to the one Desktop clone; deleted `~/code`. The two-clone setup
+was the hazard; `git fetch && git log origin/main..HEAD` is the only honest "did it
+land."
+
+### build-approved email — a notification backend that actually reaches people
+
+`notifications` was an in-app inbox only (`comment`/`reply`/`like`, written by triggers,
+shown on a bell). **Nothing emailed anyone about anything** except auth — a builder got
+silence at the one moment they're most likely to share: approval. Built the whole path:
+
+- Migration: 4th kind `approved` (actor-less — sender is Gunforma), `email_sent_at`
+  outbox column, the **backfill** that stamps existing rows sent (table was empty so
+  moot, but the guard is the point), `profiles.email_notifications` opt-out, and a
+  trigger on `builds` so approval through the admin UI, SQL, or anything later all fire
+  it.
+- Edge function `send-build-approved` (Resend, idempotent on `email_sent_at`,
+  service-role gated), a 15-min workflow, and the inbox render patch.
+- First deploy **500'd**: Supabase bundles only the JS entrypoint, so the sibling
+  `email.html` read with `Deno.readTextFile` was never uploaded (ENOENT). Fixed by
+  inlining the template into `index.ts`. Tested dry-run and real, both 200. Live — first
+  real email fires on the next approval. PRs #111, #112.
+
+### contest accountability
+
+`contest_build_part` let any signed-in user flag any part on any approved build — no
+record of who, no dedupe, no limit. First-reviewed as a hole, then correctly re-scoped:
+it is a deliberate community feature (the admin queue literally says "a visitor
+flagged"). Kept it open but added a `build_part_flags` table (who + when, one row per
+user per part) so the signal is legible and a future "require N flags" is a one-liner.
+Applied and verified live. PR #113.
+
+### Security housekeeping
+
+- Revoked PUBLIC `execute` on `restrict_owner_edits_on_approved_build` (a trigger fn
+  Postgres had granted to everyone).
+- `build_comments_public` SECURITY DEFINER view reviewed = **correct by design**;
+  flipping it to invoker would break comments for every logged-out visitor. Accepted in
+  operations.md, with the real risk named — it *is* the whole access boundary for
+  comments, so any column added to its SELECT is public immediately.
+- Leaked-password protection: AG declined for now; recorded as a decision, not an
+  oversight.
+
+### Gallery
+
+Two more test builds (`...TEST`, `testing post builder`) deleted — down to the two real
+builds.
+
+### Open / carried forward
+
+- **71 of 231 products (31%) still have no live affiliate link** — concentrated in
+  slides / frames / triggers, the parts people brag about. It is a **partnership**
+  problem, not matching: boutique brands (Norsso 29, ECM 8, Mischief Machine 6,
+  Grayguns / Armory Craft / MCARBO) sell direct, not through the networks we are in.
+  **Norsso alone is 41% of the gap — one relationship.** The Norsso outreach email is
+  drafted-on-request, not sent.
+- Loadouts still parked (`claude/loadouts-spec.md`).
+- Parts-catalog content engine still unstarted — gated behind closing the monetization
+  gap.
+- First real build-approved email is unverified until the next approval sends one.
+
+---
+
+## Changes made 2026-09-29 (late session, PRs #93–#98) — the launch
 
 **Five real builders' builds posted through admin-post and five claim
 messages sent.** Real builds 2 → 7. open-send-claim-invites is done.
