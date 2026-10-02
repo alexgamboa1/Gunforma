@@ -1,4 +1,15 @@
 User-agent: *
 Allow: /
 
+# /go/<affiliate_link_id> is the outbound click layer, not a page. Every buy
+# anchor on the site already carries rel="noopener sponsored nofollow", so a
+# crawler should not be following these anyway — this says it in the one place
+# a crawler reads before it fetches anything.
+#
+# It costs no SEO: /go/ URLs are in no sitemap, carry no canonical, and are
+# not what the JSON-LD offers point at. product-page.mjs emits each Offer's
+# `url` as the RETAILER's own URL, never the /go/ one, so nothing structured
+# is behind this rule. An unresolvable /go/ id already answers a noindex 404.
+Disallow: /go/
+
 Sitemap: https://gunforma.com/sitemap.xml
