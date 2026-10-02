@@ -68,7 +68,7 @@ const SPEC_TABLES = {
   frame: ['frame_specs', [
     ['housing_classes(display_name,grip_length,magazine_families(display_name,capacity_note))', 'Housing Class',
       (v) => (v && v.display_name) || null],
-    ['housing_classes', 'Magazines',
+    ['housing_classes(display_name,grip_length,magazine_families(display_name,capacity_note))', 'Magazines',
       (v) => (v && v.magazine_families)
         ? v.magazine_families.display_name + (v.magazine_families.capacity_note ? ' — ' + v.magazine_families.capacity_note : '')
         : null],
@@ -286,13 +286,13 @@ async function fetchSpecs(category, productId) {
   const table = SPEC_TABLES[category];
   if (!table) return null;
   const [tableName, fields] = table;
-  const cols = fields.map((f) => f[0]).join(',');
+  const cols = Array.from(new Set(fields.map((f) => f[0]))).join(',');
   const rows = await pgGet(tableName + '?product_id=eq.' + productId + '&select=' + encodeURIComponent(cols) + '&limit=1');
   const row = Array.isArray(rows) && rows.length ? rows[0] : null;
   if (!row) return [];
   return fields
     .map(([col, label, fmt]) => {
-      const raw = row[col];
+      const raw = row[col.split('(')[0]];
       if (raw === null || raw === undefined || raw === '') return null;
       const val = fmt ? fmt(raw) : String(raw);
       return val === null ? null : { label, value: val };
