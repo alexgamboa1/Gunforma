@@ -306,6 +306,31 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-thumb:hover { border-color: #4a9edd; }
 .detail-thumb.active { border-color: #4a9edd; box-shadow: 0 0 0 1px #4a9edd; }
 
+/* Variant picker. Replaces the photo-only thumb strip: every LIVE variant gets
+   a chip whether or not we have a photo of it, because the colour a shopper
+   owns exists regardless of our photography backlog. Photo when we have one,
+   swatch when we don't (js/variant-swatch.js), label always. */
+.detail-variants { display: flex; flex-direction: column; gap: 9px; }
+/* Rows, not a square grid: real labels run to "Black · Anodized · Manual
+   safety · Right-hand thumb ledge" and prices differ per row ($399.99 to
+   $444.99 on the 311), neither of which fits in a thumbnail tile. Same shape
+   as the picker rows in js/part-picker.js so both surfaces read alike. */
+.detail-variant-rows { display: flex; flex-direction: column; border: 0.5px solid #e5e5e5; border-radius: 5px; overflow: hidden; max-height: 320px; overflow-y: auto; }
+.detail-variant-row { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; background: #fff; border: none; border-top: 0.5px solid #eee; cursor: pointer; text-align: left; transition: background 0.12s; }
+.detail-variant-row:first-child { border-top: none; }
+.detail-variant-row:hover { background: #f7fbfe; }
+.detail-variant-row.active { background: #eaf4fc; box-shadow: inset 2px 0 0 #2a7bbd; }
+.detail-variant-media { flex: 0 0 40px; width: 40px; height: 40px; border-radius: 3px; overflow: hidden; background: #f4f3ee; display: flex; align-items: center; justify-content: center; }
+.detail-variant-media img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
+.detail-variant-media-swatch { width: 22px; height: 22px; border-radius: 50%; display: block; }
+.detail-variant-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.detail-variant-name { font-size: 12px; line-height: 1.35; color: #333; font-weight: 600; }
+.detail-variant-row.active .detail-variant-name { color: #1a1a1a; }
+.detail-variant-std { font-size: 10px; color: #6b6a63; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.detail-variant-price { flex-shrink: 0; font-size: 12px; font-weight: 700; color: #1a1a1a; }
+.detail-variant-noimg { flex-shrink: 0; font-size: 9.5px; color: #b8b5ac; letter-spacing: 0.04em; text-transform: uppercase; }
+.part-card-colors { font-size: 10.5px; color: #6b6a63; font-weight: 600; }
+
 .detail-brand { font-size: 10.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .detail-title { font-size: 20px; font-weight: 700; line-height: 1.25; color: #1a1a1a; letter-spacing: -0.005em; }
 .detail-cat-badge { display: inline-block; font-size: 10px; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 3px 8px; border-radius: 20px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; margin-top: 6px; }
@@ -531,6 +556,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div class="detail-body">
     <div class="detail-hero" id="detail-hero"></div>
     <div class="detail-thumbs" id="detail-thumbs"></div>
+    <!-- Colour / variant picker. Driven entirely by product_variants, so it
+         renders with or without affiliate links — a shopper can identify
+         which colour they own before we have a retailer for it. -->
+    <div class="detail-variants" id="detail-variants" hidden>
+      <div class="detail-section-title" id="detail-variants-title">Options</div>
+      <div class="detail-variant-rows" id="detail-variant-rows"></div>
+    </div>
     <div>
       <div class="detail-brand" id="detail-brand"></div>
       <div class="detail-title" id="detail-title"></div>
@@ -572,6 +604,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/footer.js"></script>
 <!-- Before affiliate.js: it calls window.variantLabel at render time. -->
 <script src="js/variant-label.js"></script>
+<!-- variant-swatch: a colour chip for the 38% of variants with no vendor
+     photo. Without it the picker below can only show variants we happen
+     to have photographed, which is not the same as what Icarus sells. -->
+<script src="js/variant-swatch.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -1727,6 +1763,16 @@ function renderCard(r) {
   // Rendered on top of any card that has affiliate data. Skipped silently
   // when the product isn't listed anywhere (no dead untracked link).
   var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
+  // Colour count on the card. Without this the grid gives no hint that a
+  // product has twelve finishes behind it, so nobody opens the panel to look.
+  // Counts DISTINCT colours, not variants: the 311 has 12 variants across only
+  // 3 colours (handedness splits the rest), and "12 colors" would be a lie.
+  var colorCount = (function () {
+    var seen = {};
+    (r.variants || []).forEach(function (v) { if (v.color) seen[v.color] = 1; });
+    return Object.keys(seen).length;
+  })();
+  var colorsHtml = colorCount > 1 ? '<span class="part-card-colors">' + colorCount + ' colors</span>' : '';
   // Product-page link. Null when the row has no slug or its category isn't in
   // the shared map — render the plain name rather than ship a dead href.
   var href = window.productPath ? window.productPath(r.category, r.slug) : null;
@@ -1746,7 +1792,7 @@ function renderCard(r) {
       '<div class="part-card-brand">' + esc(r.brand) + '</div>' +
       '<div class="part-card-name">'  + nameHtml     + '</div>' +
       (r.description ? '<div class="part-card-desc">' + esc(r.description) + '</div>' : '') +
-      '<div class="part-card-footer">' + priceHtml + '</div>' +
+      '<div class="part-card-footer">' + priceHtml + colorsHtml + '</div>' +
       (affHtml ? '<div class="part-card-aff" onclick="event.stopPropagation();">' + affHtml + '</div>' : '') +
     '</div>' +
   '</div>';
@@ -1768,6 +1814,21 @@ document.getElementById('grid-container').addEventListener('click', function (e)
 
 // ─── DETAIL SLIDE-OVER ────────────────────────────────────
 var DETAIL_STATE = { productId: null, activeVariantIdx: 0 };
+
+// Live variants for a product, default first then alphabetical by label.
+// Deliberately the same ordering js/part-picker.js applies on the build side:
+// a shopper who sees "Black, Bronze, Gold" in the catalog should see that same
+// order when they pick the part into a build. Retired variants were already
+// dropped by the embed filter in the catalog query.
+function sortedVariants(p) {
+  var vs = (p && p.variants) || [];
+  return vs.slice().sort(function (a, b) {
+    if (!!a.is_default !== !!b.is_default) return a.is_default ? -1 : 1;
+    var al = (window.variantLabel ? window.variantLabel(a) : '') || a.color || '';
+    var bl = (window.variantLabel ? window.variantLabel(b) : '') || b.color || '';
+    return String(al).localeCompare(String(bl));
+  });
+}
 
 function openDetail(productId) {
   var p = PRODUCTS.find(function (x) { return x.id === productId; });
@@ -1830,9 +1891,26 @@ function renderDetail(p) {
   } else {
     compatWrap.innerHTML = '';
   }
+  // Variants, resolved once: the picker, the hero image and the price all read
+  // the same selection. Sorted default-first then by label, matching the rule
+  // js/part-picker.js uses on the build side so the two surfaces agree.
+  var variants  = sortedVariants(p);
+  var activeV   = variants[DETAIL_STATE.activeVariantIdx] || variants[0] || null;
+  // A variant's own msrp beats the product-level rollup — picking "Gold" should
+  // show what Gold costs, not the cheapest colour in the family.
+  var shownPrice = (activeV && activeV.msrp != null) ? Number(activeV.msrp) : p.price;
   var priceEl = document.getElementById('detail-price');
-  if (p.price != null) { priceEl.textContent = '$' + p.price.toFixed(p.price < 100 ? 2 : 0); priceEl.classList.remove('na'); }
-  else                  { priceEl.textContent = 'Price N/A';                                  priceEl.classList.add('na'); }
+  // Show cents whenever the price has them. The old rule dropped cents above
+  // $100, which now reads as a contradiction: the hero said $400 while the
+  // selected row directly beneath it said $399.99.
+  if (shownPrice != null) {
+    var hasCents = Math.round(shownPrice * 100) % 100 !== 0;
+    priceEl.textContent = '$' + shownPrice.toFixed(hasCents ? 2 : 0);
+    priceEl.classList.remove('na');
+  } else {
+    priceEl.textContent = 'Price N/A';
+    priceEl.classList.add('na');
+  }
   // Description: keep it simple — split on double-newline into paragraphs.
   var descEl = document.getElementById('detail-desc');
   if (p.description) {
@@ -1843,28 +1921,59 @@ function renderDetail(p) {
     descEl.innerHTML = '<p style="color:#999;">No description available.</p>';
   }
 
-  // Variant image thumbs: only variants that actually have images. Hero
-  // starts on the first-image variant (usually the default).
-  var variantsWithImg = (p.variants || []).filter(function (v) { return v.primary_image_url; });
-  var heroSrc = variantsWithImg[DETAIL_STATE.activeVariantIdx] ? variantsWithImg[DETAIL_STATE.activeVariantIdx].primary_image_url : p.image;
+  // Hero follows the selected variant. Falls back to the product image only
+  // when that variant has no photo of its own — NEVER to a different colour's
+  // photo, which is the bug check-variant-image-sku.mjs exists to catch.
+  var heroSrc = (activeV && activeV.primary_image_url) || p.image;
   var heroEl = document.getElementById('detail-hero');
   heroEl.innerHTML = heroSrc
     ? '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '"/>'
     : '<div class="detail-hero-nophoto">No photo</div>';
-  var thumbsEl = document.getElementById('detail-thumbs');
-  if (variantsWithImg.length > 1) {
-    thumbsEl.innerHTML = variantsWithImg.map(function (v, i) {
-      return '<button type="button" class="detail-thumb' + (i === DETAIL_STATE.activeVariantIdx ? ' active' : '') + '" data-variant-idx="' + i + '">' +
-        '<img src="' + escAttr(v.primary_image_url) + '" alt=""/></button>';
+  // The old photo-only thumb strip is retired: the variant picker below does
+  // the same job and covers the variants we have no photo for.
+  document.getElementById('detail-thumbs').innerHTML = '';
+
+  // Variant picker. Shown whenever there is an actual choice to make.
+  var vWrap  = document.getElementById('detail-variants');
+  var vTitle = document.getElementById('detail-variants-title');
+  var vRows  = document.getElementById('detail-variant-rows');
+  if (variants.length > 1) {
+    // Count distinct colours for the heading: the 311 has 12 variants across
+    // 3 colours (handedness and manual safety split the rest), so "12 colors"
+    // would be wrong. Say options, and name the colours when they are few.
+    var colorSet = {};
+    variants.forEach(function (v) { if (v.color) colorSet[v.color] = 1; });
+    var nColors = Object.keys(colorSet).length;
+    vTitle.textContent = variants.length + ' options' +
+      (nColors > 1 ? ' · ' + nColors + ' colors' : '');
+    vRows.innerHTML = variants.map(function (v, i) {
+      var label = (window.variantLabel ? window.variantLabel(v) : '') || v.color || 'Option ' + (i + 1);
+      var media = window.variantMediaHtml
+        ? window.variantMediaHtml(v, 'detail-variant-media')
+        : '<div class="detail-variant-media"></div>';
+      var price = (v.msrp != null)
+        ? '<span class="detail-variant-price">$' + Number(v.msrp).toFixed(2) + '</span>'
+        : '';
+      return '<button type="button" class="detail-variant-row' + (i === DETAIL_STATE.activeVariantIdx ? ' active' : '') + '"' +
+               ' data-variant-idx="' + i + '" title="' + escAttr(label) + '">' +
+               media +
+               '<span class="detail-variant-body">' +
+                 '<span class="detail-variant-name">' + esc(label) + '</span>' +
+                 (v.is_default ? '<span class="detail-variant-std">Standard</span>' : '') +
+               '</span>' +
+               price +
+             '</button>';
     }).join('');
-    thumbsEl.querySelectorAll('[data-variant-idx]').forEach(function (btn) {
+    vRows.querySelectorAll('[data-variant-idx]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         DETAIL_STATE.activeVariantIdx = Number(btn.getAttribute('data-variant-idx')) || 0;
         renderDetail(p);
       });
     });
+    vWrap.hidden = false;
   } else {
-    thumbsEl.innerHTML = '';
+    vRows.innerHTML = '';
+    vWrap.hidden = true;
   }
 
   // Specs table — pulled from the real spec tables + default variant.
