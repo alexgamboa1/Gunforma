@@ -33,7 +33,17 @@
 // Diagnostics: x-go-log reports what happened to the LOGGING, never to the
 // redirect. Netlify's plumbing has surprised this repo twice (see CLAUDE.md,
 // "Netlify redirects"), so the parts that cannot be observed locally report
-// themselves on the wire instead of being assumed.
+// themselves on the wire instead of being assumed. Its values: queued,
+// skipped, debug, no-service-key, not-found.
+//
+// TWO OPT-IN REQUEST HEADERS, NEITHER REACHABLE BY A READER — a browser
+// cannot attach a custom header to a top-level navigation:
+//
+//   x-go-no-log: 1   follow the link, write nothing  (our scripts use this)
+//   x-go-debug:  1   await the insert and report its status instead of
+//                    guessing at it
+//
+// x-go-no-log wins when both are set.
 const SB_URL  = "https://lagjjcpclvzrjlrswojt.supabase.co";
 const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4";
 
@@ -94,6 +104,40 @@ export default async (request, context) => {
   // re-points a link, and a cached 302 would outlive that.
   headers.set("cache-control", "no-store, private");
   headers.set("referrer-policy", "no-referrer");
+
+  // ── OUR OWN TOOLING FOLLOWS THE LINK WITHOUT LOGGING A CLICK ─────────────
+  // x-go-no-log: 1 skips the insert. The redirect is byte-for-byte the one a
+  // reader gets — same destination, same cache-control, same referrer-policy;
+  // only x-go-log differs, and that header has never described the redirect.
+  //
+  // WHY IT HAS TO BE A HEADER THE CALLER SETS, AND NOT A FILTER WE APPLY.
+  // On 2026-10-01, 493 rows landed between 23:25:13 and 23:25:22 — one per
+  // live affiliate link, 54 a second, none with a referrer. That is a link
+  // sweep, and it put 493 of the table's 537 rows beyond use for the Awin
+  // attribution check. Nothing in this repo walks every link, so it was an
+  // ad-hoc run from one of our own sessions.
+  //
+  // The obvious cleanup — drop rows with no referrer — is WRONG, and this is
+  // the trap worth writing down. 24 of the 36 real clicks on 2026-09-30 also
+  // have no referrer_path: a click from an app, from a client that strips the
+  // header, or across an origin we do not match looks exactly like the sweep.
+  // A missing referrer is not a bot signal. So the caller declares itself
+  // rather than being inferred, which is the only version that cannot be
+  // wrong about a real reader.
+  //
+  // NO READER CAN REACH THIS. A browser cannot attach a custom header to a
+  // top-level navigation, so a click, a crawl and a prefetch all log exactly
+  // as before. Someone could of course curl it themselves and suppress their
+  // own row — the cost of that is one analytics row, which is not worth
+  // defending against.
+  //
+  // It wins over x-go-debug on purpose: one says "tell me what the insert
+  // did", the other says "do not insert", and the refusal is the stronger
+  // instruction.
+  if (request.headers.get("x-go-no-log") === "1") {
+    headers.set("x-go-log", "skipped");
+    return new Response(null, { status: 302, headers });
+  }
 
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   if (!serviceKey) {

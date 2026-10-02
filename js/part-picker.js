@@ -612,6 +612,15 @@
   .selected-part-remove { grid-column: 3; grid-row: 4; margin-top: 8px; align-self: stretch; }
   .selected-part-variant, .picker-search { font-size: 16px; }
   .selected-part-variant::placeholder, .picker-search::placeholder { font-size: 13px; }
+
+  /* The custom-part form's Brand / Part name / link inputs, for the same
+     reason and at the same width. They are rendered by both builder pages but
+     styled here, so this is where they get it — the pages' own 560px block
+     covers the three their own CSS owns. Miss either half and a phone
+     zooms on some fields and not others, which reads as the page glitching
+     rather than as a setting. */
+  .custom-part-grid input, .custom-link-input { font-size: 16px; }
+  .custom-part-grid input::placeholder, .custom-link-input::placeholder { font-size: 13px; }
 }
 
 /* ============ COLOR STEP ============ */

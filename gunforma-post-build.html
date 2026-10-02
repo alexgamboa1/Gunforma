@@ -203,6 +203,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .footer-bar { padding: 14px 16px; }
 }
 
+/* NO FOCUS-ZOOM ON A PHONE — every text field, not just the picker's two.
+
+   iOS Safari zooms the page when a field whose computed font-size is under
+   16px takes focus, and it does not zoom back out: the reader is left panning
+   a page that no longer fits. #115 fixed the two fields js/part-picker.js
+   owns — the added-part variant box and the picker's search — and left every
+   other one on this page doing it: the pistol search, the build name and the
+   description here, plus the custom-part form's Brand / Part name / link,
+   which the module styles and so are fixed over there. Typing a build name
+   zoomed the page, and the next tap landed somewhere unexpected.
+
+   560px, deliberately NOT the 640px gutter breakpoint above. This is the same
+   rule as the picker's, and the two have to fire together or a 600px-wide
+   phone in landscape gets 16px in one field and 13px in the next. The gutter
+   is a layout choice; this is a device behaviour, and they are not the same
+   question.
+
+   16px is a threshold, not a type choice — the smallest size Safari will not
+   zoom. Placeholders stay 13px: they are not what is being typed into, and
+   the description's placeholder is a full sentence. */
+@media (max-width: 560px) {
+  .platform-search, .field-input, .field-textarea { font-size: 16px; }
+  .platform-search::placeholder,
+  .field-input::placeholder,
+  .field-textarea::placeholder { font-size: 13px; }
+}
+
 .nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
 .nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }
 .nav-toggle span + span { margin-top: 4px; }

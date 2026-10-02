@@ -49,8 +49,8 @@ const ok = (c, label, detail) => {
 };
 const note = (label, detail) => console.log(`   ·  ${label}${detail !== undefined ? ': ' + detail : ''}`);
 
-async function get(path) {
-  const res = await fetch(origin + path, { redirect: 'manual' });
+async function get(path, headers) {
+  const res = await fetch(origin + path, { redirect: 'manual', headers: headers || {} });
   const body = res.headers.get('content-type')?.includes('text/') ? await res.text() : '';
   return {
     status: res.status,
@@ -75,6 +75,13 @@ async function get(path) {
 // visitor can see. Without a build the route shapes cannot be exercised at
 // all, so a miss is a hard failure rather than a skip — a check that quietly
 // tests nothing is the thing this file exists to prevent.
+// Every /go/ request this script makes carries this. Our own tooling must not
+// show up in link_clicks: 493 of that table's 537 rows are a link sweep from
+// one of our sessions, and seven more are this script's own scheduled runs.
+// See netlify/edge-functions/go.js for why the caller declares itself instead
+// of us filtering the rows afterwards.
+const NO_LOG = { 'x-go-no-log': '1' };
+
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
@@ -187,7 +194,10 @@ for (const [label, path] of [
 
   if (goLive) {
     const expected = goLive.affiliate_url || goLive.url;
-    const r = await get('/go/' + goLive.id);
+    // x-go-no-log, so this check does not spend a click on itself. It used to:
+    // seven of the stray rows in link_clicks on 2026-10-01 are this script's
+    // scheduled runs, one per run, each indistinguishable from a reader.
+    const r = await get('/go/' + goLive.id, NO_LOG);
     ok(r.status === 302, `/go/<live id>: 302, not 200 and not a rewrite`, r.status);
     // Byte-for-byte. A tracking URL that loses or reorders a query parameter
     // still resolves to the right product page and silently stops earning.
@@ -195,11 +205,31 @@ for (const [label, path] of [
        r.location === expected ? 'identical' : `got ${r.location}\n        want ${expected}`);
     ok(/no-store/.test(r.cacheControl || ''),
        'not cacheable — the sync can re-point a link under the same id', r.cacheControl);
-    // Reports what happened to the LOGGING, never to the redirect. 'queued'
-    // means the insert was handed to waitUntil; 'no-service-key' means the
-    // redirect worked and nothing was recorded, which is a configuration
-    // problem that must not be silent.
-    ok(r.goLog === 'queued', 'click was queued for logging', r.goLog);
+    // Reports what happened to the LOGGING, never to the redirect. 'skipped'
+    // is the answer to x-go-no-log and proves two things at once: the skip
+    // works, and the logging block still runs far enough to decide — a
+    // 'no-service-key' here would mean the redirect worked and the config is
+    // broken, which must not be silent.
+    ok(r.goLog === 'skipped', 'click was NOT logged (x-go-no-log honoured)', r.goLog);
+
+    // WHAT THE LINE ABOVE GIVES UP, AND HOW TO GET IT BACK.
+    // Asserting 'skipped' on every run no longer exercises the path a real
+    // click takes. There is no free way to cover it: logging means writing a
+    // row, and this script running daily is how the table filled with its own
+    // traffic in the first place. So it is deliberate and opt-in — one row,
+    // when a person asks for it:
+    //
+    //   GO_LOG_CHECK=1 node scripts/check-routes.mjs <origin>
+    //
+    // 'queued' still only means the insert was HANDED to waitUntil, never
+    // that it landed. x-go-debug: 1 is the header that awaits and reports it.
+    if (process.env.GO_LOG_CHECK === '1') {
+      const rl = await get('/go/' + goLive.id);
+      ok(rl.status === 302, 'GO_LOG_CHECK: a normal request still redirects', rl.status);
+      ok(rl.goLog === 'queued', 'GO_LOG_CHECK: a normal request still logs', rl.goLog);
+    } else {
+      note('logging path not exercised (costs one link_clicks row)', 'set GO_LOG_CHECK=1 to include it');
+    }
   }
 
   for (const [label, path] of [
@@ -207,7 +237,10 @@ for (const [label, path] of [
     ['/go/<unknown uuid>',      '/go/00000000-0000-4000-8000-000000000000'],
     ['/go/ (no id at all)',     '/go/'],
   ]) {
-    const r = await get(path);
+    // None of these reach the logging block at all — they 404 before it — but
+    // the header goes on every /go/ request this script makes, so there is no
+    // call site to remember to update if that ever changes.
+    const r = await get(path, NO_LOG);
     ok(r.status === 404, `${label}: hard 404, never a redirect home`,
        r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
   }
