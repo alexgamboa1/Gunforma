@@ -324,6 +324,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
+<!-- The section list, order and group headings. Read at parse time by the
+     page code below, so it has to come first. -->
+<script src="js/build-categories.js"></script>
 <!-- Before the page code: loadCatalog calls window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <!-- After variant-label.js: the swatch labels its own alt text. -->
@@ -367,70 +370,44 @@ let hasAcceptedBuilderAgreement = false;
 let PLATFORMS = [];
 let platformsLoaded = false;
 
-// dbCategory: which values in the products.category enum feed this UI section.
-// null = no catalog backing yet — the picker only offers the "Add custom part"
-// flow for that category (goes in as pending: true for admin review).
-const CATEGORIES = [
-  { key:'optics',   label:'Optics',                 dbCategory:['optic'] },
-  { key:'lights',   label:'Weapon Lights',          dbCategory:['light'] },
-  { key:'grips',    label:'Grip Modules',           dbCategory:['frame'] },
-  { key:'slides',   label:'Slides',                 dbCategory:['slide'] },
-  { key:'barrels',  label:'Barrels & Compensators', dbCategory:['barrel','compensator'] },
-  { key:'triggers', label:'Triggers',               dbCategory:['trigger'] },
-  { key:'mag_release', label:'Magazine Release',   dbCategory:['mag_release'] },
-  { key:'magwells', label:'Magwells',               dbCategory:['magwell'] },
-  { key:'other_parts', label:'Other Parts / Components', dbCategory:['basepad','slide_release','safety_selector','takedown_lever','slide_plate'] },
-  { key:'holsters', label:'Holsters',               dbCategory:null },
-  { key:'mags',     label:'Magazines',              dbCategory:null },
-  // A finish is work done to the gun, not a product anyone can buy, so this
-  // category replaces the generic Brand / Part name / link form with its own
-  // fields and skips the review queue — there is no catalog listing to
-  // promote it into. See customFormFieldsHtml() and addCustomPart().
-  { key:'paintjob', label:'Paint Job & Finish',     dbCategory:null,
-    custom:{
-      toggle:'Add your paint job or finish',
-      empty:'Finishes and custom work aren\'t catalog parts. Tell us who did the work, the color, and the stipple style — it gets credited on your build.',
-      fields:[
-        { id:'shop',    placeholder:'Custom work done by (shop name, or DIY)', required:true },
-        { id:'color',   placeholder:'Color (e.g. Cerakote FDE, two-tone)' },
-        { id:'stipple', placeholder:'Stippling style (e.g. laser, hand, none)' },
-      ],
-      note:'Goes straight onto your build. Shops that show up often get featured on Gunforma.',
-      submit:'Add to build →',
-      pending:false,
-    } },
-  { key:'knife',    label:'Tactical Knife',         dbCategory:null },
-  { key:'misc',     label:'Miscellaneous',          dbCategory:null },
-];
+// The section list, its order, the four group headings and every category
+// label live in js/build-categories.js, shared with gunforma-admin-post.html
+// and gunforma-build-detail.html. This page keeps only its own call sites:
+// renderParts, categoryGroupHeadHtml, buildCategoryBlock, filterCards and the
+// add/remove handlers below.
+//
+// Each section carries `dbCategory`: which values in the products.category
+// enum feed it. null = no catalog backing, so the picker only offers the
+// "Add custom part" flow for that section (pending: true, for admin review).
+const CATEGORIES = window.BuildCategories.CATEGORIES;
+
+// The same sections collected under their group heading, in group order.
+// Derived there, not here, so this page cannot disagree with the admin page
+// about what is in a group or what comes first.
+const GROUPED_CATEGORIES = window.BuildCategories.GROUPED_CATEGORIES;
+
+const FALLBACK_CATEGORY_KEY = window.BuildCategories.FALLBACK_CATEGORY_KEY;
 
 // parts_snapshot holds a mix of vocabularies. Parts added here are stored
-// under the UI key ('optics'); parts added from the Armory are stored under
-// the raw products.category enum value ('optic'). buildCategoryBlock filters
-// with `p.category === cat.key`, so a DB-vocabulary part matches no section
-// and silently vanishes — the build still reports the right part count,
-// which is why it reads as "the part is gone" rather than "the page broke".
+// under the section key ('optics'); parts added from the Armory are stored
+// under the raw products.category enum value ('optic'). buildCategoryBlock
+// filters with `p.category === cat.key`, so a DB-vocabulary part matches no
+// section and silently vanishes — the build still reports the right part
+// count, which is why it reads as "the part is gone" rather than "the page
+// broke".
 //
-// Derived from CATEGORIES rather than hand-written, so a new section only has
-// to declare dbCategory once and this map follows automatically.
-const DB_CATEGORY_TO_UI_KEY = CATEGORIES.reduce(function (map, cat) {
-  (cat.dbCategory || []).forEach(function (dbCat) { map[dbCat] = cat.key; });
-  return map;
-}, {});
-
-const UI_CATEGORY_KEYS = new Set(CATEGORIES.map(function (cat) { return cat.key; }));
-
-// Bucket for anything we can't place — a real, rendered section. Never drop a
-// part: a visible part in the wrong section is fixable by the user, an
-// invisible one looks like data loss.
-const FALLBACK_CATEGORY_KEY = 'misc';
-
 // Normalize ON READ, both hydration paths. Deliberately not a migration:
 // doing it here also rescues drafts already sitting in the database.
+//
+// Never drop a part: a visible part in the wrong section is fixable by the
+// user, an invisible one looks like data loss. An `other_parts` key from a
+// snapshot written before that section was split into five lands here, and
+// Miscellaneous is where it goes.
 function normalizePartCategory(raw) {
   const value = (raw == null ? '' : String(raw)).trim();
   if (!value) return FALLBACK_CATEGORY_KEY;
-  if (UI_CATEGORY_KEYS.has(value)) return value;            // already a UI key
-  if (DB_CATEGORY_TO_UI_KEY[value]) return DB_CATEGORY_TO_UI_KEY[value];
+  const key = window.BuildCategories.sectionKeyFor(value);
+  if (key) return key;
   console.warn('[post-build] unmapped part category ' + JSON.stringify(value) +
                ' — showing it under "' + FALLBACK_CATEGORY_KEY + '"');
   return FALLBACK_CATEGORY_KEY;
@@ -647,8 +624,38 @@ function renderParts() {
     c.innerHTML = '<div class="parts-disabled-note">Select a pistol in step 1 to browse compatible parts.</div>';
     return;
   }
-  c.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
-    CATEGORIES.map(cat => buildCategoryBlock(cat)).join('') + '</div>';
+  // Four group headings, each over its own sections, in the order
+  // js/build-categories.js declares. Grouped rather than flat so the step
+  // reads as progress through the gun instead of eighteen accordions.
+  c.innerHTML = '<div class="category-groups">' +
+    GROUPED_CATEGORIES.map(function (g) {
+      return '<div class="category-group">' +
+          categoryGroupHeadHtml(g) +
+          '<div class="category-group-blocks">' +
+            g.categories.map(function (cat) { return buildCategoryBlock(cat); }).join('') +
+          '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+// A stage heading: the group's name, the one line saying what the stage is
+// for, and a running count of what has been added to it. Not clickable and
+// not collapsible — every other row in this step opens on click, so a heading
+// that looked the same and did nothing would read as broken.
+//
+// The count is over state.parts, which holds NORMALIZED category keys (see
+// normalizePartCategory), so a part hydrated from a draft under the DB
+// vocabulary counts toward the group its section is in rather than toward
+// nothing.
+function categoryGroupHeadHtml(g) {
+  const keys = g.categories.map(function (cat) { return cat.key; });
+  const added = state.parts.filter(function (p) { return keys.indexOf(p.category) !== -1; }).length;
+  return '<div class="category-group-head">' +
+      '<span class="category-group-name">' + g.group.label + '</span>' +
+      '<span class="category-group-count' + (added ? ' has-parts' : '') + '">' +
+        added + ' part' + (added === 1 ? '' : 's') + '</span>' +
+    '</div>' +
+    '<div class="category-group-blurb">' + g.group.blurb + '</div>';
 }
 
 // Three states drive the picker body for each category:

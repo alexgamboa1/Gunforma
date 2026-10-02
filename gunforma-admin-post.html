@@ -292,6 +292,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="toast" id="toast"><span class="toast-check">✓</span> <span id="toast-msg">Saved</span></div>
 
+<!-- The section list, order and group headings. Read at parse time by the
+     page code below, so it has to come first. -->
+<script src="js/build-categories.js"></script>
 <!-- Before the page code: loadCatalog calls window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <!-- After variant-label.js: the swatch labels its own alt text. -->
@@ -332,40 +335,24 @@ let currentAdmin = null;         // signed-in admin user (from requireAdmin)
 let PLATFORMS = [];
 let platformsLoaded = false;
 
-// dbCategory: which values in the products.category enum feed this UI section.
-// null = no catalog backing yet — the picker only offers the "Add custom part"
-// flow for that category (goes in as pending: true for admin review).
-const CATEGORIES = [
-  { key:'optics',   label:'Optics',                 dbCategory:['optic'] },
-  { key:'lights',   label:'Weapon Lights',          dbCategory:['light'] },
-  { key:'grips',    label:'Grip Modules',           dbCategory:['frame'] },
-  { key:'slides',   label:'Slides',                 dbCategory:['slide'] },
-  { key:'barrels',  label:'Barrels & Compensators', dbCategory:['barrel','compensator'] },
-  { key:'triggers', label:'Triggers',               dbCategory:['trigger'] },
-  { key:'sights',   label:'Sights',                 dbCategory:null },
-  { key:'magwells', label:'Magwells',               dbCategory:null },
-  { key:'holsters', label:'Holsters',               dbCategory:null },
-  { key:'mags',     label:'Magazines',              dbCategory:null },
-  // A finish is work done to the gun, not a product anyone can buy, so this
-  // category replaces the generic Brand / Part name / link form with its own
-  // fields and skips the review queue — there is no catalog listing to
-  // promote it into. See customFormFieldsHtml() and addCustomPart().
-  { key:'paintjob', label:'Paint Job & Finish',     dbCategory:null,
-    custom:{
-      toggle:'Add your paint job or finish',
-      empty:'Finishes and custom work aren\'t catalog parts. Tell us who did the work, the color, and the stipple style — it gets credited on your build.',
-      fields:[
-        { id:'shop',    placeholder:'Custom work done by (shop name, or DIY)', required:true },
-        { id:'color',   placeholder:'Color (e.g. Cerakote FDE, two-tone)' },
-        { id:'stipple', placeholder:'Stippling style (e.g. laser, hand, none)' },
-      ],
-      note:'Goes straight onto your build. Shops that show up often get featured on Gunforma.',
-      submit:'Add to build →',
-      pending:false,
-    } },
-  { key:'knife',    label:'Tactical Knife',         dbCategory:null },
-  { key:'misc',     label:'Miscellaneous',          dbCategory:null },
-];
+// The section list, its order, the four group headings and every category
+// label live in js/build-categories.js, shared with gunforma-post-build.html
+// and gunforma-build-detail.html. This page keeps only its own call sites.
+//
+// Each section carries `dbCategory`: which values in the products.category
+// enum feed it. null = no catalog backing, so the picker only offers the
+// "Add custom part" flow for that section (pending: true, for admin review).
+//
+// This page's own copy of the list had drifted three ways before the
+// extraction — no Magazine Release, `magwells` with its dbCategory dropped so
+// six seeded products were unreachable here, and a Sights section the public
+// page does not have (no stored build used it). Same shape as the photo
+// uploader, the redact modal and the part picker: the page nobody is looking
+// at keeps the old list, and nothing fails.
+const CATEGORIES = window.BuildCategories.CATEGORIES;
+
+// The same sections collected under their group heading, in group order.
+const GROUPED_CATEGORIES = window.BuildCategories.GROUPED_CATEGORIES;
 
 // Runtime-populated per platform, keyed by UI category key. Each entry:
 //   { id: <products.id UUID>, brand, name, desc, price }
@@ -558,8 +545,32 @@ function renderParts() {
     c.innerHTML = '<div class="parts-disabled-note">Select a pistol in step 1 to browse compatible parts.</div>';
     return;
   }
-  c.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
-    CATEGORIES.map(cat => buildCategoryBlock(cat)).join('') + '</div>';
+  // Four group headings, each over its own sections, in the order
+  // js/build-categories.js declares — identical to the public builder.
+  c.innerHTML = '<div class="category-groups">' +
+    GROUPED_CATEGORIES.map(function (g) {
+      return '<div class="category-group">' +
+          categoryGroupHeadHtml(g) +
+          '<div class="category-group-blocks">' +
+            g.categories.map(function (cat) { return buildCategoryBlock(cat); }).join('') +
+          '</div>' +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+// A stage heading: the group's name, the one line saying what the stage is
+// for, and a running count of what has been added to it. Not clickable and
+// not collapsible — every other row in this step opens on click, so a heading
+// that looked the same and did nothing would read as broken.
+function categoryGroupHeadHtml(g) {
+  const keys = g.categories.map(function (cat) { return cat.key; });
+  const added = state.parts.filter(function (p) { return keys.indexOf(p.category) !== -1; }).length;
+  return '<div class="category-group-head">' +
+      '<span class="category-group-name">' + g.group.label + '</span>' +
+      '<span class="category-group-count' + (added ? ' has-parts' : '') + '">' +
+        added + ' part' + (added === 1 ? '' : 's') + '</span>' +
+    '</div>' +
+    '<div class="category-group-blurb">' + g.group.blurb + '</div>';
 }
 
 // Three states drive the picker body for each category:

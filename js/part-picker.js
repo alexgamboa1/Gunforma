@@ -357,6 +357,29 @@
 /* ============ PARTS SECTION ============ */
 .parts-disabled-note { text-align: center; padding: 32px 20px; color: #bbb; font-size: 13px; line-height: 1.7; }
 
+/* ============ GROUP HEADINGS ============ */
+/* The parts step reads as four stages of a build — Core build, Controls,
+   Magazine, Carry and finish — rather than eighteen accordions in a row. The
+   group names and their order come from js/build-categories.js.
+
+   Headings only: NOT clickable and NOT collapsible. Everything else in this
+   section opens on click, so a heading that looked the same and did nothing
+   would read as broken — hence no cursor:pointer, no toggle affordance, and a
+   different type treatment from .category-head below.
+
+   This lives here rather than in either page because .category-block's CSS
+   does, and gunforma-post-build.html and gunforma-admin-post.html are the only
+   two pages that load this module. Note gunforma-armory.html deliberately does
+   NOT, so none of these selectors can reach its grid. */
+.category-groups { display: flex; flex-direction: column; gap: 20px; }
+.category-group { display: flex; flex-direction: column; gap: 7px; }
+.category-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 0.5px solid #e8e8e8; }
+.category-group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2a7bbd; }
+.category-group-count { font-size: 10px; font-weight: 700; color: #a8a8a8; letter-spacing: 0.04em; white-space: nowrap; }
+.category-group-count.has-parts { color: #fff; background: #4a9edd; padding: 2px 8px; border-radius: 20px; letter-spacing: 0; }
+.category-group-blurb { font-size: 11.5px; color: #777; line-height: 1.55; }
+.category-group-blocks { display: flex; flex-direction: column; gap: 8px; margin-top: 3px; }
+
 /* Category row — closed state */
 .category-block { border: 0.5px solid #e8e8e8; border-radius: 8px; overflow: hidden; transition: box-shadow 0.2s; }
 .category-block.open { box-shadow: 0 4px 20px rgba(0,0,0,0.08); border-color: #4a9edd; }
@@ -479,6 +502,11 @@
    one 295.5px column, photo 277x156. */
 @media (max-width: 560px) {
   .part-cards-grid { grid-template-columns: 1fr; }
+
+  /* "Carry and finish" plus a count is the widest heading row; at 390px it
+     still fits on one line at this tracking. Measured at 375px and 320px. */
+  .category-group-name { font-size: 10.5px; letter-spacing: 0.09em; }
+  .category-groups { gap: 18px; }
 }
 
 /* ============ COLOR STEP ============ */

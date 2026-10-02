@@ -466,6 +466,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <img id="part-lightbox-img" alt="">
 </div>
 
+<!-- Section order + category labels. Read by the render code below. -->
+<script src="js/build-categories.js"></script>
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
@@ -477,45 +479,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 var sb = window.sb;
 var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
 
-// EVERY key gunforma-post-build.html's CATEGORIES can write into
-// parts_snapshot needs an entry here, plus the raw products.category values an
-// Armory-saved part can arrive under. scripts/check-category-labels.mjs reads
-// both vocabularies out of the source and fails the build on a gap.
+// The section order and every category label live in js/build-categories.js,
+// shared with gunforma-post-build.html and gunforma-admin-post.html. This
+// page needs two things out of it: the order the sections render in, and a
+// label for every value a stored parts_snapshot can carry.
 //
-// `mag_release` and `other_parts` were both missing, and the symptom is worse
-// than a missing label: .part-type is `text-transform: uppercase`, so the raw
-// key rendered as "OTHER_PARTS" — which reads like a leaked enum, not a
-// heading. Two live builds were showing it.
-const CATEGORY_LABELS = {
-  optics:'Optics', lights:'Weapon Lights', grips:'Grip Modules', slides:'Slides',
-  barrels:'Barrels & Compensators', triggers:'Triggers', sights:'Sights',
-  magwells:'Magwells', holsters:'Holsters', mags:'Magazines',
-  mag_release:'Magazine Release', other_parts:'Other Parts',
-  paintjob:'Paint Job & Finish', knife:'Tactical Knife', misc:'Miscellaneous',
-  // Raw products.category values. A part added from the Armory is stored
-  // under the DB enum rather than the UI key, and this page does not
-  // normalize on read the way post-build does.
-  optic:'Optics', light:'Weapon Lights', frame:'Grip Modules', slide:'Slides',
-  barrel:'Barrels & Compensators', compensator:'Barrels & Compensators',
-  trigger:'Triggers', magwell:'Magwells', basepad:'Other Parts',
-  slide_release:'Other Parts', safety_selector:'Other Parts',
-  takedown_lever:'Other Parts', slide_plate:'Other Parts'
-};
-
-// An unmapped key must never reach the page verbatim. Prettifying the
-// fallback — underscores to spaces, title case — is what stops the NEXT key
-// added to CATEGORIES from shipping as "SOME_NEW_THING" before anyone maps
-// it. Same fallback gunforma-parts-catalog.html and gunforma-armory.html
-// already use; this page was the one returning the key raw.
-function categoryLabel(key) {
-  if (CATEGORY_LABELS[key]) return CATEGORY_LABELS[key];
-  var pretty = String(key == null ? '' : key)
-    .replace(/_/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/\b\w/g, function (m) { return m.toUpperCase(); });
-  return pretty || 'Miscellaneous';
-}
+// parts_snapshot holds two vocabularies — the section keys the builder pages
+// write ('optics') and the raw products.category values an Armory-saved part
+// arrives under ('optic') — and both resolve to the SAME label there, which
+// is what stops one build opening two sections with the same heading.
+//
+// An unmapped key reaching this page verbatim is worse than a missing label:
+// .part-type is `text-transform: uppercase`, so the raw key renders as
+// "OTHER_PARTS", which reads like a leaked enum rather than a heading. Two
+// live builds were showing it. scripts/check-category-labels.mjs grades the
+// shared module's labeller and fails the build on a gap.
+const categoryLabel = window.BuildCategories.categoryLabel;
 
 function escH(s) { return (s==null?'':String(s)).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/'/g,'&#39;'); }
 function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
@@ -1065,12 +1044,36 @@ function renderParts(b) {
     return '<div class="no-parts-note">No parts listed for this build yet.</div>';
   }
 
-  var groups = {}, order = [];
+  // Group by the NORMALISED section, so the two vocabularies a snapshot can
+  // carry never open two sections with the same heading — and barrel and
+  // compensator both land under Barrels & Compensators.
+  //
+  // The index pushed here is the part's ORIGINAL index in parts_snapshot,
+  // which renderPartCard uses to look up its edit history. Only the sections
+  // are reordered below; nothing is ever renumbered.
+  var groups = {}, unknownOrder = [];
   parts.forEach(function(p, idx) {
-    var cat = p.category || 'misc';
-    if (!groups[cat]) { groups[cat] = []; order.push(cat); }
+    var raw = (p.category == null ? '' : String(p.category)).trim() || 'misc';
+    var known = window.BuildCategories.sectionKeyFor(raw);
+    var cat = known || raw;
+    if (!groups[cat]) {
+      groups[cat] = [];
+      // Kept under its own raw key rather than folded into Miscellaneous: a
+      // legacy snapshot ('other_parts', 'sights') still renders every part,
+      // under a real heading, and nothing is silently relabelled.
+      if (!known) unknownOrder.push(cat);
+    }
     groups[cat].push(idx);
   });
+
+  // Known sections in the builder's own order — Core build, then Controls,
+  // then Magazine, then Carry and finish — so a published build reads the way
+  // it was assembled rather than in whatever order the parts were added.
+  // Anything unrecognised follows, in first-appearance order.
+  var order = window.BuildCategories.CATEGORIES
+    .map(function(c) { return c.key; })
+    .filter(function(k) { return groups[k]; })
+    .concat(unknownOrder);
 
   return order.map(function(cat) {
     var idxs = groups[cat];
