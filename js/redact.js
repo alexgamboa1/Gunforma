@@ -124,7 +124,7 @@ const REDACT_CSS = `
 .redact-btn.primary { background: #4a9edd; color: #fff;   border-color: #4a9edd; }
 .redact-btn.primary:disabled { background: #d9e6f2; color: #6a97be; border-color: #d9e6f2; }
 
-/* Shape-mode segmented toggle — Box (default) / Circle. Same visual pattern
+/* Tool segmented toggle — Brush (default) / Outline. Same visual pattern
    as an iOS-style segmented control; the active option gets the blue fill. */
 .redact-shape-toggle { display: inline-flex; border: 0.5px solid #d9d6cc; border-radius: 4px; overflow: hidden; }
 .redact-shape-toggle button {
@@ -237,7 +237,7 @@ const REDACT_HTML = `
     <div class="redact-header">
       <div>
         <div class="redact-title">Blur anything you want to hide before uploading</div>
-        <div class="redact-hint"><strong>Drag on the image</strong> to blur serial numbers, plates, addresses, faces.<span class="long"> Small target? <strong>Pinch or use + to zoom in</strong>, or switch to <strong>Brush</strong> and paint over it.</span><span class="short"> Too small? Pinch to zoom, or use <strong>Brush</strong>.</span> Runs before upload.</div>
+        <div class="redact-hint" id="redact-hint"></div>
       </div>
     </div>
     <div class="redact-canvas-wrap" id="redact-canvas-wrap">
@@ -246,12 +246,11 @@ const REDACT_HTML = `
       <div class="redact-loading" id="redact-loading">Loading photo…</div>
     </div>
     <div class="redact-toolbar">
-      <div class="redact-shape-toggle" role="group" aria-label="Selection shape">
-        <button type="button" id="redact-shape-rect"   class="active" aria-pressed="true"  title="Rectangle selection">▭ Box</button>
-        <button type="button" id="redact-shape-circle"                aria-pressed="false" title="Circle selection (drag from center)">◯ Circle</button>
-        <button type="button" id="redact-shape-brush"                 aria-pressed="false" title="Paint over an area (tap for a dot)">✎ Brush</button>
+      <div class="redact-shape-toggle" role="group" aria-label="Blur tool">
+        <button type="button" id="redact-shape-brush" class="active" aria-pressed="true"  title="Paint over an area (tap for a dot)">✎ Brush</button>
+        <button type="button" id="redact-shape-poly"                 aria-pressed="false" title="Tap points around an area; everything inside is blurred">◇ Outline</button>
       </div>
-      <label class="redact-brush-size" id="redact-brush-size">Size
+      <label class="redact-brush-size visible" id="redact-brush-size">Size
         <input type="range" id="redact-brush-range" min="1" max="100" value="25" aria-label="Brush size">
       </label>
       <div class="redact-zoom" role="group" aria-label="Zoom">
@@ -345,7 +344,7 @@ function blockSizeFor(minDim) {
   return Math.max(8, Math.min(40, Math.round(minDim / 2)));
 }
 
-// A reusable scratch canvas for circle-shaped redaction (see below).
+// A reusable scratch canvas for clipped redaction (see pixelateShape).
 // One per modal session, resized per-shape as needed.
 let _redactScratch = null;
 
@@ -377,86 +376,95 @@ function pathStroke(ctx, pts, r) {
   }
 }
 
-// Apply a redaction shape to ctx. Handles rect, circle and brush.
-//   shape.type === 'rect'   → { x, y, w, h }
-//   shape.type === 'circle' → { cx, cy, r }
-//   shape.type === 'brush'  → { pts: [{x,y},…], r }
-// Rects: run pixelateRegion in place — same as before.
-// Circles: naive "pixelateRegion(boundingRect) + ctx.clip(arc)" DOES NOT
-// work — putImageData ignores canvas clip regions per the Canvas 2D spec.
-// So we snapshot the bounding rect of the CURRENT canvas onto a scratch
-// canvas (which preserves prior redactions in that area — sampling from
-// origCanvas would silently un-mask overlapping earlier boxes), pixelate
-// the scratch in place, then drawImage the scratch back onto ctx clipped
-// to the arc. Only the circular interior is committed; corners outside
-// the circle are untouched.
-function pixelateShape(ctx, shape) {
-  if (shape.type === 'brush') {
-    // Same scratch-then-clip approach as circles, with the clip being the
-    // union of circles along the stroke. Block size follows the brush
-    // radius so a fine brush over a serial still lands enough blocks to
-    // destroy the digits, while a fat brush over a face reads as coarse.
-    const r = Math.max(1, shape.r);
-    const pts = densifyStroke(shape.pts, r);
-    if (!pts.length) return;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    pts.forEach(function (p) {
-      if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
-      if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
-    });
-    const bx = Math.max(0, Math.floor(minX - r));
-    const by = Math.max(0, Math.floor(minY - r));
-    const bw = Math.min(ctx.canvas.width  - bx, Math.ceil(maxX + r) - bx);
-    const bh = Math.min(ctx.canvas.height - by, Math.ceil(maxY + r) - by);
-    if (bw <= 0 || bh <= 0) return;
-    const block = blockSizeFor(r * 2);
-
-    if (!_redactScratch) _redactScratch = document.createElement('canvas');
-    if (_redactScratch.width !== bw)  _redactScratch.width  = bw;
-    if (_redactScratch.height !== bh) _redactScratch.height = bh;
-    const sctx = _redactScratch.getContext('2d');
-    sctx.clearRect(0, 0, bw, bh);
-    sctx.drawImage(ctx.canvas, bx, by, bw, bh, 0, 0, bw, bh);
-    pixelateRegion(sctx, 0, 0, bw, bh, block);
-
-    ctx.save();
-    pathStroke(ctx, pts, r);
-    ctx.clip();
-    ctx.drawImage(_redactScratch, bx, by);
-    ctx.restore();
-    return;
+// Closed path through a polygon's vertices.
+function pathPoly(ctx, pts) {
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    if (i === 0) ctx.moveTo(pts[i].x, pts[i].y); else ctx.lineTo(pts[i].x, pts[i].y);
   }
-  if (shape.type === 'circle') {
-    const cx = shape.cx, cy = shape.cy, r = Math.max(1, shape.r);
-    const bx = Math.max(0, Math.floor(cx - r));
-    const by = Math.max(0, Math.floor(cy - r));
-    const bw = Math.min(ctx.canvas.width  - bx, Math.ceil(r * 2));
-    const bh = Math.min(ctx.canvas.height - by, Math.ceil(r * 2));
-    if (bw <= 0 || bh <= 0) return;
-    const block = blockSizeFor(r * 2);
-
-    if (!_redactScratch) _redactScratch = document.createElement('canvas');
-    if (_redactScratch.width !== bw)  _redactScratch.width  = bw;
-    if (_redactScratch.height !== bh) _redactScratch.height = bh;
-    const sctx = _redactScratch.getContext('2d');
-    sctx.clearRect(0, 0, bw, bh);
-    sctx.drawImage(ctx.canvas, bx, by, bw, bh, 0, 0, bw, bh);
-    pixelateRegion(sctx, 0, 0, bw, bh, block);
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.clip();
-    ctx.drawImage(_redactScratch, bx, by);
-    ctx.restore();
-    return;
+  ctx.closePath();
+}
+// How thick a polygon is across its narrow side, near enough: 2·area /
+// perimeter. Exact for a long thin strip (a serial number outlined at an
+// angle), and half the side for a square — which only makes the blocks
+// finer on a shape big enough to hit the cap anyway. This is what sizes the
+// pixelation blocks, and it has to be the strip's own thickness rather than
+// its bounding box: a 25px-tall serial lying at 45° has a bounding box
+// hundreds of px on both sides.
+function polyThickness(pts) {
+  let area = 0, perim = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    area += p.x * q.y - q.x * p.y;
+    perim += Math.hypot(q.x - p.x, q.y - p.y);
   }
-  // rect (default)
-  const block = blockSizeFor(Math.min(shape.w, shape.h));
-  pixelateRegion(ctx, shape.x, shape.y, shape.w, shape.h, block);
+  return perim > 0 ? Math.abs(area) / perim : 0;
 }
 
-// Double-stroke marching-ants outline for the in-progress selection.
+// Apply a redaction shape to ctx.
+//   shape.type === 'brush' → { pts: [{x,y},…], r }   a painted stroke
+//   shape.type === 'poly'  → { pts: [{x,y},…] }      a closed outline
+//
+// There is deliberately no rectangle and no circle. Build photos are almost
+// always shot with the gun at an angle, so the thing being hidden — a serial
+// on a slide or a grip module — runs diagonally, and an upright box around a
+// diagonal strip has to cover far more of the gun than the strip itself:
+// its corners hang off both ends. The outline tool does the box's job (four
+// taps is a box) at whatever angle the photo is at.
+//
+// Both shapes go the same way: naive "pixelateRegion(boundingRect) +
+// ctx.clip(path)" DOES NOT work — putImageData ignores canvas clip regions
+// per the Canvas 2D spec. So we snapshot the bounding rect of the CURRENT
+// canvas onto a scratch canvas (which preserves prior redactions in that
+// area — sampling from origCanvas would silently un-mask overlapping earlier
+// shapes), pixelate the scratch in place, then drawImage the scratch back
+// onto ctx clipped to the shape. Only the interior is committed.
+function pixelateShape(ctx, shape) {
+  let pts, pad, block, path;
+  if (shape.type === 'poly') {
+    pts = shape.pts;
+    if (pts.length < 3) return;
+    pad = 0;
+    block = blockSizeFor(polyThickness(pts) * 2);
+    path = function () { pathPoly(ctx, pts); };
+  } else {
+    // Block size follows the brush radius so a fine brush over a serial
+    // still lands enough blocks to destroy the digits, while a fat brush
+    // over a face reads as coarse.
+    const r = Math.max(1, shape.r);
+    pts = densifyStroke(shape.pts, r);
+    if (!pts.length) return;
+    pad = r;
+    block = blockSizeFor(r * 2);
+    path = function () { pathStroke(ctx, pts, r); };
+  }
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  pts.forEach(function (p) {
+    if (p.x < minX) minX = p.x; if (p.x > maxX) maxX = p.x;
+    if (p.y < minY) minY = p.y; if (p.y > maxY) maxY = p.y;
+  });
+  const bx = Math.max(0, Math.floor(minX - pad));
+  const by = Math.max(0, Math.floor(minY - pad));
+  const bw = Math.min(ctx.canvas.width  - bx, Math.ceil(maxX + pad) - bx);
+  const bh = Math.min(ctx.canvas.height - by, Math.ceil(maxY + pad) - by);
+  if (bw <= 0 || bh <= 0) return;
+
+  if (!_redactScratch) _redactScratch = document.createElement('canvas');
+  if (_redactScratch.width !== bw)  _redactScratch.width  = bw;
+  if (_redactScratch.height !== bh) _redactScratch.height = bh;
+  const sctx = _redactScratch.getContext('2d');
+  sctx.clearRect(0, 0, bw, bh);
+  sctx.drawImage(ctx.canvas, bx, by, bw, bh, 0, 0, bw, bh);
+  pixelateRegion(sctx, 0, 0, bw, bh, block);
+
+  ctx.save();
+  path();
+  ctx.clip();
+  ctx.drawImage(_redactScratch, bx, by);
+  ctx.restore();
+}
+
+// Double-stroke marching-ants outline for the in-progress brush stroke.
 // Thin white dashed line on top of a slightly wider black solid line —
 // standard trick that reads on any background. The white line's dash
 // offset is driven from outside so the caller can animate marching.
@@ -467,22 +475,15 @@ function drawSelectionOutline(ctx, shape, dashOffset) {
 
   function pathShape() {
     ctx.beginPath();
-    if (shape.type === 'brush') {
-      // Outline the stroke's centerline plus a ring at the last point so
-      // the brush footprint is legible while painting.
-      const pts = shape.pts;
-      if (!pts.length) return;
-      ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      const last = pts[pts.length - 1];
-      ctx.moveTo(last.x + shape.r, last.y);
-      ctx.arc(last.x, last.y, Math.max(0.5, shape.r), 0, Math.PI * 2);
-    } else if (shape.type === 'circle') {
-      ctx.arc(shape.cx, shape.cy, Math.max(0.5, shape.r), 0, Math.PI * 2);
-    } else {
-      // half-pixel offset so a 1-px stroke sits sharp on the pixel grid
-      ctx.rect(shape.x + 0.5, shape.y + 0.5, Math.max(0, shape.w - 1), Math.max(0, shape.h - 1));
-    }
+    // Outline the stroke's centerline plus a ring at the last point so
+    // the brush footprint is legible while painting.
+    const pts = shape.pts;
+    if (!pts.length) return;
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    const last = pts[pts.length - 1];
+    ctx.moveTo(last.x + shape.r, last.y);
+    ctx.arc(last.x, last.y, Math.max(0.5, shape.r), 0, Math.PI * 2);
   }
 
   ctx.save();
@@ -519,9 +520,9 @@ function openRedactModal(file) {
     const clearBtn  = document.getElementById('redact-clear');
     const skipBtn   = document.getElementById('redact-skip');
     const doneBtn   = document.getElementById('redact-done');
-    const shapeRectBtn   = document.getElementById('redact-shape-rect');
-    const shapeCircleBtn = document.getElementById('redact-shape-circle');
     const shapeBrushBtn  = document.getElementById('redact-shape-brush');
+    const shapePolyBtn   = document.getElementById('redact-shape-poly');
+    const hintEl         = document.getElementById('redact-hint');
     const brushSizeWrap  = document.getElementById('redact-brush-size');
     const brushRange     = document.getElementById('redact-brush-range');
     const zoomOutBtn     = document.getElementById('redact-zoom-out');
@@ -532,10 +533,10 @@ function openRedactModal(file) {
     const ctx = canvas.getContext('2d');
     const loupeCtx = loupe.getContext('2d');
 
-    // Selection shape mode — 'rect' | 'circle' | 'brush'. Rect = corner-to-
-    // corner drag; circle = center-out drag (pointerdown sets center, distance
-    // sets radius); brush = paint a stroke, a bare tap drops one dot.
-    let shapeMode = 'rect';
+    // Tool — 'brush' | 'poly'. Brush = paint a stroke, a bare tap drops one
+    // dot. Poly ("Outline") = tap points around an area, tap the first point
+    // again to close it, and everything inside is blurred.
+    let shapeMode = 'brush';
     // Brush radius as a fraction of canvas width, so the same slider position
     // means the same thing on every photo. Slider 1..100 → 0.3%..6% of width.
     let brushFrac = 0.015;
@@ -629,7 +630,11 @@ function openRedactModal(file) {
     // image under the crosshair, not the pixelated preview underneath.
     let origCanvas = null;
 
-    let boxes = [];                 // committed {x,y,w,h} in canvas-natural pixels
+    let boxes = [];                 // committed shapes, in canvas-natural pixels
+    // Outline tool: the vertices placed so far for the shape being drawn.
+    // Not a blur yet — it becomes one (and moves into `boxes`) when closed.
+    let polyPts = [];
+    let pendingPt = null;           // the vertex under a held-down pointer, not yet placed
     let dragging = false;
     let startCanvas = { x: 0, y: 0 };  // natural-px start (for boxes we save)
     let startWrap   = { x: 0, y: 0 };  // wrap-local start (for loupe positioning if needed later)
@@ -647,9 +652,12 @@ function openRedactModal(file) {
       countEl.textContent = boxes.length + ' blurred region' + (boxes.length === 1 ? '' : 's');
       // The count badge is hidden on phones, so the number rides on Done.
       doneBtn.textContent = boxes.length ? 'Done (' + boxes.length + ')' : 'Done';
-      undoBtn.disabled  = boxes.length === 0;
-      clearBtn.disabled = boxes.length === 0;
-      doneBtn.disabled  = boxes.length === 0;   // Done requires at least one box; skip covers "nothing to blur"
+      // An outline in progress counts for Undo/Clear (they act on its points),
+      // and for Done once it has the three points that make it an area —
+      // Done closes it. See finishAsDone.
+      undoBtn.disabled  = boxes.length === 0 && polyPts.length === 0;
+      clearBtn.disabled = boxes.length === 0 && polyPts.length === 0;
+      doneBtn.disabled  = boxes.length === 0 && polyPts.length < 3;   // skip covers "nothing to blur"
     }
 
     // Committed layer: original image + every committed shape pixelated on
@@ -674,48 +682,120 @@ function openRedactModal(file) {
       if (!committedCanvas) return;
       ctx.drawImage(committedCanvas, 0, 0);
     }
-    function commitBoxes() { rebuildCommitted(); repaintAllBoxes(); setCount(); }
+    function commitBoxes() { rebuildCommitted(); renderIdle(); setCount(); }
 
-    function shapeHasArea(s) {
-      if (!s) return false;
-      if (s.type === 'brush')  return s.pts.length > 0;
-      if (s.type === 'circle') return s.r > 0;
-      return s.w > 0 && s.h > 0;
+    // ── Outline tool ────────────────────────────────────────────────────
+    // Everything the draft draws is sized in CSS px and converted, so the
+    // dots and lines stay the same size on screen at 100% and at 800%.
+    function cssUnit() { return 1 / Math.max(1e-6, fitScale * zoom); }   // canvas px per CSS px
+    // How close to the first point a tap has to land to close the shape. A
+    // finger gets more room than a mouse, but not the full 22px half-target:
+    // on a small serial the fourth corner is legitimately that close to the
+    // first, and closing early would leave a sliver of it unblurred.
+    function closeRadius(pointerType) { return (pointerType === 'touch' ? 16 : 10) * cssUnit(); }
+    function nearPoint(p, q, r) { return Math.hypot(p.x - q.x, p.y - q.y) <= r; }
+    function wouldClose(p, pointerType) {
+      if (polyPts.length < 3) return false;
+      // The first point closes it; so does tapping the last point again,
+      // which is what a double-click or double-tap amounts to.
+      return nearPoint(p, polyPts[0], closeRadius(pointerType)) ||
+             nearPoint(p, polyPts[polyPts.length - 1], closeRadius(pointerType) * 0.6);
+    }
+    function closePoly() {
+      if (polyPts.length < 3) return;
+      boxes.push({ type: 'poly', pts: polyPts });
+      polyPts = [];
+      commitBoxes();
+    }
+    function placePolyPoint(p, pointerType) {
+      if (wouldClose(p, pointerType)) { closePoly(); return; }
+      // A repeat tap on the point just placed, before there is a shape to
+      // close, is a double-tap that arrived early — not a second vertex.
+      const last = polyPts[polyPts.length - 1];
+      if (last && nearPoint(p, last, closeRadius(pointerType) * 0.6)) { renderIdle(); return; }
+      polyPts.push({ x: Math.round(p.x), y: Math.round(p.y) });
+      renderIdle();
+      setCount();
+    }
+    // The draft: a tint over the area that will be blurred, the edges, and a
+    // dot per point. `cursor` is where the pointer is (hovering or held
+    // down) and is drawn as the next point; null on touch between taps.
+    function drawPolyDraft(cursor, pointerType) {
+      if (!polyPts.length) return;
+      const u = cssUnit();
+      const closing = !!cursor && wouldClose(cursor, pointerType);
+      const pts = (cursor && !closing) ? polyPts.concat([cursor]) : polyPts;
+      ctx.save();
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      if (pts.length >= 3) {
+        pathPoly(ctx, pts);
+        ctx.fillStyle = 'rgba(74,158,221,0.30)';
+        ctx.fill();
+      }
+      // Edges, black under dashed white so they read on any photo. The
+      // closing edge back to the first point is drawn too, so the shape on
+      // screen is always the shape that would be blurred.
+      if (pts.length >= 3) pathPoly(ctx, pts);
+      else { ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y); for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y); }
+      ctx.setLineDash([]);
+      ctx.lineWidth = 4 * u; ctx.strokeStyle = 'rgba(0,0,0,0.85)'; ctx.stroke();
+      ctx.setLineDash([6 * u, 5 * u]); ctx.lineDashOffset = -dashOffset * u;
+      ctx.lineWidth = 2 * u; ctx.strokeStyle = 'rgba(255,255,255,0.98)'; ctx.stroke();
+      ctx.setLineDash([]);
+      // Points. The first one turns gold once tapping it would close the
+      // shape, and grows when the pointer is on it.
+      for (let i = polyPts.length - 1; i >= 0; i--) {
+        const first = i === 0 && polyPts.length >= 3;
+        const r = (first ? (closing ? 10 : 7) : 4.5) * u;
+        ctx.beginPath();
+        ctx.arc(polyPts[i].x, polyPts[i].y, r, 0, Math.PI * 2);
+        ctx.fillStyle = first ? '#d4a853' : '#fff';
+        ctx.fill();
+        ctx.lineWidth = 1.5 * u; ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.stroke();
+      }
+      ctx.restore();
     }
 
-    // Brush-only: a ring under the mouse while hovering so the user can
-    // judge the size before committing. Touch has no hover; the loupe and
+    // What the canvas shows when no pointer is down: the committed blurs,
+    // plus whatever the current tool keeps on screen between gestures — the
+    // outline being drawn, or the brush ring under the mouse so the user can
+    // judge its size before committing. Touch has no hover; the loupe and
     // the live stroke cover that case.
+    //
+    // None of this is ever exported: finishAsDone repaints the bare
+    // committed layer before it encodes.
     let hoverPoint = null;
-    function renderHover() {
+    function renderIdle() {
       repaintAllBoxes();
-      if (hoverPoint && shapeMode === 'brush') {
+      if (shapeMode === 'poly') {
+        drawPolyDraft(hoverPoint, 'mouse');
+      } else if (hoverPoint) {
         drawSelectionOutline(ctx, { type: 'brush', pts: [hoverPoint], r: brushRadius() }, 0);
       }
     }
 
-    // Render one drag frame: base + committed shapes + live-pixelated
-    // in-progress shape (rect or circle, whichever mode) + subtle white
-    // highlight overlay + double-stroke marching-ants outline on top. Uses
-    // pixelateShape so the circle preview is clipped to the arc — matches
-    // the final committed result exactly.
+    // Render one frame while a pointer is down. Brush: the stroke so far,
+    // pixelated live through pixelateShape so the preview matches the
+    // committed result exactly, with a marching-ants outline on top.
+    // Outline: the draft with the held point as its next vertex.
     function renderDragFrame() {
       repaintAllBoxes();
-      if (shapeHasArea(currentDrag)) {
-        pixelateShape(ctx, currentDrag);
-        // 10% white fill highlight — reads as "in-progress selection" vs
-        // the plain pixelation of already-committed shapes. Subtle so it
-        // doesn't wash out the pixelation preview underneath.
-        ctx.save();
-        ctx.fillStyle = 'rgba(255,255,255,0.10)';
-        ctx.beginPath();
-        if (currentDrag.type === 'circle') {
-          ctx.arc(currentDrag.cx, currentDrag.cy, currentDrag.r, 0, Math.PI * 2);
-        } else {
-          ctx.rect(currentDrag.x, currentDrag.y, currentDrag.w, currentDrag.h);
+      if (shapeMode === 'poly') {
+        if (pendingPt) {
+          if (!polyPts.length) {
+            // Very first point: nothing to connect to yet, so show the dot.
+            const u = cssUnit();
+            ctx.save();
+            ctx.beginPath(); ctx.arc(pendingPt.x, pendingPt.y, 4.5 * u, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff'; ctx.fill();
+            ctx.lineWidth = 1.5 * u; ctx.strokeStyle = 'rgba(0,0,0,0.9)'; ctx.stroke();
+            ctx.restore();
+          } else {
+            drawPolyDraft(pendingPt, activePointerType);
+          }
         }
-        ctx.fill();
-        ctx.restore();
+      } else if (currentDrag && currentDrag.pts.length > 0) {
+        pixelateShape(ctx, currentDrag);
         drawSelectionOutline(ctx, currentDrag, dashOffset);
       }
       if (currentTouch) {
@@ -805,49 +885,29 @@ function openRedactModal(file) {
       return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }
 
-    // Build the current drag shape from the pointer position, respecting mode.
-    // rect:   startCanvas is one corner; drag extends the opposite corner.
-    // circle: startCanvas IS the center; drag distance sets the radius.
+    // Extend the live brush stroke with the pointer position.
     function makeDragShape(p) {
-      if (shapeMode === 'brush') {
-        // Brush accumulates rather than recomputes: extend the live stroke.
-        const s = currentDrag && currentDrag.type === 'brush'
-          ? currentDrag
-          : { type: 'brush', pts: [], r: brushRadius() };
-        const last = s.pts[s.pts.length - 1];
-        if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 1) {
-          s.pts.push({ x: Math.round(p.x), y: Math.round(p.y) });
-        }
-        return s;
+      const s = currentDrag || { type: 'brush', pts: [], r: brushRadius() };
+      const last = s.pts[s.pts.length - 1];
+      if (!last || Math.hypot(p.x - last.x, p.y - last.y) >= 1) {
+        s.pts.push({ x: Math.round(p.x), y: Math.round(p.y) });
       }
-      if (shapeMode === 'circle') {
-        const dx = p.x - startCanvas.x, dy = p.y - startCanvas.y;
-        return {
-          type: 'circle',
-          cx: Math.round(startCanvas.x),
-          cy: Math.round(startCanvas.y),
-          r:  Math.round(Math.sqrt(dx * dx + dy * dy)),
-        };
-      }
-      return {
-        type: 'rect',
-        x: Math.round(Math.min(startCanvas.x, p.x)),
-        y: Math.round(Math.min(startCanvas.y, p.y)),
-        w: Math.round(Math.abs(p.x - startCanvas.x)),
-        h: Math.round(Math.abs(p.y - startCanvas.y)),
-      };
+      return s;
     }
 
-    // Drop the in-progress shape without committing it. Used when a second
-    // finger turns a drag into a pinch, and by pointercancel.
+    // Drop the in-progress gesture without committing it. Used when a second
+    // finger turns a drag into a pinch, and by pointercancel. For the outline
+    // tool that is only the point under the finger — the points already
+    // placed stay, so zooming in mid-outline does not cost the outline.
     function abandonDrag() {
       dragging = false;
       activePointerId = null;
       activePointerType = null;
       currentDrag = null;
+      pendingPt = null;
       currentTouch = null;
       hideLoupe();
-      repaintAllBoxes();
+      renderIdle();
     }
 
     function onPointerDown(e) {
@@ -870,7 +930,9 @@ function openRedactModal(file) {
       startCanvas = toCanvasCoords(e);
       startWrap   = toWrapCoords(e);
       dashOffset = 0;
-      currentDrag = makeDragShape(startCanvas);
+      hoverPoint = null;
+      if (shapeMode === 'poly') pendingPt = startCanvas;
+      else currentDrag = makeDragShape(startCanvas);
       if (activePointerType === 'touch') {
         currentTouch = { canvas: startCanvas, wrap: startWrap };
         showLoupe();
@@ -884,16 +946,17 @@ function openRedactModal(file) {
         if (pinch && pointers.size === 2) { updatePinch(); return; }
       }
       if (!dragging) {
-        // Hover ring for the brush (mouse/pen only).
-        if (shapeMode === 'brush' && e.pointerType !== 'touch' && origCanvas) {
+        // Mouse/pen only: the brush ring, or the outline's next edge.
+        if (e.pointerType !== 'touch' && origCanvas) {
           hoverPoint = toCanvasCoords(e);
-          renderHover();
+          renderIdle();
         }
         return;
       }
       if (e.pointerId !== activePointerId) return;
       const p = toCanvasCoords(e);
-      currentDrag = makeDragShape(p);
+      if (shapeMode === 'poly') pendingPt = p;
+      else currentDrag = makeDragShape(p);
       if (activePointerType === 'touch') {
         currentTouch = { canvas: p, wrap: toWrapCoords(e) };
       }
@@ -910,32 +973,42 @@ function openRedactModal(file) {
       if (!dragging || e.pointerId !== activePointerId) return;
       dragging = false;                            // stops the loop
       activePointerId = null;
-      const wasTouch = activePointerType === 'touch';
+      const pointerType = activePointerType;
       activePointerType = null;
       currentTouch = null;
-      if (wasTouch) hideLoupe();
-      const shape = makeDragShape(toCanvasCoords(e));
+      if (pointerType === 'touch') hideLoupe();
+      const p = toCanvasCoords(e);
+      if (shapeMode === 'poly') {
+        // The point lands where the pointer is LIFTED, not where it went
+        // down — on a phone that is what lets you press, slide under the
+        // loupe until the crosshair is on the spot, and let go.
+        pendingPt = null;
+        if (pointerType !== 'touch') hoverPoint = p;
+        placePolyPoint(p, pointerType);
+        return;
+      }
+      // A bare tap is a deliberate dot — that is exactly the gesture for a
+      // target too small to paint a stroke over — so nothing is too small.
+      const shape = makeDragShape(p);
       currentDrag = null;
-      // Below-threshold drag — treat as "meant to scroll / stray click".
-      // Brush is exempt: a tap is a deliberate dot, and that is exactly the
-      // gesture for a target too small to drag a box around.
-      const tooSmall = shape.type === 'brush'  ? false
-                     : shape.type === 'circle' ? shape.r < 8
-                     : (shape.w < 8 || shape.h < 8);
-      if (tooSmall) { repaintAllBoxes(); return; }
       boxes.push(shape);
-      commitBoxes();                                // wipes fill + outline; commits pixelation
+      commitBoxes();                                // wipes the outline; commits pixelation
     }
     function onPointerCancel(e) {
       releaseTouch(e);
       abandonDrag();
     }
     function onPointerLeave() {
-      if (hoverPoint) { hoverPoint = null; if (!dragging) repaintAllBoxes(); }
+      if (hoverPoint) { hoverPoint = null; if (!dragging) renderIdle(); }
     }
 
-    function onUndo() { boxes.pop(); commitBoxes(); }
-    function onClear() { boxes = []; commitBoxes(); }
+    // Undo takes back the last thing done: a point of the outline being
+    // drawn if there is one, otherwise the last finished blur.
+    function onUndo() {
+      if (polyPts.length) { polyPts.pop(); renderIdle(); setCount(); return; }
+      boxes.pop(); commitBoxes();
+    }
+    function onClear() { boxes = []; polyPts = []; commitBoxes(); }
 
     function cleanup() {
       overlay.classList.remove('open');
@@ -948,12 +1021,14 @@ function openRedactModal(file) {
       window.removeEventListener('resize', onResize);
       undoBtn.onclick = null; clearBtn.onclick = null;
       skipBtn.onclick = null; doneBtn.onclick = null;
-      shapeRectBtn.onclick = null; shapeCircleBtn.onclick = null; shapeBrushBtn.onclick = null;
+      shapeBrushBtn.onclick = null; shapePolyBtn.onclick = null;
       zoomInBtn.onclick = null; zoomOutBtn.onclick = null; zoomFitBtn.onclick = null;
       brushRange.oninput = null;
-      // Reset toggle to default (Box) so the next modal open doesn't inherit
-      // the previous session's circle/brush mode.
-      setShapeMode('rect');
+      // Reset to the default tool so the next modal open doesn't inherit
+      // this one's — and drop any unfinished outline first, so the reset
+      // does not try to commit it to a photo that is being torn down.
+      polyPts = []; pendingPt = null;
+      setShapeMode('brush');
       overlay.removeEventListener('click', onBackdropClick);
       removeGestureGuards();
       document.removeEventListener('keydown', onKeydown);
@@ -973,7 +1048,17 @@ function openRedactModal(file) {
     function finishAsSkip()   { cleanup(); resolve(file); }
     function finishAsCancel() { cleanup(); resolve(null); }
     function finishAsDone() {
+      // An outline with three or more points is an area the user marked to
+      // hide and then forgot to close. Blur it: dropping it would upload
+      // exactly the thing they were in the middle of covering.
+      if (polyPts.length >= 3) boxes.push({ type: 'poly', pts: polyPts });
+      polyPts = []; hoverPoint = null;
       if (boxes.length === 0) { finishAsSkip(); return; }   // guard — button *should* be disabled
+      // Encode the committed layer and nothing else. The visible canvas can
+      // be carrying editing chrome at this moment — the brush ring, outline
+      // dots — and toBlob encodes whatever is on it.
+      rebuildCommitted();
+      repaintAllBoxes();
       // Same MIME as input so JPEG stays JPEG (avoids double lossy re-encode
       // when normalizeImage does its own JPEG re-encode later); PNG stays PNG.
       const mime = (file.type === 'image/png' || file.type === 'image/webp') ? file.type : 'image/jpeg';
@@ -986,7 +1071,17 @@ function openRedactModal(file) {
       }, mime, quality);
     }
     function onBackdropClick(e) { if (e.target === overlay) finishAsCancel(); }
-    function onKeydown(e) { if (e.key === 'Escape') finishAsCancel(); }
+    function onKeydown(e) {
+      if (e.key === 'Escape') {
+        // First Escape abandons an outline in progress; only an Escape with
+        // nothing in progress closes the modal and throws the photo away.
+        if (polyPts.length) { polyPts = []; pendingPt = null; renderIdle(); setCount(); return; }
+        finishAsCancel();
+      } else if (e.key === 'Enter' && polyPts.length >= 3 && e.target.tagName !== 'BUTTON') {
+        e.preventDefault();
+        closePoly();
+      }
+    }
 
     // iOS Safari zooms the PAGE on a pinch and does not route that through
     // touch-action — it fires its own non-standard gesture* events. That is
@@ -1053,9 +1148,8 @@ function openRedactModal(file) {
       clearBtn.onclick = onClear;
       skipBtn.onclick  = finishAsSkip;
       doneBtn.onclick  = finishAsDone;
-      shapeRectBtn.onclick   = function () { setShapeMode('rect');   };
-      shapeCircleBtn.onclick = function () { setShapeMode('circle'); };
-      shapeBrushBtn.onclick  = function () { setShapeMode('brush');  };
+      shapeBrushBtn.onclick  = function () { setShapeMode('brush'); };
+      shapePolyBtn.onclick   = function () { setShapeMode('poly');  };
       zoomInBtn.onclick  = function () { zoomStep(1);  };
       zoomOutBtn.onclick = function () { zoomStep(-1); };
       zoomFitBtn.onclick = zoomFit;
@@ -1064,27 +1158,47 @@ function openRedactModal(file) {
         // serial numbers live) gets most of the slider's travel.
         const t = brushRange.value / 100;
         brushFrac = 0.003 + (0.06 - 0.003) * t * t;
-        if (hoverPoint) renderHover();
+        if (hoverPoint) renderIdle();
       };
       brushRange.oninput();
       overlay.addEventListener('click', onBackdropClick);
       document.addEventListener('keydown', onKeydown);
     };
 
-    // Toggle helper — flips the segmented-control active state and updates
+    // What the header tells the user to do, per tool. .long / .short are the
+    // desktop and phone wordings (see the 640px block in the CSS).
+    const HINTS = {
+      brush: '<strong>Paint over</strong> serial numbers, plates, addresses, faces.' +
+             '<span class="long"> Small target? <strong>Pinch or use + to zoom in</strong> and turn the <strong>Size</strong> down. Tilted or awkward shape? Trace it with <strong>Outline</strong>.</span>' +
+             '<span class="short"> Too small? Pinch to zoom.</span> Runs before upload.',
+      poly:  '<strong>Tap around the area</strong> to drop points, then <strong>tap the first point</strong> to close it. Everything inside is blurred.' +
+             '<span class="long"> Works at any angle — four taps around a tilted serial is enough. Double-click also closes.</span> Runs before upload.',
+    };
+    // Tool switch — flips the segmented-control active state and updates
     // aria-pressed for screen readers. The shapeMode variable is what the
-    // pointer handlers consult on each drag.
+    // pointer handlers consult on each gesture.
     function setShapeMode(mode) {
+      // Leaving Outline mid-shape: three or more points is a marked area, so
+      // it is blurred rather than dropped (Undo takes it back); fewer is
+      // nothing yet.
+      if (mode !== 'poly' && polyPts.length) {
+        if (polyPts.length >= 3) boxes.push({ type: 'poly', pts: polyPts });
+        polyPts = [];
+        if (origCanvas) { rebuildCommitted(); setCount(); }
+      }
       shapeMode = mode;
-      const btns = { rect: shapeRectBtn, circle: shapeCircleBtn, brush: shapeBrushBtn };
+      const btns = { brush: shapeBrushBtn, poly: shapePolyBtn };
       Object.keys(btns).forEach(function (k) {
         btns[k].classList.toggle('active', k === mode);
         btns[k].setAttribute('aria-pressed', String(k === mode));
       });
+      hintEl.innerHTML = HINTS[mode];
       brushSizeWrap.classList.toggle('visible', mode === 'brush');
       canvas.classList.toggle('brush', mode === 'brush');
-      if (mode !== 'brush' && hoverPoint) { hoverPoint = null; if (origCanvas) repaintAllBoxes(); }
+      hoverPoint = null;
+      if (origCanvas) renderIdle();
     }
+    setShapeMode('brush');
     img.onerror = function () {
       URL.revokeObjectURL(objectUrl);
       // Same fallthrough as no-dimensions — let the downstream pipeline
