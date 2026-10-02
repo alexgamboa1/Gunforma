@@ -119,8 +119,20 @@ Embeds from `affiliate_links` and `variant_images` each have exactly one FK to
 Likewise a bare `products(...)` embed is fine from single-FK parents such as
 `part_favorites` and `product_platforms`. Several spec tables
 (`barrel_specs`, `optic_specs`, `slide_specs`, `trigger_specs` and others) carry
-two or more FKs to `products` and would be ambiguous too — nothing embeds
-through them today, so the check does not flag them.
+two or more FKs to `products` and are ambiguous too — `guide-page.mjs` now
+embeds through `optic_specs` and names the FK
+(`products!optic_specs_product_id_fkey`).
+
+`optic_specs → footprints` is a second instance of the same trap with a
+different shape: one direct FK **plus** a many-to-many through
+`optic_adapter_footprints`, so a bare `footprints(...)` embed off
+`optic_specs` dies the same way. Found on the wire while building
+guide-page.mjs, after this file's earlier note said "nothing embeds through
+them today". Name it — `footprints!optic_specs_footprint_id_fkey(...)` — and
+note `check-embeds.sh` now covers this pair (its safe-parent match requires
+a query form, `table?` or `.from('table')`, because the first version was
+defeated by its own documentation: a comment naming the safe parent within
+the scan window cleared the very embed it described).
 
 ## Server-rendered pages
 
@@ -214,17 +226,18 @@ That is twice now that a rewrite behaved differently in production than
 locally, and twice that a green local test covered it. A rewrite's behaviour
 is not verified until it has been observed on a deploy.
 
-### The nav exists in 14 places, two of which are functions
+### The nav exists in 15 places, three of which are functions
 
-**Changing the site nav means changing fourteen files.** Every root HTML page
+**Changing the site nav means changing fifteen files.** Every root HTML page
 carries its own hardcoded copy — desktop `.nav-links` *and* the mobile
 `.nav-menu`, so two links per page — and on top of those:
 
 - `js/nav.js`, for the pages that mount it rather than hardcoding
 - **`netlify/functions/product-page.mjs`** — server-renders `/parts/:category/:slug`
 - **`netlify/functions/parts-index.mjs`** — server-renders `/parts`
+- **`netlify/functions/guide-page.mjs`** — server-renders `/fit/p365/...`
 
-The last two are the ones that get missed. They are Netlify functions, so they
+The functions are the ones that get missed. They are Netlify functions, so they
 do not turn up when you sweep `*.html`, and they cannot be checked with
 `netlify dev` alone the way a static page can — but they render real nav to
 real crawlers on two of the most crawled routes on the site.
@@ -782,14 +795,18 @@ an explicit revoke for exactly that reason.
 
 ## Duplicated logic to keep in sync
 
-Three files carry their own copy of the buy-row logic — the variant-label axes,
-the stale-price rule, and the sort. Change all three, or the same listing reads
-differently depending on which page you are on:
+Three PLACES carry their own copy of the buy-row logic — the variant-label
+axes, the stale-price rule, and the sort. Change all three, or the same
+listing reads differently depending on which page you are on:
 
 - `js/affiliate.js` — the browser module. `gunforma-parts-catalog.html` and
   `gunforma-armory.html` render through it and hold no copy of their own.
-- `netlify/functions/product-page.mjs` — the server-rendered `/parts/:category/:slug`
-  page. Dependency-free by design, so it cannot import the browser module.
+- `netlify/functions/_listing-rules.mjs` — the ONE server copy, imported by
+  `product-page.mjs` and `guide-page.mjs` (both plain ESM functions, so
+  there is no bundler boundary between them and no excuse for two copies —
+  same reasoning as `_variant-label.mjs`). Dependency-free by design, so it
+  cannot import the browser module. `scripts/listing-rules.test.mjs` pins
+  its behaviour to the documented rules on every deploy.
 - `gunforma-build-detail.html` — inline copy for a build's parts list
 
 The category → URL-segment mapping is duplicated for the same reason:

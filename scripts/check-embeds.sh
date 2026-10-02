@@ -91,6 +91,46 @@ matches_pv=$(printf '%s\n' "$files" | while IFS= read -r f; do
   ' "$f"
 done)
 
+# ── Direction 3: bare footprints(...) — ambiguous from optic_specs ──────────
+# optic_specs reaches footprints TWO ways: its own footprint_id FK, and
+# many-to-many through optic_adapter_footprints. So a bare footprints(...)
+# embed off optic_specs is PGRST201 — found ON THE WIRE while building
+# guide-page.mjs (2026-09-30); this guard's earlier note said "nothing embeds
+# through them today", and that day ended. Same flag-unless-cleared default
+# as Direction 1: optic_cut_footprints and optic_adapter_footprints each
+# have exactly ONE FK to footprints, so their bare embeds are correct.
+# The [^!_] guard skips both the FK-named form (footprints!...) and the
+# *_footprints table names themselves.
+#
+# The safe-parent match requires a QUERY form — `table?` (REST) or
+# .from('table') — not the bare table name. First version matched the bare
+# name and was immediately defeated by its own documentation: a COMMENT
+# mentioning optic_adapter_footprints within the window marked the embed
+# safe. Watched failing before trusting, per the build-guards rule.
+SAFE_FOOTPRINT_PARENTS='(optic_cut_footprints|optic_adapter_footprints)[?]|from[(][\047\042](optic_cut_footprints|optic_adapter_footprints)'
+
+# A pattern the engine cannot compile must go RED, not read as clean. awk dies
+# mid-scan, the capture below comes back empty, and an empty capture is
+# indistinguishable from "no findings" — which is how this direction shipped
+# unable to fail for ANY input. Compile it at BEGIN time, where it is visible.
+awk -v SAFE="$SAFE_FOOTPRINT_PARENTS" 'BEGIN { x = ("" ~ SAFE) }' \
+  || { echo "error: direction-3 regex failed to compile — the guard cannot run"; exit 1; }
+matches_fp=$(printf '%s\n' "$files" | while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  awk -v FNAME="$f" -v W="$WINDOW" -v SAFE="$SAFE_FOOTPRINT_PARENTS" '
+    {
+      line[NR] = $0
+      if ($0 ~ /[^!_]footprints\(/) {
+        if ($0 ~ /^[[:space:]]*(\/\/|\*|<!--)/) next
+        safe = 0
+        start = NR - W; if (start < 1) start = 1
+        for (i = start; i <= NR; i++) if (line[i] ~ SAFE) safe = 1
+        if (!safe) printf "%s:%d:%s\n", FNAME, NR, $0
+      }
+    }
+  ' "$f"
+done)
+
 # ── Direction 2: bare products(...) hanging off product_variants ────────────
 # \047 = single quote, \042 = double quote — written as octal escapes so this
 # awk program contains no literal quote characters of its own.
@@ -145,8 +185,18 @@ if [ -n "$matches_p" ]; then
   status=1
 fi
 
+if [ -n "$matches_fp" ]; then
+  echo "error: bare footprints(...) embed — ambiguous from optic_specs (direct FK + via optic_adapter_footprints), PGRST201."
+  echo "       Use footprints!optic_specs_footprint_id_fkey(...) from optic_specs; bare is fine only from"
+  echo "       optic_cut_footprints / optic_adapter_footprints (put the parent within $WINDOW lines)."
+  echo
+  echo "$matches_fp" | sed 's/^/  /'
+  echo
+  status=1
+fi
+
 if [ "$status" -eq 0 ]; then
-  echo "ok: no ambiguous products <-> product_variants embeds (both directions checked)"
+  echo "ok: no ambiguous products <-> product_variants or footprints embeds (all directions checked)"
 fi
 
 exit "$status"

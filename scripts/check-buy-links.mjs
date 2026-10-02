@@ -35,6 +35,7 @@ const FILES = [
   'js/affiliate.js',
   'js/part-picker.js',
   'netlify/functions/product-page.mjs',
+  'netlify/functions/guide-page.mjs',
   'gunforma-build-detail.html',
   'gunforma-armory.html',
   'gunforma-parts-catalog.html',
