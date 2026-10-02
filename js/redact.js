@@ -292,7 +292,12 @@ function mountRedactUI() {
 // the canvas produces a Blob — not a CSS/filter overlay.
 const REDACT_MAX_DIMENSION = 2400;
 
-function pixelateRegion(ctx, x, y, w, h, blockSize) {
+// `mask`, when given, is RGBA data the size of the region (w×h): only pixels
+// whose mask alpha is over half count towards a block's average, and only
+// those pixels get it. Every pixel outside the mask is made fully
+// transparent, so the region comes out as a cut-out of just the shape,
+// ready to be drawn over the original (see pixelateShape).
+function pixelateRegion(ctx, x, y, w, h, blockSize, mask) {
   // Clip to canvas bounds so a box dragged partially off-image doesn't throw.
   const cw = ctx.canvas.width, ch = ctx.canvas.height;
   x = Math.max(0, Math.min(x, cw - 1));
@@ -313,16 +318,19 @@ function pixelateRegion(ctx, x, y, w, h, blockSize) {
       for (let py = 0; py < bh; py++) {
         for (let px = 0; px < bw; px++) {
           const idx = ((by + py) * w + (bx + px)) * 4;
+          if (mask && mask[idx + 3] <= 127) continue;
           rSum += data[idx];
           gSum += data[idx + 1];
           bSum += data[idx + 2];
           n++;
         }
       }
+      if (n === 0) continue;                    // block lies wholly outside the shape
       const rAvg = (rSum / n) | 0, gAvg = (gSum / n) | 0, bAvg = (bSum / n) | 0;
       for (let py = 0; py < bh; py++) {
         for (let px = 0; px < bw; px++) {
           const idx = ((by + py) * w + (bx + px)) * 4;
+          if (mask && mask[idx + 3] <= 127) continue;
           data[idx]     = rAvg;
           data[idx + 1] = gAvg;
           data[idx + 2] = bAvg;
@@ -330,6 +338,9 @@ function pixelateRegion(ctx, x, y, w, h, blockSize) {
         }
       }
     }
+  }
+  if (mask) {
+    for (let i = 3; i < data.length; i += 4) if (mask[i] <= 127) data[i] = 0;
   }
   ctx.putImageData(imgData, x, y);
 }
@@ -347,6 +358,7 @@ function blockSizeFor(minDim) {
 // A reusable scratch canvas for clipped redaction (see pixelateShape).
 // One per modal session, resized per-shape as needed.
 let _redactScratch = null;
+let _redactMask = null;    // the shape's coverage, same size as the scratch
 
 // Brush strokes are stored as the raw pointer samples. For clipping and
 // outlining they are densified so consecutive points are never more than
@@ -464,13 +476,14 @@ function convexHull(pts) {
 // its corners hang off both ends. The outline tool does the box's job (four
 // taps is a box) at whatever angle the photo is at.
 //
-// Both shapes go the same way: naive "pixelateRegion(boundingRect) +
-// ctx.clip(path)" DOES NOT work — putImageData ignores canvas clip regions
-// per the Canvas 2D spec. So we snapshot the bounding rect of the CURRENT
+// Both shapes go the same way. We snapshot the bounding rect of the CURRENT
 // canvas onto a scratch canvas (which preserves prior redactions in that
 // area — sampling from origCanvas would silently un-mask overlapping earlier
-// shapes), pixelate the scratch in place, then drawImage the scratch back
-// onto ctx clipped to the shape. Only the interior is committed.
+// shapes), rasterise the shape into a hard-edged mask the same size, and
+// pixelate the scratch with every block averaging and writing only the
+// mask's pixels. The result is a cut-out of just the shape, which replaces
+// exactly those pixels on ctx. Nothing outside the shape is read into an
+// average or written.
 function pixelateShape(ctx, shape) {
   let pts, pad, block, path;
   if (shape.type === 'poly') {
@@ -478,7 +491,7 @@ function pixelateShape(ctx, shape) {
     if (pts.length < 3) return;
     pad = 0;
     block = blockSizeFor(polyThickness(pts) * 2);
-    path = function () { pathPoly(ctx, pts); };
+    path = function (c) { pathPoly(c, pts); };
   } else {
     // Block size follows the brush radius so a fine brush over a serial
     // still lands enough blocks to destroy the digits, while a fat brush
@@ -488,7 +501,7 @@ function pixelateShape(ctx, shape) {
     if (!pts.length) return;
     pad = r;
     block = blockSizeFor(r * 2);
-    path = function () { pathStroke(ctx, pts, r); };
+    path = function (c) { pathStroke(c, pts, r); };
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
   pts.forEach(function (p) {
@@ -507,15 +520,50 @@ function pixelateShape(ctx, shape) {
   const sctx = _redactScratch.getContext('2d');
   sctx.clearRect(0, 0, bw, bh);
   sctx.drawImage(ctx.canvas, bx, by, bw, bh, 0, 0, bw, bh);
-  pixelateRegion(sctx, 0, 0, bw, bh, block);
 
+  // The shape's own coverage, at the scratch's size and offset. Every block
+  // averages and writes ONLY the pixels inside it. Averaging the whole
+  // rectangular block is what made the blur the wrong colour: a block on the
+  // edge of a tilted outline is half outside it, so its average pulled in
+  // whatever surrounded the shape — measured as solid red inside an outline
+  // with no red in it — and the clip then pasted that colour in. The clip
+  // below only decides which pixels are drawn; it cannot fix their colour.
+  if (!_redactMask) _redactMask = document.createElement('canvas');
+  if (_redactMask.width !== bw)  _redactMask.width  = bw;
+  if (_redactMask.height !== bh) _redactMask.height = bh;
+  const mctx = _redactMask.getContext('2d', { willReadFrequently: true });
+  mctx.setTransform(1, 0, 0, 1, 0, 0);
+  mctx.clearRect(0, 0, bw, bh);
+  mctx.setTransform(1, 0, 0, 1, -bx, -by);
+  path(mctx);
+  mctx.fillStyle = '#fff';
+  mctx.fill();
+  mctx.setTransform(1, 0, 0, 1, 0, 0);
+  // Hard-edged: a pixel is in the shape or it is not. The fill above is
+  // anti-aliased, and a soft edge here would be a pixel that is partly
+  // blurred and partly the original.
+  const maskImg = mctx.getImageData(0, 0, bw, bh);
+  const md = maskImg.data;
+  for (let i = 3; i < md.length; i += 4) md[i] = md[i] > 127 ? 255 : 0;
+  mctx.putImageData(maskImg, 0, 0);
+  pixelateRegion(sctx, 0, 0, bw, bh, block, md);
+
+  // Put the cut-out in place: erase exactly the mask's pixels, then draw the
+  // pixelated copy into exactly those pixels. Outside the mask both layers
+  // are fully transparent, so nothing there can change.
+  //
+  // This replaced a ctx.clip(path) + drawImage, and the clip is not a safe
+  // backstop: it is anti-aliased. On a tilted outline it blended every rim
+  // pixel part-way back towards the original — measured as 228 rim pixels
+  // that were not the block average, off by up to 39 levels — and slightly
+  // altered pixels just outside the shape. The erase-then-draw also covers
+  // what the clear was for: a semi-transparent original pixel is replaced,
+  // not composited under its own pixelated version.
   ctx.save();
-  path();
-  ctx.clip();
-  // Clear inside the shape first. drawImage composites source-over, so on a
-  // PNG with any transparency the original detail under a semi-transparent
-  // pixel would show through its own pixelated replacement.
-  ctx.clearRect(bx, by, bw, bh);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.drawImage(_redactMask, bx, by);
+  ctx.globalCompositeOperation = 'source-over';
   ctx.drawImage(_redactScratch, bx, by);
   ctx.restore();
 }
