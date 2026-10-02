@@ -225,6 +225,55 @@
     return '<div class="selected-parts-list">' + parts.map(selectedPartHtml).join('') + '</div>';
   }
 
+  // ===== GROUP HEADINGS =====
+
+  // The heading over each of the four stages — Core build, Controls,
+  // Magazine, Carry and finish. The groups and their order come from
+  // js/build-categories.js; this is only how one is drawn.
+  //
+  // IT COUNTS SECTIONS, NOT PARTS. A builder with three optics and nothing
+  // else has covered one section of Core build, not three — a parts count
+  // would read as progress for buying the same thing again. So each segment
+  // is a section, lit when that section holds at least one part, and the
+  // tally says "2 of 5". That is also why the segment row is the progress
+  // bar rather than decoration: it is the same fact twice, once for scanning
+  // and once for reading.
+  //
+  // DELIBERATELY UNNUMBERED. The page's own cards are steps 1-4 and Parts is
+  // step 4; numbering the four groups inside it would put a second, competing
+  // 1-4 on the same screen.
+  //
+  // NOT CLICKABLE. Everything else in this section opens on click, so a
+  // heading that looked the same and did nothing would read as broken —
+  // hence an <h3>, no cursor and no toggle affordance.
+  //
+  // Lives here rather than in either page because .category-group's CSS does.
+  // It was a `categoryGroupHeadHtml` in both pages for exactly one PR (#114),
+  // which is one PR longer than this repo's record suggests is safe.
+  function groupHeadHtml(g) {
+    var parts = need().state().parts || [];
+    var filled = 0;
+    var segs = g.categories.map(function (cat) {
+      var on = parts.some(function (p) { return p.category === cat.key; });
+      if (on) filled++;
+      return '<span class="category-group-seg' + (on ? ' on' : '') + '"></span>';
+    }).join('');
+    var total = g.categories.length;
+    // role="img" with one label, because the segments are decorative spans:
+    // without it a screen reader walks eighteen empty elements and reports
+    // nothing. The tally text is inside the labelled element on purpose —
+    // sighted readers get it either way, and it keeps the two in one place.
+    return '<div class="category-group-head">' +
+        '<h3 class="category-group-name">' + g.group.label + '</h3>' +
+        '<div class="category-group-progress' + (filled ? ' has-parts' : '') + '" role="img"' +
+            ' aria-label="' + filled + ' of ' + total + ' sections have a part">' +
+          '<span class="category-group-segs">' + segs + '</span>' +
+          '<span class="category-group-tally"><b>' + filled + '</b> of ' + total + '</span>' +
+        '</div>' +
+        '<div class="category-group-blurb">' + g.group.blurb + '</div>' +
+      '</div>';
+  }
+
   // ===== POST-ADD BEHAVIOUR =====
 
   // renderParts() replaces the whole section, so the element has to be looked
@@ -360,25 +409,45 @@
 /* ============ GROUP HEADINGS ============ */
 /* The parts step reads as four stages of a build — Core build, Controls,
    Magazine, Carry and finish — rather than eighteen accordions in a row. The
-   group names and their order come from js/build-categories.js.
+   group names and their order come from js/build-categories.js; the markup is
+   groupHeadHtml() above.
+
+   A REAL HEADING, NOT AN EYEBROW. #114 drew these as 11px uppercase blue,
+   which is the page's own .page-eyebrow treatment — so four stage headings
+   read as four captions and the accordion rows under them, at 13px bold
+   black, outranked their own heading. 17px/700 near-black puts them above
+   what they label and gives the step a spine to scan down.
+
+   THE HEAD IS A GRID, NOT A FLEX ROW. Name and progress sit on one line, the
+   blurb spans both columns beneath. minmax(0, 1fr) on the name column is
+   load-bearing: a bare 1fr takes its min-content width from the longest word
+   and refuses to shrink, which on a phone is one of the two things that used
+   to push the page sideways.
 
    Headings only: NOT clickable and NOT collapsible. Everything else in this
-   section opens on click, so a heading that looked the same and did nothing
-   would read as broken — hence no cursor:pointer, no toggle affordance, and a
-   different type treatment from .category-head below.
+   section opens on click, so no cursor:pointer and no toggle affordance.
 
    This lives here rather than in either page because .category-block's CSS
    does, and gunforma-post-build.html and gunforma-admin-post.html are the only
    two pages that load this module. Note gunforma-armory.html deliberately does
    NOT, so none of these selectors can reach its grid. */
-.category-groups { display: flex; flex-direction: column; gap: 20px; }
-.category-group { display: flex; flex-direction: column; gap: 7px; }
-.category-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding-bottom: 7px; border-bottom: 0.5px solid #e8e8e8; }
-.category-group-name { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #2a7bbd; }
-.category-group-count { font-size: 10px; font-weight: 700; color: #a8a8a8; letter-spacing: 0.04em; white-space: nowrap; }
-.category-group-count.has-parts { color: #fff; background: #4a9edd; padding: 2px 8px; border-radius: 20px; letter-spacing: 0; }
-.category-group-blurb { font-size: 11.5px; color: #777; line-height: 1.55; }
-.category-group-blocks { display: flex; flex-direction: column; gap: 8px; margin-top: 3px; }
+.category-groups { display: flex; flex-direction: column; gap: 28px; }
+.category-group { display: flex; flex-direction: column; gap: 10px; }
+.category-group-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; row-gap: 2px; align-items: center; }
+.category-group-name { margin: 0; font-size: 17px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.3; color: #1a1a1a; }
+.category-group-blurb { grid-column: 1 / -1; font-size: 12px; color: #777; line-height: 1.5; }
+/* One segment per SECTION in the group, lit when that section holds a part —
+   so the bar and the tally are the same fact, and neither of them counts a
+   third optic as progress. */
+.category-group-progress { display: flex; align-items: center; gap: 9px; }
+.category-group-segs { display: flex; gap: 3px; }
+.category-group-seg { width: 18px; height: 5px; border-radius: 3px; background: #e4e3de; }
+.category-group-seg.on { background: #4a9edd; }
+/* tabular-nums so the tally does not jiggle as the first digit changes. */
+.category-group-tally { font-size: 11px; font-weight: 600; color: #999; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.category-group-tally b { font-weight: 700; }
+.category-group-progress.has-parts .category-group-tally b { color: #1a1a1a; }
+.category-group-blocks { display: flex; flex-direction: column; gap: 8px; }
 
 /* Category row — closed state */
 .category-block { border: 0.5px solid #e8e8e8; border-radius: 8px; overflow: hidden; transition: box-shadow 0.2s; }
@@ -503,10 +572,46 @@
 @media (max-width: 560px) {
   .part-cards-grid { grid-template-columns: 1fr; }
 
-  /* "Carry and finish" plus a count is the widest heading row; at 390px it
-     still fits on one line at this tracking. Measured at 375px and 320px. */
-  .category-group-name { font-size: 10.5px; letter-spacing: 0.09em; }
-  .category-groups { gap: 18px; }
+  .category-groups { gap: 24px; }
+  .category-group-name { font-size: 16px; }
+  /* 18px x 6 segments plus the tally does not fit beside "Carry and finish"
+     at 320px. 11px does, and the bar is read as a proportion rather than by
+     counting pixels. */
+  .category-group-seg { width: 11px; }
+
+  /* AN ADDED PART, RESTACKED — and this is the row that used to push the
+     whole page sideways.
+
+     Measured at 375px: .layout keeps its 36px side padding and .card its
+     20px, and .layout's column was a bare 1fr, which sizes to MIN-CONTENT
+     and then refuses to shrink below it. The row's min-content width is the
+     96px photo + the longest unbreakable word in a product name + the Remove
+     button, and that total is wider than what is left of the screen — so the
+     grid column grew, the card grew, and the document scrolled sideways.
+     Every other symptom on the page was that one overflow. The fix is both
+     halves: minmax(0, 1fr) on the page's own .layout so the column MAY
+     shrink, and this, so the row WANTS less.
+
+     Three columns and four rows: the photo spans the text rows on the left,
+     brand/name/price/pending stack beside it, and the variant field and
+     Remove sit on a full-width fourth row where the field can actually be
+     typed in. display: contents on the body is what lets its children become
+     grid items of the row itself rather than a nested flex column — THE
+     MARKUP IS UNCHANGED, which is the point: one set of elements, two shapes.
+
+     16px on the two text inputs is not a type choice. iOS Safari zooms the
+     page when a field under 16px takes focus and does not zoom back out, so
+     an 11px input turns one tap into a pinch-and-pan. The placeholder stays
+     13px because it is not what is being typed into. */
+  .selected-parts-list { padding: 10px 12px; }
+  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
+  .selected-part-thumb { grid-column: 1; grid-row: 1 / span 3; width: 72px; height: 54px; }
+  .selected-part-body { display: contents; }
+  .selected-part-brand, .selected-part-name, .selected-part-price, .selected-part-pending { grid-column: 2 / -1; }
+  .selected-part-variant { grid-column: 1 / 3; grid-row: 4; margin-top: 8px; min-width: 0; padding: 7px 9px; }
+  .selected-part-remove { grid-column: 3; grid-row: 4; margin-top: 8px; align-self: stretch; }
+  .selected-part-variant, .picker-search { font-size: 16px; }
+  .selected-part-variant::placeholder, .picker-search::placeholder { font-size: 13px; }
 }
 
 /* ============ COLOR STEP ============ */
@@ -601,6 +706,7 @@
     selectedPartThumbHtml: selectedPartThumbHtml,
     selectedPartHtml: selectedPartHtml,
     selectedPartsHtml: selectedPartsHtml,
+    groupHeadHtml: groupHeadHtml,
     scrollToCategory: scrollToCategory,
     closePickerAfterAdd: closePickerAfterAdd,
     noteVariant: noteVariant,

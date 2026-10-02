@@ -883,10 +883,17 @@ the one copy, not to grow a second.
 
 `js/part-picker.js` owns the picker's **card layer**: `partImageHtml`,
 `partCardHtml`, `selectedPartThumbHtml`, `selectedPartHtml`,
-`selectedPartsHtml`, `findCatalogItem`, `scrollToCategory` and
-`closePickerAfterAdd`, plus the ~100 CSS rules they render into. It injects
-its own CSS into `<head>` on init and is loaded by the same two pages as the
-uploader and the redact modal.
+`selectedPartsHtml`, `groupHeadHtml`, `findCatalogItem`, `scrollToCategory`
+and `closePickerAfterAdd`, plus the ~100 CSS rules they render into. It
+injects its own CSS into `<head>` on init and is loaded by the same two pages
+as the uploader and the redact modal.
+
+`groupHeadHtml(g)` draws one of the four stage headings, and **it counts
+sections, not parts** — three optics light one segment of Core build, because
+a parts count would read as progress for buying the same thing twice. It is
+also the shortest-lived duplication in this file's history: it shipped as a
+`categoryGroupHeadHtml` in both pages in `#114` and was extracted in the next
+PR, which is the right lag for a repo with this record.
 
 ```js
 PartPicker.init({
@@ -921,9 +928,9 @@ the old behaviour, and nothing fails.
 
 **What is still duplicated**, and is the obvious next extraction — these live
 in both pages and must be changed in both: `renderParts`,
-`categoryGroupHeadHtml`, `buildCategoryBlock`, `categoryPickerState`,
-`customFormFieldsHtml`, `filterCards`, `togglePicker`, `toggleCustomForm`,
-`addCatalogPart`, `addCustomPart`, `removePart` and `loadCatalog`.
+`buildCategoryBlock`, `categoryPickerState`, `customFormFieldsHtml`,
+`filterCards`, `togglePicker`, `toggleCustomForm`, `addCatalogPart`,
+`addCustomPart`, `removePart` and `loadCatalog`.
 
 The `CATEGORIES` list is **no longer on that list** — it is
 `js/build-categories.js` now. See below.
