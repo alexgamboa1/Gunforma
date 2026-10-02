@@ -12,6 +12,21 @@
 // have to be asked twice, and the asking should be explicit rather than a
 // confirmation prompt nobody reads.
 //
+// ANYTHING NEWER THAN 24 HOURS IS NOT AN ORPHAN YET, AND THIS IS THE PART
+// THAT WOULD HAVE DESTROYED SOMEBODY'S WORK.
+// js/photos.js uploads a photo the moment it is picked — into
+// <uid>/<draftId>/ — and the build_photos row is only written when the build
+// is submitted. So for the whole time a person is filling in the form, their
+// photos sit in the bucket referenced by nothing, which is this script's
+// definition of an orphan exactly. Measured 2026-10-02: the newest
+// unreferenced object in the bucket was 89 minutes old, from a session in
+// progress at the time.
+//
+// There is no flag to switch it off. An override here is the thing that gets
+// used at the wrong moment, and a day's wait costs nothing against a photo
+// that cannot be re-taken. Both modes apply it, so --delete can never remove
+// something the report just told you was being skipped.
+//
 // THE LISTING HAS TO RECURSE
 // Same trap as scripts/backup-storage.mjs: the storage list API returns only
 // the immediate children of a prefix, with folders as entries whose id is
@@ -27,6 +42,8 @@
 //   node find-orphan-storage.mjs                 # report only
 //   node find-orphan-storage.mjs --delete        # report, then delete
 //   node find-orphan-storage.mjs --bucket build-photos
+//
+// Both modes skip objects under 24h old and say how many they skipped.
 // -----------------------------------------------------------------------------
 
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://lagjjcpclvzrjlrswojt.supabase.co';
@@ -41,6 +58,11 @@ const BUCKET  = arg('bucket', 'build-photos');
 const DELETE  = process.argv.includes('--delete');
 const LIST_PAGE = 100;
 const DELETE_BATCH = 50;
+
+// An unreferenced object younger than this is an upload in progress, not an
+// orphan. See the header: photos land in the bucket before their row exists.
+const MIN_AGE_HOURS = 24;
+const MIN_AGE_MS = MIN_AGE_HOURS * 60 * 60 * 1000;
 
 const isTTY = process.stdout.isTTY;
 function c(color, s) {
@@ -86,7 +108,12 @@ async function listAll(prefix, out, depth = 0) {
     for (const e of page) {
       const full = prefix ? `${prefix}/${e.name}` : e.name;
       if (e.id === null || e.id === undefined) await listAll(full, out, depth + 1);
-      else out.push({ path: full, size: Number(e.metadata?.size ?? 0), updated_at: e.updated_at || null });
+      else out.push({
+        path: full,
+        size: Number(e.metadata?.size ?? 0),
+        updated_at: e.updated_at || null,
+        created_at: e.created_at || null,
+      });
     }
     if (page.length < LIST_PAGE) break;
     offset += LIST_PAGE;
@@ -131,16 +158,53 @@ async function referencedPaths() {
   const objects = await listAll('', []);
   const refs = await referencedPaths();
 
-  const orphans = objects.filter(o => !refs.has(o.path));
+  // Unreferenced is not the same as orphaned. The age guard splits them.
+  const unreferenced = objects.filter(o => !refs.has(o.path));
+
+  // A re-upload is protected as well as a first one. An object with NO usable
+  // stamp counts as too new: the action behind this number is deletion from
+  // the only copy, so an unknown age falls on the side of keeping the file.
+  const cutoff = Date.now() - MIN_AGE_MS;
+  // The newer of the two stamps, and the SAME one the report prints — an
+  // object created months ago but re-uploaded an hour ago is an hour old, and
+  // a line saying "skipped (900h)" next to a 24h rule reads as a broken guard
+  // rather than a working one.
+  function newestStamp(o) {
+    const stamps = [o.created_at, o.updated_at]
+      .map(t => (t ? Date.parse(t) : NaN))
+      .filter(n => Number.isFinite(n));
+    return stamps.length ? Math.max(...stamps) : null;
+  }
+  const isTooNew = (o) => { const t = newestStamp(o); return t === null || t > cutoff; };
+
+  const tooNew  = unreferenced.filter(isTooNew);
+  const orphans = unreferenced.filter(o => !isTooNew(o));
   const orphanBytes = orphans.reduce((n, o) => n + o.size, 0);
 
   log(`objects in bucket     ${String(objects.length).padStart(6)}`);
   log(`referenced by rows    ${String(refs.size).padStart(6)}`);
+  log(`unreferenced          ${String(unreferenced.length).padStart(6)}`);
+  // Printed even at zero. A guard whose line disappears when it does nothing
+  // is a guard nobody remembers is there, and this one silently changes what
+  // --delete removes.
+  log(`${c('cyan', `skipped, under ${MIN_AGE_HOURS}h`)}    ${c(tooNew.length ? 'cyan' : 'grey', String(tooNew.length).padStart(6))}   ${c('grey', 'upload in progress, not an orphan')}`);
   log(`${c('bold', 'orphans')}               ${c(orphans.length ? 'yellow' : 'green', String(orphans.length).padStart(6))}   ${human(orphanBytes)}`);
   log('');
 
+  // Named, not just counted: "3 skipped" with no paths reads as noise, and the
+  // whole point is that these are somebody's photos mid-upload.
+  if (tooNew.length) {
+    for (const o of tooNew) {
+      const t = newestStamp(o);
+      const age = t === null ? 'no timestamp — kept rather than guessed'
+                             : ((Date.now() - t) / 3600000).toFixed(1) + 'h old';
+      log(c('cyan', `  skipped  ${o.path}  (${age})`));
+    }
+    log('');
+  }
+
   if (orphans.length === 0) {
-    log(c('green', 'Nothing to clean up.'));
+    log(c('green', `Nothing to clean up${tooNew.length ? ` (${tooNew.length} too new to judge)` : ''}.`));
     return;
   }
 
@@ -172,7 +236,7 @@ async function referencedPaths() {
   // more likely to be a bug than a cleanup.
   if (orphans.length / objects.length > 0.9) {
     fail('refusing to delete: that would remove more than 90% of the bucket', [
-      `${orphans.length} of ${objects.length} objects are unreferenced.`,
+      `${orphans.length} of ${objects.length} objects are unreferenced and older than ${MIN_AGE_HOURS}h.`,
       'Check build_photos before re-running.',
     ].join('\n'));
   }
@@ -190,6 +254,7 @@ async function referencedPaths() {
     else removed += batch.length;
   }
 
-  log(`${c('green', 'deleted')} ${removed} of ${orphans.length} orphan(s), ${human(orphanBytes)} reclaimed`);
+  log(`${c('green', 'deleted')} ${removed} of ${orphans.length} orphan(s), ${human(orphanBytes)} reclaimed` +
+      (tooNew.length ? c('grey', `  (${tooNew.length} left alone, under ${MIN_AGE_HOURS}h old)`) : ''));
   if (problems.length) fail(`${problems.length} delete batch(es) failed`, problems.join('\n'));
 })().catch(e => fail('unexpected error', e?.stack || String(e)));

@@ -57,6 +57,7 @@ async function get(path, headers) {
     body,
     location: res.headers.get('location'),
     goLog: res.headers.get('x-go-log'),
+    goKey: res.headers.get('x-go-key'),
     cacheControl: res.headers.get('cache-control'),
     idSource: res.headers.get('x-build-og-id-source'),
     origHeader: res.headers.get('x-build-og-orig'),
@@ -211,6 +212,18 @@ for (const [label, path] of [
     // 'no-service-key' here would mean the redirect worked and the config is
     // broken, which must not be silent.
     ok(r.goLog === 'skipped', 'click was NOT logged (x-go-no-log honoured)', r.goLog);
+
+    // THE ONE THING THE SKIP WOULD OTHERWISE STOP TELLING US. Logging depends
+    // on SUPABASE_SERVICE_ROLE_KEY being set in Netlify's env, and a normal
+    // click reports its absence as x-go-log: no-service-key. This check no
+    // longer makes a normal click, so without asking the key could go missing
+    // — an env change, a context that does not inherit it, a rotation that
+    // only landed in one place — and the only symptom would be a click table
+    // that quietly stopped growing. Nobody watches a number for not going up.
+    //
+    // Asserted, not recorded: an unset key means every buy click since it went
+    // is unrecorded and unrecoverable, which is worth a red build.
+    ok(r.goKey === 'ok', 'SUPABASE_SERVICE_ROLE_KEY is configured — logging would work', r.goKey);
 
     // WHAT THE LINE ABOVE GIVES UP, AND HOW TO GET IT BACK.
     // Asserting 'skipped' on every run no longer exercises the path a real

@@ -39,7 +39,10 @@
 // TWO OPT-IN REQUEST HEADERS, NEITHER REACHABLE BY A READER — a browser
 // cannot attach a custom header to a top-level navigation:
 //
-//   x-go-no-log: 1   follow the link, write nothing  (our scripts use this)
+//   x-go-no-log: 1   follow the link, write nothing  (our scripts use this).
+//                    Answers x-go-key: ok | missing, because a request that
+//                    writes nothing would otherwise never notice the service
+//                    key had gone.
 //   x-go-debug:  1   await the insert and report its status instead of
 //                    guessing at it
 //
@@ -134,12 +137,27 @@ export default async (request, context) => {
   // It wins over x-go-debug on purpose: one says "tell me what the insert
   // did", the other says "do not insert", and the refusal is the stronger
   // instruction.
+  // Read before the skip branch, so that branch can report it. Deno.env.get is
+  // a map lookup with no side effects, so moving it up costs nothing.
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+
   if (request.headers.get("x-go-no-log") === "1") {
     headers.set("x-go-log", "skipped");
+    // x-go-key: the ONE thing a no-log request would otherwise stop telling
+    // us. A normal click reports a missing key as x-go-log: no-service-key —
+    // but the scheduled production check no longer makes a normal request, so
+    // without this the key could be unset for weeks and the only symptom
+    // would be a click table that quietly stopped growing. Nobody watches a
+    // number for not going up.
+    //
+    // ok/missing, never the key or its length: this header is on a response
+    // any caller can ask for, and "is it configured" is the whole question.
+    // x-go-debug already reports the length to a caller that has opted into
+    // the round trip.
+    headers.set("x-go-key", serviceKey ? "ok" : "missing");
     return new Response(null, { status: 302, headers });
   }
 
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
   if (!serviceKey) {
     // The click is not logged, and that is a configuration problem, not a
     // reader-facing one. It is reported on the wire so it cannot be silent —
