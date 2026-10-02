@@ -35,6 +35,17 @@ const RULES = [
   // thing to leave to memory.
   { global: 'variantMediaHtml', defines: 'js/variant-swatch.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
+  // BuildCategories is an OBJECT, not a function, so the inline-call regex
+  // below cannot see it — `BuildCategories.CATEGORIES` is a member read. It
+  // gets an explicit `pattern` instead.
+  //
+  // And unlike the rules above, this one is a PARSE-TIME read on all three
+  // pages: each does `const CATEGORIES = window.BuildCategories.CATEGORIES`
+  // at the top of its inline script. A wrong order here does not survive —
+  // it throws "Cannot read properties of undefined" before any render, and
+  // the whole page is blank.
+  { global: 'BuildCategories', defines: 'js/build-categories.js', consumers: [],
+    pattern: /\bBuildCategories\s*\./ },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));
@@ -48,9 +59,10 @@ for (const rule of RULES) {
 
     // Does this page pull in a consumer, or call the global inline itself?
     const consumerTags = rule.consumers.filter((c) => src.includes(`src="${c}"`));
-    const callsInline  = new RegExp(`(?<!function\\s)\\b${rule.global}\\s*\\(`).test(
-      src.replace(/<script src=[^>]*><\/script>/g, ''),
-    );
+    const inlineSrc = src.replace(/<script src=[^>]*><\/script>/g, '');
+    const callsInline = rule.pattern
+      ? rule.pattern.test(inlineSrc)
+      : new RegExp(`(?<!function\\s)\\b${rule.global}\\s*\\(`).test(inlineSrc);
     if (!consumerTags.length && !callsInline) continue;
 
     const defAt = src.indexOf(defTag);

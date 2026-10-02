@@ -505,7 +505,19 @@ Registered today:
 |---|---|
 | `scripts/check-embeds.sh` | ambiguous PostgREST embeds (PGRST201) |
 | `scripts/build-url.test.mjs` | `js/build-url.js` and `_build-url.mjs` drifting apart |
+| `scripts/variant-label.test.mjs` | the variant-label copies drifting apart |
+| `scripts/check-script-order.mjs` | a page using a shared global without loading its definition first |
+| `scripts/check-snapshot-fields.mjs` | the `parts_snapshot` field whitelists drifting apart |
+| `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
+| `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
+| `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
+| `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
+
+This table is the full registry, not a sample. It read "Registered today:"
+over three rows while `check-all.sh` ran ten, which is the documentation
+version of the bug that file exists to prevent — so when you add a `check`
+line there, add the row here in the same commit.
 
 Every one of those guards a failure that **renders perfectly in a browser**.
 That is the entry criterion: a guard here earns its place by catching
@@ -909,9 +921,12 @@ the old behaviour, and nothing fails.
 
 **What is still duplicated**, and is the obvious next extraction — these live
 in both pages and must be changed in both: `renderParts`,
-`buildCategoryBlock`, `categoryPickerState`, `customFormFieldsHtml`,
-`filterCards`, `togglePicker`, `toggleCustomForm`, `addCatalogPart`,
-`addCustomPart`, `removePart`, `loadCatalog`, and the `CATEGORIES` list.
+`categoryGroupHeadHtml`, `buildCategoryBlock`, `categoryPickerState`,
+`customFormFieldsHtml`, `filterCards`, `togglePicker`, `toggleCustomForm`,
+`addCatalogPart`, `addCustomPart`, `removePart` and `loadCatalog`.
+
+The `CATEGORIES` list is **no longer on that list** — it is
+`js/build-categories.js` now. See below.
 
 **`gunforma-armory.html` is not a third copy and must not be made one.** It
 renders a different card that happens to share class names — `.part-card`,
@@ -921,6 +936,62 @@ actions and a stretched-link overlay. It does not load `js/part-picker.js`,
 and it should not: the module's injected CSS would land on those shared
 selectors and restyle the armory grid. Extracting the armory card is a
 separate question from extracting the picker.
+
+### Nor is the category list — and that one has three pages, not two
+
+`js/build-categories.js` owns the parts taxonomy: which sections exist, what
+order they render in, which of the four group headings each sits under, and
+what label a stored `parts_snapshot` value renders as. It is a plain
+`<script src>` global (`window.BuildCategories`), loaded by **three** pages —
+the two builder pages above, plus `gunforma-build-detail.html`, which has no
+picker but renders the same sections on a published build.
+
+```js
+const CATEGORIES         = window.BuildCategories.CATEGORIES;         // render order
+const GROUPED_CATEGORIES = window.BuildCategories.GROUPED_CATEGORIES; // + group headings
+window.BuildCategories.categoryLabel(key);   // never returns a raw key
+window.BuildCategories.sectionKeyFor(raw);   // stored value -> section, or null
+```
+
+**Everything is derived from `CATEGORIES`.** Labels, the
+`products.category` -> section reverse map and the grouped order are computed,
+not hand-listed, so a new section declares its facts once. The only
+hand-written map is `LEGACY_CATEGORY_LABELS`, for keys no longer offered that
+still sit in stored snapshots (`other_parts`, `sights`).
+
+**The admin page is the worked example again, and it had drifted three ways:**
+no Magazine Release section, `magwells` with its `dbCategory` hint dropped so
+six seeded P365 products were unreachable from it, and a Sights section the
+public page does not have. Nothing failed — same shape as the photo uploader,
+the redact modal and the part picker before it.
+
+**The two vocabularies are the thing to understand.** `parts_snapshot` holds
+section keys from the builder pages (`optics`) *and* raw `products.category`
+values from Armory-saved parts (`optic`), and `barrel`/`compensator` are two
+values for one section. `sectionKeyFor()` collapses all of that, which is what
+stops one build opening two sections with the same heading. The builder pages
+send an unrecognised value to `misc` so the part stays reachable; the published
+build keeps the raw key as its own trailing section so nothing is silently
+relabelled.
+
+**`renderPartCard` takes a part's ORIGINAL index in `parts_snapshot`** and
+looks up its edit history by it. The published build reorders **sections**
+only — never the indexes.
+
+**A section with no group renders nowhere.** The builder pages render group by
+group, so a `group:` value that matches no entry in `CATEGORY_GROUPS` drops
+every section in it off the page while the page still looks perfectly normal.
+`scripts/check-category-labels.mjs` evaluates this module and refuses that,
+along with an unlabelled key and a group order that disagrees with
+`CATEGORIES` order — which would make the builder and the published build list
+the same sections differently.
+
+**What is NOT here, on purpose:** `gunforma-parts-catalog.html` and
+`gunforma-armory.html` keep their own `CATEGORY_LABELS`. Those are catalog
+labels keyed by `products.category` alone ("Frame Modules", "Barrels"), a
+different vocabulary from a build's sections ("Grip Modules",
+"Barrels & Compensators"), and the `/parts/` URL segments in
+`js/category-map.js` are a third. Do not merge them.
 
 ### Auth emails live in the dashboard, not in this repo
 

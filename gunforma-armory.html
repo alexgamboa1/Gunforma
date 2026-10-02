@@ -931,10 +931,17 @@ function draftLoadError(message, href, linkText) {
 // refId is the authoritative fix — the catalog knows each product's real
 // category, so the stored string doesn't matter. The reverse map only covers
 // custom/pending parts, which have no refId to look up.
+//
+// `other_parts` is deliberately NOT here. It used to map to 'basepad', which
+// relabelled every custom slide plate, safety selector and takedown lever as
+// a basepad — a wrong answer presented as a confident one. The section it
+// came from is now five real sections keyed by the products.category value
+// itself, so nothing needs translating; a leftover `other_parts` from an old
+// snapshot falls through to the warning below and keeps its own key.
 var UI_KEY_TO_DB_CATEGORY = {
   optics: 'optic', lights: 'light', grips: 'frame', slides: 'slide',
   barrels: 'barrel', triggers: 'trigger', magwells: 'magwell',
-  mag_release: 'mag_release', other_parts: 'basepad',
+  mag_release: 'mag_release',
 };
 
 function normalizeSnapshotCategory(part) {
