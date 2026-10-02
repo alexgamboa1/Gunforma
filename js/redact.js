@@ -659,9 +659,16 @@ function openRedactModal(file) {
       // An outline in progress counts for Undo/Clear (they act on its points),
       // and for Done once it has the three points that make it an area —
       // Done closes it. See finishAsDone.
-      undoBtn.disabled  = boxes.length === 0 && polyPts.length === 0;
-      clearBtn.disabled = boxes.length === 0 && polyPts.length === 0;
+      const marked = boxes.length > 0 || polyPts.length > 0;
+      undoBtn.disabled  = !marked;
+      clearBtn.disabled = !marked;
       doneBtn.disabled  = boxes.length === 0 && polyPts.length < 3;   // skip covers "nothing to blur"
+      // Skip uploads the ORIGINAL file. Once anything is marked that is the
+      // one button that throws the marking away and uploads what it covered,
+      // and on a phone it sits one thumb-width from Done. "Nothing to blur"
+      // is no longer true at that point either — Clear all, then Skip, is
+      // still there for someone who really means it.
+      skipBtn.disabled  = marked;
     }
 
     // Committed layer: original image + every committed shape pixelated on
