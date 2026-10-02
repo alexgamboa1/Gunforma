@@ -31,6 +31,57 @@ Always use a **full clone**. Do not use `--depth`, and never create a nested clo
 an existing working copy — the whole repo root is published, so a nested copy becomes a
 duplicate live site.
 
+## Branches and PRs
+
+**Never commit or push to `main`.** Every change goes on a branch and merges
+through a PR. The site deploys from `main`, so a commit there is a deploy —
+there is no step between writing it and shipping it, and no deploy preview on
+which to do the signed-in verification that **Verifying changes** below
+requires.
+
+**Several Claude sessions edit this one working tree**, which is what turns
+that from a preference into a rule. The tree is not yours, and its current
+state is not a fact about your task:
+
+- **`git fetch origin` and branch from `origin/main`** — not from whatever the
+  tree happens to be on. Another session may have left it on their branch
+  mid-edit, and a branch cut from that silently carries their unmerged work
+  into your PR. `git checkout -b <name> origin/main`.
+- **`git status` before touching anything.** If the tree holds someone else's
+  uncommitted changes, **stop and say so.** Do not stash them, commit them, or
+  edit around them — they are the only copy.
+- **Two sessions needing the tree at once is what `git worktree add` is for**,
+  and it lives **outside** the repo:
+  `git worktree add --detach ~/gunforma-wt-main origin/main`. Cloning above
+  applies unchanged — `publish = "."` ships the whole repo root, so a worktree
+  inside it is a duplicate live site exactly as a nested clone is, and that rule
+  does not name worktrees. **Detached on purpose**: it claims no branch, so it
+  cannot collide with whatever the other session has checked out — cut your
+  branch inside it as normal. `git worktree remove` when done.
+- **`bash scripts/check-all.sh` must pass before the PR opens.** See
+  **Build-time guards**; the deploy runs it anyway, so a failure found here is
+  the same failure found earlier.
+
+**And a change that depends on a migration is merged and deployed BEFORE the
+migration is applied, never after.** The schema is shared and the branch is
+not, so these two cannot be ordered by whichever is ready first. Deploy the
+code that tolerates both shapes, confirm it is live, then apply the migration.
+
+Both halves of that have already cost something:
+
+- **A production catalog outage.** A migration dropped a column while the
+  frontend fix for it sat unmerged on a branch. The branch was finished and
+  the checks were green — it simply was not on `main`, so production went on
+  asking for a column that no longer existed. Nothing about the branch looked
+  wrong, because nothing about it was wrong; the ordering was.
+- **A diverged local `main`.** Two commits landed straight on `main` while
+  origin had moved on, leaving the tree ahead 2 and behind 1. Pushing it would
+  have put unreviewed work on `main` as a deploy. The commits were fine. The
+  route was not, and it took a reset to undo.
+
+Both are the same shape as the failures the rest of this file is about: the
+work was correct, the browser looked normal, and nothing reported a problem.
+
 ## PostgREST embeds: the PGRST201 rule
 
 `products` and `product_variants` reference **each other** — one foreign key in
