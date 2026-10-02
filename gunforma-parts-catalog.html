@@ -718,7 +718,7 @@ async function loadEverything() {
   var productsQ = sb
     .from('products')
     .select(
-      'id, slug, name, description, category, brand_id, url, lowest_price, created_at, material, material_family,' +
+      'id, slug, name, family, description, category, brand_id, url, lowest_price, created_at, material, material_family,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(' +
@@ -796,7 +796,9 @@ async function loadEverything() {
       variants: variants,
       created_at: r.created_at,
       platform_ids: (r.product_platforms || []).map(function (pp) { return pp.platform_id; }),
-      _search: ((r.brands && r.brands.name ? r.brands.name : '') + ' ' + (r.name || '') + ' ' + (r.description || '')).toLowerCase(),
+      _search: (function (s) { return (s + ' ' + s.replace(/\./g, '')).toLowerCase(); })(
+        (r.brands && r.brands.name ? r.brands.name : '') + ' ' + (r.name || '') + ' ' +
+        (r.family || '') + ' ' + (r.description || '')),
     };
     SPEC_KEYS.forEach(function (k) {
       var v = r[k];
