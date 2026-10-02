@@ -66,7 +66,12 @@ const SPEC_TABLES = {
     ['required_spring_weight', 'Required Spring Weight'],
   ]],
   frame: ['frame_specs', [
-    ['housing_class', 'Housing Class'],
+    ['housing_classes(display_name,grip_length,magazine_families(display_name,capacity_note))', 'Housing Class',
+      (v) => (v && v.display_name) || null],
+    ['housing_classes', 'Magazines',
+      (v) => (v && v.magazine_families)
+        ? v.magazine_families.display_name + (v.magazine_families.capacity_note ? ' — ' + v.magazine_families.capacity_note : '')
+        : null],
     ['has_rail', 'Accessory Rail', YESNO],
     ['grip_rail_type', 'Rail Type'],
     ['has_beaver_tail', 'Beavertail', YESNO],
@@ -253,7 +258,7 @@ function notFound(slug) {
 async function fetchProduct(slug) {
   const cols = [
     'id', 'slug', 'name', 'category', 'description', 'best_for', 'pros', 'cons',
-    'material', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
+    'material', 'material_family', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
     'build_warning', 'fitment_notes', 'lowest_price',
     'manufacturers!products_brand_id_fkey(name,slug,website_url)',
     // Must name the FK: products has two relationships to product_variants
@@ -403,7 +408,12 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     .join('');
 
   const commonSpecs = [
-    product.material ? { label: 'Material', value: product.material } : null,
+    (product.material_family || product.material)
+      ? { label: 'Material',
+          value: product.material_family
+            ? product.material_family + (product.material && product.material !== product.material_family ? ' (' + product.material + ')' : '')
+            : product.material }
+      : null,
     product.weight_oz ? { label: 'Weight', value: product.weight_oz + ' oz' } : null,
     product.installation_difficulty ? { label: 'Install Difficulty', value: product.installation_difficulty } : null,
     product.fitment_confidence ? { label: 'Fitment', value: product.fitment_confidence } : null,

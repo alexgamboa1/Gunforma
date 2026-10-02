@@ -718,7 +718,7 @@ async function loadEverything() {
   var productsQ = sb
     .from('products')
     .select(
-      'id, slug, name, description, category, brand_id, url, lowest_price, created_at,' +
+      'id, slug, name, description, category, brand_id, url, lowest_price, created_at, material, material_family,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(' +
@@ -728,7 +728,7 @@ async function loadEverything() {
       'slide_specs!slide_specs_product_id_fkey(*),' +
       'barrel_specs!barrel_specs_product_id_fkey(*),' +
       'compensator_specs!compensator_specs_product_id_fkey(*),' +
-      'frame_specs!frame_specs_product_id_fkey(*),' +
+      'frame_specs!frame_specs_product_id_fkey(*, housing_classes(display_name, grip_length, magazine_families(display_name, capacity_note))),' +
       'optic_specs!optic_specs_product_id_fkey(emitter, battery_type, dot_size_moa, footprints(common_name)),' +
       'magwell_specs(*)'
     )
@@ -1965,11 +1965,17 @@ function detailSpecRows(p) {
     push('Material',         p.compensator_specs.material);
   }
   if (p.frame_specs) {
-    push('Housing class',    p.frame_specs.housing_class);
-    push('Grip length',      p.frame_specs.grip_length);
-    push('Texture',          p.frame_specs.texture);
-    push('Material',         p.frame_specs.material);
-    push('Undercut',         p.frame_specs.trigger_guard_undercut);
+    var hc = p.frame_specs.housing_classes || {};
+    var mf = hc.magazine_families || {};
+    push('Fits',             hc.display_name || p.frame_specs.housing_class);
+    push('Magazines',        mf.display_name ? mf.display_name + (mf.capacity_note ? ' — ' + mf.capacity_note : '') : null);
+    push('Grip length',      hc.grip_length);
+    push('Material',         p.material_family ? p.material_family + (p.material && p.material !== p.material_family ? ' (' + p.material + ')' : '') : p.material);
+    push('Texture',          p.frame_specs.grip_texture);
+    push('Magwell',          p.frame_specs.magwell_type);
+    push('Thumb rest',       p.frame_specs.thumb_rest);
+    push('Undercut guard',   p.frame_specs.undercut_trigger_guard);
+    push('Rail',             p.frame_specs.has_rail ? (p.frame_specs.grip_rail_type || 'Yes') : p.frame_specs.has_rail);
   }
   if (p.magwell_specs) {
     push('Fits model',       p.magwell_specs.fits_model);
