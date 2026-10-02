@@ -50,6 +50,12 @@ state is not a fact about your task:
 - **`git status` before touching anything.** If the tree holds someone else's
   uncommitted changes, **stop and say so.** Do not stash them, commit them, or
   edit around them — they are the only copy.
+- **Two sessions needing the tree at once is what `git worktree add` is for**,
+  and it lives **outside** the repo: `git worktree add ~/gunforma-wt-main main`.
+  Cloning above applies unchanged — `publish = "."` ships the whole repo root,
+  so a worktree inside it is a duplicate live site exactly as a nested clone is,
+  and that rule does not name worktrees. The second checkout is its own, so the
+  other session's tree and branch are untouched. `git worktree remove` when done.
 - **`bash scripts/check-all.sh` must pass before the PR opens.** See
   **Build-time guards**; the deploy runs it anyway, so a failure found here is
   the same failure found earlier.
