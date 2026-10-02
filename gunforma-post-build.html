@@ -166,11 +166,41 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .toast-check { color: #4a9edd; }
 
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
+  /* minmax(0, 1fr), never a bare 1fr — see the phone block below. A bare 1fr
+     is min-content-floored, which is what let one wide row widen the whole
+     document. */
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .sidebar { position: static; }
   /* The picker grid's own breakpoint is in js/part-picker.js, at 560px — it
      does not belong to the sidebar collapse and does not happen at the same
      width. */
+}
+
+/* PHONE — under 640px, matching gunforma-builds.html's gutter.
+
+   THE PAGE WAS SCROLLING SIDEWAYS AT 375px, and the cause was arithmetic, not
+   a stray wide element. .layout kept its 36px side padding and .card its
+   20px — 112px of chrome before any content — and .layout's single column was
+   a bare `1fr`, which resolves to MIN-CONTENT and then refuses to go below
+   it. The widest min-content on the page is an added part's row (96px photo +
+   the longest unbreakable word in a product name + the Remove button), so the
+   column grew to fit it and took the document with it.
+
+   Both halves are needed. `minmax(0, 1fr)` above lets the column shrink
+   below its content; the restacked row in js/part-picker.js's 560px block
+   makes the content want less. Either alone still overflows.
+
+   16px is the gutter, not a guess: gunforma-builds.html already uses it at
+   the same breakpoint, and the two pages sit next to each other in a flow. */
+@media (max-width: 640px) {
+  .page-header { padding: 20px 16px 16px; }
+  .layout { padding: 16px 16px 64px; gap: 16px; }
+  .main-col { gap: 16px; }
+  .card { padding: 16px 14px; }
+  /* The step title and its hint stop fitting on one line inside a 14px
+     gutter; wrapping them beats letting the hint set the card's width. */
+  .card-head { flex-wrap: wrap; row-gap: 4px; }
+  .footer-bar { padding: 14px 16px; }
 }
 
 .nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
@@ -373,7 +403,7 @@ let platformsLoaded = false;
 // The section list, its order, the four group headings and every category
 // label live in js/build-categories.js, shared with gunforma-admin-post.html
 // and gunforma-build-detail.html. This page keeps only its own call sites:
-// renderParts, categoryGroupHeadHtml, buildCategoryBlock, filterCards and the
+// renderParts, buildCategoryBlock, filterCards and the
 // add/remove handlers below.
 //
 // Each section carries `dbCategory`: which values in the products.category
@@ -630,32 +660,15 @@ function renderParts() {
   c.innerHTML = '<div class="category-groups">' +
     GROUPED_CATEGORIES.map(function (g) {
       return '<div class="category-group">' +
-          categoryGroupHeadHtml(g) +
+          // The heading is js/part-picker.js's now. It reads state through
+          // the accessors init() was given, so the page hands it the group
+          // and nothing else.
+          PartPicker.groupHeadHtml(g) +
           '<div class="category-group-blocks">' +
             g.categories.map(function (cat) { return buildCategoryBlock(cat); }).join('') +
           '</div>' +
         '</div>';
     }).join('') + '</div>';
-}
-
-// A stage heading: the group's name, the one line saying what the stage is
-// for, and a running count of what has been added to it. Not clickable and
-// not collapsible — every other row in this step opens on click, so a heading
-// that looked the same and did nothing would read as broken.
-//
-// The count is over state.parts, which holds NORMALIZED category keys (see
-// normalizePartCategory), so a part hydrated from a draft under the DB
-// vocabulary counts toward the group its section is in rather than toward
-// nothing.
-function categoryGroupHeadHtml(g) {
-  const keys = g.categories.map(function (cat) { return cat.key; });
-  const added = state.parts.filter(function (p) { return keys.indexOf(p.category) !== -1; }).length;
-  return '<div class="category-group-head">' +
-      '<span class="category-group-name">' + g.group.label + '</span>' +
-      '<span class="category-group-count' + (added ? ' has-parts' : '') + '">' +
-        added + ' part' + (added === 1 ? '' : 's') + '</span>' +
-    '</div>' +
-    '<div class="category-group-blurb">' + g.group.blurb + '</div>';
 }
 
 // Three states drive the picker body for each category:
