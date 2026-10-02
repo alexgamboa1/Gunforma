@@ -642,7 +642,7 @@ function openRedactModal(file) {
     // again to close it, and everything inside is blurred.
     let shapeMode = 'brush';
     // Brush radius as a fraction of canvas width, so the same slider position
-    // means the same thing on every photo. Slider 1..100 → 0.3%..6% of width.
+    // means the same thing on every photo. Slider 1..100 → 0.3%..2.5% of width.
     let brushFrac = 0.015;
     function brushRadius() { return Math.max(3, Math.round(brushFrac * canvas.width)); }
 
@@ -1320,10 +1320,13 @@ function openRedactModal(file) {
       zoomOutBtn.onclick = function () { zoomStep(-1); };
       zoomFitBtn.onclick = zoomFit;
       brushRange.oninput = function () {
-        // 1..100 → 0.3%..6% of canvas width, eased so the low end (where
-        // serial numbers live) gets most of the slider's travel.
+        // 1..100 → 0.3%..2.5% of canvas width, eased so the low end (where
+        // serial numbers live) gets most of the slider's travel. On a
+        // 2400px-wide canvas that is a 7px radius at 1, 11 at the default
+        // 25, 20 at 50 and 60 at 100. The top used to be 6% (144px), a
+        // face-sized disc; anything that big is the Outline tool's job.
         const t = brushRange.value / 100;
-        brushFrac = 0.003 + (0.06 - 0.003) * t * t;
+        brushFrac = 0.003 + (0.025 - 0.003) * t * t;
         if (hoverPoint) renderIdle();
       };
       brushRange.oninput();
