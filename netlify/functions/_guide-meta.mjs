@@ -46,8 +46,28 @@ export const GUIDE_FAMILIES = {
 // "Last reviewed", Article dateModified, and the sitemap lastmod, so bump
 // it when the PROSE changes (live data needs no bump; it is live).
 export const GUIDE_PAGES = [
-  { family: 'red-dots', gun: 'p365-xl', updated: '2026-09-30' },
+  { family: 'red-dots', gun: 'p365-xl',         updated: '2026-09-30' },
+  { family: 'red-dots', gun: 'p365',            updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-x',          updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-xmacro',     updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-axg',        updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-xf-dh3',     updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-xf-dh3-axg', updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-fuse',       updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-fuse-comp',  updated: '2026-10-02' },
 ];
+
+// NOT declared, deliberately — each would be a near-duplicate of a page
+// above rather than its own answer, and eleven near-identical pages is the
+// doorway-content shape Google penalises as a cluster:
+//   p365-xmacro-comp  — its gun_optic_cuts rows are the XMacro's, down to
+//                       the same `likely` confidence and the same stale-Sig
+//                       -spec note. The integrated comp changes the gun, not
+//                       what mounts on it.
+//   p365-xl-rose-comp — the XL's answer plus one -SL SKU. Rose is a product
+//                       line, not a fitment fact.
+// Both are in GUN_META and gun_optic_cuts, so declaring one here plus a
+// content block is all it takes if that call changes.
 
 export function guidePath(family, gun) {
   return '/fit/p365/' + family + '/' + gun;
