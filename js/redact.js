@@ -460,6 +460,10 @@ function pixelateShape(ctx, shape) {
   ctx.save();
   path();
   ctx.clip();
+  // Clear inside the shape first. drawImage composites source-over, so on a
+  // PNG with any transparency the original detail under a semi-transparent
+  // pixel would show through its own pixelated replacement.
+  ctx.clearRect(bx, by, bw, bh);
   ctx.drawImage(_redactScratch, bx, by);
   ctx.restore();
 }
@@ -666,6 +670,10 @@ function openRedactModal(file) {
     // pixelation for the whole list — matters once a photo has a dozen
     // shapes and the brush is repainting at 60fps.
     let committedCanvas = null;
+    //
+    // Both blits clear first. drawImage composites, so on a PNG with
+    // transparency, whatever was under a transparent pixel — an undone blur,
+    // last frame's brush ring and outline dots — would otherwise stay there.
     function rebuildCommitted() {
       if (!origCanvas) return;
       if (!committedCanvas) committedCanvas = document.createElement('canvas');
@@ -673,6 +681,7 @@ function openRedactModal(file) {
         committedCanvas.width = canvas.width; committedCanvas.height = canvas.height;
       }
       const cctx = committedCanvas.getContext('2d');
+      cctx.clearRect(0, 0, committedCanvas.width, committedCanvas.height);
       cctx.drawImage(origCanvas, 0, 0);
       boxes.forEach(function (b) { pixelateShape(cctx, b); });
     }
@@ -680,6 +689,7 @@ function openRedactModal(file) {
     // shape; that's layered by renderDragFrame.
     function repaintAllBoxes() {
       if (!committedCanvas) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(committedCanvas, 0, 0);
     }
     function commitBoxes() { rebuildCommitted(); renderIdle(); setCount(); }
@@ -1054,16 +1064,18 @@ function openRedactModal(file) {
       if (polyPts.length >= 3) boxes.push({ type: 'poly', pts: polyPts });
       polyPts = []; hoverPoint = null;
       if (boxes.length === 0) { finishAsSkip(); return; }   // guard — button *should* be disabled
-      // Encode the committed layer and nothing else. The visible canvas can
-      // be carrying editing chrome at this moment — the brush ring, outline
-      // dots — and toBlob encodes whatever is on it.
       rebuildCommitted();
-      repaintAllBoxes();
+      // Encode the committed layer itself, never the visible canvas: that
+      // one carries editing chrome — the brush ring, outline dots and edges,
+      // the tint — and toBlob encodes whatever is on it. Repainting the
+      // visible canvas first is not enough, because a transparent pixel in
+      // the photo lets the chrome under it through.
+      const out = committedCanvas;
       // Same MIME as input so JPEG stays JPEG (avoids double lossy re-encode
       // when normalizeImage does its own JPEG re-encode later); PNG stays PNG.
       const mime = (file.type === 'image/png' || file.type === 'image/webp') ? file.type : 'image/jpeg';
       const quality = mime === 'image/jpeg' ? 0.95 : undefined;
-      canvas.toBlob(function (blob) {
+      out.toBlob(function (blob) {
         if (!blob) { cleanup(); resolve(file); return; }   // fall back to original if encoding fails
         const outFile = new File([blob], file.name, { type: mime });
         cleanup();
