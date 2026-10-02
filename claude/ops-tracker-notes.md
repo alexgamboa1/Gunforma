@@ -39,6 +39,109 @@ artifact before trusting any description of it, including this one.
 
 ---
 
+## Changes made 2026-10-02 (later session, PRs #114, #115, #118) — parts step regrouped, and the build count corrected
+
+### Correction first: there are no founding-builder builds yet
+
+**The 09-29 entry below says five real builders' builds were posted and five claim
+messages sent ("Real builds 2 → 7"). That is not the state of the business.** AG
+confirmed on 2026-10-02 that the builds posted before this week were tests, and that he
+deleted them. The database agrees: no build created before 2026-10-02 exists.
+
+Live data, queried 2026-10-02:
+
+| | |
+|---|---|
+| Builds | **2**, both approved and both created 10-02 — `P365 XMACRO Mischief Machine with Kentucky Mahogany Wood Grips` (owner alexg, 2 parts) and `P365 Complete Build` (a real build per AG, 7 parts, **no owner — unclaimed**). The last fixture, `TEST 2 TEST 2`, was deleted 10-02 |
+| Builds claimed by a builder other than AG | **0** |
+| Profiles / auth users | **4**, none created since 09-25 |
+| Products | **242** live; **82 (34%)** have no buy link on any variant |
+| Buy clicks recorded | **48**, after cleanup. 537 had been recorded, but 493 were a link sweep from one of our own sessions — 23:25:13–23:25:22 UTC on 10-01, one per live link, none with a referrer — and were deleted on 10-02. About 11 of the 48 are our own route checks and PR verification; real clicks are roughly 37 |
+| Build photos | **92 unreferenced files** (8.9 MB) in the `build-photos` bucket, left by deleted test builds. Each `build_photos` row references two files, the photo and its thumbnail, so the orphan count is objects minus twice the rows |
+
+Consequences for anything written earlier in this file:
+
+- `open-send-claim-invites` is **not done**. Treat "five claim messages sent" as
+  unverified; no working claim link is outstanding, because no such build exists.
+- "The remaining ~15 queued builds (messages held until the first five reply or 48h)" has
+  no first five to wait on.
+- Every "two real builds" count in the 09-28 and 09-30 entries describes rows that are gone.
+
+AG's stated plan, 2026-10-02: start uploading real builds this week. That upload is the
+first launch, not a second wave.
+
+### What shipped
+
+**#114 — the parts step is four groups and eighteen sections.** "Other Parts /
+Components" was five `products.category` values in one accordion (basepad 8 products,
+slide_plate 3, slide_release 2, safety_selector 2, takedown_lever 2, all P365). Each is
+now its own section, keyed by the `products.category` value itself. Order, agreed with AG:
+
+- **Core build** — Grip Modules, Slides, Barrels & Compensators, Optics, Weapon Lights, Triggers
+- **Controls** — Magazine Release, Slide Releases, Takedown Levers, Safety Selectors, Slide Plates
+- **Magazine** — Magwells, Magazines, Basepads
+- **Carry and finish** — Holsters, Paint Job & Finish, Tactical Knife, Miscellaneous
+
+The list lives in one file, `js/build-categories.js`, read by post-build, admin-post and
+build-detail. The admin page's copy had drifted (no Magazine Release, Magwells with no
+catalog backing, a Sights section nothing else had) and was deleted, not patched.
+Published builds now render sections in this order and show the five under their real
+names instead of "Other Parts". The Armory's `other_parts → basepad` mapping, which
+relabelled every custom slide plate or safety as a basepad, is removed.
+
+**#115 — section-progress headings and a phone layout.** Each group heading shows one
+segment per section and "2 of 5": it counts **sections with a part, not parts**. Not
+numbered, because the page's own steps are already 1–4 and Parts is step 4.
+
+The phone bug was older than either PR: the page kept its 36px desktop gutters and 20px
+card padding on phones, `.layout`'s column was a bare `1fr`, and an added part's row had
+a min-content width wider than what was left, so the whole page scrolled sideways once a
+part was added. Fixed with `minmax(0, 1fr)`, 16px gutters under 640px, and an added-part
+row that restacks under 560px. Verified at 390px and 320px on both builder pages.
+
+`P365 Complete Build` stored a basepad under `basepad`, so the new picker is confirmed
+end to end through sign-in.
+
+**#118 — clean click data and phone-sized fields.** `/go/` now accepts
+`x-go-no-log: 1`, which follows the link without writing a `link_clicks` row; a browser
+cannot send it on a navigation, so no real click is affected. `check-routes.mjs` uses it,
+which stops the scheduled check adding one fake click per run. The same response carries
+`x-go-key: ok | missing`, and the check fails on `missing`, so a broken logging key is
+still noticed without writing a row. `robots.txt` disallows `/go/`. **A missing referrer
+is not a bot signal** — 24 of the 36 clicks on 09-30 have none — so nothing filters on it.
+
+Every form field on both builder pages is 16px under 560px, which is the threshold below
+which iOS Safari zooms the page on focus. `scripts/find-orphan-storage.mjs` skips any
+object under 24 hours old in both modes: photos upload the moment they are picked and the
+`build_photos` row is only written at submit, so a build in progress looks like an orphan.
+
+### Process, worth keeping
+
+- **A commit went to `main` with no PR during this session** — `7ac3d6f`, the catalog
+  variant picker with swatches and per-variant pricing. `main` is production.
+- **Two Claude Code sessions shared one checkout.** One session's commit landed on the
+  other's branch; it took a rebase and two force-pushes to untangle. Nothing was lost.
+  One worktree or clone per session.
+- This session's Claude could read the repo and the database but not push (GitHub not
+  linked), so both PRs were specified here and built by Claude Code from a pasted prompt.
+
+### Open
+
+- **Post real builds and send the claim messages.** The only item that changes the
+  business. `P365 Complete Build` is live with no owner: its claim link is the first one
+  to send.
+- **Attribution check** (clicks vs Awin, due Friday 10-02) — the sweep rows are deleted,
+  so read `link_clicks` as it stands.
+- **iPhone tap test.** AG tapped the variant field on a real iPhone on 10-02: no zoom.
+  The fields #118 enlarged (build name, description, pistol search, the custom-part
+  form) are verified as a computed style only and still need one tap.
+- **82 products with no buy link** — still the partnership problem, Norsso first.
+- 92 orphaned photo files in `build-photos`. Cleanup is parked, not urgent. The script
+  needs `SUPABASE_SERVICE_ROLE_KEY`, which lives only in GitHub Actions and Netlify, so it
+  cannot be run from a laptop; re-count at the moment it is run.
+
+---
+
 ## Changes made 2026-10-01/02 — database cleanup, Icarus refresh, catalog outage
 
 ### Database — schema cleanup, applied directly to Supabase
@@ -222,6 +325,8 @@ Applied and verified live. PR #113.
 Two more test builds (`...TEST`, `testing post builder`) deleted — down to the two real
 builds.
 
+*(Corrected 2026-10-02: per AG those two were also tests, and he has since deleted them.)*
+
 ### Open / carried forward
 
 - **71 of 231 products (31%) still have no live affiliate link** — concentrated in
@@ -238,6 +343,11 @@ builds.
 ---
 
 ## Changes made 2026-09-29 (late session, PRs #93–#98) — the launch
+
+> **Corrected 2026-10-02 — the paragraph below is wrong.** AG confirmed the builds
+> posted here were tests and deleted them; none exist in the database. No founding
+> builder's build is live and `open-send-claim-invites` is **not** done. See the
+> 2026-10-02 (later session) entry at the top of this file.
 
 **Five real builders' builds posted through admin-post and five claim
 messages sent.** Real builds 2 → 7. open-send-claim-invites is done.
