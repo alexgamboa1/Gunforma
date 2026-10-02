@@ -1151,15 +1151,24 @@ function openRedactModal(file) {
       currentDrag = null;
       currentTouch = null;
       hoverPoint = null;
+      // A gesture still in flight when the modal closed would otherwise keep
+      // its rAF loop running, drawing into this same canvas element on the
+      // next photo's modal.
+      dragging = false; activePointerId = null; activePointerType = null; pendingPt = null;
     }
     function finishAsSkip()   { cleanup(); resolve(file); }
     function finishAsCancel() { cleanup(); resolve(null); }
     function finishAsDone() {
-      // An outline with three or more points is an area the user marked to
-      // hide and then forgot to close. Blur it: dropping it would upload
-      // exactly the thing they were in the middle of covering.
-      if (polyPts.length >= 3) boxes.push({ type: 'poly', pts: polyPts });
-      polyPts = []; hoverPoint = null;
+      // Anything still in progress was marked to be hidden. A brush stroke
+      // whose finger is still down is committed as it stands. An outline
+      // with three or more points is an area the user marked and forgot to
+      // close — and a held, unplaced point joins it on the same terms as a
+      // closing tap. Dropping either would upload exactly the thing they
+      // were in the middle of covering.
+      if (dragging && currentDrag && currentDrag.pts.length) boxes.push(currentDrag);
+      currentDrag = null;
+      commitPoly(closingPts(pendingPt));
+      hoverPoint = null;
       if (boxes.length === 0) { finishAsSkip(); return; }   // guard — button *should* be disabled
       rebuildCommitted();
       // Encode the committed layer itself, never the visible canvas: that
