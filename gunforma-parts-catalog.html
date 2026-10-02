@@ -729,7 +729,7 @@ async function loadEverything() {
       'barrel_specs!barrel_specs_product_id_fkey(*),' +
       'compensator_specs!compensator_specs_product_id_fkey(*),' +
       'frame_specs!frame_specs_product_id_fkey(*, housing_classes(display_name, grip_length, magazine_families(display_name, capacity_note))),' +
-      'optic_specs!optic_specs_product_id_fkey(emitter, battery_type, dot_size_moa, footprints(common_name)),' +
+      'optic_specs!optic_specs_product_id_fkey(emitter, battery_type, dot_size_moa, footprints!optic_specs_footprint_id_fkey(common_name)),' +
       'magwell_specs(*)'
     )
     // Embed filter: the product stays, its retired variants drop out. Prices
