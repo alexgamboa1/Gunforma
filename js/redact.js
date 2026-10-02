@@ -392,13 +392,65 @@ function pathPoly(ctx, pts) {
 // its bounding box: a 25px-tall serial lying at 45° has a bounding box
 // hundreds of px on both sides.
 function polyThickness(pts) {
-  let area = 0, perim = 0;
+  let perim = 0;
   for (let i = 0; i < pts.length; i++) {
     const p = pts[i], q = pts[(i + 1) % pts.length];
-    area += p.x * q.y - q.x * p.y;
     perim += Math.hypot(q.x - p.x, q.y - p.y);
   }
-  return perim > 0 ? Math.abs(area) / perim : 0;
+  return perim > 0 ? Math.abs(polyArea2(pts)) / perim : 0;
+}
+// Twice the signed (shoelace) area.
+function polyArea2(pts) {
+  let a = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i], q = pts[(i + 1) % pts.length];
+    a += p.x * q.y - q.x * p.y;
+  }
+  return a;
+}
+
+// The shape that actually gets blurred for a set of outline points.
+//
+// Points tapped out of order make a polygon that crosses itself, and that is
+// worse than it looks. Four corners of a serial tapped TL, TR, BL, BR give an
+// hourglass: the two side wedges of the serial are outside it, so they are
+// never blurred — and its signed area nearly cancels to zero, so
+// polyThickness() collapses and the blocks drop to the 8px floor over the
+// part that is. Measured on a tilted 25px serial: 62% of the glyph pixels
+// came through untouched. A crossed outline is a mistake, never a shape
+// anyone means, so it is replaced by its convex hull — the error goes towards
+// blurring more, which is the only safe direction for this one.
+function blurPoly(pts) {
+  return polySelfIntersects(pts) ? convexHull(pts) : pts;
+}
+function polySelfIntersects(pts) {
+  const n = pts.length;
+  if (n < 4) return false;
+  function orient(a, b, c) { return Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)); }
+  for (let i = 0; i < n; i++) {
+    const a = pts[i], b = pts[(i + 1) % n];
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue;          // adjacent through the closing edge
+      const c = pts[j], d = pts[(j + 1) % n];
+      if (orient(a, b, c) * orient(a, b, d) < 0 && orient(c, d, a) * orient(c, d, b) < 0) return true;
+    }
+  }
+  return false;
+}
+// Andrew's monotone chain.
+function convexHull(pts) {
+  const p = pts.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+  function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+  const lower = [], upper = [];
+  for (let i = 0; i < p.length; i++) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p[i]) <= 0) lower.pop();
+    lower.push(p[i]);
+  }
+  for (let i = p.length - 1; i >= 0; i--) {
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p[i]) <= 0) upper.pop();
+    upper.push(p[i]);
+  }
+  return lower.slice(0, -1).concat(upper.slice(0, -1));
 }
 
 // Apply a redaction shape to ctx.
@@ -422,7 +474,7 @@ function polyThickness(pts) {
 function pixelateShape(ctx, shape) {
   let pts, pad, block, path;
   if (shape.type === 'poly') {
-    pts = shape.pts;
+    pts = blurPoly(shape.pts);
     if (pts.length < 3) return;
     pad = 0;
     block = blockSizeFor(polyThickness(pts) * 2);
@@ -709,27 +761,63 @@ function openRedactModal(file) {
     // finger gets more room than a mouse, but not the full 22px half-target:
     // on a small serial the fourth corner is legitimately that close to the
     // first, and closing early would leave a sliver of it unblurred.
+    //
+    // Neither radius may cost a vertex, though, and both used to. At fit zoom
+    // on a phone a 25px serial is about 4 CSS px tall, so 16 CSS px of close
+    // radius is ~107 canvas px: the bottom-right corner fell inside the
+    // "repeat tap on the last point" zone and was dropped, the bottom-left
+    // fell inside the first point's zone and closed the shape, and what got
+    // blurred was a triangle with most of the digits outside it. So:
+    //   - a repeat tap counts as a double-tap only if it comes QUICKLY after
+    //     the previous tap (DOUBLE_TAP_MS); a slow tap near the last point is
+    //     a vertex. Timed from the previous TAP, not the previous vertex, so
+    //     placing a point, pausing, then double-clicking it still closes.
+    //   - whatever closes the shape, the tap that closed it is kept as a
+    //     vertex if keeping it makes the shape bigger (see closingPts). A
+    //     corner that lands in the close zone still gets its corner.
+    const DOUBLE_TAP_MS = 350;
+    let lastTapAt = 0;
     function closeRadius(pointerType) { return (pointerType === 'touch' ? 16 : 10) * cssUnit(); }
     function nearPoint(p, q, r) { return Math.hypot(p.x - q.x, p.y - q.y) <= r; }
-    function wouldClose(p, pointerType) {
-      if (polyPts.length < 3) return false;
-      // The first point closes it; so does tapping the last point again,
-      // which is what a double-click or double-tap amounts to.
-      return nearPoint(p, polyPts[0], closeRadius(pointerType)) ||
-             nearPoint(p, polyPts[polyPts.length - 1], closeRadius(pointerType) * 0.6);
+    function closesOnFirst(p, pointerType) {
+      return polyPts.length >= 3 && nearPoint(p, polyPts[0], closeRadius(pointerType));
     }
-    function closePoly() {
-      if (polyPts.length < 3) return;
-      boxes.push({ type: 'poly', pts: polyPts });
+    function isDoubleTap(p, pointerType, quick) {
+      const last = polyPts[polyPts.length - 1];
+      return quick && !!last && nearPoint(p, last, closeRadius(pointerType) * 0.6);
+    }
+    // The outline as it closes on `p`. `p` joins it when that adds area —
+    // the closing tap was a corner that landed near the first point — and is
+    // dropped when it would only cut a notch, because then it was aimed at
+    // the first point and simply missed. Either way the result covers at
+    // least everything the plain close would have.
+    function closingPts(p) {
+      if (!p) return polyPts;
+      const withP = polyPts.concat([{ x: Math.round(p.x), y: Math.round(p.y) }]);
+      return Math.abs(polyArea2(blurPoly(withP))) > Math.abs(polyArea2(blurPoly(polyPts))) ? withP : polyPts;
+    }
+    function commitPoly(pts) {
+      if (pts.length >= 3) boxes.push({ type: 'poly', pts: blurPoly(pts) });
       polyPts = [];
+    }
+    function closePoly(pts) {
+      if (pts.length < 3) return;
+      commitPoly(pts);
       commitBoxes();
     }
     function placePolyPoint(p, pointerType) {
-      if (wouldClose(p, pointerType)) { closePoly(); return; }
-      // A repeat tap on the point just placed, before there is a shape to
-      // close, is a double-tap that arrived early — not a second vertex.
+      const now = performance.now();
+      const quick = now - lastTapAt < DOUBLE_TAP_MS;
+      lastTapAt = now;
+      if (polyPts.length >= 3 && (closesOnFirst(p, pointerType) || isDoubleTap(p, pointerType, quick))) {
+        closePoly(closingPts(p));
+        return;
+      }
+      // Before there is a shape to close, only a true duplicate (the second
+      // half of a double-click) is ignored — 2 CSS px, not the close radius,
+      // which at fit zoom is wide enough to swallow a real corner.
       const last = polyPts[polyPts.length - 1];
-      if (last && nearPoint(p, last, closeRadius(pointerType) * 0.6)) { renderIdle(); return; }
+      if (last && nearPoint(p, last, 2 * cssUnit())) { renderIdle(); return; }
       polyPts.push({ x: Math.round(p.x), y: Math.round(p.y) });
       renderIdle();
       setCount();
@@ -740,12 +828,14 @@ function openRedactModal(file) {
     function drawPolyDraft(cursor, pointerType) {
       if (!polyPts.length) return;
       const u = cssUnit();
-      const closing = !!cursor && wouldClose(cursor, pointerType);
-      const pts = (cursor && !closing) ? polyPts.concat([cursor]) : polyPts;
+      const closing = !!cursor && closesOnFirst(cursor, pointerType);
+      const pts = !cursor ? polyPts : closing ? closingPts(cursor) : polyPts.concat([cursor]);
       ctx.save();
       ctx.lineJoin = 'round'; ctx.lineCap = 'round';
       if (pts.length >= 3) {
-        pathPoly(ctx, pts);
+        // The tint is the area that will actually be blurred — the hull, if
+        // the points cross — so the preview never promises less than it does.
+        pathPoly(ctx, blurPoly(pts));
         ctx.fillStyle = 'rgba(74,158,221,0.30)';
         ctx.fill();
       }
@@ -1098,7 +1188,7 @@ function openRedactModal(file) {
         finishAsCancel();
       } else if (e.key === 'Enter' && polyPts.length >= 3 && e.target.tagName !== 'BUTTON') {
         e.preventDefault();
-        closePoly();
+        closePoly(polyPts);
       }
     }
 
@@ -1201,8 +1291,7 @@ function openRedactModal(file) {
       // it is blurred rather than dropped (Undo takes it back); fewer is
       // nothing yet.
       if (mode !== 'poly' && polyPts.length) {
-        if (polyPts.length >= 3) boxes.push({ type: 'poly', pts: polyPts });
-        polyPts = [];
+        commitPoly(polyPts);
         if (origCanvas) { rebuildCommitted(); setCount(); }
       }
       shapeMode = mode;
