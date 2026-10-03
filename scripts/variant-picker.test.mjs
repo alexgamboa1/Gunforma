@@ -145,3 +145,75 @@ test('an unmapped color still renders, and still shows its label', () => {
   const html = win.variantMediaHtml({ color: 'Unobtainium Teal' }, 'variant-media');
   assert.ok(html.includes('variant-media-swatch'), 'unknown color rendered no swatch');
 });
+
+// ── The "your build" row for a part already added ──────────────────────────
+// selectedPartHtml() renders from the part the page stored in
+// addPartWithVariant(): imageUrl / variantLabel / variantColor are the CHOSEN
+// variant's. The bug these pin: the row read the catalog item's image, which
+// is the DEFAULT variant's, so every non-default pick showed the default.
+const CATALOG = { barrels: [{ ...MANY, image: 'https://img/black.jpg', price: '299' }] };
+const STATE = { parts: [] };
+for (const fn of ['addCatalogPart', 'removePart', 'pickVariant', 'cancelVariantPick']) win[fn] = () => {};
+PP.init({ catalog: () => CATALOG, state: () => STATE, render: () => {} });
+
+const part = (over = {}) => ({ uid: 'p1', refId: 'p2', category: 'barrels',
+  brand: 'True Precision', name: 'P365-FUSE', pending: false, ...over });
+const imgSrcs = (html) => [...html.matchAll(/<img src="([^"]+)"/g)].map((m) => m[1]);
+const hasInput = (html) => html.includes('class="selected-part-variant"');
+
+test('a chosen variant with a photo shows THAT photo, not the default', () => {
+  const html = PP.selectedPartHtml(part({ variantId: 'gp', variantLabel: 'Gold / TiN',
+    variantColor: 'Gold', variantFinish: 'TiN', imageUrl: 'https://img/gold.jpg' }));
+  assert.deepEqual(imgSrcs(html), ['https://img/gold.jpg']);
+  assert.ok(!html.includes('black.jpg'), 'the default variant photo leaked into the row');
+});
+
+test('a chosen variant shows its label and hides the free-text field', () => {
+  const html = PP.selectedPartHtml(part({ variantId: 'g', variantLabel: 'Gold / TiN',
+    variantColor: 'Gold', variantFinish: 'TiN', imageUrl: null }));
+  assert.match(html, /<div class="selected-part-variant-label">Gold \/ TiN<\/div>/);
+  assert.ok(!hasInput(html), 'free-text variant input still rendered next to a chosen variant');
+  assert.ok(html.includes('$299'), 'price line lost');
+});
+
+test('a chosen variant with NO photo gets its swatch — never the default photo', () => {
+  const html = PP.selectedPartHtml(part({ variantId: 'g', variantLabel: 'Gold / TiN',
+    variantColor: 'Gold', variantFinish: 'TiN', imageUrl: null }));
+  // The product HAS a default photo (black.jpg); the Gold row must not use it.
+  assert.deepEqual(imgSrcs(html), [], 'a photo was rendered for a variant that has none');
+  assert.match(html, /<span class="selected-part-thumb-swatch" style="background:#c2953f;"/,
+    'expected the Gold swatch, same as the picker row draws');
+  assert.ok(!html.includes('No photo'), 'fell back to the "No photo" box instead of the swatch');
+});
+
+test('a part with no chosen variant and no photo falls back to a swatch from variantColor', () => {
+  const html = PP.selectedPartHtml(part({ refId: 'nope', variantColor: 'FDE' }));
+  assert.deepEqual(imgSrcs(html), []);
+  assert.ok(html.includes('class="selected-part-thumb-swatch"'), 'no swatch for a known colour');
+});
+
+test('a part with no variant at all keeps the default photo and the free-text field', () => {
+  // e.g. hydrated from a snapshot that predates variants: no variantId, no label.
+  const html = PP.selectedPartHtml(part({ variant: 'Coyote' }));
+  assert.deepEqual(imgSrcs(html), ['https://img/black.jpg']);
+  assert.ok(hasInput(html), 'the no-variant fallback lost its free-text field');
+  assert.ok(html.includes('value="Coyote"'), 'the typed note was not restored into the field');
+  assert.ok(!html.includes('selected-part-variant-label'), 'rendered a label with nothing to say');
+  // And noteVariant still writes it back to state.
+  STATE.parts = [part({ uid: 'p9' })];
+  PP.noteVariant('p9', '  Two-tone  ');
+  assert.equal(STATE.parts[0].variant, 'Two-tone');
+  PP.noteVariant('p9', '   ');
+  assert.equal(STATE.parts[0].variant, undefined, 'blank must clear the key, not store ""');
+});
+
+test('pending custom parts still get no free-text field and no swatch', () => {
+  const html = PP.selectedPartHtml(part({ refId: null, pending: true }));
+  assert.ok(!hasInput(html));
+  assert.ok(html.includes('Pending'), 'pending box lost');
+});
+
+test('the label is escaped', () => {
+  const html = PP.selectedPartHtml(part({ variantId: 'x', variantLabel: '<b>Gold</b> & "TiN"' }));
+  assert.ok(html.includes('&lt;b&gt;Gold&lt;/b&gt; &amp; &quot;TiN&quot;'));
+});
