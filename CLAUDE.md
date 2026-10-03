@@ -753,6 +753,9 @@ only add to a product that already existed.
     forever and the buy row reads "Check price" with no MSRP.
 - **`products.url` is required, and it is a reference.** It is the page the
   data came from.
+  - A product without one is not approved: `product_data_status()` reports a
+    blank `url` in `missing`, not `optional_blank`
+    (`supabase/fix_product_data_status_url.sql`).
   - No public page renders it: the catalog and the Armory map it to a
     `buy_url` that nothing reads.
   - Do not start rendering it, and do not drop it.
@@ -786,9 +789,14 @@ nothing is written.
   got a link can never be removed.
 - For a multi-case test, use one `DO` block that ends in `RAISE EXCEPTION`.
   - Run any case that relies on the direct session's NULL
-    `request.jwt.claims` **before** any case that sets the claims. Once set in
-    a transaction, a rolled-back value reads `''`, not NULL.
-  - `restrict_owner_edits_on_approved_build` treats `''` as an API caller.
+    `request.jwt.claims` **before** any case that sets the claims. Once a
+    connection has set it, a rolled-back or reset value reads `''`, not NULL.
+  - **Known defect, logged and not yet fixed:**
+    `restrict_owner_edits_on_approved_build` tests `claims is null`, so it
+    treats `''` as an API caller. A direct session on such a connection is
+    refused an edit to an approved build. The fix is
+    `nullif(current_setting('request.jwt.claims', true), '')`, which is what
+    `is_trusted_backend()` already does.
 
 **Tracked links are built, not typed.**
 
