@@ -106,7 +106,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <li>We store your email and username for account logins, password resets, and opt-in-only emails.</li>
       <li>We do not run ads or ad trackers on this site.</li>
       <li>We do not sell, rent, or share your personal information with anyone.</li>
-      <li>We do not use Google Analytics or any third-party analytics.</li>
+      <li>We use Cloudflare Web Analytics to count page views and see how fast pages load. It sets no cookies and uses no local storage, and Cloudflare states that it does not collect or use visitors&rsquo; personal data or &ldquo;fingerprint&rdquo; individuals. We do not use Google Analytics.</li>
       <li>When you click through to a retailer, we count the click on our own server so we can check our records against the retailer's. We record which link was clicked, when, and which page on this site it came from &mdash; no cookie, no account, no IP address, and nothing that identifies you.</li>
       <li>Builds you post are public. Everything else stays private.</li>
     </ul>
@@ -118,14 +118,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <p><strong>Account info:</strong> Your email address (for login and password resets), a username you choose (displayed publicly on your builds), and a hashed password (we never see or store it in plain text).</p>
     <p><strong>Builds:</strong> Photos, parts lists, and descriptions you submit. These are public by design — anyone can see them, including people without accounts and search engines.</p>
     <p><strong>Preferences:</strong> Whether you've opted into marketing emails, and whether you've accepted the <a href="builder-agreement.html">Builder Agreement</a> (including which version and when).</p>
-    <p><strong>Automated data:</strong> Our hosting provider (Netlify) collects standard server logs — IP addresses, browser type, timestamps — for security and uptime. Cloudflare Turnstile processes a bot-detection challenge on sign-in and sign-up forms. Neither stores personal data on our behalf.</p>
-    <p>That's the complete list. We do not collect phone numbers, physical addresses, payment information, location data, or device fingerprints.</p>
+    <p><strong>Automated data:</strong> Our hosting provider (Netlify) collects standard server logs — IP addresses, browser type, timestamps — for security and uptime. Cloudflare Turnstile processes a bot-detection challenge on sign-in and sign-up forms. Cloudflare Web Analytics records page views: the page visited (without its query string), the site that referred you, your country, your browser, operating system and device type, and how long the page took to load. It does not use cookies or local storage, and Cloudflare states that it does not fingerprint visitors or track them across other websites. None of these stores personal data on our behalf.</p>
+    <p>That's the complete list. We do not collect phone numbers, physical addresses, payment information, precise location data, or device fingerprints.</p>
 
     <h2>2. What we don't do</h2>
     <p>We don't sell your data. We don't run targeted ads. We don't use tracking pixels in emails. We don't share your information with anyone except to comply with the law or protect our rights. We have not and will not sell your personal information — you are automatically opted out, now and in the future.</p>
 
     <h2>3. Cookies</h2>
-    <p>We use cookies only to keep you signed in. No tracking cookies, no advertising cookies, no analytics cookies. Cloudflare Turnstile may set a cookie as part of its bot detection — that's managed by Cloudflare under their own <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">privacy policy</a>.</p>
+    <p>We use cookies only to keep you signed in. No tracking cookies, no advertising cookies, no analytics cookies &mdash; Cloudflare Web Analytics, which we use to count page views, does not use cookies or local storage. Cloudflare Turnstile may set a cookie as part of its bot detection — that's managed by Cloudflare under their own <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">privacy policy</a>.</p>
 
     <h2>4. Affiliate links</h2>
     <p>Some product links on Gunforma are affiliate links. When you click one, you leave our site and interact with a third-party retailer. That retailer may track your visit under their own privacy policy. We receive only a commission notification — we never see your name, payment info, or what you bought.</p>
@@ -149,7 +149,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <h2>10. Contact</h2>
     <p>Privacy questions or data requests: <strong>contact@gunforma.com</strong>.</p>
 
-    <div class="effective-date">Effective date: September 5, 2026</div>
+    <div class="effective-date">Effective date: October 3, 2026</div>
 
   </div>
 </div>
@@ -162,5 +162,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

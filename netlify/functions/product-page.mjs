@@ -37,6 +37,7 @@ import { variantLabel } from './_variant-label.mjs';
 // (js/affiliate.js, gunforma-build-detail.html) remain hand-synced; see
 // CLAUDE.md "Duplicated logic to keep in sync".
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -221,7 +222,7 @@ function notFound(slug) {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Part not found</div>' +
     '<div class="s">' + (s ? 'No listing at &ldquo;' + s + '&rdquo;.' : 'That part link is not valid.') + '</div>' +
-    '<a href="' + SITE + '/gunforma-parts-catalog.html">Browse the catalog &rarr;</a></div></body></html>',
+    '<a href="' + SITE + '/gunforma-parts-catalog.html">Browse the catalog &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
   );
 }
@@ -564,7 +565,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
   'm.addEventListener("click",function(e){if(e.target.closest("a"))c();});' +
   'window.addEventListener("resize",function(){if(window.innerWidth>820)c();});' +
 '})();</script>' +
-'</body></html>';
+ANALYTICS_SNIPPET + '</body></html>';
 }
 
 export default async (req) => {

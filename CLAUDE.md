@@ -226,6 +226,23 @@ That is twice now that a rewrite behaved differently in production than
 locally, and twice that a green local test covered it. A rewrite's behaviour
 is not verified until it has been observed on a deploy.
 
+### The analytics tag: one module, sixteen literals, four deliberate absences
+
+Cloudflare Web Analytics loads from `netlify/functions/_analytics.mjs`
+(`ANALYTICS_SNIPPET`), placed immediately before `</body>`. Every function
+that emits an HTML document imports it; the static pages carry it as a
+literal, held byte-for-byte to the module by
+`scripts/check-analytics-snippet.mjs`.
+
+**It is absent on purpose from** `gunforma-admin-*.html`, `auth-callback.html`
+and `gunforma-claim.html` (both receive an access token in the URL hash), and
+`netlify/edge-functions/go.js`. **Do not add it to `build-og.mjs` or
+`profile-og.mjs`'s main path:** they serve the static build and profile pages,
+which already carry it, and a second copy counts every `/b/` and `/u/` view
+twice. The guard fails on all of these. No host check is needed for deploy
+previews: Cloudflare only accepts beacons from hostnames ending in the
+registered site's.
+
 ### The nav exists in 15 places, three of which are functions
 
 **Changing the site nav means changing fifteen files.** Every root HTML page
@@ -576,6 +593,7 @@ Registered today:
 | `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
 | `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
+| `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
 | `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
 
