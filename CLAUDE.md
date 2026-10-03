@@ -572,6 +572,7 @@ Registered today:
 | `scripts/variant-label.test.mjs` | the variant-label copies drifting apart |
 | `scripts/check-script-order.mjs` | a page using a shared global without loading its definition first |
 | `scripts/check-snapshot-fields.mjs` | the `parts_snapshot` field whitelists drifting apart |
+| `scripts/snapshot-roundtrip.test.mjs` | a builder hydration path (edit mode, Armory handoff) dropping a `parts_snapshot` field, so the next save deletes it — runs the page's own code, load → save, and requires byte-identical rows |
 | `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
 | `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |

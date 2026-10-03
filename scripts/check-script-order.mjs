@@ -34,6 +34,10 @@ const RULES = [
   // anyway, because "it happens to work because of when we call it" is not a
   // thing to leave to memory.
   { global: 'variantMediaHtml', defines: 'js/variant-swatch.js', consumers: ['js/part-picker.js'] },
+  // The spec line beside a variant's label. part-picker.js reads it at render
+  // time; the two builder pages call it inline in loadCatalog() and
+  // addPartWithVariant(), and the build page in resolveVariant().
+  { global: 'variantSpecs', defines: 'js/variant-label.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
   // BuildCategories is an OBJECT, not a function, so the inline-call regex
   // below cannot see it — `BuildCategories.CATEGORIES` is a member read. It

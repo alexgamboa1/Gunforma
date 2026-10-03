@@ -171,6 +171,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-brand { font-size: 16px; font-weight: 700; line-height: 1.2; }
 .part-model { font-size: 12px; color: #666; }
 .part-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+/* The chosen variant's spec line ("2 MOA · Red dot"), under its tag. Plain
+   muted text, not another pill: it qualifies the tag, it is not a second one. */
+.part-variant-specs { font-size: 11px; color: #777; line-height: 1.35; margin-top: 4px; }
 .part-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 /* Variant note reads as the builder's own words, so it keeps its casing
    rather than being upper-cased like the structural tags beside it. */
@@ -227,6 +230,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-affiliate-variant-row:first-child { border-top: none; }
 .part-affiliate-variant-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .part-affiliate-variant-label { font-size: 12px; color: #333; font-weight: 600; }
+/* Spec line under the label — muted like .part-variant-specs on the card. */
+.part-affiliate-variant-specs { font-size: 11px; color: #777; line-height: 1.3; }
 .part-affiliate-variant-sub { font-size: 11px; color: #888; }
 .part-affiliate-variant-sub strong { color: #444; font-weight: 600; }
 .part-affiliate-variant-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; padding: 6px 12px; border-radius: 4px; text-decoration: none; transition: background 0.15s; }
@@ -688,7 +693,7 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,color,finish,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
+    .select('id,product_id,variant_label,color,finish,reticle,reticle_color,battery_type,mount_system,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
@@ -1155,6 +1160,9 @@ function renderPartCard(build, part, idx) {
         '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
         '<div class="part-model">'+escH(part.name||'Unnamed part')+'</div>'+
         ((pendingTag || variantTag || chosenTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+'</div>' : '')+
+        // "2 MOA · Red dot" under the chosen-variant tag — the label alone
+        // does not say which of three "Black · Anodized" optics this is.
+        (vr.specs ? '<div class="part-variant-specs">'+escH(vr.specs)+'</div>' : '')+
         verifiedHtml+
       '</div>'+
     '</div>'+
@@ -1178,6 +1186,8 @@ function resolveVariant(part) {
       live: true,
       id: live.id,
       label: window.variantLabel(live),
+      // Live first, like the label: a corrected spec reaches old builds.
+      specs: window.variantSpecs(live),
       imageUrl: live.primary_image_url || null,
       msrp: live.msrp != null ? Number(live.msrp) : null,
     };
@@ -1198,6 +1208,8 @@ function resolveVariant(part) {
     live: false,
     id: part.variantId || null,
     label: fromSnapshot || '',
+    // Composed at pick time and stored; only read when the live row is gone.
+    specs: part.variantSpecs || '',
     imageUrl: part.imageUrl || null,
     msrp: null,          // never stored in the snapshot; MSRP moves
   };
@@ -1310,13 +1322,19 @@ function renderAffiliateRow(part, vr) {
   // MSRP and no button, because the alternative is telling the reader this
   // part comes in one color.
   //
-  // Ordered default-first then by label, matching PartPicker.variantsOf().
-  // PostgREST returns embedded rows in arbitrary order, so the second key is
-  // what stops the list reshuffling between requests.
+  // Ordered default-first, then by label, then by spec line — exactly
+  // PartPicker.variantsOf(), so the panel lists colors in the same order the
+  // picker offered them. The spec key matters when labels tie: the Holosun
+  // 407C X3's three "Black · Anodized" rows sort Gold / Green / Red by dot
+  // colour rather than by variant id. PostgREST returns embedded rows in
+  // arbitrary order, so the keys are what stop the list reshuffling.
   var allVariants = (VARIANTS_BY_PRODUCT_ID[part.refId] || []).slice().sort(function(a, b) {
     if (!!b.is_default !== !!a.is_default) return a.is_default ? -1 : 1;
     var al = window.variantLabel(a), bl = window.variantLabel(b);
-    return al < bl ? -1 : al > bl ? 1 : (a.id < b.id ? -1 : 1);
+    if (al !== bl) return al < bl ? -1 : 1;
+    var as = window.variantSpecs(a), bs = window.variantSpecs(b);
+    if (as !== bs) return as < bs ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
   });
 
   // Nothing to open when there is only one color. 81 of 231 products are in
@@ -1333,6 +1351,9 @@ function renderAffiliateRow(part, vr) {
 
   var variantRows = allVariants.map(function(v) {
     var vLabel = window.variantLabel(v) || 'This color';
+    // "2 MOA · Red dot" — the same line the picker row and the part card
+    // show. Without it, same-label variants are identical rows here.
+    var vSpecs = window.variantSpecs(v);
     var mine   = vr && vr.id === v.id;
     // Cheapest fresh listing on THIS variant — the same tier-1 rule the main
     // row uses, so the two cannot disagree about a color's price.
@@ -1371,6 +1392,7 @@ function renderAffiliateRow(part, vr) {
         '<div class="part-affiliate-variant-info">'+
           '<span class="part-affiliate-variant-label">'+escH(vLabel)+
             (mine ? '<span class="part-affiliate-variant-mine">On this build</span>' : '')+'</span>'+
+          (vSpecs ? '<span class="part-affiliate-variant-specs">'+escH(vSpecs)+'</span>' : '')+
           '<span class="part-affiliate-variant-sub">'+priceHtml+'</span>'+
         '</div>'+
         btnHtml+

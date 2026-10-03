@@ -58,6 +58,7 @@ check "build URL copies agree"     scripts/build-url.test.mjs
 check "variant label copies agree" scripts/variant-label.test.mjs
 check "shared globals loaded"      scripts/check-script-order.mjs
 check "snapshot whitelists agree" scripts/check-snapshot-fields.mjs
+check "snapshot round-trips"    scripts/snapshot-roundtrip.test.mjs
 check "affiliate module runs"      scripts/affiliate-render.test.mjs
 check "variant picker runs"        scripts/variant-picker.test.mjs
 check "buy links go through /go/"  scripts/check-buy-links.mjs

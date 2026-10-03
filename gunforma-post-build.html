@@ -555,7 +555,9 @@ async function loadCatalog(platformId) {
       'product_platforms!inner(platform_id), '+
       // Named FK to avoid the products↔product_variants ambiguity from
       // products.lowest_price_variant_id also referencing product_variants.id.
-      'product_variants!product_variants_product_id_fkey(id, msrp, is_default, primary_image_url, color, finish, variant_label)'
+      'product_variants!product_variants_product_id_fkey(id, msrp, is_default, primary_image_url, color, finish, variant_label, '+
+      // Spec columns, for the spec line under a variant's label (variantSpecs).
+      'reticle, reticle_color, battery_type, mount_system)'
     )
     // Same as the admin picker: a retired variant is not something a builder
     // can pick, so it must not price or illustrate a catalog row here.
@@ -603,6 +605,7 @@ async function loadCatalog(platformId) {
         variantLabel:  dv ? window.variantLabel(dv) : '',
         variantColor:  dv && dv.color  ? dv.color  : null,
         variantFinish: dv && dv.finish ? dv.finish : null,
+        variantSpecs:  dv ? window.variantSpecs(dv) : '',
       };
     });
   });
@@ -838,6 +841,10 @@ function addPartWithVariant(k, item, variantId) {
     variantLabel:  chosen ? window.variantLabel(chosen) : (item.variantLabel || ''),
     variantColor:  chosen ? (chosen.color  || null) : (item.variantColor  || null),
     variantFinish: chosen ? (chosen.finish || null) : (item.variantFinish || null),
+    // "2 MOA · Red dot" — what tells apart variants that share a label.
+    // Composed now and stored, like variantLabel, so a saved build can still
+    // say it if the variant is later retired.
+    variantSpecs:  chosen ? window.variantSpecs(chosen) : (item.variantSpecs || ''),
     // The CHOSEN variant's own photo, or nothing. Never the default's — a
     // Black barrel's photo above the words "Gold / TiN" looks like an answer.
     // The build row falls back to a swatch, which is honest.
@@ -968,6 +975,7 @@ function buildPartsSnapshot() {
     if (p.variantLabel)  row.variantLabel  = p.variantLabel;
     if (p.variantColor)  row.variantColor  = p.variantColor;
     if (p.variantFinish) row.variantFinish = p.variantFinish;
+    if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
     if (p.imageUrl)      row.imageUrl      = p.imageUrl;
     // Only finish-style entries (Paint Job & Finish) carry this, and it is an
     // OBJECT, not a string.
@@ -1344,6 +1352,18 @@ async function hydrateFromArmoryHandoff() {
       brand: part.brand || 'Unknown', name: part.name || '', pending: !!part.pending,
       finish: part.finish || undefined,
       variant: part.variant || undefined,
+      // The chosen variant, carried through. buildPartsSnapshot() writes these
+      // only when present on the part, so a part rebuilt without them loses them
+      // on the next save — the edited build's Gold barrel came back as the
+      // default. Same convention, and the same reason, as finish/variant above
+      // and gunforma-armory.html's loadBuildById().
+      variantId:     part.variantId     || undefined,
+      variantLabel:  part.variantLabel  || undefined,
+      variantColor:  part.variantColor  || undefined,
+      variantFinish: part.variantFinish || undefined,
+      imageUrl:      part.imageUrl      || undefined,
+      // The spec line ("2 MOA · Red dot"), stored alongside the label.
+      variantSpecs:  part.variantSpecs  || undefined,
     });
   });
   renderParts(); renderSidebar();
@@ -1542,6 +1562,18 @@ async function hydrateFromEditMode() {
       pending: !!part.pending,
       finish: part.finish || undefined,
       variant: part.variant || undefined,
+      // The chosen variant, carried through. buildPartsSnapshot() writes these
+      // only when present on the part, so a part rebuilt without them loses them
+      // on the next save — the edited build's Gold barrel came back as the
+      // default. Same convention, and the same reason, as finish/variant above
+      // and gunforma-armory.html's loadBuildById().
+      variantId:     part.variantId     || undefined,
+      variantLabel:  part.variantLabel  || undefined,
+      variantColor:  part.variantColor  || undefined,
+      variantFinish: part.variantFinish || undefined,
+      imageUrl:      part.imageUrl      || undefined,
+      // The spec line ("2 MOA · Red dot"), stored alongside the label.
+      variantSpecs:  part.variantSpecs  || undefined,
     });
   });
 

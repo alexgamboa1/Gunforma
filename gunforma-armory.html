@@ -1038,6 +1038,7 @@ async function loadBuildById(buildId) {
       variantId:     part.variantId     || undefined,
       variantLabel:  part.variantLabel  || undefined,
       variantColor:  part.variantColor  || undefined,
+      variantSpecs:  part.variantSpecs  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
       price: live ? live.price : null,
@@ -1562,6 +1563,7 @@ function buildPartsSnapshot() {
     if (p.variantId)     row.variantId     = p.variantId;
     if (p.variantLabel)  row.variantLabel  = p.variantLabel;
     if (p.variantColor)  row.variantColor  = p.variantColor;
+    if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
     if (p.variantFinish) row.variantFinish = p.variantFinish;
     if (p.imageUrl)      row.imageUrl      = p.imageUrl;
     return row;
@@ -1898,6 +1900,7 @@ function remixGuide(guideId) {
       variantId:     part.variantId     || undefined,
       variantLabel:  part.variantLabel  || undefined,
       variantColor:  part.variantColor  || undefined,
+      variantSpecs:  part.variantSpecs  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
       price: live ? live.price : null,
