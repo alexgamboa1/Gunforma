@@ -1362,6 +1362,8 @@ async function hydrateFromArmoryHandoff() {
       variantColor:  part.variantColor  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
+      // The spec line ("2 MOA · Red dot"), stored alongside the label.
+      variantSpecs:  part.variantSpecs  || undefined,
     });
   });
   renderParts(); renderSidebar();
@@ -1570,6 +1572,8 @@ async function hydrateFromEditMode() {
       variantColor:  part.variantColor  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
+      // The spec line ("2 MOA · Red dot"), stored alongside the label.
+      variantSpecs:  part.variantSpecs  || undefined,
     });
   });
 

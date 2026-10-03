@@ -106,6 +106,17 @@ const GOLD_BARREL = {
   variantColor: 'Gold', variantFinish: 'TiN',
   imageUrl: 'https://op1.0ps.us/640-640/opplanet-true-precision-pistol-barrel-9mm-1-2x28-thread-sig-p365-xl-non-threaded-gold-tin-sub-compact-tp-p365xlb-xg-main-3.jpg',
 };
+// A chosen variant WITH a spec line (#123). Keys in buildPartsSnapshot()'s
+// order: variantSpecs sits between variantFinish and imageUrl. Without it in
+// the fixture, a load path that drops variantSpecs would pass this test and
+// wipe the spec line on every edit.
+const HOLO_GREEN = {
+  category: 'optics', refId: 'e74a19db-915f-4d75-954b-f9f34446aca6',
+  brand: 'Holosun', name: 'Holosun 407C X3', pending: false,
+  variantId: '359acab6-3018-49db-8f81-5be9598e15f3', variantLabel: 'Black · Anodized',
+  variantColor: 'Black', variantFinish: 'Anodized', variantSpecs: '2 MOA · Green dot',
+  imageUrl: 'https://img.example/holosun-407c-x3-green.jpg',
+};
 const PLAIN = { category: 'triggers', refId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   brand: 'Sig Sauer', name: 'Curved P365', pending: false };
 const NOTED = { category: 'optics', refId: '5795c40a-97b8-4a6a-9880-9ef4190685b9',
@@ -131,8 +142,10 @@ for (const [i, site] of SITES.entries()) {
   const where = `hydration path ${i + 1} (line ${site.at})`;
 
   test(`${where}: a chosen variant survives load → save byte for byte`, () => {
-    const [out] = roundTrip(site, [GOLD_BARREL]);
-    assert.equal(JSON.stringify(out), JSON.stringify(GOLD_BARREL));
+    for (const row of [GOLD_BARREL, HOLO_GREEN]) {
+      const [out] = roundTrip(site, [row]);
+      assert.equal(JSON.stringify(out), JSON.stringify(row), 'changed: ' + row.name);
+    }
   });
 
   test(`${where}: a part with no variant gains nothing — no nulls, no empty keys`, () => {
@@ -143,7 +156,7 @@ for (const [i, site] of SITES.entries()) {
   });
 
   test(`${where}: a whole mixed build round-trips in order`, () => {
-    const build = [GOLD_BARREL, PLAIN, NOTED, PAINT, PENDING];
+    const build = [GOLD_BARREL, HOLO_GREEN, PLAIN, NOTED, PAINT, PENDING];
     assert.equal(JSON.stringify(roundTrip(site, build)), JSON.stringify(build));
   });
 }
