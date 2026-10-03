@@ -148,11 +148,6 @@ const REDACT_CSS = `
 .redact-zoom button.fit { width: auto; padding: 0 9px; font-size: 11px; letter-spacing: 0.04em; border-left: 0.5px solid #d9d6cc; }
 .redact-zoom-label { min-width: 44px; text-align: center; font-size: 11px; color: #666; font-variant-numeric: tabular-nums; }
 
-/* Brush size slider — only shown in Brush mode. */
-.redact-brush-size { display: none; align-items: center; gap: 6px; font-size: 11px; color: #666; }
-.redact-brush-size.visible { display: inline-flex; }
-.redact-brush-size input[type=range] { width: 90px; accent-color: #4a9edd; }
-
 @media (max-width: 640px) {
   .redact-overlay { padding: 0; }
   .redact-panel {
@@ -167,8 +162,7 @@ const REDACT_CSS = `
   .redact-hint .long { display: none; }
   .redact-hint .short { display: inline; }
   .redact-canvas-wrap { padding: 8px; }
-  /* Two rows on a phone — tools, then actions — and a third only in Brush
-     mode, for the size slider.
+  /* Two rows on a phone — tools, then actions.
 
      Every control here is now at least 44px tall. The old ones were 26-37px,
      which is what let the toolbar be 112px at 390px, and it still wrapped
@@ -200,16 +194,10 @@ const REDACT_CSS = `
      back, so the readout is what gives way rather than a tap target or a
      row. It is still written to (see applyZoom) and returns above 640px. */
   .redact-zoom-label { display: none; }
-  /* Row 2, Brush mode only — the size slider. Squeezed inline next to the
-     zoom cluster it collapsed to a few px and could not be dragged. The
-     track gets the full 44px so it is grabbable anywhere along its length,
-     not only on the thumb. */
-  .redact-brush-size.visible { order: 2; flex-basis: 100%; }
-  .redact-brush-size input[type=range] { flex: 1; width: auto; height: 44px; }
   /* The count lives in the Done label on a phone (see setCount) — one row
      of controls saved. */
   .redact-count { display: none; }
-  /* Row 3 — the actions, always on a line of their own. That line is what
+  /* Row 2 — the actions, always on a line of their own. That line is what
      buys "Skip — nothing to blur" the width it needs at 360px; sharing a
      row with the mode toggle is what forced it down to a bare "Skip".
      flex-wrap here is a safety net, not the plan: if a wide system font
@@ -250,9 +238,6 @@ const REDACT_HTML = `
         <button type="button" id="redact-shape-brush" class="active" aria-pressed="true"  title="Paint over an area (tap for a dot)">✎ Brush</button>
         <button type="button" id="redact-shape-poly"                 aria-pressed="false" title="Tap points around an area; everything inside is blurred">◇ Outline</button>
       </div>
-      <label class="redact-brush-size visible" id="redact-brush-size">Size
-        <input type="range" id="redact-brush-range" min="1" max="100" value="45" aria-label="Brush size">
-      </label>
       <div class="redact-zoom" role="group" aria-label="Zoom">
         <button type="button" id="redact-zoom-out" title="Zoom out (ctrl + scroll)" aria-label="Zoom out">−</button>
         <span class="redact-zoom-label" id="redact-zoom-label">100%</span>
@@ -627,8 +612,6 @@ function openRedactModal(file) {
     const shapeBrushBtn  = document.getElementById('redact-shape-brush');
     const shapePolyBtn   = document.getElementById('redact-shape-poly');
     const hintEl         = document.getElementById('redact-hint');
-    const brushSizeWrap  = document.getElementById('redact-brush-size');
-    const brushRange     = document.getElementById('redact-brush-range');
     const zoomOutBtn     = document.getElementById('redact-zoom-out');
     const zoomInBtn      = document.getElementById('redact-zoom-in');
     const zoomFitBtn     = document.getElementById('redact-zoom-fit');
@@ -641,15 +624,19 @@ function openRedactModal(file) {
     // dot. Poly ("Outline") = tap points around an area, tap the first point
     // again to close it, and everything inside is blurred.
     let shapeMode = 'brush';
-    // Brush radius as a fraction of the canvas's LONG edge, so the same slider
-    // position means the same thing on every photo. Slider 1..100 → 0.3%..2.5%
-    // of the long edge. Not the width: on a portrait photo the width is the
-    // short edge, which made every brush a third smaller than the same setting
-    // in landscape, and the default too small to cover a serial in one pass.
-    // Matches the slider's default (45); brushRange.oninput() sets it for
-    // real once the photo has loaded.
-    let brushFrac = 0.003 + (0.025 - 0.003) * 0.45 * 0.45;
-    function brushRadius() { return Math.max(3, Math.round(brushFrac * Math.max(canvas.width, canvas.height))); }
+    // The brush is one fixed, small size: 0.34% of the canvas's LONG edge,
+    // an 8px radius (16px stroke) at the 2400px cap, in either orientation.
+    // Not the width — on a portrait photo that is the short edge, and every
+    // brush came out a third smaller than in landscape.
+    //
+    // There used to be a Size slider. Small is the point: the brush is for
+    // painting precisely over a serial, a plate or an address, zoomed in,
+    // and anything big is the Outline tool's job. Its top end was a 144px
+    // disc, and every size it offered was one more way to cover the wrong
+    // thing. A fine brush takes a few strokes to cover a serial — the live
+    // pixelation shows what is still exposed while painting.
+    const BRUSH_FRAC = 0.0034;
+    function brushRadius() { return Math.max(3, Math.round(BRUSH_FRAC * Math.max(canvas.width, canvas.height))); }
 
     // ── Zoom ────────────────────────────────────────────────────────────
     // zoom = 1 is "fit to the wrap"; the canvas's internal resolution never
@@ -1183,7 +1170,6 @@ function openRedactModal(file) {
       skipBtn.onclick = null; doneBtn.onclick = null;
       shapeBrushBtn.onclick = null; shapePolyBtn.onclick = null;
       zoomInBtn.onclick = null; zoomOutBtn.onclick = null; zoomFitBtn.onclick = null;
-      brushRange.oninput = null;
       // Reset to the default tool so the next modal open doesn't inherit
       // this one's — and drop any unfinished outline first, so the reset
       // does not try to commit it to a photo that is being torn down.
@@ -1324,21 +1310,6 @@ function openRedactModal(file) {
       zoomInBtn.onclick  = function () { zoomStep(1);  };
       zoomOutBtn.onclick = function () { zoomStep(-1); };
       zoomFitBtn.onclick = zoomFit;
-      brushRange.oninput = function () {
-        // 1..100 → 0.3%..2.5% of the canvas's long edge, eased so the low end
-        // (where serial numbers live) gets most of the slider's travel. With
-        // the long edge at the 2400px cap, in either orientation, that is a
-        // 7px radius at 1, 18 at the default 45, 20 at 50 and 60 at 100. The
-        // top used to be 6% (144px), a face-sized disc; anything that big is
-        // the Outline tool's job.
-        // The default is 45 rather than lower because a 36px stroke is what
-        // covers a ~25px serial in one pass; at 25 (r = 11) one pass left
-        // the tops and bottoms of the characters readable.
-        const t = brushRange.value / 100;
-        brushFrac = 0.003 + (0.025 - 0.003) * t * t;
-        if (hoverPoint) renderIdle();
-      };
-      brushRange.oninput();
       overlay.addEventListener('click', onBackdropClick);
       document.addEventListener('keydown', onKeydown);
     };
@@ -1347,7 +1318,7 @@ function openRedactModal(file) {
     // desktop and phone wordings (see the 640px block in the CSS).
     const HINTS = {
       brush: '<strong>Paint over</strong> serial numbers, plates, addresses, faces.' +
-             '<span class="long"> Small target? <strong>Pinch or use + to zoom in</strong> and turn the <strong>Size</strong> down. Tilted or awkward shape? Trace it with <strong>Outline</strong>.</span>' +
+             '<span class="long"> Small target? <strong>Pinch or use + to zoom in</strong>. Bigger area, or a tilted strip? Trace it with <strong>Outline</strong>.</span>' +
              '<span class="short"> Too small? Pinch to zoom.</span> Runs before upload.',
       poly:  '<strong>Tap around the area</strong> to drop points, then <strong>tap the first point</strong> to close it. Everything inside is blurred.' +
              '<span class="long"> Works at any angle — four taps around a tilted serial is enough. Double-click also closes.</span> Runs before upload.',
@@ -1370,7 +1341,6 @@ function openRedactModal(file) {
         btns[k].setAttribute('aria-pressed', String(k === mode));
       });
       hintEl.innerHTML = HINTS[mode];
-      brushSizeWrap.classList.toggle('visible', mode === 'brush');
       canvas.classList.toggle('brush', mode === 'brush');
       hoverPoint = null;
       if (origCanvas) renderIdle();
