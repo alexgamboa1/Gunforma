@@ -251,7 +251,7 @@ const REDACT_HTML = `
         <button type="button" id="redact-shape-poly"                 aria-pressed="false" title="Tap points around an area; everything inside is blurred">◇ Outline</button>
       </div>
       <label class="redact-brush-size visible" id="redact-brush-size">Size
-        <input type="range" id="redact-brush-range" min="1" max="100" value="25" aria-label="Brush size">
+        <input type="range" id="redact-brush-range" min="1" max="100" value="45" aria-label="Brush size">
       </label>
       <div class="redact-zoom" role="group" aria-label="Zoom">
         <button type="button" id="redact-zoom-out" title="Zoom out (ctrl + scroll)" aria-label="Zoom out">−</button>
@@ -643,7 +643,9 @@ function openRedactModal(file) {
     let shapeMode = 'brush';
     // Brush radius as a fraction of canvas width, so the same slider position
     // means the same thing on every photo. Slider 1..100 → 0.3%..2.5% of width.
-    let brushFrac = 0.015;
+    // Matches the slider's default (45); brushRange.oninput() sets it for
+    // real once the photo has loaded.
+    let brushFrac = 0.003 + (0.025 - 0.003) * 0.45 * 0.45;
     function brushRadius() { return Math.max(3, Math.round(brushFrac * canvas.width)); }
 
     // ── Zoom ────────────────────────────────────────────────────────────
@@ -1322,9 +1324,12 @@ function openRedactModal(file) {
       brushRange.oninput = function () {
         // 1..100 → 0.3%..2.5% of canvas width, eased so the low end (where
         // serial numbers live) gets most of the slider's travel. On a
-        // 2400px-wide canvas that is a 7px radius at 1, 11 at the default
-        // 25, 20 at 50 and 60 at 100. The top used to be 6% (144px), a
+        // 2400px-wide canvas that is a 7px radius at 1, 18 at the default
+        // 45, 20 at 50 and 60 at 100. The top used to be 6% (144px), a
         // face-sized disc; anything that big is the Outline tool's job.
+        // The default is 45 rather than lower because a 36px stroke is what
+        // covers a ~25px serial in one pass; at 25 (r = 11) one pass left
+        // the tops and bottoms of the characters readable.
         const t = brushRange.value / 100;
         brushFrac = 0.003 + (0.025 - 0.003) * t * t;
         if (hoverPoint) renderIdle();
