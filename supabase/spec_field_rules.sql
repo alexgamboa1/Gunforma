@@ -1,6 +1,7 @@
 -- spec_field_rules.sql
--- NOT YET APPLIED. Dry-run 2026-10-03 against Gunforma-v2 inside one rolled-back
--- transaction, together with create_product.sql — see that PR for the results.
+-- APPLIED 2026-10-03. See the record at the bottom of this file.
+-- Dry-run first the same day inside one rolled-back transaction, together
+-- with create_product.sql; the results are in #131.
 --
 -- WHAT A CATEGORY NEEDS, in one place. Read by create_product() (which spec
 -- keys it accepts), by product_data_status() (what makes a part APPROVED),
@@ -202,3 +203,16 @@ insert into public.spec_field_rules (category, field, requirement, only_when_fie
   ('takedown_lever', 'takedown_type',             'required', null, null, 'Takedown type', 10),
   ('takedown_lever', 'has_thumb_rest',            'required', null, null, 'Thumb rest', 20),
   ('takedown_lever', 'optic_compatibility_notes', 'optional', null, null, 'Optic compatibility notes', 30);
+
+-- ============================================================
+-- APPLIED 2026-10-03 as migration spec_field_rules (20261003223210) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #131.
+-- Verified live after the change:
+--
+--   101 rows; md5 of the rows (category|field|requirement|only_when_field|
+--     only_when_values|label|sort_order, ordered by category, field)
+--     850c2c1566e9e6f20f8a96301e100f1c, identical to the rows parsed from
+--     this file
+--   RLS on; grants: anon r, authenticated r — no write grant for either
+--   anon reads it through PostgREST (200)
+-- ============================================================

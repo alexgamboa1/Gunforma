@@ -1,8 +1,12 @@
 -- create_product.sql
--- NOT YET APPLIED. Dry-run 2026-10-03 against Gunforma-v2 inside one
--- transaction that was rolled back (a DO block ending in RAISE EXCEPTION);
--- the results are in the PR. Apply spec_field_rules.sql FIRST: every function
--- here reads that table.
+-- APPLIED 2026-10-03. See the record at the bottom of this file.
+-- Dry-run first the same day inside one transaction that was rolled back (a
+-- DO block ending in RAISE EXCEPTION); the results are in #131.
+-- spec_field_rules.sql was applied FIRST: every function here reads it.
+--
+-- product_data_status() below is SUPERSEDED by
+-- fix_product_data_status_url.sql, which moves a blank url from
+-- optional_blank to missing. Read that file for the live definition.
 --
 -- WHY. There was no way to add ONE product. Every product arrived in a bulk
 -- load, create_variant() only adds to a product that already exists, and the
@@ -90,6 +94,7 @@ language sql immutable set search_path = '' as $sb$
 $sb$;
 
 -- ── how complete a product is ───────────────────────────────────────────────
+-- SUPERSEDED: see fix_product_data_status_url.sql (url is now missing[]).
 -- { approved, missing[], optional_blank[], platforms[] }. Reads only catalog
 -- data, as the caller. A field whose only-when condition is false is not
 -- applicable and appears in neither list. Spec fields are reported as
@@ -608,3 +613,24 @@ select p.id as product_id, p.slug, p.name, m.name as brand, p.category,
 
 revoke all on public.products_needing_data from public, anon, authenticated;
 grant select on public.products_needing_data to authenticated, service_role;
+
+-- ============================================================
+-- APPLIED 2026-10-03 as migration create_product (20261003223355) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #131, after
+-- spec_field_rules (20261003223210).
+-- Verified live after the change — md5(pg_proc.prosrc) against the body
+-- between each function's dollar quotes in this file, all identical:
+--
+--   create_product        ddc77c90ef658b914f7adb285e4b15ff
+--   product_data_status   6d89efbeb72d7de5a6506d5c3cdb6a4b
+--   url_encode            7cf7c7bb7025f85b8fc653b7465a0fbc
+--   jsonb_strip_blank     e84ec6d60424e3846ddc575d17cfab81
+--
+--   signatures, search_path = '', SECURITY DEFINER on create_product only,
+--     volatility (create_product v, product_data_status s, helpers i) match
+--   EXECUTE on create_product / product_data_status: authenticated and
+--     service_role only; anon through PostgREST gets 42501
+--   products_needing_data: security_invoker=true; SELECT for authenticated
+--     and service_role only; anon through PostgREST gets 42501
+--   232 of 242 products approved; the 10 unapproved are all 'verified'
+-- ============================================================
