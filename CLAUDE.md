@@ -689,12 +689,125 @@ transform is only exercised by swapping the origin, which that script does.
 Testing through Facebook's Sharing Debugger instead will tell you about its
 cache for days after you have fixed something.
 
+## Adding a product
+
+**One product is added with one call: `create_product()`**
+(`supabase/create_product.sql`). It writes the brand (found or created), the
+product, its platforms, its spec sheet, every variant with its photos and
+retailer links, and its fits-with rules in one transaction. It can also swap a
+build's pending custom part for the new product. It is `SECURITY DEFINER`, and
+its guard is `is_admin() or is_trusted_backend()`. `anon` cannot execute it.
+Before it, products arrived only in bulk loads, and `create_variant()` could
+only add to a product that already existed.
+
+**What a category needs lives in a table, not in code:
+`spec_field_rules`** (`supabase/spec_field_rules.sql`).
+
+- It holds one row per (category, field), and each row is `required` or
+  `optional`.
+- A row can be scoped by `only_when_field` / `only_when_values`. Example: a
+  barrel's `thread_pitch` applies only when `barrel_type` is threaded.
+- Three readers use the same rows:
+  - `create_product()` accepts a spec key only if it has a row.
+  - `product_data_status()` decides what makes a part approved.
+  - PR 2's form decides what to ask and how to label it.
+- To change what a category needs, change a row. Do not add a list anywhere
+  else.
+
+**Saving and approval are separate on purpose.**
+
+- **To save, a part needs:** brand, name, category, at least one platform,
+  the source `url`, one variant, and a photo and an MSRP on the default
+  variant.
+- **To be approved, it needs** everything
+  `product_data_status(product_id)` checks, which returns
+  `{approved, missing[], optional_blank[], platforms[]}`.
+- `create_product()` always returns that status, so an unapproved save is
+  never silent.
+- Only an approved part may carry a `fitment_confidence` other than
+  `unverified`.
+  - This applies to `create_product()` only. Existing products were not
+    re-graded.
+- `products_needing_data` lists every unapproved product with what it is
+  missing. Only admins and the service role see rows.
+
+**Five things that look like omissions and are not:**
+
+- **Platform is explicit.** Nothing defaults to P365, and a part with no
+  platform is refused.
+  - A slide or barrel belongs to **exactly one** platform. Its spec row's
+    platform is that platform, and a `platform` spec key that disagrees is
+    refused.
+  - A platform that is not live yet is accepted, with a warning.
+  - A slide or barrel length the platform has not registered in
+    `platform_part_lengths` is refused with a readable sentence, not the
+    class trigger's raw error.
+  - **P320 has no registered lengths yet.** The `slide_length_valid` and
+    `barrel_length_valid` CHECKs allow only 3.1/3.7/4.3, so registering them
+    takes both changes.
+- **Retailer links are optional:** zero, one or several per variant. A
+  missing link shows in `optional_blank` as "retailer link" and never blocks
+  approval.
+  - There is no "direct from maker" partner, and do not add one. A partner
+    without an Awin id is never matched by the sync, so its price is stale
+    forever and the buy row reads "Check price" with no MSRP.
+- **`products.url` is required, and it is a reference.** It is the page the
+  data came from.
+  - No public page renders it: the catalog and the Armory map it to a
+    `buy_url` that nothing reads.
+  - Do not start rendering it, and do not drop it.
+- **Defaulted spec columns pass silently.** Several required fields have a
+  column default: `caliber '9mm'`, `capacity_change 0`, `drop_in true`,
+  `is_combo false`, and others.
+  - A spec sheet that omits one is saved holding the default.
+  - **PR 2's form must make the admin answer each of those explicitly.**
+  - The function does not refuse them, by decision.
+- **Material is one fact.**
+  - `optic_specs.housing_material` and `mag_release_specs.material` are
+    filled from `products.material`.
+  - A spec value that disagrees with it is refused.
+
+**Never entered by `create_product()`:**
+
+- the sync's columns: `street_price`, `in_stock`, `last_checked` and
+  `op_last_matched_by`
+- `slide_class` and `barrel_class`, which are owned by triggers
+- any spec column with no rule row
+- `installation_difficulty` and `best_for`, which are refused by name.
+  Existing values stay, and the product page still reads them.
+
+**Try a part with `p_dry_run => true`.** The function does everything, then
+raises errcode `P0DRY` with the would-be result JSON in the error's DETAIL, so
+nothing is written.
+
+- Through PostgREST it arrives as an error body that carries the result.
+- **It is the only safe way to test against production.** `affiliate_links`
+  and `price_history` are `ON DELETE RESTRICT`, so a real test product that
+  got a link can never be removed.
+- For a multi-case test, use one `DO` block that ends in `RAISE EXCEPTION`.
+  - Run any case that relies on the direct session's NULL
+    `request.jwt.claims` **before** any case that sets the claims. Once set in
+    a transaction, a rolled-back value reads `''`, not NULL.
+  - `restrict_owner_edits_on_approved_build` treats `''` as an API caller.
+
+**Tracked links are built, not typed.**
+
+- For a partner with an `awin_merchant_id`, the Awin URL is built with the
+  clickref `build-detail_<product slug>`.
+- A supplied Awin link whose merchant id disagrees with the partner's is
+  refused.
+
 ## Adding an affiliate link (CSV import)
 
-New `affiliate_links` rows are added **by hand**, through the Supabase dashboard's
-CSV import. Nothing in this repo inserts into that table — the nightly sync only
-PATCHes existing rows, and no page writes it. So the import template is the one
-place a new link's columns are decided.
+New `affiliate_links` rows come from two places:
+
+- **`create_product()`**, for a new product's links. See **Adding a
+  product**. It builds the tracked URL and never sets the sync's columns.
+- **The Supabase dashboard's CSV import**, for a link on a product that
+  already exists. This section covers the CSV.
+
+Nothing else inserts into the table. The nightly sync only PATCHes existing
+rows, and no page writes it.
 
 **The template's columns, in order:**
 
