@@ -45,3 +45,22 @@ export function variantLabel(v) {
 export function variantLabelOr(v, fallback = '') {
   return variantLabel(v) || fallback;
 }
+
+// Mirror of variantSpecs in js/variant-label.js — see the reasoning there.
+// scripts/variant-label.test.mjs runs both over the same inputs.
+const SPEC_KEYS = ['reticle', 'reticle_color', 'battery_type', 'mount_system'];
+
+function specPart(key, value) {
+  if (key === 'reticle_color' && !/\b(dot|reticle)\b/i.test(value)) return value + ' dot';
+  return value;
+}
+
+export function variantSpecs(v) {
+  if (!v) return '';
+  const out = [];
+  for (const key of SPEC_KEYS) {
+    const val = clean(v[key]);
+    if (val) out.push(specPart(key, val));
+  }
+  return out.join(' · ');
+}
