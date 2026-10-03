@@ -340,6 +340,18 @@ function blockSizeFor(minDim) {
   return Math.max(8, Math.min(40, Math.round(minDim / 2)));
 }
 
+// The brush's pixelation blocks are at least this big, whatever its radius.
+// The brush is a fixed 16px stroke, and blocks sized from the stroke (the
+// 8px floor) leave a ~25px serial as rows of light and dark blocks that
+// follow the character strokes — after three overlapping passes, measured:
+// 261 of 2368 glyph pixels still bright, the characters still countable.
+// The block is not limited by the stroke: each one averages only the
+// pixels inside the stroke (see pixelateShape), so a 20px block over a
+// 16px stroke is a 16x20 patch of the stroke's own colour. At 20 the same
+// three passes leave none bright and read like the Outline tool's result;
+// 16 still showed the gaps between characters.
+const BRUSH_MIN_BLOCK = 20;
+
 // A reusable scratch canvas for clipped redaction (see pixelateShape).
 // One per modal session, resized per-shape as needed.
 let _redactScratch = null;
@@ -478,14 +490,14 @@ function pixelateShape(ctx, shape) {
     block = blockSizeFor(polyThickness(pts) * 2);
     path = function (c) { pathPoly(c, pts); };
   } else {
-    // Block size follows the brush radius so a fine brush over a serial
-    // still lands enough blocks to destroy the digits, while a fat brush
-    // over a face reads as coarse.
+    // Block size follows the brush radius, but never below BRUSH_MIN_BLOCK:
+    // the brush is small, and blocks the size of a small stroke leave the
+    // characters under it countable.
     const r = Math.max(1, shape.r);
     pts = densifyStroke(shape.pts, r);
     if (!pts.length) return;
     pad = r;
-    block = blockSizeFor(r * 2);
+    block = Math.max(BRUSH_MIN_BLOCK, blockSizeFor(r * 2));
     path = function (c) { pathStroke(c, pts, r); };
   }
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
