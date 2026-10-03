@@ -19,6 +19,7 @@
 // ?username=:username), alongside the site's other :param rewrites.
 // -----------------------------------------------------------------------------
 import { readFile } from 'node:fs/promises';
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -94,7 +95,7 @@ function notFound(username) {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Profile not found</div>' +
     '<div class="s">' + (u ? 'No Gunforma member goes by &ldquo;' + u + '&rdquo;.' : 'That profile link is not valid.') + '</div>' +
-    '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div></body></html>',
+    '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     {
       status: 404,
       headers: {
@@ -165,7 +166,7 @@ export default async (req) => {
     return new Response(
       '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' + metaBlock(username) +
       '<meta http-equiv="refresh" content="0;url=' + SITE + '/gunforma-profile.html?u=' + encodeURIComponent(username) + '"/>' +
-      '</head><body></body></html>',
+      '</head><body>' + ANALYTICS_SNIPPET + '</body></html>',
       { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
     );
   }
