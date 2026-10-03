@@ -172,17 +172,44 @@
     '</div>';
   }
 
-  // Thumbnail for a part the user has already added. A pending custom part has
-  // no catalog row to photograph, so it says so rather than showing an empty
-  // grey square that reads like a broken image.
+  // Thumbnail for a part the user has already added.
+  //
+  // A part with a CHOSEN VARIANT (part.variantId, set by the pages'
+  // addPartWithVariant) shows that variant: its own photo, else its swatch —
+  // drawn by the same variantMediaHtml the color step uses, so the row
+  // matches the row it was picked from. Never item.image here: that is the
+  // DEFAULT variant's photo, and a Black barrel's photo over the words
+  // "Gold / TiN" looks like an answer. That was this function's bug — it read
+  // item.image unconditionally, so every non-default pick showed the default.
+  // part.imageUrl is deliberately null for a chosen variant with no photo
+  // (38% of live variants), which is exactly when the swatch is the honest
+  // answer. Its onerror degrades to the swatch too, not to a blank box.
+  //
+  // A part with NO chosen variant — custom, or hydrated from a snapshot that
+  // predates variants — keeps the product photo as before, then a swatch if a
+  // colour is known, then the label box. A pending custom part has no catalog
+  // row to photograph, so it says so rather than showing an empty grey square
+  // that reads like a broken image.
   function selectedPartThumbHtml(part, item) {
-    if (!item || !item.image) {
+    if (part.variantId) {
+      return global.variantMediaHtml({
+        primary_image_url: part.imageUrl || null,
+        color:             part.variantColor || null,
+        finish:            part.variantFinish || null,
+        variant_label:     part.variantLabel || null,
+      }, 'selected-part-thumb');
+    }
+    var src = part.imageUrl || (item && item.image) || null;
+    if (!src) {
+      if (part.variantColor) {
+        return global.variantMediaHtml({ color: part.variantColor }, 'selected-part-thumb');
+      }
       return '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' +
                (part.pending ? 'Pending' : 'No photo') + '</div></div>';
     }
     var alt = ((part.brand ? part.brand + ' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
     return '<div class="selected-part-thumb">' +
-             '<img src="' + item.image + '" alt="' + alt + '" loading="lazy" ' +
+             '<img src="' + src + '" alt="' + alt + '" loading="lazy" ' +
                'onerror="this.parentElement.innerHTML=\'<div class=&quot;selected-part-thumb-label&quot;>No photo</div>\'"/>' +
            '</div>';
   }
@@ -197,17 +224,24 @@
       '<div class="selected-part-body">' +
         '<div class="selected-part-brand">' + part.brand + '</div>' +
         '<div class="selected-part-name">'  + part.name  + '</div>' +
+        // The colour they picked, under the name — the photo alone does not
+        // say "Gold / TiN", and a swatch says even less.
+        (part.variantLabel
+          ? '<div class="selected-part-variant-label">' + escAttr(part.variantLabel) + '</div>'
+          : '') +
         (part.pending
           ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
           : (item && item.price ? '<div class="selected-part-price">$' + item.price + '</div>' : '')) +
-        // Free text on purpose: the catalog has no variant coverage yet, so a
-        // builder who owns this product in a colour we do not carry has
-        // nowhere else to say so. Named `variant` rather than `variantId`
-        // precisely so it will not collide when real product_variants
-        // coverage lands.
+        // Free text, for a part with NO chosen variant: a product hydrated
+        // from a snapshot that predates variants, or one with no variant
+        // coverage, where a builder who owns it in a colour we do not carry
+        // has nowhere else to say so. Named `variant` rather than `variantId`
+        // so it never collides with the real thing. When a variant WAS picked
+        // the label above already says it, and a second box asking the same
+        // question invites an answer that contradicts it.
         // Not offered on custom/pending parts — the builder typed the full
         // name there already.
-        (part.pending ? '' :
+        (part.pending || part.variantLabel ? '' :
           '<input type="text" class="selected-part-variant" maxlength="' + VARIANT_MAX + '"' +
             ' value="' + escAttr(part.variant || '') + '"' +
             ' data-uid="' + escAttr(part.uid) + '"' +
@@ -482,6 +516,12 @@
 .selected-part-brand { font-size: 9px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .selected-part-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
 .selected-part-price { font-size: 12px; font-weight: 700; color: #1a1a1a; }
+/* The picked colour. Quiet, like the meta around it — it confirms the pick,
+   it is not a heading. */
+.selected-part-variant-label { font-size: 11px; color: #666; line-height: 1.3; }
+/* The swatch, when the chosen variant has no photo. variantMediaHtml names
+   it <cls>-swatch; it fills the thumb box the way the picker's fills its. */
+.selected-part-thumb-swatch { display: block; width: 100%; height: 100%; }
 /* Variant note. Deliberately quiet until focused — it is optional, and most
    parts will not need it, so it should not shout on every row. */
 .selected-part-variant { width: 100%; margin-top: 3px; font-family: inherit; font-size: 11px; color: #1a1a1a; background: #fff; border: 0.5px solid #e5e2d8; border-radius: 4px; padding: 4px 7px; box-sizing: border-box; }
@@ -592,10 +632,10 @@
      halves: minmax(0, 1fr) on the page's own .layout so the column MAY
      shrink, and this, so the row WANTS less.
 
-     Three columns and four rows: the photo spans the text rows on the left,
-     brand/name/price/pending stack beside it, and the variant field and
-     Remove sit on a full-width fourth row where the field can actually be
-     typed in. display: contents on the body is what lets its children become
+     Three columns and five rows: the photo spans the text rows on the left,
+     brand/name/variant label/price/pending stack beside it, and the variant
+     field and Remove sit on a full-width last row where the field can
+     actually be typed in. display: contents on the body is what lets its children become
      grid items of the row itself rather than a nested flex column — THE
      MARKUP IS UNCHANGED, which is the point: one set of elements, two shapes.
 
@@ -604,12 +644,16 @@
      an 11px input turns one tap into a pinch-and-pan. The placeholder stays
      13px because it is not what is being typed into. */
   .selected-parts-list { padding: 10px 12px; }
-  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
-  .selected-part-thumb { grid-column: 1; grid-row: 1 / span 3; width: 72px; height: 54px; }
+  /* Five rows, not four, since the variant label: brand / name / label /
+     price stack beside the photo and the action row is always row 5. With
+     four, a part that had a label pushed its price into row 4 — the row
+     Remove is pinned to — and auto-placement dropped the price BELOW Remove. */
+  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
+  .selected-part-thumb { grid-column: 1; grid-row: 1 / span 4; width: 72px; height: 54px; }
   .selected-part-body { display: contents; }
-  .selected-part-brand, .selected-part-name, .selected-part-price, .selected-part-pending { grid-column: 2 / -1; }
-  .selected-part-variant { grid-column: 1 / 3; grid-row: 4; margin-top: 8px; min-width: 0; padding: 7px 9px; }
-  .selected-part-remove { grid-column: 3; grid-row: 4; margin-top: 8px; align-self: stretch; }
+  .selected-part-brand, .selected-part-name, .selected-part-variant-label, .selected-part-price, .selected-part-pending { grid-column: 2 / -1; }
+  .selected-part-variant { grid-column: 1 / 3; grid-row: 5; margin-top: 8px; min-width: 0; padding: 7px 9px; }
+  .selected-part-remove { grid-column: 3; grid-row: 5; margin-top: 8px; align-self: stretch; }
   .selected-part-variant, .picker-search { font-size: 16px; }
   .selected-part-variant::placeholder, .picker-search::placeholder { font-size: 13px; }
 
