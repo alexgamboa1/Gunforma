@@ -196,6 +196,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .cat-tab { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; padding: 8px 14px; border-radius: 20px; border: 0.5px solid #d5d3ca; background: #fff; color: #666; cursor: pointer; transition: color .15s, background .15s, border-color .15s; }
 .cat-tab:hover { color: #1a1a1a; border-color: #4a9edd; }
 .cat-tab.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+.fit-hint { display: inline-flex; align-items: center; gap: 7px; margin: 0 0 14px; padding: 8px 13px; border: 0.5px solid #cfe0ee; border-radius: 8px; background: #f2f8fc; font-size: 12.5px; color: #24506e; text-decoration: none; }
+.fit-hint:hover { border-color: #4a9edd; }
+.fit-hint b { font-weight: 700; }
+.fit-hint .fh-go { color: #4a9edd; font-weight: 600; }
 
 /* Sort dropdown — sits inside the .search-row on the right. */
 .sort-wrap { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #888; }
@@ -516,6 +520,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <!-- Category selector — single-select, sits above search/sort so it
          reads as the primary way to slice the catalog. -->
     <div class="cat-tabs" id="cat-tabs"></div>
+
+    <!-- Fit-guide hint. Renders ONLY on the optics category, because that
+         is the one slice of the catalog where "which fits my gun?" is the
+         live question. One static href to /p365/, the hub index, which is
+         always valid — the declared set of model pages lives server-side
+         in _guide-meta.mjs and is deliberately NOT mirrored here. -->
+    <div id="fit-guide-hint"></div>
 
     <div class="search-row">
       <input class="search-input" id="search" type="search" placeholder="Search brand, part name, description…" autocomplete="off" />
@@ -1084,6 +1095,26 @@ function renderCategoryTabs() {
       renderFilters(); applyFiltersAndRender();
     });
   });
+  renderFitGuideHint(activeCat);
+}
+
+// The one inbound link to the /fit/ guide cluster from this page. Shown only
+// on the optics category: a reader filtering to red dots is asking which one
+// fits their pistol, which is exactly what those pages answer. Everywhere
+// else it would be a link farm.
+//
+// Deliberately a single static href to the hub index rather than a per-model
+// link: which model pages are live is decided by GUN_HUBS in
+// _guide-meta.mjs, and mirroring that list into this page would create the
+// drift pair that file's header tells you not to create. The index always
+// resolves; an undeclared model would 404.
+function renderFitGuideHint(activeCat) {
+  var el = document.getElementById('fit-guide-hint');
+  if (!el) return;
+  if (activeCat !== 'optic') { el.innerHTML = ''; return; }
+  el.innerHTML = '<a class="fit-hint" href="/p365/">' +
+    '<span>Not sure which of these fits? <b>P365 optic cuts vary by SKU.</b></span>' +
+    '<span class="fh-go">See fit by model &rarr;</span></a>';
 }
 
 // ─── FITMENT ──────────────────────────────────────────────
