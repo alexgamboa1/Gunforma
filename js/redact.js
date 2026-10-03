@@ -641,12 +641,15 @@ function openRedactModal(file) {
     // dot. Poly ("Outline") = tap points around an area, tap the first point
     // again to close it, and everything inside is blurred.
     let shapeMode = 'brush';
-    // Brush radius as a fraction of canvas width, so the same slider position
-    // means the same thing on every photo. Slider 1..100 → 0.3%..2.5% of width.
+    // Brush radius as a fraction of the canvas's LONG edge, so the same slider
+    // position means the same thing on every photo. Slider 1..100 → 0.3%..2.5%
+    // of the long edge. Not the width: on a portrait photo the width is the
+    // short edge, which made every brush a third smaller than the same setting
+    // in landscape, and the default too small to cover a serial in one pass.
     // Matches the slider's default (45); brushRange.oninput() sets it for
     // real once the photo has loaded.
     let brushFrac = 0.003 + (0.025 - 0.003) * 0.45 * 0.45;
-    function brushRadius() { return Math.max(3, Math.round(brushFrac * canvas.width)); }
+    function brushRadius() { return Math.max(3, Math.round(brushFrac * Math.max(canvas.width, canvas.height))); }
 
     // ── Zoom ────────────────────────────────────────────────────────────
     // zoom = 1 is "fit to the wrap"; the canvas's internal resolution never
@@ -1322,11 +1325,12 @@ function openRedactModal(file) {
       zoomOutBtn.onclick = function () { zoomStep(-1); };
       zoomFitBtn.onclick = zoomFit;
       brushRange.oninput = function () {
-        // 1..100 → 0.3%..2.5% of canvas width, eased so the low end (where
-        // serial numbers live) gets most of the slider's travel. On a
-        // 2400px-wide canvas that is a 7px radius at 1, 18 at the default
-        // 45, 20 at 50 and 60 at 100. The top used to be 6% (144px), a
-        // face-sized disc; anything that big is the Outline tool's job.
+        // 1..100 → 0.3%..2.5% of the canvas's long edge, eased so the low end
+        // (where serial numbers live) gets most of the slider's travel. With
+        // the long edge at the 2400px cap, in either orientation, that is a
+        // 7px radius at 1, 18 at the default 45, 20 at 50 and 60 at 100. The
+        // top used to be 6% (144px), a face-sized disc; anything that big is
+        // the Outline tool's job.
         // The default is 45 rather than lower because a 36px stroke is what
         // covers a ~25px serial in one pass; at 25 (r = 11) one pass left
         // the tops and bottoms of the characters readable.
