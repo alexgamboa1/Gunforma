@@ -1352,6 +1352,16 @@ async function hydrateFromArmoryHandoff() {
       brand: part.brand || 'Unknown', name: part.name || '', pending: !!part.pending,
       finish: part.finish || undefined,
       variant: part.variant || undefined,
+      // The chosen variant, carried through. buildPartsSnapshot() writes these
+      // only when present on the part, so a part rebuilt without them loses them
+      // on the next save — the edited build's Gold barrel came back as the
+      // default. Same convention, and the same reason, as finish/variant above
+      // and gunforma-armory.html's loadBuildById().
+      variantId:     part.variantId     || undefined,
+      variantLabel:  part.variantLabel  || undefined,
+      variantColor:  part.variantColor  || undefined,
+      variantFinish: part.variantFinish || undefined,
+      imageUrl:      part.imageUrl      || undefined,
     });
   });
   renderParts(); renderSidebar();
@@ -1550,6 +1560,16 @@ async function hydrateFromEditMode() {
       pending: !!part.pending,
       finish: part.finish || undefined,
       variant: part.variant || undefined,
+      // The chosen variant, carried through. buildPartsSnapshot() writes these
+      // only when present on the part, so a part rebuilt without them loses them
+      // on the next save — the edited build's Gold barrel came back as the
+      // default. Same convention, and the same reason, as finish/variant above
+      // and gunforma-armory.html's loadBuildById().
+      variantId:     part.variantId     || undefined,
+      variantLabel:  part.variantLabel  || undefined,
+      variantColor:  part.variantColor  || undefined,
+      variantFinish: part.variantFinish || undefined,
+      imageUrl:      part.imageUrl      || undefined,
     });
   });
 
