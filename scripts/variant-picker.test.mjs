@@ -217,3 +217,48 @@ test('the label is escaped', () => {
   const html = PP.selectedPartHtml(part({ variantId: 'x', variantLabel: '<b>Gold</b> & "TiN"' }));
   assert.ok(html.includes('&lt;b&gt;Gold&lt;/b&gt; &amp; &quot;TiN&quot;'));
 });
+
+// ── Spec line (variantSpecs) ───────────────────────────────────────────────
+// Holosun 407C X3, as it is in product_variants: three variants with the SAME
+// label, differing only in dot colour. Before the spec line the color step
+// listed "Black · Anodized" three times.
+const HOLO = { id: 'h1', brand: 'Holosun', name: '407C X3', variants: [
+  v({ id: 'hr', variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Red', is_default: true }),
+  v({ id: 'hz', variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Green' }),
+  v({ id: 'ha', variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Gold' }),
+] };
+
+test('same-label variants are told apart by their spec line, in a stable order', () => {
+  const html = PP.variantListHtml('optics', HOLO);
+  const specs = [...html.matchAll(/<span class="variant-row-specs">([^<]*)<\/span>/g)].map((m) => m[1]);
+  // Default first, then the shared label ties and the spec line decides —
+  // not the variant id, which is arbitrary.
+  assert.deepEqual(specs, ['2 MOA · Red dot', '2 MOA · Gold dot', '2 MOA · Green dot']);
+  assert.equal(new Set(specs).size, 3, 'two rows still read the same');
+  // The label itself is untouched.
+  assert.equal((html.match(/<span class="variant-row-label">Black · Anodized<\/span>/g) || []).length, 3);
+});
+
+test('a product with no spec columns renders no spec line at all', () => {
+  const html = PP.variantListHtml('barrels', MANY);
+  assert.ok(!html.includes('variant-row-specs'), 'empty spec element rendered for a barrel');
+});
+
+test('a light shows battery then mount', () => {
+  const light = { id: 'l1', brand: 'Streamlight', name: 'TLR-7 X', variants: [
+    v({ id: 'l', is_default: true, color: 'Black', battery_type: 'CR123A', mount_system: 'Swappable keys (1913 + Glock)' }),
+    v({ id: 'l2', color: 'FDE', battery_type: 'CR123A' }),
+  ] };
+  const html = PP.variantListHtml('lights', light);
+  assert.ok(html.includes('<span class="variant-row-specs">CR123A · Swappable keys (1913 + Glock)</span>'));
+  assert.ok(html.includes('<span class="variant-row-specs">CR123A</span>'));
+});
+
+test('the build row shows the stored spec line under the label', () => {
+  const html = PP.selectedPartHtml(part({ refId: 'h1', variantId: 'hz', variantLabel: 'Black · Anodized',
+    variantColor: 'Black', variantSpecs: '2 MOA · Green dot', imageUrl: 'https://img/407c.jpg' }));
+  assert.match(html, /selected-part-variant-label">Black · Anodized<\/div><div class="selected-part-variant-specs">2 MOA · Green dot<\/div>/);
+  // No specs → no element, so a barrel row is byte-for-byte what it was.
+  const plain = PP.selectedPartHtml(part({ variantId: 'g', variantLabel: 'Gold / TiN', variantColor: 'Gold' }));
+  assert.ok(!plain.includes('selected-part-variant-specs'));
+});

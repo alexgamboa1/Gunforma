@@ -229,6 +229,10 @@
         (part.variantLabel
           ? '<div class="selected-part-variant-label">' + escAttr(part.variantLabel) + '</div>'
           : '') +
+        // "2 MOA · Red dot" — stored on the part by addPartWithVariant().
+        (part.variantSpecs
+          ? '<div class="selected-part-variant-specs">' + escAttr(part.variantSpecs) + '</div>'
+          : '') +
         (part.pending
           ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
           : (item && item.price ? '<div class="selected-part-price">$' + item.price + '</div>' : '')) +
@@ -364,7 +368,13 @@
     return vs.slice().sort(function (a, b) {
       if (!!b.is_default !== !!a.is_default) return a.is_default ? -1 : 1;
       var al = global.variantLabel(a), bl = global.variantLabel(b);
-      return al < bl ? -1 : al > bl ? 1 : (a.id < b.id ? -1 : 1);
+      if (al !== bl) return al < bl ? -1 : 1;
+      // Same label — the Holosun 407C X3's three "Black · Anodized" rows —
+      // so the spec line decides, and Gold / Green / Red read in order
+      // rather than in id order.
+      var as = global.variantSpecs(a), bs = global.variantSpecs(b);
+      if (as !== bs) return as < bs ? -1 : 1;
+      return a.id < b.id ? -1 : 1;
     });
   }
 
@@ -389,11 +399,15 @@
 
   function variantRowHtml(catKey, item, v) {
     var label = global.variantLabel(v);
+    var specs = global.variantSpecs(v);
     return '<button type="button" class="variant-row" ' +
              'onclick="pickVariant(\'' + catKey + '\',\'' + escAttr(item.id) + '\',\'' + escAttr(v.id) + '\')">' +
         global.variantMediaHtml(v, 'variant-media') +
         '<span class="variant-row-body">' +
           '<span class="variant-row-label">' + (label || 'This color') + '</span>' +
+          // What tells two rows with the same label apart. Absent, not
+          // empty, for a part with no spec columns, so its row is unchanged.
+          (specs ? '<span class="variant-row-specs">' + escAttr(specs) + '</span>' : '') +
           (v.is_default ? '<span class="variant-row-std">Standard</span>' : '') +
         '</span>' +
         priceLineFor(v) +
@@ -519,6 +533,8 @@
 /* The picked colour. Quiet, like the meta around it — it confirms the pick,
    it is not a heading. */
 .selected-part-variant-label { font-size: 11px; color: #666; line-height: 1.3; }
+/* The spec line under it — quieter still: it qualifies the label. */
+.selected-part-variant-specs { font-size: 10.5px; color: #8a8a8a; line-height: 1.3; }
 /* The swatch, when the chosen variant has no photo. variantMediaHtml names
    it <cls>-swatch; it fills the thumb box the way the picker's fills its. */
 .selected-part-thumb-swatch { display: block; width: 100%; height: 100%; }
@@ -632,10 +648,10 @@
      halves: minmax(0, 1fr) on the page's own .layout so the column MAY
      shrink, and this, so the row WANTS less.
 
-     Three columns and five rows: the photo spans the text rows on the left,
-     brand/name/variant label/price/pending stack beside it, and the variant
-     field and Remove sit on a full-width last row where the field can
-     actually be typed in. display: contents on the body is what lets its children become
+     Three columns and six rows: the photo spans the text rows on the left,
+     brand/name/variant label/specs/price/pending stack beside it, and the
+     variant field and Remove sit on a full-width last row where the field
+     can actually be typed in. display: contents on the body is what lets its children become
      grid items of the row itself rather than a nested flex column — THE
      MARKUP IS UNCHANGED, which is the point: one set of elements, two shapes.
 
@@ -644,16 +660,18 @@
      an 11px input turns one tap into a pinch-and-pan. The placeholder stays
      13px because it is not what is being typed into. */
   .selected-parts-list { padding: 10px 12px; }
-  /* Five rows, not four, since the variant label: brand / name / label /
-     price stack beside the photo and the action row is always row 5. With
-     four, a part that had a label pushed its price into row 4 — the row
-     Remove is pinned to — and auto-placement dropped the price BELOW Remove. */
-  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
-  .selected-part-thumb { grid-column: 1; grid-row: 1 / span 4; width: 72px; height: 54px; }
+  /* Six rows: brand / name / variant label / spec line / price stack
+     beside the photo, and the action row is always LAST. Every stacked line
+     added has needed a row added here — with too few, auto-placement puts
+     the price into the row Remove is pinned to and drops it BELOW Remove,
+     which is what the variant label did in #122 and the spec line would
+     have done here. */
+  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto auto auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
+  .selected-part-thumb { grid-column: 1; grid-row: 1 / span 5; width: 72px; height: 54px; }
   .selected-part-body { display: contents; }
-  .selected-part-brand, .selected-part-name, .selected-part-variant-label, .selected-part-price, .selected-part-pending { grid-column: 2 / -1; }
-  .selected-part-variant { grid-column: 1 / 3; grid-row: 5; margin-top: 8px; min-width: 0; padding: 7px 9px; }
-  .selected-part-remove { grid-column: 3; grid-row: 5; margin-top: 8px; align-self: stretch; }
+  .selected-part-brand, .selected-part-name, .selected-part-variant-label, .selected-part-variant-specs, .selected-part-price, .selected-part-pending { grid-column: 2 / -1; }
+  .selected-part-variant { grid-column: 1 / 3; grid-row: 6; margin-top: 8px; min-width: 0; padding: 7px 9px; }
+  .selected-part-remove { grid-column: 3; grid-row: 6; margin-top: 8px; align-self: stretch; }
   .selected-part-variant, .picker-search { font-size: 16px; }
   .selected-part-variant::placeholder, .picker-search::placeholder { font-size: 13px; }
 
@@ -700,6 +718,7 @@
 
 .variant-row-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .variant-row-label { font-size: 12.5px; font-weight: 600; color: #1a1a1a; }
+.variant-row-specs { font-size: 11px; color: #777; line-height: 1.3; }
 .variant-row-std { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #6b6b6b; }
 .variant-row-price { font-size: 12px; font-weight: 700; color: #1a1a1a; white-space: nowrap; }
 .variant-row-msrp { font-size: 8.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: #6b6b6b; background: #f2f1ee; border: 0.5px solid #d8d5cd; border-radius: 3px; padding: 1px 3px; margin-left: 4px; vertical-align: 1px; }

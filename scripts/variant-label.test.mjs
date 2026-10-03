@@ -141,3 +141,55 @@ test('the label does not depend on sibling variants', () => {
   // Same row, whether it is the only variant or one of eight.
   assert.equal(browser.variantLabel({ ...v }), 'Black / DLC');
 });
+
+// ── variantSpecs ────────────────────────────────────────────────────────────
+// The spec line under the label. Same rule as the label: both copies, same
+// inputs, must agree. Values from live product_variants rows (2026-10-02):
+// every optic carries reticle + reticle_color, every light battery_type,
+// 50 of 59 lights mount_system, and nothing else carries any of the four.
+const SPEC_CASES = [
+  // Holosun 407C X3: three variants labelled "Black · Anodized" — this line
+  // is the only thing that tells them apart.
+  [{ variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Red'   }, '2 MOA · Red dot'],
+  [{ variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Green' }, '2 MOA · Green dot'],
+  [{ variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Gold'  }, '2 MOA · Gold dot'],
+  // EOTech EFLX / EFLX CE.
+  [{ reticle: '3 MOA', reticle_color: 'Red' }, '3 MOA · Red dot'],
+  [{ reticle: 'MRS',   reticle_color: 'Red' }, 'MRS · Red dot'],
+  [{ reticle: '3.5 MOA', reticle_color: 'Red' }, '3.5 MOA · Red dot'],
+  // Lights: battery, then mount, verbatim.
+  [{ battery_type: 'CR123A', mount_system: 'Swappable keys (1913 + Glock)' }, 'CR123A · Swappable keys (1913 + Glock)'],
+  [{ battery_type: 'Rechargeable' }, 'Rechargeable'],                // 9 lights have no mount_system
+  // Fixed order regardless of key order in the object.
+  [{ mount_system: 'T-slot screw mount', battery_type: 'Multi-Fuel' }, 'Multi-Fuel · T-slot screw mount'],
+  [{ reticle_color: 'Green', reticle: '6 MOA' }, '6 MOA · Green dot'],
+  // A colour that already says what it is of is not doubled.
+  [{ reticle: '2 MOA', reticle_color: 'Red Dot' }, '2 MOA · Red Dot'],
+  [{ reticle_color: 'green reticle' }, 'green reticle'],
+  // Trimmed; blanks and junk skipped, never stringified.
+  [{ reticle: '  2 MOA ', reticle_color: '  ' }, '2 MOA'],
+  [{ reticle: 42, reticle_color: {}, battery_type: null }, ''],
+  // A barrel, a frame: no spec columns, nothing to say. The label's own
+  // fields are NOT specs.
+  [{ variant_label: 'Black / DLC', color: 'Black', finish: 'DLC' }, ''],
+  [{}, ''],
+  [null, ''],
+  [undefined, ''],
+];
+
+test('variantSpecs: the two copies agree on every case', () => {
+  for (const [input, expected] of SPEC_CASES) {
+    const b = browser.variantSpecs(input);
+    const s = server.variantSpecs(input);
+    const where = JSON.stringify(input);
+    assert.equal(b, s, `browser and server disagree for ${where}: ${b} vs ${s}`);
+    assert.equal(b, expected, `wrong spec line for ${where}`);
+  }
+});
+
+test('variantSpecs leaves variantLabel alone', () => {
+  // Additive: the label of a spec-bearing variant is exactly what it was.
+  const v = { variant_label: 'Black · Anodized', reticle: '2 MOA', reticle_color: 'Red' };
+  assert.equal(browser.variantLabel(v), 'Black · Anodized');
+  assert.equal(server.variantLabel(v), 'Black · Anodized');
+});
