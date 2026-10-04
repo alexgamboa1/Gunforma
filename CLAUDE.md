@@ -710,7 +710,7 @@ only add to a product that already existed.
 - Three readers use the same rows:
   - `create_product()` accepts a spec key only if it has a row.
   - `product_data_status()` decides what makes a part approved.
-  - PR 2's form decides what to ask and how to label it.
+  - `gunforma-admin-part.html` decides what to ask and how to label it.
 - To change what a category needs, change a row. Do not add a list anywhere
   else.
 
@@ -762,13 +762,23 @@ only add to a product that already existed.
 - **Defaulted spec columns pass silently.** Several required fields have a
   column default: `caliber '9mm'`, `capacity_change 0`, `drop_in true`,
   `is_combo false`, and others.
-  - A spec sheet that omits one is saved holding the default.
-  - **PR 2's form must make the admin answer each of those explicitly.**
-  - The function does not refuse them, by decision.
+  - A spec sheet that omits one is saved holding the default, and
+    `product_data_status()` then calls it approved.
+  - The function does not refuse them, by decision. The page does: see
+    **The add-a-part page** below.
 - **Material is one fact.**
   - `optic_specs.housing_material` and `mag_release_specs.material` are
     filled from `products.material`.
   - A spec value that disagrees with it is refused.
+- **Material family is required for approval; the material's wording is
+  not** (`supabase/material_optional.sql`).
+  - `'Unspecified'` is a valid family. It approves, and `optional_blank`
+    carries "material family unspecified" so those parts can be found later.
+  - A blank `material` sits in `optional_blank`, not `missing`.
+  - Except for optics: the optic rule row `housing_material` is required and
+    is filled from `material`, so an optic with no material still reads
+    missing "spec.housing_material". That is the rule as it stands, not an
+    accident; changing it is one row in `spec_field_rules`.
 
 **Never entered by `create_product()`:**
 
@@ -804,6 +814,73 @@ nothing is written.
   clickref `build-detail_<product slug>`.
 - A supplied Awin link whose merchant id disagrees with the partner's is
   refused.
+
+### The add-a-part page
+
+`gunforma-admin-part.html` is the form over `create_product()`. Like the
+other admin pages it carries its own Admin bar, not the site nav, so it is
+not a sixteenth nav copy; it has no analytics tag (the guard exempts
+`gunforma-admin-*`) and is `noindex`.
+
+- **The gate is `requireAdmin()` from `gunforma-admin-post.html`.** Nothing
+  renders until it passes. A signed-in non-admin gets "Admins only"; anyone
+  signed out goes to sign-in.
+- **Platform first, then category, then everything else.** Slide and barrel
+  lengths come from `platform_part_lengths`; when the chosen platform has
+  none, the page prints the same sentence the function would and offers no
+  Check or Save.
+- **The form is rendered from `spec_field_rules`.** What the page holds
+  itself is only how to draw a field (`BOOL_FIELDS`, `NUMBER_FIELDS`,
+  `LOOKUP_FIELDS`): column types are not readable through PostgREST. Check
+  runs the real function, so a wrong entry there is refused, not saved.
+- **Lookup tables and enums are strict dropdowns. Free-text fields suggest
+  only values already used by two or more products**, which is what keeps
+  the typos in `mount_system` ("Rail climp", "1914 clamp") from spreading.
+  `mag_release.caliber` stays free text: its live value `9mm/.380` is not in
+  `calibers`.
+- **Required yes/no and number fields start empty.** When one is left blank
+  and the dry run says nothing is missing, the column's default would be
+  stored silently, so Save waits until it is answered. That is the page
+  honouring the defaults rule above.
+- **Check, then Save.** Check calls `create_product(…, p_dry_run => true)`,
+  which answers **HTTP 500 with `error.code === 'P0DRY'`** and the result in
+  `error.details`. The page branches on the code and never on the status.
+  Save is enabled only while the form is byte-for-byte what was last checked.
+- **`p_specs` and `p_fits` are omitted when empty, never sent as `null`.** A
+  JSON null that reaches the function as the jsonb value `'null'` made
+  `jsonb_strip_blank()` throw "cannot call jsonb_each on a non-object".
+  `supabase/fix_strip_blank_and_link_result.sql` makes it read any
+  non-object as empty; the page keeps omitting them anyway.
+- **A retailer row is a retailer and a URL, nothing else.** The page never
+  sends `op_merchant_product_id`, `op_mpn` or `op_gtin`: they are the
+  retailer feed's own identifiers, which an admin cannot see on the
+  retailer's page, and the nightly sync fills them on its first match.
+- **After Check, every retailer link says whether a tracked link was
+  built.** A partner with no `awin_merchant_id` gets none, and the page says
+  so plainly: "untracked: no commission". This matters because `partners`
+  lists `optics-planet` (no Awin id) beside `awin-optics-planet`, and the two
+  read almost the same in the dropdown. The answer comes from
+  `variants[].retailers[].tracked_url` in the function's result (same fix
+  file); before that file is applied the page says tracking is not reported.
+- **Product photos are pasted https URLs, not uploads, for now.** The page
+  previews each one; a photo that does not load is flagged and counts as no
+  photo (it is not sent). Nothing writes to the `product-images` bucket, and
+  a maker changing their site breaks the photo — copying them into our own
+  storage is logged for later.
+- **The label preview runs `variantLabel()` over what `create_variant()`
+  stores.** `create_variant()` always writes `variant_label` as
+  `coalesce(p_variant_label, color || ' · ' || finish)`, and `variantLabel()`
+  returns a stored label verbatim — so 650 of 779 live variants read
+  "Colour · Finish", not the formula's "Colour / Finish". The page mirrors
+  that one coalesce, and every Check compares it with the labels the server
+  returns.
+- **Adding a colour** inserts into `colors` and needs
+  `supabase/colors_admin_insert.sql`. Without it the database refuses and
+  the page says so.
+- **`?build=<uuid>&part=<index>`** prefills brand, name, category and the
+  build's platform from a pending custom part and passes both through, so
+  Save re-links the part. A section with two categories ("Barrels &
+  Compensators") makes the admin pick; a section with none says so.
 
 ## Adding an affiliate link (CSV import)
 

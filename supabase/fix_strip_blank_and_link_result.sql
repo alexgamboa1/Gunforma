@@ -1,173 +1,38 @@
--- create_product.sql
--- APPLIED 2026-10-03. See the record at the bottom of this file.
--- Dry-run first the same day inside one transaction that was rolled back (a
--- DO block ending in RAISE EXCEPTION); the results are in #131.
--- spec_field_rules.sql was applied FIRST: every function here reads it.
+-- fix_strip_blank_and_link_result.sql
+-- NOT YET APPLIED. Dry-run 2026-10-04 against Gunforma-v2 inside one
+-- rolled-back transaction; results in #133. Apply after #133 is merged,
+-- alongside colors_admin_insert.sql. gunforma-admin-part.html reads both
+-- result shapes, so the order page-then-migration holds.
 --
--- product_data_status() below is SUPERSEDED by
--- fix_product_data_status_url.sql, which moves a blank url from
--- optional_blank to missing. Read that file for the live definition.
+-- Two changes, both create or replace, nothing else touched:
 --
--- jsonb_strip_blank() and create_product() below are restated by
--- fix_strip_blank_and_link_result.sql (non-objects read as empty; each
--- retailer link reported with its tracked URL). Its header says whether it
--- is applied; once it is, that file holds the live definitions.
+-- 1. jsonb_strip_blank() treats any non-object as empty. It raised "cannot
+--    call jsonb_each on a non-object" on JSON null, and create_product()
+--    runs it over p_product, every variant, every link, p_specs and p_fits —
+--    so a caller sending "p_fits": null as the jsonb value 'null' (not SQL
+--    NULL) had its whole call refused. Found replaying the add-a-part page's
+--    first payload; the page also leaves empty sections out.
 --
--- WHY. There was no way to add ONE product. Every product arrived in a bulk
--- load, create_variant() only adds to a product that already exists, and the
--- catalog tables carry SELECT policies only, so a signed-in admin cannot
--- write them from the site.
---
--- WHAT. One atomic call that writes everything an admin enters for a part:
---   p_product   brand (find-or-create), name, category, platforms[], slug, url,
---               description, family, material, material_family, fitment_notes,
---               build_warning, build_notes, weight_oz, fitment_confidence,
---               internal_notes
---   p_variants  one object per variant: colour/finish/sku/upc/msrp/label/notes,
---               every option column, image_url + gallery[], and links[]
---               (zero or more retailers; partner_slug + url on the variant
---               itself is shorthand for one)
---   p_specs     the category's <category>_specs row. Accepted keys are exactly
---               the category's spec_field_rules fields; `platform` and
---               `footprint` take slugs.
---   p_fits      light: light_compatibility[] · optic: adapter_footprints[] ·
---               barrel: slides[] · slide: barrels[] · magwell: frames[] ·
---               frame: magwells[]
---   p_build_id + p_part_index  swap a build's pending custom part for this
---               product (the variant flagged use_in_build, else the default)
---   p_dry_run   do everything, then raise P0DRY with the result in DETAIL so
---               nothing is written. The form's "Check" button uses it, and it
---               is the only safe way to try a part against production:
---               affiliate_links and price_history are ON DELETE RESTRICT, so a
---               real test product that got a link can never be deleted.
---
--- SAVING needs only: brand, name, category, at least one platform, the source
--- URL (the product page the data came from — a reference, rendered nowhere),
--- one variant, and a photo and MSRP on the default variant. Retailer links
--- are optional. A part can be saved unapproved; it cannot be saved silently
--- unapproved — the result always carries product_data_status().
---
--- APPROVED (product_data_status): description, material and material_family;
--- every required spec_field_rules field for the category (only-when fields
--- where their condition holds); a photo and an MSRP on every live variant;
--- at least one platform; and for a light, at least one light_compatibility
--- row. A retailer link is reported but never blocks approval.
--- fitment_confidence other than 'unverified' is refused unless approved.
---
--- PLATFORM IS EXPLICIT. Nothing defaults to P365. A slide or barrel belongs to
--- exactly one platform, and its spec row's platform is that one. A not-yet-
--- live platform is accepted (parts go in ahead of launch) with a warning.
---
--- NEVER ENTERED: the sync's columns (street_price, in_stock, last_checked,
--- op_last_matched_by), trigger-owned slide_class / barrel_class, any spec
--- column with no spec_field_rules row (including the ten no product has ever
--- filled), and products.pros / cons / editor_rating / installation_difficulty
--- / best_for. Existing values in those columns are untouched.
---
--- TRACKED LINKS ARE BUILT, NOT TYPED, for partners with an awin_merchant_id.
--- A supplied Awin link whose merchant id disagrees with the partner is
--- refused: 17 of 25 live Olight links carry OpticsPlanet's id.
---
--- WARNINGS, not errors: a new slide that is not added to the barrels that
--- carry a slide whitelist, and a new frame not added to the whitelisted
--- magwells, will show as NOT fitting them. The result names them.
---
--- The spec vocabulary and the variant vocabulary are different on purpose
--- (optic_specs.reticle "2 MOA Dot & 32 MOA Circle (MRS)" vs variant "MRS";
--- light_specs.battery_type vs variant "Rechargeable"), so nothing is copied
--- between them. Material IS one fact: products.material fills
--- optic_specs.housing_material / mag_release_specs.material, and the reverse
--- when only the spec side is given. A disagreement is refused.
---
--- Never use current_user in the guard: SECURITY DEFINER rewrites it to the
--- owner. See create_variant_backend_callable.sql.
+-- 2. create_product()'s result says, per retailer link, whether a tracked
+--    link was built: variants[].retailers[] = {partner, partner_name, url,
+--    tracked_url}. tracked_url is null for a partner with no
+--    awin_merchant_id, which earns no commission — and partners such as
+--    `optics-planet` (no Awin id) sit beside `awin-optics-planet` in the
+--    retailer list, so picking the wrong one is easy and was silent.
+--    The variants[] keys that already existed are unchanged. This is the
+--    whole function restated from create_product.sql with only the
+--    'variants' expression changed; diff the two to see it.
 
-create or replace function public.url_encode(p text) returns text
-language sql immutable strict set search_path = '' as $ue$
-  select coalesce(string_agg(
-    case when ch ~ '^[A-Za-z0-9_.~-]$' then ch
-         else upper(regexp_replace(encode(convert_to(ch, 'UTF8'), 'hex'), '(..)', '%\1', 'g')) end,
-    '' order by ord), '')
-  from regexp_split_to_table(p, '') with ordinality as t(ch, ord);
-$ue$;
-
--- A form sends "" (or null, or []) for an untouched field. Treat it as absent.
 create or replace function public.jsonb_strip_blank(j jsonb) returns jsonb
 language sql immutable set search_path = '' as $sb$
-  select coalesce((select jsonb_object_agg(e.key, e.value) from jsonb_each(j) e
-                    where e.value not in ('""'::jsonb, 'null'::jsonb, '[]'::jsonb)), '{}'::jsonb);
+  -- Anything that is not an object — SQL NULL, JSON null, an array, a string —
+  -- is an empty section. jsonb_each() raises on a non-object, and a form or a
+  -- PostgREST caller can send JSON null for a section it left out.
+  select case when jsonb_typeof(j) = 'object'
+              then coalesce((select jsonb_object_agg(e.key, e.value) from jsonb_each(j) e
+                              where e.value not in ('""'::jsonb, 'null'::jsonb, '[]'::jsonb)), '{}'::jsonb)
+              else '{}'::jsonb end;
 $sb$;
-
--- ── how complete a product is ───────────────────────────────────────────────
--- SUPERSEDED: see fix_product_data_status_url.sql (url is now missing[]).
--- { approved, missing[], optional_blank[], platforms[] }. Reads only catalog
--- data, as the caller. A field whose only-when condition is false is not
--- applicable and appears in neither list. Spec fields are reported as
--- "spec.<field>"; the form maps them to spec_field_rules.label.
-create or replace function public.product_data_status(p_product_id uuid) returns jsonb
-language plpgsql stable set search_path = '' as $ds$
-declare
-  pr record; j jsonb; v_tbl regclass; r record; v_col text; v_val text;
-  v_missing text[] := '{}'; v_opt text[] := '{}'; v_platforms text[];
-begin
-  select p.id, p.category, p.description, p.material, p.material_family::text as material_family,
-         p.url, p.weight_oz, p.fitment_notes
-    into pr from public.products p where p.id = p_product_id;
-  if not found then return null; end if;
-
-  if coalesce(btrim(pr.description), '') = ''     then v_missing := v_missing || 'description'::text; end if;
-  if coalesce(btrim(pr.material), '') = ''        then v_missing := v_missing || 'material'::text; end if;
-  if coalesce(btrim(pr.material_family), '') = '' then v_missing := v_missing || 'material_family'::text; end if;
-
-  v_platforms := array(select pl.slug from public.product_platforms pp join public.platforms pl on pl.id = pp.platform_id
-                        where pp.product_id = p_product_id order by pl.slug);
-  if cardinality(v_platforms) = 0 then v_missing := v_missing || 'platform'::text; end if;
-
-  v_tbl := to_regclass('public.' || quote_ident(pr.category::text || '_specs'));
-  if v_tbl is not null then
-    execute format('select to_jsonb(s) from %s s where s.product_id = $1', v_tbl) into j using p_product_id;
-  end if;
-  j := coalesce(j, '{}'::jsonb);   -- no spec row: every applicable required field is missing
-  for r in select f.field, f.requirement, f.only_when_field, f.only_when_values
-             from public.spec_field_rules f where f.category = pr.category order by f.sort_order loop
-    if r.only_when_field is not null and not coalesce((j ->> r.only_when_field) = any (r.only_when_values), false) then
-      continue;   -- not applicable
-    end if;
-    v_col := case r.field when 'platform' then 'platform_id' when 'footprint' then 'footprint_id' else r.field end;
-    v_val := j ->> v_col;
-    if coalesce(btrim(v_val), '') = '' then
-      if r.requirement = 'required' then v_missing := v_missing || ('spec.' || r.field);
-      else v_opt := v_opt || ('spec.' || r.field); end if;
-    end if;
-  end loop;
-
-  if not exists (select 1 from public.product_variants pv where pv.product_id = p_product_id and pv.retired_at is null) then
-    v_missing := v_missing || 'variant'::text;
-  end if;
-  v_missing := v_missing || array(select 'variant ' || pv.slug || ': photo' from public.product_variants pv
-                                   where pv.product_id = p_product_id and pv.retired_at is null and pv.primary_image_url is null order by pv.slug);
-  v_missing := v_missing || array(select 'variant ' || pv.slug || ': msrp' from public.product_variants pv
-                                   where pv.product_id = p_product_id and pv.retired_at is null and pv.msrp is null order by pv.slug);
-
-  if pr.category = 'light' and not exists (select 1 from public.light_compatibility lc where lc.light_product_id = p_product_id) then
-    v_missing := v_missing || 'light compatibility'::text;
-  end if;
-
-  if not exists (select 1 from public.affiliate_links al join public.product_variants pv on pv.id = al.variant_id
-                  where pv.product_id = p_product_id and pv.retired_at is null and al.retired_at is null) then
-    v_opt := v_opt || 'retailer link'::text;
-  end if;
-  if coalesce(btrim(pr.url), '') = ''           then v_opt := v_opt || 'url'::text; end if;
-  if pr.weight_oz is null                       then v_opt := v_opt || 'weight_oz'::text; end if;
-  if coalesce(btrim(pr.fitment_notes), '') = '' then v_opt := v_opt || 'fitment_notes'::text; end if;
-
-  return jsonb_build_object('approved', cardinality(v_missing) = 0, 'missing', to_jsonb(v_missing),
-                            'optional_blank', to_jsonb(v_opt), 'platforms', to_jsonb(v_platforms));
-end;
-$ds$;
-
-revoke all on function public.product_data_status(uuid) from public, anon;
-grant execute on function public.product_data_status(uuid) to authenticated, service_role;
 
 create or replace function public.create_product(
   p_product jsonb, p_variants jsonb, p_specs jsonb default null, p_fits jsonb default null,
@@ -583,7 +448,13 @@ begin
     'has_spec_sheet', v_has_specs, 'fitment_confidence', v_confidence, 'warnings', to_jsonb(v_warn),
     'variants', (select jsonb_agg(jsonb_build_object('id', pv.id, 'slug', pv.slug, 'label', pv.variant_label, 'default', pv.is_default,
                     'photos', (select count(*) from public.variant_images vi where vi.variant_id = pv.id),
-                    'links', (select count(*) from public.affiliate_links al where al.variant_id = pv.id))
+                    'links', (select count(*) from public.affiliate_links al where al.variant_id = pv.id),
+                    -- one entry per retailer link: tracked_url is the link the buy
+                    -- button will use, null when none was built (no commission)
+                    'retailers', coalesce((select jsonb_agg(jsonb_build_object('partner', pa.slug, 'partner_name', pa.name,
+                                     'url', al.url, 'tracked_url', al.affiliate_url) order by pa.slug, al.url)
+                                   from public.affiliate_links al join public.partners pa on pa.id = al.partner_id
+                                  where al.variant_id = pv.id), '[]'::jsonb))
                   order by pv.is_default desc, pv.slug)
                  from public.product_variants pv where pv.product_id = v_product_id))
     || v_status;
@@ -598,44 +469,7 @@ $fn$;
 comment on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) is
   'Admin / service_role only. Creates a product with its brand, platforms, spec sheet, every variant (photos + retailer links) and fits-with rules in one transaction, optionally re-links a build''s pending custom part, and returns product_data_status. p_dry_run raises P0DRY with the result instead of writing.';
 
--- CREATE re-grants EXECUTE to anon through default privileges; take it back.
+-- create or replace keeps the grants; restated so this file says the whole
+-- of what is live.
 revoke all on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) from public, anon;
 grant execute on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) to authenticated, service_role;
-
--- ── the needs-data list (PR 3) ──────────────────────────────────────────────
--- Unapproved products and what each is missing. Admins (and the service role)
--- see rows; everyone else sees none. security_invoker so it reads as the
--- caller, and the filter is in the view itself.
-create or replace view public.products_needing_data with (security_invoker = true) as
-select p.id as product_id, p.slug, p.name, m.name as brand, p.category,
-       array(select jsonb_array_elements_text(st.s -> 'platforms')) as platforms,
-       array(select jsonb_array_elements_text(st.s -> 'missing'))   as missing
-  from public.products p
-  join public.manufacturers m on m.id = p.brand_id
-  cross join lateral (select public.product_data_status(p.id) as s) st
- where (public.is_admin() or public.is_trusted_backend())
-   and not (st.s ->> 'approved')::boolean;
-
-revoke all on public.products_needing_data from public, anon, authenticated;
-grant select on public.products_needing_data to authenticated, service_role;
-
--- ============================================================
--- APPLIED 2026-10-03 as migration create_product (20261003223355) to
--- project lagjjcpclvzrjlrswojt, from this file as merged in #131, after
--- spec_field_rules (20261003223210).
--- Verified live after the change — md5(pg_proc.prosrc) against the body
--- between each function's dollar quotes in this file, all identical:
---
---   create_product        ddc77c90ef658b914f7adb285e4b15ff
---   product_data_status   6d89efbeb72d7de5a6506d5c3cdb6a4b
---   url_encode            7cf7c7bb7025f85b8fc653b7465a0fbc
---   jsonb_strip_blank     e84ec6d60424e3846ddc575d17cfab81
---
---   signatures, search_path = '', SECURITY DEFINER on create_product only,
---     volatility (create_product v, product_data_status s, helpers i) match
---   EXECUTE on create_product / product_data_status: authenticated and
---     service_role only; anon through PostgREST gets 42501
---   products_needing_data: security_invoker=true; SELECT for authenticated
---     and service_role only; anon through PostgREST gets 42501
---   232 of 242 products approved; the 10 unapproved are all 'verified'
--- ============================================================

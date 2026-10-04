@@ -1,28 +1,30 @@
--- fix_product_data_status_url.sql
--- APPLIED 2026-10-03. See the record at the bottom of this file.
--- Dry-run first the same day inside one rolled-back transaction; the
--- results are in #132.
+-- material_optional.sql
+-- NOT YET APPLIED. Dry-run 2026-10-04 against Gunforma-v2 inside one
+-- rolled-back transaction; results in #133. Apply after #133 is merged,
+-- alongside colors_admin_insert.sql and fix_strip_blank_and_link_result.sql.
 --
--- product_data_status() is restated by material_optional.sql (material
--- optional, family 'Unspecified' reported). Its header says whether it is
--- applied; once it is, that file holds the live definition.
+-- The material rule, as ruled:
+--   * material_family stays REQUIRED for approval. 'Unspecified' (a row in
+--     public.materials) is a valid answer. When it is the answer,
+--     optional_blank carries "material family unspecified" so those parts can
+--     be found later. It does not block approval.
+--   * material, the exact wording, becomes OPTIONAL: a blank one moves from
+--     missing[] to optional_blank[].
 --
--- A missing source URL is MISSING, not optional.
+-- Only product_data_status() changes. create_product() still fills
+-- optic_specs.housing_material and mag_release_specs.material from the
+-- product's material when one is given, and leaves them alone when it is
+-- blank, exactly as before.
 --
--- create_product() refuses a product without products.url: it is the page
--- the data came from, and without it nothing on the product can be checked
--- again. product_data_status() as applied in create_product.sql reported a
--- blank url under optional_blank, so a product with no source could still
--- read as approved, and the status disagreed with the rule the function that
--- creates products enforces. This moves it to missing[].
+-- ONE CONSEQUENCE, deliberately left as it is: the optic rule row
+-- housing_material is 'required' in spec_field_rules. An optic with no
+-- material therefore still reads missing "spec.housing_material" — blank
+-- material stops blocking approval for every category except optics. Making
+-- that row optional would be a one-row change to spec_field_rules; it is not
+-- made here.
 --
--- Only product_data_status() changes. create_product() never produces a
--- blank url, so its results are unaffected; the one live product affected is
--- streamlight-tlr-7-sub, which was already unapproved (no MSRP on one
--- variant) and now also reports url.
---
--- create or replace keeps the grants; they are restated so this file says
--- the whole of what is live.
+-- Restated from fix_product_data_status_url.sql (applied), with only the two
+-- material lines changed; diff the two to see it.
 
 create or replace function public.product_data_status(p_product_id uuid) returns jsonb
 language plpgsql stable set search_path = '' as $ds$
@@ -36,7 +38,6 @@ begin
   if not found then return null; end if;
 
   if coalesce(btrim(pr.description), '') = ''     then v_missing := v_missing || 'description'::text; end if;
-  if coalesce(btrim(pr.material), '') = ''        then v_missing := v_missing || 'material'::text; end if;
   if coalesce(btrim(pr.material_family), '') = '' then v_missing := v_missing || 'material_family'::text; end if;
   -- the source page the data came from: create_product() requires it, so a
   -- product without one did not come through it and is not approved
@@ -80,6 +81,11 @@ begin
                   where pv.product_id = p_product_id and pv.retired_at is null and al.retired_at is null) then
     v_opt := v_opt || 'retailer link'::text;
   end if;
+  -- material (the exact wording) is optional; material_family stays required
+  -- above, and 'Unspecified' answers it — reported here so those parts can be
+  -- found later
+  if coalesce(btrim(pr.material), '') = ''      then v_opt := v_opt || 'material'::text; end if;
+  if pr.material_family = 'Unspecified'         then v_opt := v_opt || 'material family unspecified'::text; end if;
   if pr.weight_oz is null                       then v_opt := v_opt || 'weight_oz'::text; end if;
   if coalesce(btrim(pr.fitment_notes), '') = '' then v_opt := v_opt || 'fitment_notes'::text; end if;
 
@@ -90,17 +96,3 @@ $ds$;
 
 revoke all on function public.product_data_status(uuid) from public, anon;
 grant execute on function public.product_data_status(uuid) to authenticated, service_role;
-
--- ============================================================
--- APPLIED 2026-10-03 as migration fix_product_data_status_url
--- (20261003225703) to project lagjjcpclvzrjlrswojt, from this file as
--- merged in #132. Verified live after the change:
---
---   md5(pg_proc.prosrc) 88db1a8510011c7181408aebc50dde63, identical to the
---     body between this file's $ds$ quotes
---   search_path = '', stable, not SECURITY DEFINER; EXECUTE for
---     authenticated and service_role only
---   approved: 232 of 242, unchanged by the fix
---   url in missing[]: streamlight-tlr-7-sub only; url in optional_blank[]
---     on no product
--- ============================================================
