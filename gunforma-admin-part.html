@@ -913,7 +913,6 @@ function variantHtml(v, idx, cols) {
       '<div class="field"><div class="field-label">Retailer</div><select class="field-select" data-vl="' + u + '|' + i + '|partner_slug"><option value="">Choose…</option>' +
         (L.partners || []).map(function (p) { return '<option value="' + esc(p.slug) + '"' + (l.partner_slug === p.slug ? ' selected' : '') + '>' + esc(p.name) + '</option>'; }).join('') + '</select></div>' +
       '<div class="field" style="grid-column: span 2"><div class="field-label">Retailer URL</div>' + input('data-vl="' + u + '|' + i + '|url" type="url" placeholder="https://"', l.url) + '</div>' +
-      '<div class="field"><div class="field-label">Product id pin</div>' + input('data-vl="' + u + '|' + i + '|pin" autocomplete="off"', l.pin) + '</div>' +
     '</div></div>';
   }).join('');
   return '<div class="variant" id="v-' + u + '">' +
@@ -1044,17 +1043,18 @@ function variantsPayload() {
       if (blank(val)) return;
       o[c.key] = c.bool ? val === 'true' : String(val).trim();
     });
+    // Retailer and URL only. op_merchant_product_id / op_mpn / op_gtin are
+    // never sent: they are the retailer feed's identifiers, which an admin
+    // cannot see on the retailer's page, and the nightly sync fills them.
     const links = v.links.filter(linkComplete).map(function (l) {
-      const x = { partner_slug: l.partner_slug, url: l.url.trim() };
-      if (!blank(l.pin)) x.op_merchant_product_id = l.pin.trim();
-      return x;
+      return { partner_slug: l.partner_slug, url: l.url.trim() };
     });
     if (links.length) o.links = links;
     return o;
   });
 }
 function linkComplete(l) { return !!(l.partner_slug && isHttpUrl(l.url)); }
-function linkStarted(l) { return !!(l.partner_slug || !blank(l.url) || !blank(l.pin)); }
+function linkStarted(l) { return !!(l.partner_slug || !blank(l.url)); }
 function variantIdentity(v) {
   const cols = OPTION_COLS[S.category] || [];
   return JSON.stringify([v.color, (v.finish || '').trim()].concat(cols.map(function (c) { return String(v.opts[c.key] || '').trim(); })));
@@ -1478,7 +1478,7 @@ function onClick(e) {
     if (S.defaultUid === v.uid) S.defaultUid = S.variants[0].uid;
     renderVariants(); afterChange(); return;
   }
-  if (act === 'l-add') { variantByUid(b.dataset.u).links.push({ partner_slug: '', url: '', pin: '' }); renderVariants(); afterChange(); return; }
+  if (act === 'l-add') { variantByUid(b.dataset.u).links.push({ partner_slug: '', url: '' }); renderVariants(); afterChange(); return; }
   if (act === 'l-del') { variantByUid(b.dataset.u).links.splice(Number(b.dataset.i), 1); renderVariants(); afterChange(); return; }
   if (act === 'lc-add') { S.lightRows.push({ rail_type: '', fitment_type: '', key_or_adapter: '', gun: '' }); renderFits(); afterChange(); return; }
   if (act === 'lc-del') { S.lightRows.splice(Number(b.dataset.i), 1); renderFits(); afterChange(); return; }

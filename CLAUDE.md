@@ -851,6 +851,10 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   `jsonb_strip_blank()` throw "cannot call jsonb_each on a non-object".
   `supabase/fix_strip_blank_and_link_result.sql` makes it read any
   non-object as empty; the page keeps omitting them anyway.
+- **A retailer row is a retailer and a URL, nothing else.** The page never
+  sends `op_merchant_product_id`, `op_mpn` or `op_gtin`: they are the
+  retailer feed's own identifiers, which an admin cannot see on the
+  retailer's page, and the nightly sync fills them on its first match.
 - **After Check, every retailer link says whether a tracked link was
   built.** A partner with no `awin_merchant_id` gets none, and the page says
   so plainly: "untracked: no commission". This matters because `partners`
