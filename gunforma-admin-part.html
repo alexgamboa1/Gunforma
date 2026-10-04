@@ -63,6 +63,9 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 .field-note { font-size: 11px; color: #888; line-height: 1.5; }
 .field-note.bad { color: #b03a2e; }
 .field-note.good { color: #1d6b43; }
+.bad-text { color: #b03a2e; }
+.good-text { color: #1d6b43; }
+.warn-text-inline { color: #8a6a2a; }
 .field-input, .field-select, .field-textarea { width: 100%; font: inherit; font-size: 13px; padding: 8px 10px; border: 0.5px solid #ccc; border-radius: 4px; background: #fff; color: #1a1a1a; }
 .field-textarea { min-height: 70px; resize: vertical; }
 .field-input:focus, .field-select:focus, .field-textarea:focus { outline: 2px solid #4a9edd; outline-offset: -1px; border-color: #4a9edd; }
@@ -638,14 +641,91 @@ function renderProductSuggest() {
   const w = $('dl-material-wrap');
   if (w) w.innerHTML = datalist('dl-material', SUGGEST['product.material']);
 }
+// THE SUGGESTED SLUG. The function's own default is brand + full name,
+// which gave a 70-character address. The page suggests a short one instead
+// and always sends it, so the server never falls back to the long form:
+//   brand, then the name with filler dropped and repeats removed, then the
+//   model it fits (found in the name against the chosen platform's guns, so
+//   "X Macro" on P365 reads p365xmacro), else the platform itself.
+// Aims for 50 characters by dropping words from the MIDDLE of the name:
+// the first word says what kind of thing it is and the last two are the
+// noun ("mag release", "mag extension"), so those stay. Editable; the typed
+// slug wins.
+// The ruled filler, plus the plain connectives ("and", "all", "of", "a",
+// "an") that carry nothing in an address.
+const SLUG_FILLER = { for: 1, sig: 1, sauer: 1, the: 1, with: 1, and: 1, all: 1, of: 1, a: 1, an: 1 };
+const SLUG_WORD = { magazine: 'mag', magazines: 'mag', mags: 'mag' };
+const SLUG_NO_MODEL = { optic: 1, light: 1 };   // parts that are not cut for one pistol
+const SLUG_TARGET = 50, SLUG_WARN = 60;
+const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+function modelKeys() {
+  // joined-token form -> the model to append, e.g. xmacro -> p365xmacro
+  const keys = {};
+  chosenPlatforms().forEach(function (pl) {
+    keys[pl.slug] = pl.slug;
+    (L.guns || []).filter(function (g) { return g.platform_id === pl.id; }).forEach(function (g) {
+      const full = slugify(g.name).replace(/-/g, '');
+      keys[full] = full;
+      const suffix = full.indexOf(pl.slug) === 0 ? full.slice(pl.slug.length) : '';
+      if (suffix.length >= 2 && !keys[suffix]) keys[suffix] = full;
+    });
+  });
+  return keys;
+}
+function suggestSlug() {
+  const p = S.product;
+  const m = brandMatch();
+  const brandSlug = m ? m.slug : slugify(p.brand);
+  if (!brandSlug || blank(p.name)) return '';
+  let toks = slugify(p.name).split('-').filter(Boolean);
+  // leading name words that are brand words ("Radian Ramjet" under the brand
+  // Radian Weapons, "Sig Sauer P365 …" under Sig Sauer) are already said
+  const bt = brandSlug.split('-');
+  while (toks.length > 1 && bt.indexOf(toks[0]) !== -1) toks.shift();
+  toks = toks.map(function (w) { return SLUG_WORD[w] || w; }).filter(function (w) { return !SLUG_FILLER[w]; });
+  // the longest run of name words that spells a model of the chosen platform
+  const keys = modelKeys();
+  let best = null;
+  for (let i = 0; i < toks.length; i++) {
+    for (let j = i + 1; j <= toks.length; j++) {
+      const k = keys[toks.slice(i, j).join('')];
+      if (k && (!best || j - i > best.n)) best = { i: i, n: j - i, model: k };
+    }
+  }
+  let model = '';
+  if (best) { model = best.model; toks.splice(best.i, best.n); }
+  else if (S.platforms.size === 1 && !SLUG_NO_MODEL[S.category]) model = chosenPlatforms()[0].slug;
+  const seen = {};
+  toks = toks.filter(function (w) { if (seen[w] || w === model) return false; seen[w] = 1; return true; });
+  const join = function (ws) { return [brandSlug].concat(ws, model ? [model] : []).join('-'); };
+  while (join(toks).length > SLUG_TARGET && toks.length > 3) toks.splice(1, 1);
+  return join(toks);
+}
 function computedSlug() {
   const p = S.product;
-  if (p.slugTouched) return p.slug.trim();
-  const m = brandMatch();
-  const brand = m ? m.name : p.brand.trim();
-  const name = p.name.trim();
-  if (!brand || !name) return '';
-  return slugify(name.toLowerCase().indexOf(brand.toLowerCase()) === 0 ? name : brand + ' ' + name);
+  return p.slugTouched ? p.slug.trim() : suggestSlug();
+}
+
+// "already taken", as the admin types: the catalog loaded with the page
+// answers at once, and products.slug is asked live (debounced) for anything
+// added since. Check would refuse a duplicate anyway; this says so earlier.
+const slugState = { slug: null, taken: null };
+let slugTimer = null;
+function checkSlugTaken() {
+  const s = computedSlug();
+  if (s === slugState.slug) return;            // asked once per slug; the answer (or a failure) stays
+  slugState.slug = s; slugState.taken = null;
+  clearTimeout(slugTimer);
+  if (!s || !SLUG_RE.test(s)) return;
+  if ((L.products || []).some(function (x) { return x.slug === s; })) { slugState.taken = true; return; }
+  slugTimer = setTimeout(async function () {
+    const { data, error } = await sb.from('products').select('id').eq('slug', s).limit(1);
+    if (slugState.slug !== s) return;          // superseded while waiting
+    // a failed lookup leaves taken = null: the panel keeps saying "checking",
+    // Check is held, and the server's own duplicate refusal still stands
+    slugState.taken = error ? null : data.length > 0;
+    renderProductNotes(); afterChange();
+  }, 300);
 }
 function renderProductNotes() {
   const p = S.product;
@@ -657,12 +737,22 @@ function renderProductNotes() {
   }
   const slugEl = document.querySelector('[data-p="slug"]');
   if (slugEl && !p.slugTouched) slugEl.value = computedSlug();
+  checkSlugTaken();
   const sn = $('slug-note');
   if (sn) {
     const s = computedSlug();
     const path = window.productPath(S.category, s);
-    sn.innerHTML = 'Permanent: this is the part\'s URL for good. ' + (path ? 'It will live at <code>' + esc(path) + '</code>' : '') +
-      (p.slugTouched ? ' (typed by hand)' : ' (generated; Check confirms it)') + '.';
+    const bad = !!s && !SLUG_RE.test(s);
+    const long = s.length > SLUG_WARN;
+    const lines = ['Permanent: this is the part\'s URL for good.' + (p.slugTouched ? ' Typed by hand.' : ' Suggested; edit it if a shorter one reads better.')];
+    if (path && !bad) lines.push('It will live at <code>' + esc(path) + '</code> (' + s.length + ' characters).');
+    if (bad) lines.push('<span class="bad-text">Use lowercase letters, numbers and single hyphens only.</span>');
+    else if (slugState.taken === true) lines.push('<span class="bad-text"><strong>Already taken:</strong> another product uses this address. Change it.</span>');
+    else if (s && slugState.taken === null) lines.push('Checking it is free…');
+    else if (s && slugState.taken === false) lines.push('<span class="good-text">Free.</span>');
+    if (long && !bad) lines.push('<span class="warn-text-inline">Over ' + SLUG_WARN + ' characters. Shorten it if you can: it is the address people share.</span>');
+    sn.innerHTML = lines.join(' ');
+    if (slugEl) slugEl.classList.toggle('bad', bad || slugState.taken === true);
   }
   const un = $('url-note');
   const urlEl = document.querySelector('[data-p="url"]');
@@ -1067,7 +1157,9 @@ function payload() {
     brand: p.brand.trim(), name: p.name.trim(), category: S.category,
     platforms: chosenPlatforms().map(function (x) { return x.slug; }), url: p.url.trim(),
   };
-  if (p.slugTouched && !blank(p.slug)) prod.slug = p.slug.trim();
+  // always sent: the suggested short slug, or the one typed by hand
+  const slug = computedSlug();
+  if (slug) prod.slug = slug;
   ['description', 'material', 'material_family', 'fitment_notes', 'build_warning', 'build_notes', 'internal_notes'].forEach(function (k) {
     if (!blank(p[k])) prod[k] = p[k].trim();
   });
@@ -1098,7 +1190,10 @@ function progress() {
   add(save, !blank(p.brand), 'Brand');
   add(save, !blank(p.name), 'Name');
   add(save, isHttpUrl(p.url), 'Source URL');
-  if (p.slugTouched) add(save, !blank(p.slug), 'URL slug (typed by hand, so it cannot be empty)');
+  const slug = computedSlug();
+  add(save, !!slug && SLUG_RE.test(slug), 'URL slug: lowercase letters, numbers and hyphens');
+  if (slug && SLUG_RE.test(slug)) add(save, slugState.slug === slug && slugState.taken === false,
+    slugState.taken === true ? 'URL slug is already taken' : slugState.taken === null ? 'URL slug: checking it is free' : 'URL slug is free');
   if (!blank(p.weight_oz) && !(Number(p.weight_oz) >= 0)) add(save, false, 'Weight must be a number');
 
   const rules = rulesFor(S.category).filter(ruleApplies);

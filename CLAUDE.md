@@ -851,6 +851,23 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   `jsonb_strip_blank()` throw "cannot call jsonb_each on a non-object".
   `supabase/fix_strip_blank_and_link_result.sql` makes it read any
   non-object as empty; the page keeps omitting them anyway.
+- **The page suggests a short slug and always sends it.** `create_product()`
+  falls back to brand + full name, which produced a 70-character address
+  (Springer's "+3 Magazine Extension for Sig Sauer X Macro 17rd Mags").
+  The suggestion is brand, then the name with filler dropped ("for", "sig",
+  "sauer", "the", "with", "and", "all", "of", "a", "an"; "magazine"/"mags" →
+  "mag") and leading brand words removed, then the model it fits, found in
+  the name against the chosen platform's guns ("X Macro" on P365 →
+  `p365xmacro`), else the platform. Over 50 characters it drops words from
+  the middle, keeping the first word and the last two (the noun). It warns
+  over 60, refuses anything but lowercase letters, digits and single
+  hyphens, and says "already taken" as the admin types — from the catalog
+  loaded with the page, then `products.slug` live.
+  - Run over all 243 live products: average 30 characters, longest 52, none
+    over 60. Trimming can make two near-identical names collide (the two
+    ECM mag releases); the "already taken" check is what catches that.
+  - A slug can be changed afterwards in the database (Springer's was), but
+    it is the shared address: the old one 404s at once.
 - **A retailer row is a retailer and a URL, nothing else.** The page never
   sends `op_merchant_product_id`, `op_mpn` or `op_gtin`: they are the
   retailer feed's own identifiers, which an admin cannot see on the
