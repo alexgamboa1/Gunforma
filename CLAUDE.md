@@ -899,6 +899,55 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   Save re-links the part. A section with two categories ("Barrels &
   Compensators") makes the admin pick; a section with none says so.
 
+### Pending build parts → the catalog, and the needs-data page
+
+A builder's hand-typed part is stored as a **pending custom part**
+(`pending: true`, no `refId`) and shows "Pending catalog review" in
+`gunforma-admin-queue.html`. Beside each one the queue offers:
+
+- **Add to catalog** → `gunforma-admin-part.html?build=<id>&part=<index>`.
+  `create_product()` re-links the part when it saves.
+- **Link to existing part** → pick a product (only those in the part's
+  section, by `js/build-categories.js`) and a variant; the page calls
+  `relink_build_part(build, index, product, variant, variant_specs)`
+  (`supabase/relink_build_part.sql`).
+- A part whose section has **no catalog category** (misc, mags, holsters,
+  paintjob, knife) gets a reason line and neither action.
+
+**The index is the part's ORIGINAL index in `parts_snapshot`.** The queue
+renders parts in stored order, so its row index is that index.
+
+`relink_build_part()` writes what `create_product()`'s re-link writes, **plus
+`variantSpecs`**, which the queue computes with `js/variant-label.js` and the
+function stores only when non-empty. It refuses a part that is not pending,
+a variant that is not the product's or is retired, and **a part with
+corrections in `builds.edit_history`** — the build page lays those over the
+entry, so a linked part would read as the correction; it says how many. It
+does not check category against section: the page restricts the picker, and
+a SQL copy of the taxonomy would be a third one.
+
+`scripts/snapshot-roundtrip.test.mjs` runs post-build's two hydration paths
+and `buildPartsSnapshot()` over the exact entry the function stored in its
+dry run, so a re-linked part surviving an edit-and-save is checked on every
+deploy. (Its keys are compared as a set: Postgres stores jsonb keys in its
+own order, so a stored row never had the writer's order.)
+
+**`gunforma-admin-data.html` ("Needs data")** lists `products_needing_data`
+by how many approved builds use each part, then fewest missing; approved
+parts with no buy link (the partnership pipeline, grouped by brand); and
+material family "Unspecified". Read-only: editing an existing product is
+the next project, and the page says so instead of linking to a dead end.
+Same gate as the add-a-part page, `noindex`, no analytics tag.
+
+Two things noticed here and not fixed:
+
+- `create_product()`'s own re-link writes no `variantSpecs`, and does not
+  refuse a part that has corrections. `relink_build_part()` does both.
+- `prevent_owner_edit_history_change()` lets only `is_admin()` change
+  `builds.edit_history`, so the service role and a direct session are
+  refused — the "service_role bypasses RLS, not triggers" trap above, failing
+  closed.
+
 ## Adding an affiliate link (CSV import)
 
 New `affiliate_links` rows come from two places:

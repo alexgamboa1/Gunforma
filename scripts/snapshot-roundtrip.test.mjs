@@ -125,6 +125,29 @@ const PAINT = { category: 'paintjob', refId: null, brand: 'Shop', name: 'FDE · 
   pending: false, finish: { shop: 'Shop', color: 'FDE', stipple: 'Dragon scale' } };
 const PENDING = { category: 'grips', refId: null, brand: 'Someone', name: 'Custom grip', pending: true };
 
+// A part re-linked by relink_build_part() (supabase/relink_build_part.sql),
+// exactly as the function stored it in its dry run against Gunforma-v2:
+// "P365 Complete Build" part 6, the pending "Base Plate +3", linked to the
+// Springer Precision base plate. Keys are in jsonb's own order, not
+// buildPartsSnapshot()'s — Postgres sorts jsonb keys on write, so the stored
+// row never had the writer's order. What must hold is that a load → save in
+// the builder writes back the same keys with the same values, so the stored
+// jsonb would be unchanged; the comparison is key by key for that reason.
+// No variantFinish: the Tan variant has none, and the function strips nulls.
+const RELINKED = {
+  name: '+3 Magazine Extension for Sig Sauer X Macro 17rd Mags', brand: 'Springer Precision',
+  refId: 'f309b3ee-26f8-4b64-812b-b072d05601ca', pending: false, category: 'basepad',
+  imageUrl: 'https://cdn11.bigcommerce.com/s-pmz45dzobp/images/stencil/2048x2048/products/606/2627/277_-_P365_Macro_Extension_Tan_4__30950.1673555216.jpg?c=1',
+  variantId: '26ee942d-1d0c-4044-96e1-6c96b6dd5711', variantColor: 'Tan', variantLabel: 'Tan',
+};
+// The same link with the spec line the queue page passes (computed with
+// js/variant-label.js) — the dry run's signed-in-admin case.
+const RELINKED_SPECS = Object.assign({}, RELINKED, { variantSpecs: '2 MOA · Red dot' });
+const sameKeysAndValues = (a, b) => {
+  const sort = (o) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
+  return sort(a) === sort(b);
+};
+
 test('post-build has the two hydration paths this test expects', () => {
   // Edit mode and the Armory handoff. If this count changes, a path was
   // added or reshaped — read it, then update the number; the round-trip
@@ -152,6 +175,13 @@ for (const [i, site] of SITES.entries()) {
     for (const row of [PLAIN, NOTED, PAINT, PENDING]) {
       const [out] = roundTrip(site, [row]);
       assert.equal(JSON.stringify(out), JSON.stringify(row), 'changed: ' + row.name);
+    }
+  });
+
+  test(`${where}: a part re-linked by relink_build_part() survives load → save`, () => {
+    for (const row of [RELINKED, RELINKED_SPECS]) {
+      const [out] = roundTrip(site, [row]);
+      assert.ok(sameKeysAndValues(out, row), 'changed on round trip:\n  stored ' + JSON.stringify(row) + '\n  saved  ' + JSON.stringify(out));
     }
   });
 
