@@ -1,6 +1,7 @@
 -- fix_product_data_status_url.sql
--- NOT YET APPLIED. Dry-run 2026-10-03 against Gunforma-v2 inside one
--- rolled-back transaction; results in the PR.
+-- APPLIED 2026-10-03. See the record at the bottom of this file.
+-- Dry-run first the same day inside one rolled-back transaction; the
+-- results are in #132.
 --
 -- A missing source URL is MISSING, not optional.
 --
@@ -85,3 +86,17 @@ $ds$;
 
 revoke all on function public.product_data_status(uuid) from public, anon;
 grant execute on function public.product_data_status(uuid) to authenticated, service_role;
+
+-- ============================================================
+-- APPLIED 2026-10-03 as migration fix_product_data_status_url
+-- (20261003225703) to project lagjjcpclvzrjlrswojt, from this file as
+-- merged in #132. Verified live after the change:
+--
+--   md5(pg_proc.prosrc) 88db1a8510011c7181408aebc50dde63, identical to the
+--     body between this file's $ds$ quotes
+--   search_path = '', stable, not SECURITY DEFINER; EXECUTE for
+--     authenticated and service_role only
+--   approved: 232 of 242, unchanged by the fix
+--   url in missing[]: streamlight-tlr-7-sub only; url in optional_blank[]
+--     on no product
+-- ============================================================
