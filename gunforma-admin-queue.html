@@ -106,6 +106,22 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .simple-part-thumb-fallback { font-size: 8px; color: #b8b5ac; letter-spacing: 0.06em; text-align: center; padding: 2px; }
 .simple-part-brand { font-size: 10px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
 .simple-part-variant { display: inline-block; margin-left: 6px; font-size: 9.5px; color: #555; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 1px 6px; border-radius: 20px; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.catalog-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 2px 0; }
+.btn-catalog { font: inherit; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 6px 10px; border-radius: 4px; border: 0.5px solid #1a1a1a; background: #fff; color: #1a1a1a; text-decoration: none; cursor: pointer; }
+.btn-catalog.primary { background: #1a1a1a; color: #fff; }
+.btn-catalog:disabled { opacity: 0.35; cursor: not-allowed; }
+.catalog-reason { font-size: 11px; color: #777; margin: 6px 0 2px 0; }
+.catalog-note { font-size: 11px; color: #8a6a2a; }
+.link-panel { border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 12px; margin: 8px 0; background: #fafaf8; }
+.link-panel input[type=text] { width: 100%; font: inherit; font-size: 13px; padding: 7px 9px; border: 0.5px solid #ccc; border-radius: 4px; }
+.link-results { max-height: 260px; overflow-y: auto; margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+.link-result { display: flex; gap: 8px; align-items: flex-start; font-size: 12px; padding: 6px; border-radius: 4px; cursor: pointer; }
+.link-result.on { background: #eef6fd; }
+.link-result img { width: 40px; height: 40px; object-fit: contain; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 3px; flex-shrink: 0; }
+.link-choice { font-size: 12px; line-height: 1.6; margin: 8px 0; }
+.link-choice select { font: inherit; font-size: 12px; padding: 4px 6px; }
+.link-msg { font-size: 11px; line-height: 1.5; margin-top: 6px; }
+.link-msg.bad { color: #b03a2e; }
 .simple-part-pending-tag { font-size: 9px; color: #b45309; background: #fef3e2; border: 0.5px solid #f9b860; padding: 2px 6px; border-radius: 20px; font-weight: 700; margin-left: 6px; }
 .no-parts-note { font-size: 12px; color: #999; padding: 16px; text-align: center; background: #fafaf8; border-radius: 6px; border: 0.5px solid #e5e5e5; }
 
@@ -247,6 +263,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
          back here but nothing here linked there. -->
     <a href="/admin-post" class="nav-right-link">Post build</a>
     <a href="gunforma-admin-part.html" class="nav-right-link">Add a part</a>
+    <a href="gunforma-admin-data.html" class="nav-right-link">Needs data</a>
     <a href="gunforma-builds.html" class="nav-right-link">Builds</a>
     <a href="index.html" class="nav-right-link">← Site</a>
   </div>
@@ -283,6 +300,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
+<script src="js/build-categories.js"></script>
+<script src="js/variant-label.js"></script>
+<script src="js/category-map.js"></script>
 <script>
 // admin nav is intentionally NOT the shared nav (distinct admin-only links +
 // Admin tag) so nav.js is not loaded here. Same for the footer: admin has none.
@@ -307,6 +327,11 @@ let filterState = 'pending';
 let selectedId = null;
 let currentAdminUsername = 'Admin';
 let editOpenKey = null; // buildId+'-'+partIndex of the currently open edit panel
+// "Link to existing part": one panel open at a time, keyed buildId+'-'+index.
+// The index is the part's ORIGINAL index in parts_snapshot — parts render in
+// stored order here, so the map index IS it.
+let LINK = { key: null, q: '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
+let CATALOG = null;   // { products: [...], brands: {id: name} } — loaded on first use
 let currentDetailUser = '';
 let currentDetailName = '';
 
@@ -561,6 +586,7 @@ function renderDetail(b) {
             (dVar ? '<span class="simple-part-variant">'+escH(dVar)+'</span>' : '')+'</div></div>'+
         '</div>'+
         '<div class="simple-part-actions">'+editBtnHtml+'</div>'+
+        catalogActionsHtml(b, p, i, history)+
         editPanelHtml+
         historyHtml+
       '</div>';
@@ -879,6 +905,162 @@ function showToast(color, msg) {
   t.classList.add('show');
   clearTimeout(window._tt);
   window._tt=setTimeout(function(){ t.classList.remove('show'); },2800);
+}
+
+// ============================================================
+// PENDING PARTS → THE CATALOG
+// A pending custom part (pending, no refId) gets two actions: "Add to
+// catalog" sends it to gunforma-admin-part.html with the build and its
+// ORIGINAL index, so Save re-links it; "Link to existing part" swaps it for
+// a product already in the catalog through relink_build_part(). A part
+// whose section has no catalog category gets a reason line instead.
+// ============================================================
+function partSection(raw) {
+  var BC = window.BuildCategories;
+  var key = BC.sectionKeyFor(raw);
+  var sec = BC.CATEGORIES.find(function (c) { return c.key === key; });
+  return { key: key, label: sec ? sec.label : BC.categoryLabel(raw), dbCategory: (sec && sec.dbCategory) || [] };
+}
+function catalogActionsHtml(b, p, i, history) {
+  if (p.pending !== true || p.refId) return '';
+  var sec = partSection(p.category);
+  if (!sec.dbCategory.length) {
+    return '<div class="catalog-reason">No catalog section for ' + escH(sec.label) + ', so this part stays as typed.</div>';
+  }
+  var key = b.id + '-' + i;
+  var open = LINK.key === key;
+  var blocked = history.length
+    ? '<span class="catalog-note">' + history.length + ' correction' + (history.length > 1 ? 's' : '') + ' on this part: linking is refused while they stand.</span>'
+    : '';
+  return '<div class="catalog-actions">' +
+      '<a class="btn-catalog" href="gunforma-admin-part.html?build=' + b.id + '&part=' + i + '">Add to catalog</a>' +
+      '<button class="btn-catalog' + (open ? ' primary' : '') + '" onclick="doToggleLink(\'' + b.id + '\',' + i + ')"' + (history.length ? ' disabled' : '') + '>' + (open ? 'Close' : 'Link to existing part') + '</button>' +
+      blocked +
+    '</div>' +
+    (open ? linkPanelHtml(b, p, i, sec) : '');
+}
+async function loadCatalog() {
+  if (CATALOG) return CATALOG;
+  var res = await Promise.all([
+    sb.from('products').select('id,slug,name,category,brand_id').order('name'),
+    sb.from('manufacturers').select('id,name'),
+  ]);
+  if (res[0].error || res[1].error) throw new Error((res[0].error || res[1].error).message);
+  var brands = {};
+  res[1].data.forEach(function (m) { brands[m.id] = m.name; });
+  CATALOG = { products: res[0].data, brands: brands };
+  return CATALOG;
+}
+async function doToggleLink(buildId, idx) {
+  var key = buildId + '-' + idx;
+  if (LINK.key === key) { LINK.key = null; rerenderSelected(); return; }
+  var b = BUILDS.find(function (x) { return x.id === buildId; });
+  var p = (b.parts_snapshot || [])[idx];
+  LINK = { key: key, q: p.brand || '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
+  try { await loadCatalog(); } catch (e) { LINK.msg = 'Could not load the catalog: ' + e.message; LINK.msgBad = true; }
+  rerenderSelected();
+}
+function rerenderSelected() {
+  var b = BUILDS.find(function (x) { return x.id === selectedId; });
+  if (b) renderDetail(b);
+}
+// Products in the part's section only (the ruling), matching every word of
+// the search against brand + name.
+function linkCandidates(sec) {
+  if (!CATALOG) return [];
+  var words = LINK.q.toLowerCase().split(/\s+/).filter(Boolean);
+  return CATALOG.products.filter(function (pr) {
+    if (sec.dbCategory.indexOf(pr.category) === -1) return false;
+    var hay = ((CATALOG.brands[pr.brand_id] || '') + ' ' + pr.name).toLowerCase();
+    return words.every(function (w) { return hay.indexOf(w) !== -1; });
+  });
+}
+function linkPanelHtml(b, p, i, sec) {
+  var hint = 'Showing ' + escH(sec.dbCategory.map(function (c) { return c.replace(/_/g, ' '); }).join(' and ')) + ' products only.';
+  return '<div class="link-panel">' +
+      '<input type="text" id="link-q" placeholder="Search brand and name" value="' + escH(LINK.q) + '" oninput="linkSearch(this.value)" />' +
+      '<div class="catalog-reason">' + hint + ' The entry becomes the catalog part: the builder\'s wording ("' + escH(p.name || '') + '") is replaced by the catalog name.</div>' +
+      '<div class="link-results" id="link-results">' + linkResultsHtml(sec) + '</div>' +
+      '<div id="link-choice">' + linkChoiceHtml(b, i) + '</div>' +
+    '</div>';
+}
+function linkResultsHtml(sec) {
+  if (!CATALOG) return LINK.msg ? '' : '<div class="catalog-reason">Loading the catalog…</div>';
+  var list = linkCandidates(sec);
+  if (!list.length) return '<div class="catalog-reason">Nothing in this section matches. Clear the search, or use "Add to catalog".</div>';
+  return list.slice(0, 30).map(function (pr) {
+    var on = LINK.productId === pr.id;
+    var img = IMAGE_BY_PRODUCT_ID[pr.id];
+    return '<label class="link-result' + (on ? ' on' : '') + '"><input type="radio" name="link-product"' + (on ? ' checked' : '') + ' onchange="linkPick(\'' + pr.id + '\')" />' +
+      (img ? '<img src="' + escH(img) + '" alt="" />' : '') +
+      '<span><strong>' + escH(CATALOG.brands[pr.brand_id] || '') + '</strong> — ' + escH(pr.name) + '<br><span class="catalog-reason">' + escH(window.productPath(pr.category, pr.slug) || pr.slug) + '</span></span></label>';
+  }).join('') + (list.length > 30 ? '<div class="catalog-reason">' + (list.length - 30) + ' more: narrow the search.</div>' : '');
+}
+function linkSearch(q) {
+  LINK.q = q;
+  var b = BUILDS.find(function (x) { return x.id === selectedId; });
+  var idx = Number(LINK.key.split('-').pop());
+  var sec = partSection((b.parts_snapshot || [])[idx].category);
+  document.getElementById('link-results').innerHTML = linkResultsHtml(sec);
+}
+async function linkPick(productId) {
+  LINK.productId = productId; LINK.variantId = null; LINK.msg = '';
+  if (!LINK.variants[productId]) {
+    var res = await sb.from('product_variants')
+      .select('id,color,finish,variant_label,primary_image_url,is_default,reticle,reticle_color,battery_type,mount_system')
+      .eq('product_id', productId).is('retired_at', null).order('is_default', { ascending: false });
+    if (res.error) { LINK.msg = 'Could not load its variants: ' + res.error.message; LINK.msgBad = true; rerenderSelected(); return; }
+    LINK.variants[productId] = res.data;
+  }
+  var vs = LINK.variants[productId];
+  LINK.variantId = vs.length ? vs[0].id : null;   // the default variant first
+  rerenderSelected();
+}
+function linkVariant(id) { LINK.variantId = id; rerenderSelected(); }
+function chosenVariant() {
+  var vs = LINK.variants[LINK.productId] || [];
+  return vs.find(function (v) { return v.id === LINK.variantId; }) || null;
+}
+function linkChoiceHtml(b, i) {
+  var msg = LINK.msg ? '<div class="link-msg' + (LINK.msgBad ? ' bad' : '') + '">' + escH(LINK.msg) + '</div>' : '';
+  if (!LINK.productId) return msg;
+  var pr = CATALOG.products.find(function (x) { return x.id === LINK.productId; });
+  var vs = LINK.variants[LINK.productId] || [];
+  if (!vs.length) return '<div class="link-msg bad">That product has no live variant to link to.</div>' + msg;
+  var v = chosenVariant();
+  var specs = v ? window.variantSpecs(v) : '';
+  return '<div class="link-choice">Variant <select onchange="linkVariant(this.value)">' +
+      vs.map(function (x) { return '<option value="' + x.id + '"' + (x.id === LINK.variantId ? ' selected' : '') + '>' + escH(window.variantLabelOr(x, 'Unlabelled')) + (x.is_default ? ' (default)' : '') + '</option>'; }).join('') +
+      '</select>' + (specs ? ' · <span class="catalog-reason">' + escH(specs) + '</span>' : '') +
+      '<br>Links to <a href="' + escH(window.productPath(pr.category, pr.slug) || '#') + '" target="_blank" rel="noopener">' + escH(window.productPath(pr.category, pr.slug) || pr.slug) + '</a>' +
+    '</div>' +
+    '<div class="catalog-actions"><button class="btn-catalog primary" onclick="doLink(\'' + b.id + '\',' + i + ')"' + (LINK.busy ? ' disabled' : '') + '>' + (LINK.busy ? 'Linking…' : 'Link') + '</button>' +
+    '<button class="btn-catalog" onclick="doToggleLink(\'' + b.id + '\',' + i + ')">Cancel</button></div>' + msg;
+}
+async function doLink(buildId, idx) {
+  var v = chosenVariant();
+  if (!v || LINK.busy) return;
+  var pr = CATALOG.products.find(function (x) { return x.id === LINK.productId; });
+  if (!window.confirm('Link this build\'s part to "' + pr.name + '" (' + window.variantLabelOr(v, 'Unlabelled') + ')? The entry becomes the catalog part.')) return;
+  LINK.busy = true; LINK.msg = ''; rerenderSelected();
+  // The spec line is computed here, with js/variant-label.js, so the formula
+  // stays in one place; the function stores it only when non-empty.
+  var res = await sb.rpc('relink_build_part', {
+    p_build_id: buildId, p_part_index: idx, p_product_id: pr.id, p_variant_id: v.id,
+    p_variant_specs: window.variantSpecs(v) || null,
+  });
+  LINK.busy = false;
+  if (res.error) {
+    LINK.msgBad = true;
+    LINK.msg = (res.error.code === 'PGRST202' || /relink_build_part/.test(res.error.message || '') && /not find|does not exist/i.test(res.error.message || ''))
+      ? 'Linking is not available yet: relink_build_part() has not been applied to the database.'
+      : res.error.message;
+    rerenderSelected();
+    return;
+  }
+  LINK = { key: null, q: '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
+  showToast('green', 'Linked to ' + pr.name);
+  await loadBuilds();
 }
 
 // ============================================================
