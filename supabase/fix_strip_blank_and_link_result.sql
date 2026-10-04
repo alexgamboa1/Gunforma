@@ -1,8 +1,6 @@
 -- fix_strip_blank_and_link_result.sql
--- NOT YET APPLIED. Dry-run 2026-10-04 against Gunforma-v2 inside one
--- rolled-back transaction; results in #133. Apply after #133 is merged,
--- alongside colors_admin_insert.sql. gunforma-admin-part.html reads both
--- result shapes, so the order page-then-migration holds.
+-- APPLIED 2026-10-04, after #133 was merged and live. See the record at the
+-- bottom of this file. Dry-run first the same day; results in #133.
 --
 -- Two changes, both create or replace, nothing else touched:
 --
@@ -473,3 +471,20 @@ comment on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, inte
 -- of what is live.
 revoke all on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) from public, anon;
 grant execute on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) to authenticated, service_role;
+
+-- ============================================================
+-- APPLIED 2026-10-04 as migration fix_strip_blank_and_link_result
+-- (20261004032834) to project lagjjcpclvzrjlrswojt, from this file as merged
+-- in #133. Verified live after the change — md5(pg_proc.prosrc) against the
+-- body between each function's dollar quotes in this file, identical:
+--
+--   create_product      37eb056b406c5ecb95da1548ef191df3
+--   jsonb_strip_blank   b4d3564de4fe404452cf8883098c6532
+--
+--   search_path = '', SECURITY DEFINER on create_product only, grants as
+--     before (EXECUTE on create_product: authenticated, service_role)
+--   jsonb_strip_blank('null') = {}, ('[1]') = {}, blanks stripped, 0 kept
+--   create_product dry run as the admin with p_specs / p_fits as JSON null:
+--     P0DRY, approved; variants[].retailers[] present — awin-optics-planet
+--     with a built tracked_url, optics-planet with tracked_url null
+-- ============================================================

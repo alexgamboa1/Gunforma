@@ -1,6 +1,6 @@
 -- colors_admin_insert.sql
--- NOT YET APPLIED. Apply AFTER gunforma-admin-part.html is merged and live:
--- the page reports a refusal cleanly without this, so it ships first.
+-- APPLIED 2026-10-04, after gunforma-admin-part.html (#133) was merged and
+-- live. See the record at the bottom of this file.
 --
 -- Lets an admin add a colour from the add-a-part page. create_variant()
 -- refuses any colour not in public.colors ("Add it there first (with a
@@ -26,3 +26,15 @@
 create policy colors_admin_insert on public.colors
   for insert to authenticated
   with check (public.is_admin());
+
+-- ============================================================
+-- APPLIED 2026-10-04 as migration colors_admin_insert (20261004032655) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #133.
+-- Verified live after the change:
+--
+--   policies on public.colors: colors_admin_insert, colors_public_read
+--   colors_admin_insert: INSERT, to authenticated, with check is_admin()
+--   simulated callers, rolled back: admin inserts; signed-in non-admin
+--     refused (42501, row-level security); anon refused (42501, no grant)
+--   colors: 57 before and after — nothing was left behind by the tests
+-- ============================================================

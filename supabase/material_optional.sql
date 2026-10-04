@@ -1,7 +1,6 @@
 -- material_optional.sql
--- NOT YET APPLIED. Dry-run 2026-10-04 against Gunforma-v2 inside one
--- rolled-back transaction; results in #133. Apply after #133 is merged,
--- alongside colors_admin_insert.sql and fix_strip_blank_and_link_result.sql.
+-- APPLIED 2026-10-04, after #133 was merged and live. See the record at the
+-- bottom of this file. Dry-run first the same day; results in #133.
 --
 -- The material rule, as ruled:
 --   * material_family stays REQUIRED for approval. 'Unspecified' (a row in
@@ -96,3 +95,19 @@ $ds$;
 
 revoke all on function public.product_data_status(uuid) from public, anon;
 grant execute on function public.product_data_status(uuid) to authenticated, service_role;
+
+-- ============================================================
+-- APPLIED 2026-10-04 as migration material_optional (20261004032852) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #133. Verified
+-- live after the change:
+--
+--   md5(pg_proc.prosrc) 56c7ad2360970334584d7e0179c7d6b3, identical to the
+--     body between this file's $ds$ quotes
+--   search_path = '', stable, not SECURITY DEFINER; EXECUTE for
+--     authenticated and service_role only
+--   approved: 232 of 243 before, 233 of 243 after. The one that moved is
+--     springer-precision-3-mag-extension-p365xmacro (family Unspecified,
+--     material wording blank): now approved, optional_blank carries
+--     "material" and "material family unspecified". The 10 unapproved
+--     products are the same 10 as before.
+-- ============================================================
