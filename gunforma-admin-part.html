@@ -262,7 +262,8 @@ const LIGHT_FITMENT = ['direct', 'adapter-included', 'adapter-required', 'adapte
 
 // Labels for the status object's non-spec entries.
 const STATUS_LABELS = {
-  description: 'Description', material: 'Material', material_family: 'Material family', platform: 'Platform',
+  description: 'Description', material: 'Material (exact wording)', material_family: 'Material family', platform: 'Platform',
+  'material family unspecified': 'Material family: Unspecified',
   variant: 'At least one variant', 'light compatibility': 'Light compatibility (at least one row)', url: 'Source URL',
   'retailer link': 'Retailer link (no buy link)', weight_oz: 'Weight', fitment_notes: 'Fitment notes',
 };
@@ -616,8 +617,10 @@ function renderProduct() {
       '<div class="field-note" id="url-note">Reference only: the product page this data came from. It is not a buy link and no page shows it.</div></div>' +
     '<div class="field"><div class="field-label">Description<span class="req">*</span></div><textarea class="field-textarea" data-p="description">' + esc(p.description) + '</textarea></div>' +
     '<div class="grid2">' +
-      '<div class="field"><div class="field-label">Material<span class="req">*</span></div>' + input('data-p="material" list="dl-material"', p.material) + '<span id="dl-material-wrap"></span></div>' +
-      '<div class="field"><div class="field-label">Material family<span class="req">*</span></div><select class="field-select" data-p="material_family"><option value="">Choose…</option>' + mats + '</select></div>' +
+      '<div class="field"><div class="field-label">Material</div>' + input('data-p="material" list="dl-material"', p.material) + '<span id="dl-material-wrap"></span>' +
+        '<div class="field-note">Optional: the exact wording, e.g. "7075-T6 Aluminum". An optic\'s housing material is filled from it.</div></div>' +
+      '<div class="field"><div class="field-label">Material family<span class="req">*</span></div><select class="field-select" data-p="material_family"><option value="">Choose…</option>' + mats + '</select>' +
+        '<div class="field-note">"Unspecified" is a valid answer when the maker does not say.</div></div>' +
     '</div>' +
     '<details class="optional"' + (['weight_oz', 'fitment_notes', 'build_warning', 'build_notes', 'internal_notes'].some(function (k) { return !blank(p[k]); }) ? ' open' : '') + '>' +
       '<summary>Optional: weight · fitment notes · build warning · build notes · staff note</summary>' +
@@ -1130,7 +1133,6 @@ function progress() {
   }
 
   add(approve, !blank(p.description), 'Description');
-  add(approve, !blank(p.material), 'Material');
   add(approve, !blank(p.material_family), 'Material family');
   rules.filter(function (r) { return r.requirement === 'required' && !r.only_when_field; }).forEach(function (r) {
     const fk = fieldKind(r.field);
@@ -1144,6 +1146,8 @@ function progress() {
   if (!S.variants.some(function (v) { return v.links.some(linkComplete); })) notes.push('No buy link. Saves and approves anyway.');
   const untracked = S.check && S.check.ok && S.check.sig === currentSig() ? untrackedCount() : 0;
   if (untracked) notes.push(untracked + ' retailer link' + (untracked > 1 ? 's' : '') + ' untracked: no commission.');
+  if (blank(p.material)) notes.push('Material wording is blank (optional).');
+  if (p.material_family === 'Unspecified') notes.push('Material family is Unspecified. Approves anyway, and stays findable for later.');
   if (blank(p.weight_oz)) notes.push('Weight is blank (optional).');
   const optBlank = rules.filter(function (r) { return r.requirement === 'optional' && blank(S.specs[r.field]) && fieldKind(r.field).kind !== 'derived'; }).length;
   if (optBlank) notes.push(optBlank + ' optional spec field' + (optBlank > 1 ? 's' : '') + ' blank.');

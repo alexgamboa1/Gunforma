@@ -770,6 +770,15 @@ only add to a product that already existed.
   - `optic_specs.housing_material` and `mag_release_specs.material` are
     filled from `products.material`.
   - A spec value that disagrees with it is refused.
+- **Material family is required for approval; the material's wording is
+  not** (`supabase/material_optional.sql`).
+  - `'Unspecified'` is a valid family. It approves, and `optional_blank`
+    carries "material family unspecified" so those parts can be found later.
+  - A blank `material` sits in `optional_blank`, not `missing`.
+  - Except for optics: the optic rule row `housing_material` is required and
+    is filled from `material`, so an optic with no material still reads
+    missing "spec.housing_material". That is the rule as it stands, not an
+    accident; changing it is one row in `spec_field_rules`.
 
 **Never entered by `create_product()`:**
 
