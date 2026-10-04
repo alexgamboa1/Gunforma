@@ -1,8 +1,7 @@
 -- relink_build_part.sql
--- NOT YET APPLIED. Dry-run 2026-10-04 against Gunforma-v2 inside one
--- rolled-back transaction; results in the PR. Apply AFTER the queue page
--- that calls it is merged and live: the page reports a missing function
--- cleanly, so it ships first.
+-- APPLIED 2026-10-04, after the queue page (#136) was merged and live. See
+-- the record at the bottom of this file. Dry-run first the same day; results
+-- in #136.
 --
 -- Swaps a build's pending custom part for a product that is ALREADY in the
 -- catalog — the "Link to existing part" action on gunforma-admin-queue.html.
@@ -112,3 +111,23 @@ comment on function public.relink_build_part(uuid, integer, uuid, uuid, text) is
 
 revoke all on function public.relink_build_part(uuid, integer, uuid, uuid, text) from public, anon;
 grant execute on function public.relink_build_part(uuid, integer, uuid, uuid, text) to authenticated, service_role;
+
+-- ============================================================
+-- APPLIED 2026-10-04 as migration relink_build_part (20261004224459) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #136. Verified
+-- live after the change:
+--
+--   md5(pg_proc.prosrc) 80122f973c216ece049c44b4bd4c788b, identical to the
+--     body between this file's $rl$ quotes
+--   SECURITY DEFINER, search_path = ''; EXECUTE for authenticated and
+--     service_role only; anon through PostgREST gets 42501 (not "function
+--     not found", so the schema cache has it)
+--
+-- First real use, 2026-10-04 22:45 UTC, AG from the review queue on
+-- gunforma.com: "P365 Complete Build" part 6, the pending "Base Plate +3",
+-- linked to springer-precision-3-mag-extension-p365xmacro (Tan). The stored
+-- entry equals the dry run's entry exactly; the other six parts are
+-- unchanged; the public build page shows the catalog part with its photo,
+-- and the only part still pending is DMP Soft RSA (misc, no catalog
+-- section).
+-- ============================================================
