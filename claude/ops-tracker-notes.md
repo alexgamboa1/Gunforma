@@ -1,4 +1,4 @@
-# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-02)
+# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-04)
 
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
@@ -36,6 +36,89 @@ by Claude through the artifact database tool. The "manual deploy log" was never 
 This file was wrong for two weeks and nothing surfaced it. Same failure the START-HERE
 doc warns about, inside the notes file for the tool built to prevent it. Re-read the
 artifact before trusting any description of it, including this one.
+
+---
+
+## Changes made 2026-10-03/04 (PRs #131–#134) — add one part from the site
+
+Until now a product could only arrive in a bulk load. There is now one admin page that
+adds a single part: `gunforma.com/gunforma-admin-part.html`, linked from the Admin bar on
+the review-queue and post-a-build pages. The technical detail lives in CLAUDE.md
+("Adding a product", "The add-a-part page"); this entry is the state and the calls made.
+
+### What shipped
+
+| PR | | |
+|---|---|---|
+| #131, #132 | database | `create_product()` (one atomic call: brand, product, platforms, spec sheet, variants, links, fits-with, optional build re-link; dry run raises `P0DRY`), `product_data_status()`, `spec_field_rules` (101 rows, measured from live data), view `products_needing_data` |
+| #133 | the page | Check (dry run) then Save; live "needed to save / needed to be approved" panel; colour add; short slug suggestion |
+| #134 | records | applied dates on the three migrations below (comments only). **Merged.** |
+
+Six migrations, all applied from their merged files and verified against them by md5:
+`spec_field_rules`, `create_product`, `fix_product_data_status_url` (2026-10-03 UTC);
+`colors_admin_insert`, `fix_strip_blank_and_link_result`, `material_optional`
+(**2026-10-04 UTC**).
+
+Catalog after, queried 2026-10-04: **243 products, 780 variants, 493 links, 43 brands,
+57 colours. 233 of 243 approved.** The 10 unapproved are all older parts and none can be
+fixed from the site yet — there is no edit path. Most are missing variant photos
+(`icarus-precision-axg-fuse` alone has 22); `streamlight-tlr-7-sub` lacks an MSRP and a
+source URL; `zaffiri-zpsp-p365-xl` a port count.
+
+**First part added through the page:** Springer Precision "+3 Magazine Extension for Sig
+Sauer X Macro 17rd Mags", slug `springer-precision-3-mag-extension-p365xmacro` (AG
+shortened the generated 70-character slug in the database). One variant, Tan, $36.75; no
+retailer link; material family Unspecified; approved. **It is not yet attached to
+"P365 Complete Build"** — that build's part 6, "Base Plate +3", is still a pending custom
+part. It was saved without the build parameters, so `create_product()` would now refuse
+it as a duplicate; PR 3's "link to existing part" is what attaches it.
+
+### Decisions (AG)
+
+- Spec rules as measured. Compensator `length_in` optional, and only when sold without a
+  barrel. Optic `housing_material` stays required and is filled from the material.
+- **Material family is required; "Unspecified" is a valid answer** and approves, but is
+  listed so those parts can be found later. The exact material wording is optional.
+- **Source URL required; retailer links optional** and never block approval. No
+  "direct from maker" partner.
+- **Platform explicit on every part.** Slides and barrels take exactly one.
+- Install difficulty and best-for tags are off the form. Weight and fitment notes optional.
+- **Product photos are pasted image URLs, not uploads.**
+- No retailer item-ID field: the page sends retailer + URL only; the nightly sync fills
+  the feed identifiers.
+- Slugs: brand, what it is, what it fits, suggested at ≤ 50 characters. The name stays
+  the maker's wording.
+- The dry run keeps code `P0DRY` (it answers HTTP 500); the page branches on the code.
+- Warnings from Check sit between Check and Save, so they are read before saving.
+
+### Open
+
+- **One check from #133 still to run:** add a colour through the live page as admin. The
+  database side is proven (admin can insert; non-admin and anon refused; colours still
+  57). As of 2026-10-04 no insert has reached `colors` from the page.
+- **PR 3**: from the review queue, "Add to catalog" / "Link to existing part" beside each
+  pending build part, and a "Needs data" view for admins. Next after that: an **edit path
+  for existing products** (including adding a colour to an existing part).
+
+### Logged, not started
+
+- Copy pasted image URLs into our own storage, so a maker changing their site does not
+  break our photos.
+- Vocabulary tables for clamp, mount, optic type, emitter and reticle type — the live
+  data carries typos ("Rail climp", "1914 clamp").
+- The stored "Colour · Finish" variant label overrides the label formula on 650 of 779
+  variants, so the formula is effectively dead.
+- Whether a variant's UPC should also be stored on its retailer link as `op_gtin`, so the
+  link is matched exactly on the first sync.
+- `restrict_owner_edits_on_approved_build` tests `claims is null`; it should use
+  `nullif(..., '')` as `is_trusted_backend()` does.
+- anon can execute the two pure helpers (`jsonb_strip_blank`, `url_encode`). Harmless.
+- P320 slides and barrels need length rows **and** changes to the two length CHECKs
+  (3.1/3.7/4.3 only today). Base-pad and magazine type lists are P365-only.
+- Links: 17 Olight links carry OpticsPlanet's Awin id; 2 Awin links have no clickref and
+  1 has no awinaffid. `partners` also holds `optics-planet` (no Awin id, near-twin of
+  `awin-optics-planet`) and a placeholder `partner-one`.
+- No recoil-spring category. `products.lowest_price` is maintained by nothing.
 
 ---
 
