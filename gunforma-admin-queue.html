@@ -26,6 +26,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nav-right { display: flex; align-items: center; gap: 16px; }
 .nav-right-link { font-size: 11px; color: #ffffff; text-decoration: none; letter-spacing: 0.06em; text-transform: uppercase; }
 .nav-right-link:hover { color: #ffffff; }
+/* One line at any width (see gunforma-admin-post.html): the bar is 52px tall. */
+.nav-right { min-width: 0; overflow-x: auto; scrollbar-width: none; margin-left: 12px; }
+.nav-right .nav-right-link { white-space: nowrap; }
+@media (max-width: 600px) { .nav-right { gap: 11px; } .nav-right .nav-right-link { font-size: 10px; letter-spacing: 0.03em; } }
 
 .shell { display: grid; grid-template-columns: 340px 1fr; min-height: calc(100vh - 52px); }
 
@@ -242,6 +246,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
          route that was actually missing, since gunforma-admin-post.html links
          back here but nothing here linked there. -->
     <a href="/admin-post" class="nav-right-link">Post build</a>
+    <a href="gunforma-admin-part.html" class="nav-right-link">Add a part</a>
     <a href="gunforma-builds.html" class="nav-right-link">Builds</a>
     <a href="index.html" class="nav-right-link">← Site</a>
   </div>
