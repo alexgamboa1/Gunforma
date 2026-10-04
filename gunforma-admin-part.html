@@ -888,6 +888,7 @@ function renderVariants() {
     cols.filter(function (c) { return !c.bool && !c.lookup; }).map(function (c) { return datalist('dl-v-' + c.key, SUGGEST['variant.' + c.key]); }).join('');
   S.variants.forEach(function (v) { refreshPhoto(v); refreshExtras(v); });
   refreshLabels();
+  annotateLinks();
 }
 function variantHtml(v, idx, cols) {
   const u = v.uid;
@@ -1141,6 +1142,8 @@ function progress() {
   if (S.category === 'light') add(approve, S.lightRows.some(lightRowComplete), 'At least one compatibility row');
 
   if (!S.variants.some(function (v) { return v.links.some(linkComplete); })) notes.push('No buy link. Saves and approves anyway.');
+  const untracked = S.check && S.check.ok && S.check.sig === currentSig() ? untrackedCount() : 0;
+  if (untracked) notes.push(untracked + ' retailer link' + (untracked > 1 ? 's' : '') + ' untracked: no commission.');
   if (blank(p.weight_oz)) notes.push('Weight is blank (optional).');
   const optBlank = rules.filter(function (r) { return r.requirement === 'optional' && blank(S.specs[r.field]) && fieldKind(r.field).kind !== 'derived'; }).length;
   if (optBlank) notes.push(optBlank + ' optional spec field' + (optBlank > 1 ? 's' : '') + ' blank.');
@@ -1269,6 +1272,10 @@ function renderResult() {
       '<div class="banner good">' + esc(S.product.name) + ' is in the catalog' + (path ? ': <a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(path) + '</a>' : '') + '.' +
         (d.build_relinked ? ' The build\'s pending part now points at it.' : '') + (d.brand_created ? ' New brand created: ' + esc(d.brand) + '.' : '') + '</div>' +
       statusHtml(d) +
+      ((d.variants || []).some(function (v) { return v.links; })
+        ? '<h4>Retailer links</h4><ul>' + d.variants.filter(function (v) { return v.links; }).map(function (v) {
+            return '<li>' + esc(v.label) + '<ul>' + retailerLines(v).map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul></li>';
+          }).join('') + '</ul>' : '') +
       '<div style="margin-top:14px"><a class="btn" href="gunforma-admin-part.html">Add another part</a></div></div>';
     return;
   }
@@ -1284,8 +1291,54 @@ function renderResult() {
     statusHtml(d) + labelCheckHtml(d) +
     '<h4>Would be created</h4><ul><li>' + (path ? '<code>' + esc(path) + '</code>' : esc(d.slug)) + '</li>' +
     '<li>Brand: ' + esc(d.brand) + (d.brand_created ? ' (new)' : '') + '</li>' +
-    (d.variants || []).map(function (v) { return '<li>' + esc(v.label) + (v.default ? ' (default)' : '') + ': ' + v.photos + ' photo' + (v.photos === 1 ? '' : 's') + ', ' + v.links + ' retailer link' + (v.links === 1 ? '' : 's') + '</li>'; }).join('') +
+    (d.variants || []).map(function (v) {
+      return '<li>' + esc(v.label) + (v.default ? ' (default)' : '') + ': ' + v.photos + ' photo' + (v.photos === 1 ? '' : 's') + ', ' + v.links + ' retailer link' + (v.links === 1 ? '' : 's') +
+        (v.links ? '<ul>' + retailerLines(v).map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' : '') + '</li>';
+    }).join('') +
     (d.build_relinked ? '<li>Re-links the build\'s pending part</li>' : '') + '</ul></div>';
+  annotateLinks();
+}
+
+// Per retailer link: was a tracked link built? create_product() reports it
+// as variants[].retailers[].tracked_url (supabase/fix_strip_blank_and_link_
+// result.sql). A function without that change returns no `retailers`, and
+// the page says it cannot tell rather than guessing.
+function retailerLines(v) {
+  if (!Array.isArray(v.retailers)) return ['<span class="field-note">Tracking not reported: the database function predates this check.</span>'];
+  return v.retailers.map(function (r) {
+    return esc(r.partner_name || r.partner) + ': ' + (r.tracked_url
+      ? '<span class="field-note good">tracked link built</span>'
+      : '<span class="field-note bad"><strong>untracked: no commission</strong></span>');
+  });
+}
+function checkedRetailers() {
+  if (!S.check || !S.check.ok) return null;
+  const vs = S.check.detail.variants || [];
+  if (!vs.some(function (v) { return Array.isArray(v.retailers); })) return null;
+  return vs.reduce(function (all, v) { return all.concat(v.retailers || []); }, []);
+}
+function untrackedCount() {
+  const rs = checkedRetailers();
+  return rs ? rs.filter(function (r) { return !r.tracked_url; }).length : 0;
+}
+// The same answer on the retailer rows in the form, matched by retailer and
+// URL. Only while the form is still what was checked.
+function annotateLinks() {
+  const rs = checkedRetailers();
+  const fresh = S.check && S.check.ok && S.check.sig === currentSig();
+  S.variants.forEach(function (v) {
+    v.links.forEach(function (l, i) {
+      const box = document.querySelector('[data-vl="' + v.uid + '|' + i + '|url"]');
+      if (!box) return;
+      const host = box.closest('.rowbox');
+      let note = host.querySelector('.track-note');
+      if (!note) { note = document.createElement('div'); note.className = 'field-note track-note'; note.style.marginTop = '8px'; host.appendChild(note); }
+      const hit = fresh && rs && linkComplete(l) ? rs.find(function (r) { return r.partner === l.partner_slug && r.url === l.url.trim(); }) : null;
+      if (!hit) { note.textContent = ''; note.className = 'field-note track-note'; return; }
+      note.className = 'field-note track-note ' + (hit.tracked_url ? 'good' : 'bad');
+      note.innerHTML = hit.tracked_url ? 'Tracked link built.' : '<strong>untracked: no commission.</strong> This retailer has no affiliate programme set up, so the buy button sends people to the plain URL.';
+    });
+  });
 }
 
 // ============================================================
@@ -1333,6 +1386,7 @@ async function addColour() {
 function afterChange() {
   if (S.saved) return;
   renderPanel();
+  annotateLinks();
   if (S.check && S.check.sig !== currentSig()) {
     // the result on screen no longer describes the form
     const el = $('sec-result');

@@ -838,8 +838,17 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   `error.details`. The page branches on the code and never on the status.
   Save is enabled only while the form is byte-for-byte what was last checked.
 - **`p_specs` and `p_fits` are omitted when empty, never sent as `null`.** A
-  JSON null that reaches the function as the jsonb value `'null'` makes
+  JSON null that reaches the function as the jsonb value `'null'` made
   `jsonb_strip_blank()` throw "cannot call jsonb_each on a non-object".
+  `supabase/fix_strip_blank_and_link_result.sql` makes it read any
+  non-object as empty; the page keeps omitting them anyway.
+- **After Check, every retailer link says whether a tracked link was
+  built.** A partner with no `awin_merchant_id` gets none, and the page says
+  so plainly: "untracked: no commission". This matters because `partners`
+  lists `optics-planet` (no Awin id) beside `awin-optics-planet`, and the two
+  read almost the same in the dropdown. The answer comes from
+  `variants[].retailers[].tracked_url` in the function's result (same fix
+  file); before that file is applied the page says tracking is not reported.
 - **Product photos are pasted https URLs, not uploads, for now.** The page
   previews each one; a photo that does not load is flagged and counts as no
   photo (it is not sent). Nothing writes to the `product-images` bucket, and
