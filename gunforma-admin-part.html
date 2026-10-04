@@ -25,7 +25,11 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 @media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
 .nav-admin-tag { font-size: 9px; color: #f9b860; background: rgba(249,184,96,0.12); border: 0.5px solid #6b4a1e; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-left: 12px; }
 .nav-right-link { font-size: 11px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; margin-left: 20px; }
-@media (max-width: 600px) { .nav-right-link { margin-left: 12px; font-size: 10px; } }
+/* One line at any width: the Admin bar is 52px tall, so a wrapped second
+   row of links spills out of it. Same flex + gap as gunforma-admin-queue.html. */
+.nav-right { display: flex; align-items: center; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; margin-left: 12px; }
+.nav-right .nav-right-link { margin-left: 0; white-space: nowrap; }
+@media (max-width: 600px) { .nav-right { gap: 11px; } .nav-right .nav-right-link { font-size: 10px; letter-spacing: 0.03em; } }
 
 .page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
 .page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
@@ -37,7 +41,10 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
 
 .layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 24px; padding: 28px 36px 80px; align-items: start; }
 .main-col { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
-.sidebar { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 90px); overflow-y: auto; }
+/* Short enough to fit between the sticky Admin bar and the layout's bottom
+   padding, so the Check / outcome / Save block at its top is never pushed
+   under the bar at the foot of a long form. The checklists scroll inside. */
+.sidebar { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; max-height: calc(100vh - 170px); overflow-y: auto; }
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); padding: 20px 16px 40px; }
   .page-header { padding: 22px 16px 16px; }
@@ -130,8 +137,16 @@ details.optional summary { font-size: 11px; font-weight: 700; color: #666; curso
 .panel li.ok .m { color: #22a06b; }
 .panel li.no .m { color: #c0392b; }
 .panel li.note .m { color: #b08a2a; }
-.panel-actions { display: flex; gap: 8px; margin-top: 16px; }
-.panel-actions .btn { flex: 1; }
+.panel-actions { display: flex; flex-direction: column; gap: 8px; padding-bottom: 14px; margin-bottom: 14px; border-bottom: 0.5px solid #e5e5e5; }
+.panel-actions .btn { width: 100%; }
+.outcome { font-size: 12px; line-height: 1.5; border-radius: 4px; padding: 8px 10px; }
+.outcome.good { background: #eefaf3; color: #1d6b43; }
+.outcome.warn { background: #fff8ea; color: #6b5a2a; }
+.outcome.bad { background: #fdf0f0; color: #8a2a2a; }
+.outcome.stale { background: #f6f6f4; color: #666; }
+.outcome.warning { background: #fff3dc; color: #6b4a1e; border: 0.5px solid #e8c98a; white-space: pre-wrap; }
+.outcome-tag { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 3px; color: #8a6a2a; }
+.outcome-more { font-size: 11px; color: #2a7bbd; text-decoration: none; }
 .panel-msg { font-size: 11px; color: #888; margin-top: 8px; line-height: 1.5; }
 
 .result h4 { font-size: 12px; font-weight: 700; margin: 12px 0 6px; }
@@ -1278,16 +1293,43 @@ function renderPanel() {
   if (!ready) msg = 'Check is available once everything under "Needed to save" is ticked.';
   else if (!S.check) msg = 'Run Check: it runs the real function as a dry run and writes nothing.';
   else if (stale) msg = 'Changed since the last Check. Check again before saving.';
-  else if (!S.check.ok) msg = 'The last Check was refused. See the result on the left.';
+  else if (!S.check.ok) msg = 'The last Check was refused.';
   else if (silent.length) msg = 'Answer ' + silent.map(function (r) { return r.label; }).join(', ') + ': left blank, the database would store its default and call the part approved.';
-  else msg = 'Clean Check. Save writes exactly this.';
+  else msg = (S.check.detail.warnings || []).length ? 'Clean Check. Read the warnings above, then Save writes exactly this.' : 'Clean Check. Save writes exactly this.';
+  // ORDER MATTERS: Check, then what the last Check said (the function's
+  // warnings word for word), then Save — at the TOP of the panel, so the
+  // warnings sit between the two buttons and are read before Save, without
+  // scrolling. The checklists follow. They used to come first, which put the
+  // buttons below a 30-line optic checklist and the warnings in the result
+  // card at the foot of the page, where a P320 base plate's "Not live yet"
+  // was never seen.
   el.innerHTML =
+    '<div class="panel-actions">' +
+      '<button class="btn" data-act="check"' + (ready && !S.busy ? '' : ' disabled') + '>' + (S.busy === 'check' ? 'Checking…' : 'Check') + '</button>' +
+      checkOutcomeHtml(checked, stale) +
+      '<button class="btn primary" data-act="save"' + (ready && checked && !silent.length && !S.busy ? '' : ' disabled') + '>' + (S.busy === 'save' ? 'Saving…' : 'Save') + '</button>' +
+      '<div class="panel-msg">' + esc(msg) + '</div>' +
+    '</div>' +
     '<h3>Needed to save</h3><ul>' + pr.save.map(li).join('') + '</ul>' +
     (pr.approve.length ? '<h3>Needed to be approved</h3><ul>' + pr.approve.map(li).join('') + '</ul>' : '') +
-    (pr.notes.length ? '<h3>Not blocking</h3><ul>' + pr.notes.map(function (n) { return '<li class="note"><span class="m">·</span><span>' + esc(n) + '</span></li>'; }).join('') + '</ul>' : '') +
-    '<div class="panel-actions"><button class="btn" data-act="check"' + (ready && !S.busy ? '' : ' disabled') + '>' + (S.busy === 'check' ? 'Checking…' : 'Check') + '</button>' +
-      '<button class="btn primary" data-act="save"' + (ready && checked && !silent.length && !S.busy ? '' : ' disabled') + '>' + (S.busy === 'save' ? 'Saving…' : 'Save') + '</button></div>' +
-    '<div class="panel-msg">' + esc(msg) + '</div>';
+    (pr.notes.length ? '<h3>Not blocking</h3><ul>' + pr.notes.map(function (n) { return '<li class="note"><span class="m">·</span><span>' + esc(n) + '</span></li>'; }).join('') + '</ul>' : '');
+}
+// The last Check, in the panel between the buttons: verdict, then every
+// warning verbatim. Full detail stays in the result card below the form.
+function checkOutcomeHtml(checked, stale) {
+  if (!S.check) return '';
+  if (stale) return '<div class="outcome stale">The form has changed since the last Check. Check again.</div>';
+  if (!S.check.ok) return '<div class="outcome bad"><strong>Refused.</strong> ' + esc(S.check.error) + '</div>';
+  const d = S.check.detail;
+  const miss = d.missing || [];
+  const untracked = untrackedCount();
+  return '<div class="outcome ' + (d.approved ? 'good' : 'warn') + '">' +
+      (d.approved ? '<strong>Saves, and is approved.</strong>'
+                  : '<strong>Saves, but is not approved.</strong> Missing: ' + miss.map(function (m) { return esc(statusLabel(m)); }).join(', ') + '.') +
+    '</div>' +
+    (d.warnings || []).map(function (w) { return '<div class="outcome warning"><span class="outcome-tag">Warning</span>' + esc(w) + '</div>'; }).join('') +
+    (untracked ? '<div class="outcome warning"><span class="outcome-tag">Retailer</span>' + untracked + ' link' + (untracked > 1 ? 's' : '') + ' untracked: no commission.</div>' : '') +
+    '<a class="outcome-more" href="#sec-result">Full result below ↓</a>';
 }
 
 let sigCache = null;
