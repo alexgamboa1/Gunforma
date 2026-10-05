@@ -1,4 +1,4 @@
-# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-04)
+# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-05)
 
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
@@ -36,6 +36,82 @@ by Claude through the artifact database tool. The "manual deploy log" was never 
 This file was wrong for two weeks and nothing surfaced it. Same failure the START-HERE
 doc warns about, inside the notes file for the tool built to prevent it. Re-read the
 artifact before trusting any description of it, including this one.
+
+---
+
+## Changes made 2026-10-04 (PR #138) — add a variant to an existing part
+
+The add-a-part page now has a second mode: add a colour or option to a part that is
+already in the catalog. Every part listed under "Already in the catalog?" has an **Add a
+variant** link to `gunforma-admin-part.html?product=<slug>`. The technical detail is in
+CLAUDE.md ("Adding a variant to an existing part"); this entry is the state and the calls
+made.
+
+### What shipped
+
+| PR | | |
+|---|---|---|
+| #138 | database + page | `add_variants()` (new variants on an existing part; dry run raises `P0DRY`), the variant logic moved into one shared function used by both `create_product()` and `add_variants()`, and the page's add-a-variant mode. Also widened the embed guard (below). **Merged.** |
+| #139 | records | applied date and comment corrections only, no code |
+
+One migration, `add_variants` (**20261005005427**), applied 2026-10-05 UTC **before #138
+merged**, by decision. Nothing on main called it, so the live site tolerated both shapes.
+All four functions were verified against the file by md5.
+
+Before it was applied, a rolled-back A/B run took every old add-a-part test case through
+`create_product()` before and after the change. All matched except two duplicate cases,
+both intended. One of them was a real bug: the old function **saved "Anodized" and
+"anodized " as two variants of one part.** The new rule refuses that.
+
+Catalog after, queried 2026-10-05: **243 products, 781 variants, 493 links, 43 brands, 57
+colours. 233 of 243 approved.**
+
+**First variant added through the page:** **Red** on the Springer Precision +3 base plate
+(`springer-precision-3-mag-extension-p365xmacro-red`, $36.75, with a photo). Tan stays the
+default and the part stays approved. Done-checks 1–4 passed on the deploy preview, signed
+in as admin.
+
+### Decisions (AG)
+
+- **Every new variant needs a photo and an MSRP**, refused in the database, not only on
+  the page. Adding a variant must never unapprove a part.
+- **Duplicates are refused and named.** A new variant is compared with every live variant
+  of the part, **discontinued ones included**, and with the other new ones. The comparison
+  ignores case and stray spaces, and blank = none. The same rule now applies when adding a
+  new part.
+- **One default.** Two new variants marked default are refused. A new default takes over
+  from the old one in the same save. Unmarked, the current default stays.
+- **A taken slug gets a unique one** (`…-black-2`), never a raw database error.
+- **Option fields suggest this part's values first, then the category's.** A new value
+  can still be typed.
+- **The existing-variants list shows each variant's option values**, not just its label.
+- **Applied before the merge** this time, not after.
+
+### Worth knowing
+
+- **Hidden columns.** The bulk load set handedness "ambidextrous" on most parts. The form
+  has no handedness field outside frames and mag releases, so a copy of an existing
+  variant would have passed the duplicate rule. Treating "ambidextrous" as blank was tried
+  and reverted, because on frames it is a real option (Icarus's ambi thumb ledge). Instead
+  **the page** copies a value that every existing variant of the part shares and says so
+  on the form. **A direct call to `add_variants()` does not.**
+- **Mag releases gained a Handedness field.** 1 left and 1 right exist; the other 19 are
+  ambidextrous.
+- **The embed guard had a gap.** It let `products!inner(…)`, a join hint with no FK name,
+  through, and that form is just as ambiguous. It was found by breaking the new page's
+  query on purpose; the guard now catches it.
+
+### Logged, not started
+
+- **Clear handedness "ambidextrous" where it means nothing**, the real fix for hidden
+  columns. 477 variants carry it, but 122 are frames and 19 mag releases, where it is a
+  real option. **336 rows** are to clear. Deferred to the field review.
+- **An edit path for existing parts and variants** (photo, price, spec fix) and **retiring
+  a variant**. The page only adds.
+- `sig-sauer-manual-safety-kit-p365` has **two identical "Rose Gold" variants** (SKUs
+  8901340 and 8901337). Left alone by ruling, for the edit path.
+- `create_product()`'s "already exists" refusals still say "use create_variant". The Add a
+  variant link is the real answer now.
 
 ---
 
