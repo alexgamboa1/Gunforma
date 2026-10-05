@@ -125,6 +125,15 @@ NOT_BUILD_CHECKS=(
   # .github/workflows/check-variant-images.yml and raises an issue.
   scripts/check-variant-image-sku.mjs
 
+  # Runs every branch of supabase/functions/launch-invite against a fake
+  # Supabase. The function is TypeScript, and the test strips its types with
+  # node:module's stripTypeScriptTypes, which needs Node 22.13 — the site
+  # build is pinned to Node 20 in netlify.toml, so here it would fail for the
+  # wrong reason. It also guards nothing a site deploy ships: an Edge Function
+  # is deployed separately, by hand. Run it before
+  # `supabase functions deploy launch-invite`.
+  scripts/launch-invite.test.mjs
+
   # NOT a unit test, despite the name. It signs in as a real user and writes
   # to live Storage, so it needs SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD and a
   # serving origin. Runs from .github/workflows/smoke-test.yml, 4x daily.

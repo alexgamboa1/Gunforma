@@ -51,7 +51,9 @@ CLAUDE.md, "Auth emails live in the dashboard, not in this repo," for the full r
 | Invite user | `admin.inviteUserByEmail()` in `launch-invite` AND `invite-builder` |
 
 Magic Link, Change Email Address and Reauthentication are **unreachable** — nothing
-in the codebase calls `updateUser`, `signInWithOtp` or `verifyOtp`. If an
+in the codebase calls `signInWithOtp` or `verifyOtp`, and the only `updateUser` calls
+set a password (`gunforma-claim.html`, and the reset form on `gunforma-signin.html`),
+which sends no email. If an
 email-change feature is ever added to the profile page, that template goes live as
 Supabase's stock default: no logo, no brand, no warning.
 
@@ -62,17 +64,60 @@ the nav bell. Nothing in the system emails a user about anything except auth.
 
 ### The invite trap
 
-An invite creates the auth user the moment it is sent. `invite-builder` then refuses
-any address that already exists, and `inviteUserByEmail` would reject it anyway. So
-**an expired invite cannot be re-sent** — the address is taken by an unconfirmed user.
+An invite creates the auth user the moment it is sent, and `launch-invite` links the
+build and its photo rows to that user in the same call — before the builder has
+clicked anything.
 
-Recovery: Supabase → Authentication → Users → delete the unconfirmed user → re-run
-the invite. Roughly thirty seconds, but you have to notice.
+**Never delete an invited user in the Supabase dashboard.** Three foreign keys cascade
+from that delete, read from the live schema on 2026-10-05:
 
-Fallback that already exists: `gunforma-claim.html`. A builder whose link died can
-sign up normally and claim the build. Say so in the covering message.
+| | |
+|---|---|
+| `profiles.id → auth.users` | `ON DELETE CASCADE` |
+| `builds.user_id → profiles` | `ON DELETE CASCADE` |
+| `build_photos.user_id → auth.users` | `ON DELETE CASCADE` |
 
-Nothing tracks unclaimed invites. Keep the list by hand.
+So deleting the user deletes their build and its photo rows. This section used to give
+exactly that as the recovery for an expired invite ("delete the unconfirmed user,
+re-run the invite"). It was written when an invite carried no build, and nobody came
+back for it when `launch-invite` started linking one.
+
+What to do instead, by case. Every command looks the build up in
+`scripts/builders.json`, so the email must be in that file:
+
+| What happened | Do this |
+|---|---|
+| The link expired, or they lost the email, and they have **not** claimed | `node scripts/launch-invites.js --resend <email>` — a fresh link to the same account. Nothing else changes. |
+| The address was typed wrong, or the invite should not have gone out | `node scripts/launch-invites.js --release <email>` — the build goes back to having no owner, its photo rows go back to the admin, the unclaimed account is deleted. Then correct `builders.json` and run normally. |
+| They clicked the link but never finished, or cannot get back in | Nothing for you to run. **Forgot password?** on the sign-in page emails a link that opens a "choose a new password" form; from there they are sent on to pick a username. |
+| Who has not claimed yet? | Run `node scripts/launch-invites.js` again. A plain run never emails anyone already invited; it prints each builder as claimed or not. |
+
+`--resend` and `--release` refuse a builder who has already claimed, with a 409 that
+says why. `--release` moves everything off the account and reads it back before it
+deletes the account, so a step that silently did nothing stops the delete.
+
+`--resend` rests on one fact about Supabase that the tests cannot prove:
+`inviteUserByEmail` re-sends to an existing **unconfirmed** address instead of refusing
+it. That is how `supabase/auth` reads (`internal/api/invite.go`: an existing user is
+refused only `if isConfirmed`). Until it has been watched once on a real address, treat
+it as read, not verified.
+
+`invite-builder` (the one-off function behind `batch-invite.js`) has neither action and
+still refuses any address that exists.
+
+### Invited builders set a password when they claim
+
+`gunforma-claim.html` asks for a username **and a password**. Until the change that
+added this section (written 2026-10-05) it asked for a username only, and nothing on
+the site could set a password at all — the
+reset email's link signed the person in and redirected, with no form. An invited
+builder therefore had one session, in one browser, and no way back in from anywhere
+else.
+
+Both halves are fixed: the claim page saves a password before it marks the claim
+complete, and the reset link now lands on a "choose a new password" form on
+`gunforma-signin.html`. A builder who claimed before this has no password; **Forgot
+password?** gives them one.
 
 ---
 
@@ -144,7 +189,10 @@ setting — whether Supabase exposes a separate recovery expiry was **not** conf
 Revisit after launch; if it is separable, put recovery back to 3600.
 
 All three templates state the expiry in their copy. **Change the setting, change the
-copy.**
+copy** — and the copy is in four more places than the templates: the "Reset link sent"
+note on `gunforma-signin.html` (it read "1 hour" for five days after the setting was
+raised), the expired screen on `gunforma-claim.html`, and the `--resend` messages in
+`scripts/launch-invites.js` and `supabase/functions/launch-invite`.
 
 ---
 
