@@ -103,6 +103,10 @@ products!inner(id, name, product_variants!product_variants_product_id_fkey(msrp,
 product_variants!inner(id, sku, products!product_variants_product_id_fkey(name, category))
 ```
 
+A join-type hint is not an FK name: `products!inner(...)` off
+`product_variants` is exactly as ambiguous as `products(...)`. Write
+`products!product_variants_product_id_fkey!inner(...)`.
+
 This fails quietly: `supabase-js` returns an error object rather than throwing, so the page
 renders its generic "could not load" state with nothing in the console. It has shipped
 broken twice. Before pushing:
@@ -698,7 +702,9 @@ retailer links, and its fits-with rules in one transaction. It can also swap a
 build's pending custom part for the new product. It is `SECURITY DEFINER`, and
 its guard is `is_admin() or is_trusted_backend()`. `anon` cannot execute it.
 Before it, products arrived only in bulk loads, and `create_variant()` could
-only add to a product that already existed.
+only add to a product that already existed. **New variants on an existing
+part go through `add_variants()`** — see **Adding a variant to an existing
+part** below. Both share one copy of the variant logic.
 
 **What a category needs lives in a table, not in code:
 `spec_field_rules`** (`supabase/spec_field_rules.sql`).
@@ -898,6 +904,62 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   build's platform from a pending custom part and passes both through, so
   Save re-links the part. A section with two categories ("Barrels &
   Compensators") makes the admin pick; a section with none says so.
+
+### Adding a variant to an existing part
+
+`gunforma-admin-part.html?product=<slug>` is the add-a-part page in
+**add-a-variant mode**, over `add_variants(p_product_slug, p_variants,
+p_dry_run)` (`supabase/add_variants.sql`). Every part listed under "Already
+in the catalog?" links to it.
+
+- **The part is read-only:** name, brand, category, platforms, and every
+  live variant with its photo, MSRP and option values. Only new variants are
+  entered, in the same variant table, then Check → warnings → Save as
+  before. Save links to the part's `/parts` page.
+- **The variant logic exists once.** `create_variants_for_product()` turns a
+  variant object into a variant — unknown keys, colour vocabulary, the
+  option columns folded into the slug, gallery, retailer links with the Awin
+  link built. `create_product()` and `add_variants()` both call it, and it
+  is not callable from the API (EXECUTE revoked; both callers are SECURITY
+  DEFINER). Change variant rules there, not in either caller.
+- **`add_variants()` never changes an existing variant**, except that a new
+  variant marked `is_default` takes the default from the old one in the same
+  transaction (`variants_one_default_per_product` holds exactly one). Two new
+  defaults are refused. Unmarked, the current default stays.
+- **Every new variant needs a photo and an MSRP**, refused in the function:
+  adding a variant must never unapprove a part.
+- **Duplicates are refused against every live variant, discontinued ones
+  included, and against the other new ones**, and the message names the
+  match. `variant_identity()` is what "the same" means: all 13 option
+  columns, trimmed, case-folded, blank = null, `optic_cut 'none'` = none,
+  manual safety missing = false. The same rule now applies in
+  `create_product()`, which used to compare raw values and saved "Anodized"
+  beside "anodized ".
+- **`handedness 'ambidextrous'` is NOT normalised away.** The bulk load set
+  it on nearly every slide, barrel, light and trigger, and the form has no
+  handedness field outside frames and mag releases — but on frames it is a
+  real option (Icarus's "Ambi thumb ledge" beside "No thumb ledge", which is
+  null). So the PAGE closes the gap instead: a column the form does not show
+  that holds one value on every live variant of the part is carried onto
+  the new variants and stated on the form. Without that, a page-added copy
+  of an existing variant differs from it only by a column nobody can see,
+  and the duplicate rule lets it through.
+- **Option fields suggest this part's values first, then its category's**,
+  unlike add-a-part mode's "used by two or more products". A new value can
+  still be typed.
+- **A discontinued part is refused.** (`products` has no `retired_at`; it
+  has `is_discontinued`.)
+
+Logged for later, not built:
+
+- **Editing an existing part or variant** (photo, price, a spec fix) and
+  **retiring a variant**. This page only adds.
+- **`sig-sauer-manual-safety-kit-p365` has two live variants identical on
+  every option**: "Rose Gold", `…-matte-rose` (SKU 8901340) and
+  `…-rose-gold` (SKU 8901337). Left alone by ruling; they are for the edit
+  path. Until then nothing more can be added identical to either.
+- `create_product()`'s "already exists" refusals still say "use
+  create_variant"; the page's "Add a variant" link is the real answer.
 
 ### Pending build parts → the catalog, and the needs-data page
 

@@ -152,6 +152,17 @@ details.optional summary { font-size: 11px; font-weight: 700; color: #666; curso
 .result h4 { font-size: 12px; font-weight: 700; margin: 12px 0 6px; }
 .result ul { margin-left: 18px; font-size: 12px; line-height: 1.6; }
 .result .warn-text { font-size: 12px; color: #6b5a2a; white-space: pre-wrap; line-height: 1.55; background: #fff8ea; border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; }
+.existing { display: flex; flex-direction: column; gap: 8px; }
+.existing-row { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: start; border: 0.5px solid #e5e5e5; border-radius: 4px; padding: 8px 10px; }
+.existing-row .photo-box { width: 56px; height: 56px; }
+.existing-row .lbl { font-size: 13px; font-weight: 700; }
+.existing-row .opts { font-size: 11px; color: #666; line-height: 1.6; margin-top: 2px; }
+.existing-row .opts b { color: #444; font-weight: 600; }
+.existing-row .price { font-size: 13px; font-weight: 700; white-space: nowrap; }
+.readonly-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; font-size: 13px; }
+.readonly-grid .field-label { margin-bottom: 2px; }
+.keep-default { display: flex; gap: 8px; align-items: center; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+.hits .hit-add { font-size: 11px; font-weight: 700; margin-left: 4px; }
 .hidden { display: none !important; }
 </style>
 </head>
@@ -171,9 +182,9 @@ details.optional summary { font-size: 11px; font-weight: 700; color: #666; curso
 </nav>
 
 <div class="page-header">
-  <div class="page-eyebrow">Admin — Add a part</div>
-  <div class="page-title">Add one part to the catalog</div>
-  <p class="page-sub">Writes through <code>create_product()</code>. <strong>Check</strong> runs it as a dry run and writes nothing; <strong>Save</strong> is enabled only after a clean Check of exactly what is on screen. A saved product cannot be deleted.</p>
+  <div class="page-eyebrow" id="page-eyebrow">Admin — Add a part</div>
+  <div class="page-title" id="page-title">Add one part to the catalog</div>
+  <p class="page-sub" id="page-sub">Writes through <code>create_product()</code>. <strong>Check</strong> runs it as a dry run and writes nothing; <strong>Save</strong> is enabled only after a clean Check of exactly what is on screen. A saved product cannot be deleted.</p>
 </div>
 
 <!-- Nothing below renders until requireAdmin() passes. -->
@@ -268,7 +279,14 @@ const OPTION_COLS = {
     { key: 'mount_system', label: 'Mount' }, { key: 'bundle', label: 'Bundle' }],
   slide: [{ key: 'optic_cut', label: 'Optic cut' }],
   frame: [{ key: 'manual_safety_variant', label: 'Manual safety', bool: true }, { key: 'handedness', label: 'Handedness' }],
+  mag_release: [{ key: 'handedness', label: 'Handedness' }],   // left / right versions exist; ambidextrous = leave blank
 };
+// The columns variant_identity() compares, in its order (supabase/add_variants.sql).
+const IDENTITY_COLS = ['color', 'finish', 'optic_cut', 'handedness', 'manual_safety_variant', 'reticle', 'reticle_color',
+  'battery_type', 'mount_system', 'bundle', 'clamp', 'clamp_style', 'clamp_rail_type'];
+const IDENTITY_LABELS = { color: 'Colour', finish: 'Finish', optic_cut: 'Optic cut', handedness: 'Handedness', manual_safety_variant: 'Manual safety',
+  reticle: 'Reticle', reticle_color: 'Dot colour', battery_type: 'Battery', mount_system: 'Mount', bundle: 'Bundle', clamp: 'Clamp',
+  clamp_style: 'Clamp style', clamp_rail_type: 'Clamp rail type' };
 
 // The fits-with rule each category may send, as create_product names them.
 const FITS = {
@@ -306,6 +324,8 @@ const S = {
   variants: [],
   defaultUid: null,
   build: null,                // { id, index, part, name, platform_id, categories }
+  target: null,               // ADD-A-VARIANT MODE (?product=<slug>): { id, slug, name, brand, category, is_discontinued, variants }
+  targetError: null,
   check: null,                // { sig, ok, detail, error }
   saved: null,
   busy: false,
@@ -520,11 +540,62 @@ async function loadBuildParam() {
   if (dbCats.length === 1) S.category = dbCats[0];
 }
 
+// ?product=<slug> — ADD-A-VARIANT MODE. The part, its brand and platforms
+// are shown read-only; only new variants are entered, and Save writes them
+// through add_variants(). Existing variants are never changed here.
+const VARIANT_COLS = 'id,slug,color,finish,sku,msrp,primary_image_url,variant_label,is_default,is_discontinued,' + IDENTITY_COLS.slice(2).join(',');
+async function loadTargetParam() {
+  const slug = (new URLSearchParams(location.search).get('product') || '').trim();
+  const { data: prod, error } = await sb.from('products').select('id,slug,name,category,brand_id,is_discontinued').eq('slug', slug).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!prod) { S.targetError = 'No part with the address "' + slug + '" is in the catalog. Nothing to add a variant to.'; return; }
+  const { data: vars, error: vErr } = await sb.from('product_variants').select(VARIANT_COLS)
+    .eq('product_id', prod.id).is('retired_at', null).order('is_default', { ascending: false }).order('slug');
+  if (vErr) throw new Error(vErr.message);
+  S.category = prod.category;
+  (L.productPlatforms || []).filter(function (pp) { return pp.product_id === prod.id; }).forEach(function (pp) { S.platforms.add(pp.platform_id); });
+  S.target = Object.assign({}, prod, { brand: brandName(prod.brand_id), variants: vars || [], inherit: {}, varies: [] });
+  S.defaultUid = 0;   // 0 = keep the current default
+  // Identity columns this category's form does not show. Where every live
+  // variant of the part holds the same value, new variants carry it too, and
+  // the form says so. Without this a page-added copy of an existing variant
+  // would differ from it only by a column nobody can see (handedness
+  // "ambidextrous", set by the bulk load on nearly every slide, barrel and
+  // light) and the duplicate rule would let it through. Not normalised away
+  // in SQL: on frames "ambidextrous" is a real option (Icarus's ambi thumb
+  // ledge, beside a variant with none).
+  const shown = (OPTION_COLS[S.category] || []).map(function (c) { return c.key; });
+  IDENTITY_COLS.slice(2).filter(function (k) { return shown.indexOf(k) === -1; }).forEach(function (k) {
+    const vals = Array.from(new Set(S.target.variants.map(function (x) {
+      return k === 'manual_safety_variant' ? (x[k] === true ? 'true' : '') : blank(x[k]) ? '' : String(x[k]).trim();
+    })));
+    if (vals.length === 1 && vals[0] !== '') S.target.inherit[k] = k === 'manual_safety_variant' ? true : vals[0];
+    else if (vals.length > 1) S.target.varies.push(k);
+  });
+}
+// Suggestions for an option field in add-a-variant mode: the values this part
+// already uses first, then the ones used elsewhere in its category. A new
+// value can still be typed.
+async function loadTargetSuggestions() {
+  const keys = ['finish'].concat((OPTION_COLS[S.category] || []).filter(function (c) { return !c.bool && !c.lookup; }).map(function (c) { return c.key; }));
+  // variants -> products: two FKs between the pair, so the embed names one (CLAUDE.md, PGRST201)
+  const { data } = await sb.from('product_variants').select(keys.join(',') + ',products!product_variants_product_id_fkey!inner(category)')
+    .eq('products.category', S.category).is('retired_at', null);
+  const distinct = function (rows, k) {
+    return Array.from(new Set((rows || []).map(function (r) { return blank(r[k]) ? null : String(r[k]).trim(); }).filter(Boolean))).sort();
+  };
+  keys.forEach(function (k) {
+    const mine = distinct(S.target.variants, k);
+    SUGGEST['target.' + k] = mine.concat(distinct(data, k).filter(function (x) { return mine.indexOf(x) === -1; }));
+  });
+}
+
 // ============================================================
 // RENDER
 // ============================================================
 function render() {
   const app = $('app');
+  if (S.target || S.targetError) { renderTargetMode(); return; }
   app.innerHTML =
     '<div class="layout"><div class="main-col">' +
       '<div id="sec-build"></div>' +
@@ -535,6 +606,59 @@ function render() {
   renderBuildBanner();
   renderWhat();
   renderBody();
+}
+
+function renderTargetMode() {
+  $('app').innerHTML =
+    '<div class="layout"><div class="main-col">' +
+      '<div class="card" id="sec-target"></div>' +
+      '<div id="sec-body"></div>' +
+      '<div id="sec-result"></div>' +
+    '</div><aside class="sidebar"><div class="card panel" id="panel"></div></aside></div>';
+  renderTarget();
+  const block = bodyBlocker();
+  if (S.targetError) { $('panel').innerHTML = ''; return; }   // the part card already says why
+  if (block) { $('sec-body').innerHTML = '<div class="banner bad">' + esc(block.msg) + '</div>'; renderPanel(); return; }
+  $('sec-body').innerHTML = '<div class="card" id="sec-variants"></div>';
+  renderVariants();
+  renderPanel();
+  loadTargetSuggestions().then(function () { if (!S.saved) renderVariants(); });
+}
+function existingOptsHtml(x) {
+  return IDENTITY_COLS.filter(function (k) {
+    if (k === 'manual_safety_variant') return x[k] === true;
+    return !blank(x[k]);
+  }).map(function (k) {
+    return '<b>' + esc(IDENTITY_LABELS[k]) + ':</b> ' + esc(k === 'manual_safety_variant' ? 'yes' : x[k]);
+  }).join(' · ');
+}
+function renderTarget() {
+  const el = $('sec-target');
+  if (S.targetError) { el.innerHTML = '<div class="banner bad">' + esc(S.targetError) + ' <a href="gunforma-admin-part.html">Add a new part instead</a>.</div>'; return; }
+  const t = S.target;
+  const path = window.productPath(t.category, t.slug);
+  const plats = chosenPlatforms().map(function (p) { return p.name; }).join(', ') || '—';
+  el.innerHTML =
+    '<div class="card-head"><div class="card-title"><span class="card-step">1</span>The part</div><div class="card-hint">read-only here</div></div>' +
+    '<div class="readonly-grid">' +
+      '<div><div class="field-label">Name</div>' + esc(t.name) + '</div>' +
+      '<div><div class="field-label">Brand</div>' + esc(t.brand) + '</div>' +
+      '<div><div class="field-label">Category</div>' + esc(CATEGORY_LABEL[t.category] || t.category) + '</div>' +
+      '<div><div class="field-label">Platforms</div>' + esc(plats) + '</div>' +
+    '</div>' +
+    (path ? '<div class="field-note" style="margin-top:10px">Live at <a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(path) + '</a></div>' : '') +
+    '<h4 style="font-size:12px;margin:16px 0 8px">Existing variants (' + t.variants.length + ')</h4>' +
+    (t.variants.length ? '<div class="existing">' + t.variants.map(function (x) {
+      const label = window.variantLabel(x), specs = window.variantSpecs(x);
+      return '<div class="existing-row">' +
+        '<div class="photo-box">' + (x.primary_image_url ? '<img src="' + esc(x.primary_image_url) + '" alt="">' : 'No photo') + '</div>' +
+        '<div><div class="lbl">' + esc(label || x.slug) + (specs ? ' <span style="font-weight:400;color:#666">— ' + esc(specs) + '</span>' : '') +
+          (x.is_default ? ' <span class="tag">default</span>' : '') + (x.is_discontinued ? ' <span class="tag">discontinued</span>' : '') + '</div>' +
+          '<div class="opts">' + (existingOptsHtml(x) || 'No options set') + '</div>' +
+          '<div class="opts">' + esc(x.slug) + (x.sku ? ' · SKU ' + esc(x.sku) : '') + '</div></div>' +
+        '<div class="price">' + (x.msrp != null ? '$' + Number(x.msrp).toFixed(2) : '<span class="bad-text">no MSRP</span>') + '</div>' +
+      '</div>';
+    }).join('') + '</div>' : '<div class="field-note">None live.</div>');
 }
 
 function renderBuildBanner() {
@@ -571,6 +695,11 @@ function renderWhat() {
 
 // The gate for everything below section 1.
 function bodyBlocker() {
+  if (S.targetError) return { msg: S.targetError, bad: true };
+  if (S.target) {
+    if (S.target.is_discontinued) return { msg: '"' + S.target.name + '" is discontinued. New variants are not added to a discontinued part.', bad: true };
+    return null;
+  }
   if (S.build && !S.build.categories.length) return { msg: 'This build part has no catalog category, so it cannot be added here.' };
   if (S.platforms.size === 0 || !S.category) return { msg: 'Choose the platform(s) and the category. Nothing else renders until both are chosen.', quiet: true };
   if (ONE_PLATFORM[S.category] && S.platforms.size !== 1) {
@@ -795,7 +924,8 @@ function renderCatalogHits() {
   el.innerHTML = '<div class="hits"><strong>Already in the catalog?</strong> ' + esc(m.name) + ' ' + esc(CATEGORY_LABEL[S.category].toLowerCase()) + 's:<br>' +
     hits.map(function (p) {
       const path = window.productPath(p.category, p.slug);
-      return path ? '<a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(p.name) + '</a>' : esc(p.name);
+      return (path ? '<a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(p.name) + '</a>' : esc(p.name)) +
+        ' <a class="hit-add" href="gunforma-admin-part.html?product=' + encodeURIComponent(p.slug) + '">Add a variant</a>';
     }).join(' · ') + '</div>';
 }
 
@@ -984,17 +1114,32 @@ function colorOptions(sel) {
 function renderVariants() {
   const el = $('sec-variants');
   if (!el) return;
-  if (!S.variants.length) { const v = newVariant(); S.variants.push(v); S.defaultUid = v.uid; }
+  if (!S.variants.length) { const v = newVariant(); S.variants.push(v); if (!S.target) S.defaultUid = v.uid; }
   const cols = OPTION_COLS[S.category] || [];
+  const cur = S.target && S.target.variants.find(function (x) { return x.is_default; });
   el.innerHTML =
-    '<div class="card-head"><div class="card-title"><span class="card-step">5</span>Variants</div><div class="card-hint">One per colour / finish / option</div></div>' +
+    (S.target
+      ? '<div class="card-head"><div class="card-title"><span class="card-step">2</span>New variants</div><div class="card-hint">One per colour / finish / option</div></div>' +
+        '<label class="keep-default"><input type="radio" name="v-default" data-default="0"' + (S.defaultUid === 0 ? ' checked' : '') + '> Keep ' +
+          (cur ? '"' + esc(window.variantLabel(cur) || cur.slug) + '"' : 'the current default') + ' as the default</label>' +
+        (Object.keys(S.target.inherit).length
+          ? '<div class="field-note" style="margin-bottom:12px">Every new variant also gets ' + Object.keys(S.target.inherit).map(function (k) {
+              return esc(IDENTITY_LABELS[k]) + ': <strong>' + esc(S.target.inherit[k] === true ? 'yes' : S.target.inherit[k]) + '</strong>';
+            }).join(', ') + ', as every existing variant of this part has. It is not a field on this form.</div>' : '') +
+        (S.target.varies.length
+          ? '<div class="banner warn" style="margin-bottom:12px">This part\'s variants differ by ' + S.target.varies.map(function (k) { return esc(IDENTITY_LABELS[k]); }).join(', ') +
+            ', which this form does not edit. New variants are saved with none.</div>' : '')
+      : '<div class="card-head"><div class="card-title"><span class="card-step">5</span>Variants</div><div class="card-hint">One per colour / finish / option</div></div>') +
     S.variants.map(function (v, idx) { return variantHtml(v, idx, cols); }).join('') +
     '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">' +
       '<button class="btn small" data-act="v-add">+ Add variant</button>' +
       '<button class="btn link" data-act="color-add">+ Add a colour to the list…</button>' +
       '<span class="field-note" id="color-note"></span>' +
     '</div>' +
-    cols.filter(function (c) { return !c.bool && !c.lookup; }).map(function (c) { return datalist('dl-v-' + c.key, SUGGEST['variant.' + c.key]); }).join('');
+    cols.filter(function (c) { return !c.bool && !c.lookup; }).map(function (c) {
+      return datalist('dl-v-' + c.key, S.target ? SUGGEST['target.' + c.key] : SUGGEST['variant.' + c.key]);
+    }).join('') +
+    (S.target ? datalist('dl-v-finish', SUGGEST['target.finish']) : '');
   S.variants.forEach(function (v) { refreshPhoto(v); refreshExtras(v); });
   refreshLabels();
   annotateLinks();
@@ -1022,13 +1167,14 @@ function variantHtml(v, idx, cols) {
     '</div></div>';
   }).join('');
   return '<div class="variant" id="v-' + u + '">' +
-    '<div class="variant-head"><label class="variant-default"><input type="radio" name="v-default" data-default="' + u + '"' + (S.defaultUid === u ? ' checked' : '') + '> Default variant</label>' +
+    '<div class="variant-head"><label class="variant-default"><input type="radio" name="v-default" data-default="' + u + '"' + (S.defaultUid === u ? ' checked' : '') + '> ' +
+      (S.target ? 'Make this the new default' : 'Default variant') + '</label>' +
       '<div class="variant-actions"><button class="btn small" data-act="v-dup" data-u="' + u + '">⧉ Duplicate row</button>' +
       (S.variants.length > 1 ? '<button class="btn small" data-act="v-del" data-u="' + u + '">Remove</button>' : '') + '</div></div>' +
     '<div class="variant-label" id="vlabel-' + u + '"></div>' +
     '<div class="rowbox-grid">' +
       '<div class="field"><div class="field-label">Colour<span class="req">*</span></div><select class="field-select" data-v="' + u + '|color">' + colorOptions(v.color) + '</select></div>' +
-      '<div class="field"><div class="field-label">Finish</div>' + input('data-v="' + u + '|finish" autocomplete="off"', v.finish) + '</div>' +
+      '<div class="field"><div class="field-label">Finish</div>' + input('data-v="' + u + '|finish" autocomplete="off"' + (S.target ? ' list="dl-v-finish"' : ''), v.finish) + '</div>' +
       '<div class="field"><div class="field-label">SKU</div>' + input('data-v="' + u + '|sku" autocomplete="off"', v.sku) + '</div>' +
       '<div class="field"><div class="field-label">UPC</div>' + input('data-v="' + u + '|upc" autocomplete="off"', v.upc) + '</div>' +
       '<div class="field"><div class="field-label">MSRP ($)<span class="req">*</span></div>' + input('data-v="' + u + '|msrp" type="number" step="0.01" min="0"', v.msrp) + '</div>' +
@@ -1130,8 +1276,11 @@ function refreshLabels() {
     const el = $('vlabel-' + v.uid);
     if (!el) return;
     const vl = visitorLabel(v);
+    const twin = existingMatch(v);
     el.innerHTML = 'Visitors see: <span class="lbl">' + esc(vl.label || '(choose a colour)') + '</span>' + (vl.specs ? ' — ' + esc(vl.specs) : '') +
-      (vl.label && seen[vl.key] > 1 ? '<span class="dup">Another variant reads exactly the same. Allowed, but a visitor cannot tell them apart.</span>' : '');
+      (twin ? '<span class="dup">Identical on every option to the existing variant "' + esc(window.variantLabel(twin) || twin.slug) + '" (' + esc(twin.slug) +
+                '). Check will be refused: change its colour, finish or an option.</span>'
+            : vl.label && seen[vl.key] > 1 ? '<span class="dup">Another variant reads exactly the same. Allowed, but a visitor cannot tell them apart.</span>' : '');
   });
 }
 function variantsPayload() {
@@ -1156,18 +1305,36 @@ function variantsPayload() {
       return { partner_slug: l.partner_slug, url: l.url.trim() };
     });
     if (links.length) o.links = links;
+    // add-a-variant mode: the values every sibling shares, for columns not on the form
+    if (S.target) Object.keys(S.target.inherit).forEach(function (k) { if (!(k in o)) o[k] = S.target.inherit[k]; });
     return o;
   });
 }
 function linkComplete(l) { return !!(l.partner_slug && isHttpUrl(l.url)); }
 function linkStarted(l) { return !!(l.partner_slug || !blank(l.url)); }
-function variantIdentity(v) {
-  const cols = OPTION_COLS[S.category] || [];
-  return JSON.stringify([v.color, (v.finish || '').trim()].concat(cols.map(function (c) { return String(v.opts[c.key] || '').trim(); })));
+// Mirror of public.variant_identity(): trimmed, case-folded, blank = none,
+// optic_cut 'none' = none, manual safety missing = false. The server
+// decides; this only says so earlier.
+function identityOf(o) {
+  return IDENTITY_COLS.map(function (k) {
+    const raw = o[k];
+    if (k === 'manual_safety_variant') return String(raw === true || raw === 'true');
+    let x = raw == null ? '' : String(raw).trim().toLowerCase();
+    if (k === 'optic_cut' && x === 'none') x = '';
+    return x;
+  }).join('\u001f');
+}
+function variantIdentity(v) { return identityOf(Object.assign({}, S.target ? S.target.inherit : {}, v.opts, { color: v.color, finish: v.finish })); }
+// add-a-variant mode: the live variant of this part a new row is identical to
+function existingMatch(v) {
+  if (!S.target || !v.color) return null;
+  const id = variantIdentity(v);
+  return S.target.variants.find(function (x) { return identityOf(x) === id; }) || null;
 }
 
 // ---- payload ----
 function payload() {
+  if (S.target) return { p_product_slug: S.target.slug, p_variants: variantsPayload() };
   const p = S.product;
   const prod = {
     brand: p.brand.trim(), name: p.name.trim(), category: S.category,
@@ -1198,10 +1365,35 @@ function progress() {
   const save = [], approve = [], notes = [];
   const add = function (list, ok, text) { list.push({ ok: !!ok, text: text }); };
   const block = bodyBlocker();
-  add(save, S.platforms.size > 0, 'Platform chosen');
-  add(save, !!S.category, 'Category chosen');
-  if (block && !block.quiet) add(save, false, block.msg);
+  if (S.target || S.targetError) {
+    if (block) { add(save, false, block.msg); return { save: save, approve: approve, notes: notes }; }
+  } else {
+    add(save, S.platforms.size > 0, 'Platform chosen');
+    add(save, !!S.category, 'Category chosen');
+  }
+  if (block && !block.quiet && !S.target) add(save, false, block.msg);
   if (block) return { save: save, approve: approve, notes: notes };
+  if (S.target) {
+    add(save, S.variants.every(function (v) { return !!v.color; }), 'Every new variant has a colour');
+    add(save, S.variants.every(function (v) { return v.photo === 'ok'; }), 'Every new variant: photo that loads');
+    add(save, S.variants.every(function (v) { return !blank(v.msrp) && Number(v.msrp) >= 0; }), 'Every new variant: MSRP');
+    const tids = S.variants.map(variantIdentity);
+    add(save, new Set(tids).size === tids.length, 'No two new variants identical on every option');
+    const tBadLinks = S.variants.reduce(function (n, v) { return n + v.links.filter(function (l) { return linkStarted(l) && !linkComplete(l); }).length; }, 0);
+    if (tBadLinks) add(save, false, tBadLinks + ' retailer row' + (tBadLinks > 1 ? 's need' : ' needs') + ' a retailer and a web address');
+    const tBadExtras = S.variants.reduce(function (n, v) { return n + galleryUrls(v).filter(function (u) { return v.extras[u] !== 'ok'; }).length; }, 0);
+    if (tBadExtras) add(save, false, tBadExtras + ' extra photo' + (tBadExtras > 1 ? 's do' : ' does') + ' not load (or is still loading)');
+    S.variants.forEach(function (v, i) {
+      const twin = existingMatch(v);
+      if (twin) notes.push('New variant ' + (i + 1) + ' is identical to the existing "' + (window.variantLabel(twin) || twin.slug) + '". Check will be refused.');
+    });
+    const nd = S.variants.findIndex(function (v) { return v.uid === S.defaultUid; });
+    notes.push(nd === -1 ? 'The current default stays the default.' : 'New variant ' + (nd + 1) + ' becomes the default; the current one stops being it.');
+    if (!S.variants.some(function (v) { return v.links.some(linkComplete); })) notes.push('No buy link on the new variants. Saves anyway.');
+    const tUntracked = S.check && S.check.ok && S.check.sig === currentSig() ? untrackedCount() : 0;
+    if (tUntracked) notes.push(tUntracked + ' retailer link' + (tUntracked > 1 ? 's' : '') + ' untracked: no commission.');
+    return { save: save, approve: approve, notes: notes };
+  }
   const p = S.product;
   add(save, !blank(p.brand), 'Brand');
   add(save, !blank(p.name), 'Name');
@@ -1271,7 +1463,7 @@ function saveReady(pr) { return pr.save.every(function (i) { return i.ok; }) && 
 // server would store the default and call the part approved. PR 1's ruling
 // is that the admin answers each of these explicitly, so Save waits.
 function silentDefaults() {
-  if (!S.check || !S.check.ok) return [];
+  if (S.target || !S.check || !S.check.ok) return [];
   const serverMissing = S.check.detail.missing || [];
   return rulesFor(S.category).filter(ruleApplies).filter(function (r) {
     return r.requirement === 'required' && fieldKind(r.field).kind !== 'derived' && blank(S.specs[r.field]) &&
@@ -1282,7 +1474,7 @@ function silentDefaults() {
 function renderPanel() {
   const el = $('panel');
   if (!el) return;
-  if (S.saved) { el.innerHTML = '<h3>Saved</h3><div class="panel-msg">This part is in the catalog. The result is on the left.</div>'; return; }
+  if (S.saved) { el.innerHTML = '<h3>Saved</h3><div class="panel-msg">' + (S.target ? 'The new variants are in the catalog.' : 'This part is in the catalog.') + ' The result is on the left.</div>'; return; }
   const pr = progress();
   const li = function (i) { return '<li class="' + (i.ok ? 'ok' : 'no') + '"><span class="m">' + (i.ok ? '✓' : '✗') + '</span><span>' + esc(i.text) + '</span></li>'; };
   const sig = currentSig();
@@ -1350,13 +1542,15 @@ async function runCheck() {
   const body = payload();
   const sig = JSON.stringify(body);
   S.busy = 'check'; renderPanel();
-  const { data, error } = await sb.rpc('create_product', Object.assign({}, body, { p_dry_run: true }));
+  const { data, error } = await sb.rpc(S.target ? 'add_variants' : 'create_product', Object.assign({}, body, { p_dry_run: true }));
   S.busy = false;
   if (error && error.code === 'P0DRY') {
     let detail = null;
     try { detail = JSON.parse(error.details); } catch (e) { /* handled below */ }
     if (detail) S.check = { sig: sig, ok: true, detail: detail };
     else S.check = { sig: sig, ok: false, error: 'The dry run answered, but its result could not be read: ' + (error.details || '(empty)') };
+  } else if (error && S.target && error.code === 'PGRST202') {
+    S.check = { sig: sig, ok: false, error: 'Adding variants is not available yet: add_variants() has not been applied to the database.', code: error.code };
   } else if (error) {
     S.check = { sig: sig, ok: false, error: error.message + (error.details ? ' — ' + error.details : ''), code: error.code };
   } else {
@@ -1364,7 +1558,7 @@ async function runCheck() {
     // broken in a new way; say so loudly rather than offer Save.
     S.check = { sig: sig, ok: false, error: 'Unexpected: the dry run returned a result instead of P0DRY. Nothing is enabled; report this. ' + JSON.stringify(data) };
   }
-  if (S.check.ok && !S.product.slugTouched) {
+  if (S.check.ok && !S.target && !S.product.slugTouched) {
     const el = document.querySelector('[data-p="slug"]');
     if (el) el.value = S.check.detail.slug;
   }
@@ -1374,9 +1568,12 @@ async function runSave() {
   const body = payload();
   const sig = JSON.stringify(body);
   if (!S.check || !S.check.ok || S.check.sig !== sig) { renderPanel(); return; }
-  if (!window.confirm('Save "' + body.p_product.name + '"? A saved product cannot be deleted.')) return;
+  const n = body.p_variants.length;
+  if (!window.confirm(S.target
+      ? 'Add ' + n + ' variant' + (n > 1 ? 's' : '') + ' to "' + S.target.name + '"? Variants are never deleted; removing one later means retiring it.'
+      : 'Save "' + body.p_product.name + '"? A saved product cannot be deleted.')) return;
   S.busy = 'save'; renderPanel();
-  const { data, error } = await sb.rpc('create_product', body);
+  const { data, error } = await sb.rpc(S.target ? 'add_variants' : 'create_product', body);
   S.busy = false;
   if (error) {
     S.check = { sig: sig, ok: false, error: 'Save refused: ' + error.message + (error.details ? ' — ' + error.details : ''), code: error.code };
@@ -1385,7 +1582,7 @@ async function runSave() {
   }
   S.saved = data;
   renderResult(); renderPanel();
-  document.querySelectorAll('#sec-what input, #sec-what select, #sec-body input, #sec-body select, #sec-body textarea, #sec-body button')
+  document.querySelectorAll('#sec-what input, #sec-what select, #sec-body input, #sec-body select, #sec-body textarea, #sec-body button, #sec-body label input')
     .forEach(function (x) { x.disabled = true; });
 }
 function statusHtml(d) {
@@ -1404,9 +1601,44 @@ function labelCheckHtml(d) {
   if (JSON.stringify(server) === JSON.stringify(preview)) return '';
   return '<div class="banner bad">The labels the server will store (' + server.map(esc).join(', ') + ') differ from this page\'s preview (' + preview.map(esc).join(', ') + '). Report this; the preview is wrong.</div>';
 }
+function variantLines(d) {
+  return (d.variants || []).map(function (v) {
+    return '<li>' + esc(v.label) + (v.default ? ' (default)' : '') + ' <code>' + esc(v.slug) + '</code>: ' + v.photos + ' photo' + (v.photos === 1 ? '' : 's') + ', ' +
+      v.links + ' retailer link' + (v.links === 1 ? '' : 's') +
+      (v.links ? '<ul>' + retailerLines(v).map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' : '') + '</li>';
+  }).join('');
+}
+function renderTargetResult(el) {
+  const t = S.target;
+  const path = window.productPath(t.category, t.slug);
+  const link = path ? '<a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(path) + '</a>' : esc(t.slug);
+  if (S.saved) {
+    const d = S.saved, n = (d.variants || []).length;
+    el.innerHTML = '<div class="card result"><div class="card-head"><div class="card-title"><span class="card-step">✓</span>Saved</div></div>' +
+      '<div class="banner good">' + n + ' variant' + (n === 1 ? '' : 's') + ' added to ' + esc(t.name) + '. See it on ' + link + '.</div>' +
+      '<h4>Added</h4><ul>' + variantLines(d) + '</ul>' +
+      '<h4>The part as a whole</h4>' + statusHtml(d) +
+      '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><a class="btn" href="gunforma-admin-part.html?product=' + encodeURIComponent(t.slug) + '">Add another variant to this part</a>' +
+        '<a class="btn" href="gunforma-admin-part.html">Add a new part</a></div></div>';
+    return;
+  }
+  if (!S.check) { el.innerHTML = ''; return; }
+  if (!S.check.ok) {
+    el.innerHTML = '<div class="card result"><div class="card-head"><div class="card-title"><span class="card-step">3</span>Check result</div></div>' +
+      '<div class="banner bad"><strong>Refused.</strong> ' + esc(S.check.error) + '</div></div>';
+    return;
+  }
+  const d = S.check.detail;
+  el.innerHTML = '<div class="card result"><div class="card-head"><div class="card-title"><span class="card-step">3</span>Check result</div><div class="card-hint">dry run, nothing written</div></div>' +
+    '<h4>The part as a whole, after this</h4>' + statusHtml(d) + labelCheckHtml(d) +
+    '<h4>Would be added to ' + link + '</h4><ul>' + variantLines(d) + '</ul>' +
+    '<div class="field-note">Defaults on the part afterwards: ' + esc(d.defaults) + '.</div></div>';
+  annotateLinks();
+}
 function renderResult() {
   const el = $('sec-result');
   if (!el) return;
+  if (S.target) { renderTargetResult(el); return; }
   if (S.saved) {
     const d = S.saved;
     const path = window.productPath(d.category, d.slug);
@@ -1613,7 +1845,7 @@ function onClick(e) {
   if (act === 'v-del') {
     const v = variantByUid(b.dataset.u);
     S.variants.splice(S.variants.indexOf(v), 1);
-    if (S.defaultUid === v.uid) S.defaultUid = S.variants[0].uid;
+    if (S.defaultUid === v.uid) S.defaultUid = S.target ? 0 : S.variants[0].uid;
     renderVariants(); afterChange(); return;
   }
   if (act === 'l-add') { variantByUid(b.dataset.u).links.push({ partner_slug: '', url: '' }); renderVariants(); afterChange(); return; }
@@ -1632,7 +1864,15 @@ function onClick(e) {
   if (!ok) return;
   try {
     await loadLookups();
-    await loadBuildParam();
+    if (new URLSearchParams(location.search).has('product')) {
+      await loadTargetParam();
+      $('page-eyebrow').textContent = 'Admin — Add a variant';
+      $('page-title').textContent = S.target ? 'Add a variant to ' + S.target.name : 'Add a variant';
+      $('page-sub').innerHTML = 'Writes through <code>add_variants()</code>. Existing variants are never changed here. <strong>Check</strong> runs it as a dry run and writes nothing; <strong>Save</strong> is enabled only after a clean Check of exactly what is on screen.';
+      document.title = 'Admin — Add a variant — Gunforma';
+    } else {
+      await loadBuildParam();
+    }
   } catch (err) {
     $('gate').innerHTML = '<strong>Could not load the catalog vocabulary</strong>' + esc(err.message);
     return;
