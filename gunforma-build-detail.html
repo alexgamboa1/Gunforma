@@ -472,6 +472,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <!-- Section order + category labels. Read by the render code below. -->
+<script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
@@ -1063,9 +1064,10 @@ function renderParts(b) {
     var cat = known || raw;
     if (!groups[cat]) {
       groups[cat] = [];
-      // Kept under its own raw key rather than folded into Miscellaneous: a
-      // legacy snapshot ('other_parts', 'sights') still renders every part,
-      // under a real heading, and nothing is silently relabelled.
+      // Kept under its own raw key rather than folded into Other Parts: an
+      // unrecognised key still renders every part, under a real heading, and
+      // nothing is silently relabelled. (The legacy keys 'other_parts' and
+      // 'sights' are recognised: they fold into their sections.)
       if (!known) unknownOrder.push(cat);
     }
     groups[cat].push(idx);

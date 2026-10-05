@@ -636,6 +636,7 @@ var sb = window.sb;
 // ─── STATE ────────────────────────────────────────────────
 var CURRENT_USER = null;
 var PRODUCTS = [];              // denormalized flat rows (see loadEverything)
+var PART_TYPES = {};            // product id -> products.part_type, Other Parts only
 var PLATFORMS_BY_ID = {};       // {id: {id,name,slug}}
 var FAVORITES = new Set();      // product_ids the signed-in user has favorited
 // Retired (#4): "Set as mine" pinned owned components here and narrowed the
@@ -843,6 +844,16 @@ async function loadEverything() {
     return product;
   });
 
+  // An Other Part's part type, read for that category only and never in the
+  // main select: a column named there that the database does not have yet
+  // would fail the whole catalog. Not fatal: the card falls back to "Other Part".
+  if (PRODUCTS.some(function (p) { return p.category === 'other'; })) {
+    try {
+      var pt = await sb.from('products').select('id,part_type').eq('category', 'other');
+      (pt.data || []).forEach(function (r) { if (r.part_type) PART_TYPES[r.id] = r.part_type; });
+    } catch (e) { console.warn('[catalog] part types failed', e); }
+  }
+
   await loadFavoritesAndRender(/*skipRender*/ true);
   // Affiliate listings for every visible product (one query, ~233 ids).
   // Never fatal — renderers handle missing entries by hiding the block.
@@ -1014,19 +1025,15 @@ function hasActiveFilters() {
 }
 
 // ─── FILTERS ────────────────────────────────────────────
-// Category label overrides so ugly enum values ("mag_release") read cleanly
-// in the sidebar. Anything not in this map falls back to a Title-Case-ish
-// transform.
-var CATEGORY_LABELS = {
-  slide: 'Slides', barrel: 'Barrels', compensator: 'Compensators',
-  frame: 'Frame Modules', trigger: 'Triggers',
-  light: 'Weapon Lights', optic: 'Optics',
-  mag_release: 'Magazine Releases', magwell: 'Magwells',
-  basepad: 'Basepads', slide_release: 'Slide Releases',
-  safety_selector: 'Safety Selectors', takedown_lever: 'Takedown Levers',
-  slide_plate: 'Slide Plates',
-};
-function catLabel(c) { return CATEGORY_LABELS[c] || (c || '').replace(/_/g, ' ').replace(/\b\w/g, function(m){return m.toUpperCase();}); }
+// Category names come from js/category-map.js, the one list every surface
+// reads: the plural for tabs, filters and headings ("Grip Modules"), the
+// singular for one part's own label ("Grip Module"). An Other Part reads as
+// its part type instead ("Thumb ledge").
+function catLabel(c) { return window.categoryPlural(c); }
+function partCatLabel(p) {
+  if (p.category === 'other' && PART_TYPES[p.id]) return PART_TYPES[p.id].charAt(0).toUpperCase() + PART_TYPES[p.id].slice(1);
+  return window.categorySingular(p.category);
+}
 
 function renderFilters() {
   var s = document.getElementById('sidebar');
@@ -1786,7 +1793,7 @@ function renderCard(r) {
   return '<div class="part-card" data-id="' + r.id + '" data-open-detail="1">' +
     '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
     '<div class="part-card-photo">' + photoHtml +
-      (r.category ? '<div class="part-card-cat">' + esc(catLabel(r.category)) + '</div>' : '') +
+      (r.category ? '<div class="part-card-cat">' + esc(partCatLabel(r)) + '</div>' : '') +
     '</div>' +
     '<div class="part-card-body">' +
       '<div class="part-card-brand">' + esc(r.brand) + '</div>' +
@@ -1865,11 +1872,11 @@ document.addEventListener('keydown', function (e) {
 });
 
 function renderDetail(p) {
-  document.getElementById('detail-eyebrow').textContent = p.category ? catLabel(p.category) : 'Product';
+  document.getElementById('detail-eyebrow').textContent = p.category ? partCatLabel(p) : 'Product';
   document.getElementById('detail-brand').textContent = p.brand;
   document.getElementById('detail-title').textContent = p.name;
   document.getElementById('detail-cat-badge-wrap').innerHTML = p.category
-    ? '<div class="detail-cat-badge">' + esc(catLabel(p.category)) + '</div>' : '';
+    ? '<div class="detail-cat-badge">' + esc(partCatLabel(p)) + '</div>' : '';
 
   // Sub-model compat badge — only rendered when a sub-model is selected.
   // Recomputes the fitment rules against SELECTED_SUBMODEL in isolation

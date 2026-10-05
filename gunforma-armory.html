@@ -495,15 +495,8 @@ var STATE = {
 };
 var partUid = 1;
 
-var CATEGORY_LABELS = {
-  slide: 'Slides', barrel: 'Barrels', compensator: 'Compensators',
-  frame: 'Frame Modules', trigger: 'Triggers', light: 'Weapon Lights', optic: 'Optics',
-  mag_release: 'Magazine Releases', magwell: 'Magwells',
-  basepad: 'Basepads', slide_release: 'Slide Releases',
-  safety_selector: 'Safety Selectors', takedown_lever: 'Takedown Levers',
-  slide_plate: 'Slide Plates',
-};
-function catLabel(c) { return CATEGORY_LABELS[c] || (c || '').replace(/_/g, ' ').replace(/\b\w/g, function(m){return m.toUpperCase();}); }
+// Category names come from js/category-map.js, the one list every surface reads.
+function catLabel(c) { return window.categoryPlural(c); }
 
 var GUIDE_CATEGORIES = [
   { key: 'all',                label: 'All' },
@@ -949,7 +942,7 @@ function normalizeSnapshotCategory(part) {
   if (live && live.category) return live.category;          // ground truth
   var raw = (part.category == null ? '' : String(part.category)).trim();
   if (!raw) return null;
-  if (CATEGORY_LABELS[raw] || PRODUCTS_BY_CATEGORY[raw]) return raw;   // already a DB category
+  if (window.CATEGORY_URL_SEGMENT[raw] || PRODUCTS_BY_CATEGORY[raw]) return raw;   // already a DB category
   if (UI_KEY_TO_DB_CATEGORY[raw]) return UI_KEY_TO_DB_CATEGORY[raw];
   // Kept rather than dropped, so the part still counts and can be removed.
   console.warn('[armory] unmapped part category ' + JSON.stringify(raw) +

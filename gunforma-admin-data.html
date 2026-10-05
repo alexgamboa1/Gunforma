@@ -215,7 +215,7 @@ function render() {
       '<div class="card-hint">From <code>products_needing_data</code>. Sorted by how many approved builds use the part, then by fewest missing.</div>' +
       (rows.length ? '<table><thead><tr><th>Part</th><th class="hide-sm">Category</th><th class="hide-sm">Platform</th><th>Used</th><th>Missing</th></tr></thead><tbody>' +
         rows.map(function (n) {
-          return '<tr><td>' + partLine(n) + '</td><td class="hide-sm">' + esc(n.category.replace(/_/g, ' ')) + '</td><td class="hide-sm">' + esc((n.platforms || []).join(', ')) + '</td>' +
+          return '<tr><td>' + partLine(n) + '</td><td class="hide-sm">' + esc(window.categorySingular(n.category)) + '</td><td class="hide-sm">' + esc((n.platforms || []).join(', ')) + '</td>' +
             '<td>' + used(n.product_id) + '</td>' +
             '<td class="miss">' + n.missing.length + ': ' + n.missing.map(function (m) { return esc(missingLabel(n.category, m)); }).join(', ') + '</td></tr>';
         }).join('') + '</tbody></table>' : '<div class="empty">Nothing on this platform.</div>') +

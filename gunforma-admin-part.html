@@ -214,17 +214,13 @@ sb.auth.onAuthStateChange(function(event, session) {
 // readable through PostgREST. The database stays the authority: Check runs
 // the real function, so a wrong entry here is refused there, not saved.
 
-// products.category, in enum order. Display text for this page only: the
-// catalog's CATEGORY_LABELS, the builder's section labels and the /parts/
-// segments are three separate vocabularies (CLAUDE.md) and this is not a
-// fourth one to merge with them — it is the noun an admin is choosing.
-const CATEGORIES = [
-  ['slide', 'Slide'], ['barrel', 'Barrel'], ['frame', 'Grip module (frame)'], ['trigger', 'Trigger'],
-  ['compensator', 'Compensator'], ['light', 'Weapon light'], ['optic', 'Optic'], ['mag_release', 'Magazine release'],
-  ['magwell', 'Magwell'], ['basepad', 'Base plate'], ['slide_release', 'Slide release'],
-  ['safety_selector', 'Safety selector'], ['takedown_lever', 'Takedown lever'], ['slide_plate', 'Slide plate'],
-];
+// products.category, in enum order, with its names: all from
+// js/category-map.js, the one list every surface reads. CATEGORY_LABEL is
+// the plural (lists, headings: "Grip Modules"); CATEGORY_SINGULAR is for
+// sentences ("A slide belongs to exactly one platform").
+const CATEGORIES = window.CATEGORY_KEYS.map(function (k) { return [k, window.categoryPlural(k)]; });
 const CATEGORY_LABEL = Object.fromEntries(CATEGORIES);
+const CATEGORY_SINGULAR = Object.fromEntries(window.CATEGORY_KEYS.map(function (k) { return [k, window.categorySingular(k)]; }));
 // A slide or barrel belongs to exactly one platform (create_product refuses
 // several); its length must be registered in platform_part_lengths.
 const ONE_PLATFORM = { slide: true, barrel: true };
@@ -242,6 +238,7 @@ const BOOL_FIELDS = {
   slide_release: ['uses_oem_spring'],
   takedown_lever: ['has_thumb_rest'],
   safety_selector: ['is_ambidextrous', 'includes_detent_spring'],
+  recoil_spring: ['captured'],
 };
 // true = whole number
 const NUMBER_FIELDS = {
@@ -261,18 +258,37 @@ const LOOKUP_FIELDS = {
   'basepad.basepad_type': 'basepad_types', 'basepad.fits_mag_type': 'mag_types',
   'barrel.barrel_type': 'barrel_type',
   'slide.slide_length_in': 'len:slide', 'slide.barrel_length_in': 'len:barrel', 'barrel.barrel_length_in': 'len:barrel',
+  'recoil_spring.slide_length_in': 'len:slide',
+  'sight.sight_position': 'sight_position', 'sight.height': 'sight_height', 'sight.sight_type': 'sight_type',
 };
 // Filled by the function, not by the admin.
 const DERIVED_FIELDS = {
   'slide.platform': 'platform', 'barrel.platform': 'platform',
   'optic.housing_material': 'material', 'mag_release.material': 'material',
+  'recoil_spring.guide_rod_material': 'material',
 };
 const BARREL_TYPES = ['standard', 'threaded', 'ported', 'threaded-and-ported'];   // enum barrel_type
+// sight_specs CHECKs (supabase/add_categories.sql): value -> what the admin reads
+const SIGHT_CHOICES = {
+  sight_position: [['front', 'Front'], ['rear', 'Rear'], ['set', 'Set (front and rear)']],
+  sight_height:   [['standard', 'Standard'], ['suppressor', 'Suppressor / co-witness']],
+  sight_type:     [['night', 'Night (tritium)'], ['fiber', 'Fiber optic'], ['night-fiber', 'Night + fiber'], ['plain', 'Plain']],
+};
+
+// THE ONE PLACE a variant option column is named. A column can read
+// differently by category: on a sight, reticle_color is the front dot.
+const AXIS_LABELS = { color: 'Colour', finish: 'Finish', optic_cut: 'Optic cut', handedness: 'Handedness', manual_safety_variant: 'Manual safety',
+  reticle: 'Reticle', reticle_color: 'Dot colour', battery_type: 'Battery', mount_system: 'Mount', bundle: 'Bundle', clamp: 'Clamp',
+  clamp_style: 'Clamp style', clamp_rail_type: 'Clamp rail type' };
+const AXIS_LABELS_BY_CATEGORY = { sight: { reticle_color: 'Front dot colour' } };
+function axisLabel(cat, key) { return (AXIS_LABELS_BY_CATEGORY[cat] || {})[key] || AXIS_LABELS[key] || key; }
 
 // Variant option columns, per category, as ruled.
 const OPTION_COLS = {
   optic: [
-    { key: 'reticle', label: 'Reticle' }, { key: 'reticle_color', label: 'Dot colour' }, { key: 'bundle', label: 'Bundle' }],
+    { key: 'reticle', label: axisLabel('optic', 'reticle') }, { key: 'reticle_color', label: axisLabel('optic', 'reticle_color') },
+    { key: 'bundle', label: axisLabel('optic', 'bundle') }],
+  sight: [{ key: 'reticle_color', label: axisLabel('sight', 'reticle_color') }],   // green / orange fronts are variants
   light: [
     { key: 'clamp', label: 'Clamp' }, { key: 'clamp_rail_type', label: 'Clamp rail type', lookup: 'rail_types' },
     { key: 'clamp_style', label: 'Clamp style' }, { key: 'battery_type', label: 'Battery' },
@@ -284,9 +300,6 @@ const OPTION_COLS = {
 // The columns variant_identity() compares, in its order (supabase/add_variants.sql).
 const IDENTITY_COLS = ['color', 'finish', 'optic_cut', 'handedness', 'manual_safety_variant', 'reticle', 'reticle_color',
   'battery_type', 'mount_system', 'bundle', 'clamp', 'clamp_style', 'clamp_rail_type'];
-const IDENTITY_LABELS = { color: 'Colour', finish: 'Finish', optic_cut: 'Optic cut', handedness: 'Handedness', manual_safety_variant: 'Manual safety',
-  reticle: 'Reticle', reticle_color: 'Dot colour', battery_type: 'Battery', mount_system: 'Mount', bundle: 'Bundle', clamp: 'Clamp',
-  clamp_style: 'Clamp style', clamp_rail_type: 'Clamp rail type' };
 
 // The fits-with rule each category may send, as create_product names them.
 const FITS = {
@@ -315,7 +328,7 @@ let uidSeq = 0;
 const S = {
   platforms: new Set(),       // platform ids
   category: '',
-  product: { brand: '', name: '', slug: '', slugTouched: false, url: '', description: '', material: '', material_family: '',
+  product: { brand: '', name: '', slug: '', slugTouched: false, url: '', description: '', material: '', material_family: '', part_type: '',
              weight_oz: '', fitment_notes: '', build_warning: '', build_notes: '', internal_notes: '' },
   specs: {},                  // rule field -> raw string ('' blank; 'true'/'false' for yes/no)
   fitsChecked: new Set(),     // product slugs ticked in the fits checklist
@@ -485,6 +498,15 @@ async function loadSuggestions(cat) {
       textFields.forEach(function (f) { SUGGEST['spec.' + cat + '.' + f] = suggestValues(res.data, f, 'product_id'); });
     }));
   }
+  // Other Parts: every part type already entered in this category (not the
+  // "two or more products" rule — there are few, and each is a phrasing to
+  // reuse). Read only for this category: before supabase/add_categories.sql
+  // the column does not exist, the read fails, and the list stays empty.
+  if (cat === 'other') {
+    jobs.push(sb.from('products').select('part_type').eq('category', 'other').then(function (res) {
+      SUGGEST['product.part_type'] = res.error ? [] : Array.from(new Set((res.data || []).map(function (r) { return blank(r.part_type) ? null : r.part_type.trim(); }).filter(Boolean))).sort();
+    }));
+  }
   if (!loadedSuggest._variants) {
     loadedSuggest._variants = true;
     jobs.push(sb.from('product_variants').select('product_id,reticle,reticle_color,bundle,clamp,clamp_style,battery_type,mount_system,optic_cut,handedness')
@@ -531,13 +553,17 @@ async function loadBuildParam() {
   const BC = window.BuildCategories;
   const sectionKey = BC.sectionKeyFor(part.category);
   const section = BC.CATEGORIES.find(function (c) { return c.key === sectionKey; });
-  const dbCats = (section && section.dbCategory) || [];
+  // Other Parts (`misc`) is the catch-all: a part typed there may be any
+  // catalog part, so every category is offered and none is pre-selected.
+  // Saving re-links it and gives it the product's category (create_product()).
+  const anyCategory = !!(section && section.anyCategory);
+  const dbCats = anyCategory ? window.CATEGORY_KEYS.slice() : ((section && section.dbCategory) || []);
   S.build = { id: data.id, index: idx, part: part, name: data.name, platform_id: data.platform_id,
-              sectionLabel: section ? section.label : (part.category || 'unknown'), categories: dbCats };
+              sectionLabel: section ? section.label : (part.category || 'unknown'), categories: dbCats, anyCategory: anyCategory };
   if (data.platform_id) S.platforms.add(data.platform_id);
   S.product.brand = part.brand || '';
   S.product.name = part.name || '';
-  if (dbCats.length === 1) S.category = dbCats[0];
+  if (!anyCategory && dbCats.length === 1) S.category = dbCats[0];
 }
 
 // ?product=<slug> — ADD-A-VARIANT MODE. The part, its brand and platforms
@@ -549,6 +575,12 @@ async function loadTargetParam() {
   const { data: prod, error } = await sb.from('products').select('id,slug,name,category,brand_id,is_discontinued').eq('slug', slug).maybeSingle();
   if (error) throw new Error(error.message);
   if (!prod) { S.targetError = 'No part with the address "' + slug + '" is in the catalog. Nothing to add a variant to.'; return; }
+  if (prod.category === 'other') {
+    // read for this category only: never named in the select above, which
+    // must keep working before the column exists
+    const { data: pt } = await sb.from('products').select('part_type').eq('id', prod.id).maybeSingle();
+    prod.part_type = pt ? pt.part_type : null;
+  }
   const { data: vars, error: vErr } = await sb.from('product_variants').select(VARIANT_COLS)
     .eq('product_id', prod.id).is('retired_at', null).order('is_default', { ascending: false }).order('slug');
   if (vErr) throw new Error(vErr.message);
@@ -629,7 +661,7 @@ function existingOptsHtml(x) {
     if (k === 'manual_safety_variant') return x[k] === true;
     return !blank(x[k]);
   }).map(function (k) {
-    return '<b>' + esc(IDENTITY_LABELS[k]) + ':</b> ' + esc(k === 'manual_safety_variant' ? 'yes' : x[k]);
+    return '<b>' + esc(axisLabel(S.category, k)) + ':</b> ' + esc(k === 'manual_safety_variant' ? 'yes' : x[k]);
   }).join(' · ');
 }
 function renderTarget() {
@@ -643,7 +675,7 @@ function renderTarget() {
     '<div class="readonly-grid">' +
       '<div><div class="field-label">Name</div>' + esc(t.name) + '</div>' +
       '<div><div class="field-label">Brand</div>' + esc(t.brand) + '</div>' +
-      '<div><div class="field-label">Category</div>' + esc(CATEGORY_LABEL[t.category] || t.category) + '</div>' +
+      '<div><div class="field-label">Category</div>' + esc(CATEGORY_LABEL[t.category] || t.category) + (t.part_type ? ' · ' + esc(t.part_type) : '') + '</div>' +
       '<div><div class="field-label">Platforms</div>' + esc(plats) + '</div>' +
     '</div>' +
     (path ? '<div class="field-note" style="margin-top:10px">Live at <a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(path) + '</a></div>' : '') +
@@ -668,6 +700,7 @@ function renderBuildBanner() {
   const b = S.build;
   let extra = '';
   if (!b.categories.length) extra = ' The <strong>' + esc(b.sectionLabel) + '</strong> section has no catalog category, so this part cannot be added as a product.';
+  else if (b.anyCategory) extra = ' <strong>' + esc(b.sectionLabel) + '</strong> takes any category: pick the one this part really is, and saving moves it into that section of the build.';
   else if (b.categories.length > 1) extra = ' The <strong>' + esc(b.sectionLabel) + '</strong> section covers ' +
     b.categories.map(function (c) { return esc(CATEGORY_LABEL[c] || c); }).join(' and ') + ': pick one below.';
   el.innerHTML = '<div class="banner info">Adding the pending part <strong>' + esc(b.part.name || '') + '</strong> (part ' + b.index +
@@ -690,7 +723,8 @@ function renderWhat() {
     '<div class="field"><div class="field-label">Platforms<span class="req">*</span></div><div class="chips">' + plats + '</div>' +
       '<div class="field-note">Nothing is pre-selected. A slide or barrel fits exactly one platform; every other part may fit several.</div></div>' +
     '<div class="field"><div class="field-label">Category<span class="req">*</span></div>' +
-      '<select class="field-select" data-category' + (noPlat ? ' disabled' : '') + '><option value="">' + (noPlat ? 'Choose a platform first' : 'Choose a category') + '</option>' + cats + '</select></div>';
+      '<select class="field-select" data-category' + (noPlat ? ' disabled' : '') + '><option value="">' + (noPlat ? 'Choose a platform first' : 'Choose a category') + '</option>' + cats + '</select>' +
+      (S.category === 'other' ? '<div class="field-note">Only for parts that fit no other category.</div>' : '') + '</div>';
 }
 
 // The gate for everything below section 1.
@@ -703,7 +737,7 @@ function bodyBlocker() {
   if (S.build && !S.build.categories.length) return { msg: 'This build part has no catalog category, so it cannot be added here.' };
   if (S.platforms.size === 0 || !S.category) return { msg: 'Choose the platform(s) and the category. Nothing else renders until both are chosen.', quiet: true };
   if (ONE_PLATFORM[S.category] && S.platforms.size !== 1) {
-    return { msg: 'A ' + CATEGORY_LABEL[S.category].toLowerCase() + ' belongs to exactly one platform; ' + S.platforms.size + ' are chosen. Untick all but one.' };
+    return { msg: 'A ' + CATEGORY_SINGULAR[S.category].toLowerCase() + ' belongs to exactly one platform; ' + S.platforms.size + ' are chosen. Untick all but one.' };
   }
   if (ONE_PLATFORM[S.category]) {
     const p = chosenPlatforms()[0];
@@ -759,6 +793,12 @@ function renderProduct() {
       '<div class="field"><div class="field-label">Name<span class="req">*</span></div>' + input('data-p="name" autocomplete="off"', p.name) +
         '<div id="catalog-hits"></div></div>' +
     '</div>' +
+    (S.category === 'other'
+      ? '<div class="field"><div class="field-label">Part type<span class="req">*</span></div>' +
+          input('data-p="part_type" list="dl-part-type" autocomplete="off" placeholder="e.g. thumb ledge"', p.part_type) +
+          '<span id="dl-part-type-wrap"></span>' +
+          '<div class="field-note">What the part is, in two or three words. Pages show it in place of the category, so it reads "Thumb ledge for the Sig Sauer P365".</div></div>'
+      : '') +
     '<div class="field"><div class="field-label">URL slug</div>' + input('data-p="slug" autocomplete="off"', p.slug) +
       '<div class="field-note" id="slug-note"></div></div>' +
     '<div class="field"><div class="field-label">Source URL<span class="req">*</span></div>' + input('data-p="url" type="url" placeholder="https://"', p.url) +
@@ -785,6 +825,8 @@ function renderProduct() {
 function renderProductSuggest() {
   const w = $('dl-material-wrap');
   if (w) w.innerHTML = datalist('dl-material', SUGGEST['product.material']);
+  const pt = $('dl-part-type-wrap');
+  if (pt) pt.innerHTML = datalist('dl-part-type', SUGGEST['product.part_type']);
 }
 // THE SUGGESTED SLUG. The function's own default is brand + full name,
 // which gave a 70-character address. The page suggests a short one instead
@@ -921,7 +963,7 @@ function renderCatalogHits() {
   if (!m) { el.innerHTML = '<div class="hits">New brand: nothing from it in the catalog yet.</div>'; return; }
   const hits = (L.products || []).filter(function (p) { return p.brand_id === m.id && p.category === S.category; });
   if (!hits.length) { el.innerHTML = '<div class="hits">No ' + esc(CATEGORY_LABEL[S.category].toLowerCase()) + ' from ' + esc(m.name) + ' in the catalog yet.</div>'; return; }
-  el.innerHTML = '<div class="hits"><strong>Already in the catalog?</strong> ' + esc(m.name) + ' ' + esc(CATEGORY_LABEL[S.category].toLowerCase()) + 's:<br>' +
+  el.innerHTML = '<div class="hits"><strong>Already in the catalog?</strong> ' + esc(m.name) + ' ' + esc(CATEGORY_LABEL[S.category].toLowerCase()) + ':<br>' +
     hits.map(function (p) {
       const path = window.productPath(p.category, p.slug);
       return (path ? '<a href="' + esc(path) + '" target="_blank" rel="noopener">' + esc(p.name) + '</a>' : esc(p.name)) +
@@ -944,6 +986,7 @@ function lookupOptions(lookup) {
     });
   }
   if (lookup === 'barrel_type') return BARREL_TYPES.map(function (t) { return [t, t]; });
+  if (SIGHT_CHOICES[lookup]) return SIGHT_CHOICES[lookup];
   if (lookup.indexOf('len:') === 0) return lengthsFor(lookup.slice(4)).map(function (n) { return [String(n), n + ' in']; });
   const KEY = { grip_rail_types: 'grip_rail_type', port_styles: 'port_style', calibers: 'caliber', basepad_types: 'basepad_type', mag_types: 'mag_type', rail_types: 'rail_type' }[lookup];
   return (L[lookup] || []).map(function (r) { return [r[KEY], r.display_name ? r.display_name + ' (' + r[KEY] + ')' : r[KEY]]; });
@@ -982,7 +1025,7 @@ function renderSpec() {
   if (!el) return;
   const rules = rulesFor(S.category);
   const head = '<div class="card-head"><div class="card-title"><span class="card-step">3</span>Spec sheet</div><div class="card-hint">* needed for approval</div></div>';
-  if (!rules.length) { el.innerHTML = head + '<div class="field-note">A ' + esc(CATEGORY_LABEL[S.category].toLowerCase()) + ' has no spec sheet.</div>'; return; }
+  if (!rules.length) { el.innerHTML = head + '<div class="field-note">' + (S.category === 'other' ? 'An Other Part has no spec sheet: its part type, under Product, says what it is.' : 'A ' + esc(CATEGORY_SINGULAR[S.category].toLowerCase()) + ' has no spec sheet.') + '</div>'; return; }
   const applicable = rules.filter(ruleApplies);
   const req = applicable.filter(function (r) { return r.requirement === 'required'; });
   const opt = applicable.filter(function (r) { return r.requirement === 'optional'; });
@@ -1067,7 +1110,7 @@ function renderFits() {
       }).join('') + '<button class="btn small" data-act="fp-add">+ Add footprint</button>';
     return;
   }
-  el.innerHTML = head + '<div class="field-note">A ' + esc(CATEGORY_LABEL[S.category].toLowerCase()) + ' has no fits-with rules.</div>';
+  el.innerHTML = head + '<div class="field-note">' + (S.category === 'other' ? 'An Other Part' : 'A ' + esc(CATEGORY_SINGULAR[S.category].toLowerCase())) + ' has no fits-with rules.</div>';
 }
 function fitsPayload() {
   const f = FITS[S.category];
@@ -1124,10 +1167,10 @@ function renderVariants() {
           (cur ? '"' + esc(window.variantLabel(cur) || cur.slug) + '"' : 'the current default') + ' as the default</label>' +
         (Object.keys(S.target.inherit).length
           ? '<div class="field-note" style="margin-bottom:12px">Every new variant also gets ' + Object.keys(S.target.inherit).map(function (k) {
-              return esc(IDENTITY_LABELS[k]) + ': <strong>' + esc(S.target.inherit[k] === true ? 'yes' : S.target.inherit[k]) + '</strong>';
+              return esc(axisLabel(S.category, k)) + ': <strong>' + esc(S.target.inherit[k] === true ? 'yes' : S.target.inherit[k]) + '</strong>';
             }).join(', ') + ', as every existing variant of this part has. It is not a field on this form.</div>' : '') +
         (S.target.varies.length
-          ? '<div class="banner warn" style="margin-bottom:12px">This part\'s variants differ by ' + S.target.varies.map(function (k) { return esc(IDENTITY_LABELS[k]); }).join(', ') +
+          ? '<div class="banner warn" style="margin-bottom:12px">This part\'s variants differ by ' + S.target.varies.map(function (k) { return esc(axisLabel(S.category, k)); }).join(', ') +
             ', which this form does not edit. New variants are saved with none.</div>' : '')
       : '<div class="card-head"><div class="card-title"><span class="card-step">5</span>Variants</div><div class="card-hint">One per colour / finish / option</div></div>') +
     S.variants.map(function (v, idx) { return variantHtml(v, idx, cols); }).join('') +
@@ -1347,6 +1390,7 @@ function payload() {
     if (!blank(p[k])) prod[k] = p[k].trim();
   });
   if (!blank(p.weight_oz)) prod.weight_oz = Number(p.weight_oz);
+  if (S.category === 'other' && !blank(p.part_type)) prod.part_type = p.part_type.trim();
   // p_specs / p_fits are left OUT when empty, never sent as null: a JSON
   // null that reaches the function as the jsonb value 'null' (not SQL NULL)
   // makes jsonb_strip_blank() throw "cannot call jsonb_each on a non-object".
@@ -1397,6 +1441,7 @@ function progress() {
   const p = S.product;
   add(save, !blank(p.brand), 'Brand');
   add(save, !blank(p.name), 'Name');
+  if (S.category === 'other') add(save, !blank(p.part_type), 'Part type (what it is, in two or three words)');
   add(save, isHttpUrl(p.url), 'Source URL');
   const slug = computedSlug();
   add(save, !!slug && SLUG_RE.test(slug), 'URL slug: lowercase letters, numbers and hyphens');
@@ -1549,6 +1594,12 @@ async function runCheck() {
     try { detail = JSON.parse(error.details); } catch (e) { /* handled below */ }
     if (detail) S.check = { sig: sig, ok: true, detail: detail };
     else S.check = { sig: sig, ok: false, error: 'The dry run answered, but its result could not be read: ' + (error.details || '(empty)') };
+  } else if (error && ['recoil_spring', 'sight', 'other'].indexOf(S.category) !== -1 &&
+             /unknown product field\(s\): part_type|a (recoil_spring|sight) has no spec sheet/.test(error.message || '')) {
+    // the function from before supabase/add_categories.sql: it knows the
+    // category (the enum has it) but not its spec sheet or part type yet
+    S.check = { sig: sig, ok: false, code: error.code,
+      error: CATEGORY_LABEL[S.category] + ' are not available yet: supabase/add_categories.sql has not been applied to the database. (' + error.message + ')' };
   } else if (error && S.target && error.code === 'PGRST202') {
     S.check = { sig: sig, ok: false, error: 'Adding variants is not available yet: add_variants() has not been applied to the database.', code: error.code };
   } else if (error) {
@@ -1788,7 +1839,7 @@ function onInput(e) {
     S.category = t.value; S.specs = {}; S.fitsChecked = new Set(); S.lightRows = []; S.footprintRows = []; S.check = null;
     S.variants.forEach(function (v) { v.opts = {}; });
     $('sec-result').innerHTML = '';
-    renderBody(); return;
+    renderWhat(); renderBody(); return;
   }
   if (t.dataset.p) {
     const k = t.dataset.p;

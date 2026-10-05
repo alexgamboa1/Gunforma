@@ -599,6 +599,7 @@ Registered today:
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
 | `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
 | `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
+| `scripts/check-categories.mjs` | the browser and server category lists differing; a category in no build section; a page carrying its own category list; a spec sheet the product page never renders |
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
 
 This table is the full registry, not a sample. It read "Registered today:"
@@ -972,6 +973,70 @@ Logged for later, not built:
 - `create_product()`'s "already exists" refusals still say "use
   create_variant"; the page's "Add a variant" link is the real answer.
 
+### Recoil Springs, Sights and Other Parts
+
+Three categories added together (`supabase/add_categories_enum.sql`, then
+`supabase/add_categories.sql`), on every surface: catalog tab, `/parts/`
+address and index, build section, add-a-part with its rules, Needs data and
+the sitemap.
+
+**An enum value is its own migration, applied first.** Postgres refuses to
+USE a value in the transaction that added it, so `add_categories_enum.sql`
+holds only the three `add value` lines and was applied before anything that
+names them could even be dry-run. It touches no row, and no page reads a
+value until a product has it. The pages tolerate both states: categories and
+names live in code, a Check on a new category before its rules exist says
+"not available yet", and nothing reads `products.part_type` except for an
+`other` product — a column named in a main query before it exists fails the
+whole query (every product page, the whole catalog).
+
+| category | segment | build section | group | spec sheet |
+|---|---|---|---|---|
+| `recoil_spring` | `recoil-springs` | Recoil Springs | Core build, after Barrels & Compensators | `recoil_spring_specs` |
+| `sight` | `sights` | Sights | Core build, after Optics | `sight_specs` |
+| `other` | `other-parts` | Other Parts (`misc`) | Carry and finish, last | none |
+
+- **Recoil springs:** slide length (required, one of the slide lengths
+  registered for the part's platforms — refused in words otherwise), spring
+  weight (required, free text: makers write "13 lb" or "Reduced (Soft)"),
+  captured (required), spring type and guide rod material (optional; the guide
+  rod material is filled from the product's material, "material is one fact").
+  **A different weight or length is a different product, not a variant**: neither
+  is an option column, so `variant_identity()` would refuse two weights as
+  identical.
+- **Sights:** front / rear / set, standard / suppressor height, and night /
+  fiber / night + fiber / plain — all required, strict dropdowns, and CHECKs on
+  `sight_specs`. Dovetail and rear notch optional: a required free-text field
+  an admin cannot answer gets filled with guesses. **The front dot colour is a
+  variant option** reusing `reticle_color`; add-a-part labels it "Front dot
+  colour" for sights through `axisLabel()`, the one place a variant column is
+  named per category.
+- **Other Parts:** catalog parts that fit no other category. No spec sheet;
+  one extra fact, **`products.part_type`** — two or three words ("thumb
+  ledge"), suggested from the values already entered in the category. The
+  table rule `products_part_type_other` ties it to the category both ways (an
+  Other Part must have one; nothing else may), comparing the category as text
+  so it does not depend on the enum at plan time; `create_product()` refuses
+  either case in words first. anon reads `products` through COLUMN grants, so
+  the column is granted explicitly. Pages show the part type in place of the
+  category name in a sentence ("Thumb ledge for the Sig Sauer P365").
+- Both new spec tables arrive with RLS on, every grant revoked, and SELECT
+  only, for anon and authenticated, behind a read policy.
+
+Logged for later, not built:
+
+- **Spring weight as a variant option** (one product, several weights).
+- **The older spec tables carry broad grants** — `authenticated` holds
+  INSERT/UPDATE/DELETE/TRUNCATE on `slide_release_specs` and its siblings,
+  behind a read-only policy. RLS refuses the writes; the grants are the drift
+  pattern under **A revoke is not permanent**.
+- **Catalog backing for magazines, holsters and knives**, and **optic adapter
+  plates, fire control parts and grip weights** as categories once builds show
+  them.
+- `create_product()` refuses a spec sheet sent for a category without one as
+  "a other has no spec sheet" — the generic "a %" sentence; the page never
+  sends one.
+
 ### Pending build parts → the catalog, and the needs-data page
 
 A builder's hand-typed part is stored as a **pending custom part**
@@ -984,8 +1049,15 @@ A builder's hand-typed part is stored as a **pending custom part**
   section, by `js/build-categories.js`) and a variant; the page calls
   `relink_build_part(build, index, product, variant, variant_specs)`
   (`supabase/relink_build_part.sql`).
-- A part whose section has **no catalog category** (misc, mags, holsters,
-  paintjob, knife) gets a reason line and neither action.
+- A part whose section has **no catalog category** (mags, holsters, paintjob,
+  knife) gets a reason line and neither action.
+- **Other Parts (`misc`) is the catch-all.** Add to catalog pre-selects no
+  category and offers all of them; Link searches the whole catalog. Linking a
+  part stored under `misc` — through either `create_product()` or
+  `relink_build_part()` — **rewrites its `category` to the product's own**, so
+  the DMP recoil spring typed under Other Parts renders under Recoil Springs.
+  Only `misc`: a part in any other section keeps the category it was saved
+  under (`supabase/add_categories.sql`; the dry run in that PR shows both).
 
 **The index is the part's ORIGINAL index in `parts_snapshot`.** The queue
 renders parts in stored order, so its row index is that index.
@@ -1165,11 +1237,44 @@ listing reads differently depending on which page you are on:
   its behaviour to the documented rules on every deploy.
 - `gunforma-build-detail.html` — inline copy for a build's parts list
 
-The category → URL-segment mapping is duplicated for the same reason:
-`netlify/functions/_category-meta.mjs` (shared by `product-page.mjs` and
-`parts-index.mjs`) and `js/category-map.js` (the browser mirror, loaded as a
-plain `<script>` global). A category that exists in only one of them ships links
-that 404.
+### One category list, two copies
+
+Every `products.category` value — its `/parts/` URL segment, its plural name
+("Grip Modules", for headings, tabs and sections) and its singular name ("Grip
+Module", for sentences, the product page's eyebrow and its JSON-LD
+`category`) — lives in two files with **identical contents**:
+
+- `js/category-map.js` — the browser copy, a plain `<script>` global
+  (`categoryPlural()`, `categorySingular()`, `productPath()`,
+  `CATEGORY_KEYS`).
+- `netlify/functions/_category-meta.mjs` — the server copy (`CATEGORY_META`,
+  `CATEGORIES_WITHOUT_SPEC_SHEET`), imported by `product-page.mjs`,
+  `parts-index.mjs` and `sitemap.mjs`.
+
+Two copies for the usual reason (no module loader on the pages). **Every other
+surface derives from them**: the catalog's and Armory's tabs and labels,
+add-a-part's category list and sentences, Needs data, and the build sections
+in `js/build-categories.js` (a one-category section takes that category's
+plural). **One name per category, everywhere; the builder's names won**:
+"Grip Modules" not "Frame Modules", "Basepads" not "Base plate", "Magazine
+Releases" (plural, like the rest). "Barrels & Compensators" is one build
+section over two catalog categories: layout, not a second name.
+
+`scripts/check-categories.mjs` (every deploy) fails when the two copies differ
+by a character, when a category sits in no build section or in two, when any
+other file maps three or more categories to strings itself, when
+`product-page.mjs`'s `SPEC_TABLES` misses a category that has a spec sheet,
+and when a page reads the globals without loading `js/category-map.js`. The
+build cannot see the database, so `scripts/check-routes.mjs` (scheduled,
+against production) adds the live half: every category that has a product
+must be in the lists, and one product per category must answer 200 at its
+`/parts/` address. A category with no products cannot be hidden from anyone,
+so it is not asserted.
+
+**Adding a category** is therefore: the enum value (its own migration — see
+**Adding a product**), one line in each copy, its build section, and — if it
+has a spec sheet — its `SPEC_TABLES` entry and rules. The guard names whatever
+is missing.
 
 The axis columns they read (`reticle`, `reticle_color`, `color`, `optic_cut`,
 `bundle`, `clamp`, `manual_safety_variant`) feed **labels only**. Nothing filters
@@ -1386,9 +1491,22 @@ window.BuildCategories.sectionKeyFor(raw);   // stored value -> section, or null
 
 **Everything is derived from `CATEGORIES`.** Labels, the
 `products.category` -> section reverse map and the grouped order are computed,
-not hand-listed, so a new section declares its facts once. The only
-hand-written map is `LEGACY_CATEGORY_LABELS`, for keys no longer offered that
-still sit in stored snapshots (`other_parts`, `sights`).
+not hand-listed, so a new section declares its facts once. A section holding
+one category takes that category's plural from `js/category-map.js`, **which
+must load first** (`check-script-order.mjs` enforces it; the module throws
+without it). The only hand-written map is `LEGACY_SECTION_ALIASES`: retired
+keys that may sit in old snapshots fold into the section that replaced them —
+`other_parts` → `misc` (Other Parts), `sights` → `sight` — so they never open
+a second heading with the same name.
+
+**Other Parts is the `misc` section, renamed.** Its key stays `misc` (every
+part typed there was saved under it), it is backed by the `other` catalog
+category, and it keeps the typed-in form. It is the catch-all, so it carries
+`anyCategory`: the review queue's link picker and add-a-part offer every
+category for a pending part from it, and linking one rewrites its category to
+the product's own (see **Pending build parts**). `other` is a
+`products.category` value and `other_parts` a retired section key; neither is
+ever used as the other, and `check-category-labels.mjs` asserts it.
 
 **The admin page is the worked example again, and it had drifted three ways:**
 no Magazine Release section, `magwells` with its `dbCategory` hint dropped so
@@ -1417,12 +1535,11 @@ along with an unlabelled key and a group order that disagrees with
 `CATEGORIES` order — which would make the builder and the published build list
 the same sections differently.
 
-**What is NOT here, on purpose:** `gunforma-parts-catalog.html` and
-`gunforma-armory.html` keep their own `CATEGORY_LABELS`. Those are catalog
-labels keyed by `products.category` alone ("Frame Modules", "Barrels"), a
-different vocabulary from a build's sections ("Grip Modules",
-"Barrels & Compensators"), and the `/parts/` URL segments in
-`js/category-map.js` are a third. Do not merge them.
+**The catalog's names are no longer a separate vocabulary.** This section
+used to say the catalog's own `CATEGORY_LABELS` ("Frame Modules") were a
+different vocabulary from the build's sections and must not be merged. That
+was the drift: one part had four names depending on the page. They are one
+list now — see **One category list, two copies** above.
 
 ### Auth emails live in the dashboard, not in this repo
 

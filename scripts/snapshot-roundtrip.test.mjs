@@ -72,6 +72,9 @@ const page = await read('gunforma-post-build.html');
 // js/build-categories.js — a stub would hide a row that normalises to a
 // different key and so does not round-trip.
 const win = {};
+// build-categories.js names its sections from js/category-map.js, which the
+// page loads first; so does this test.
+new Function('window', await read('js/category-map.js'))(win);
 new Function('window', await read('js/build-categories.js'))(win);
 // The page takes it from the same module: `const FALLBACK_CATEGORY_KEY =
 // window.BuildCategories.FALLBACK_CATEGORY_KEY`.
@@ -143,6 +146,21 @@ const RELINKED = {
 // The same link with the spec line the queue page passes (computed with
 // js/variant-label.js) — the dry run's signed-in-admin case.
 const RELINKED_SPECS = Object.assign({}, RELINKED, { variantSpecs: '2 MOA · Red dot' });
+// A part typed under Other Parts (`misc`) and then linked to a catalog part:
+// create_product() and relink_build_part() (supabase/add_categories.sql)
+// rewrite its category to the PRODUCT's, so it renders in its real section.
+// The keys and shape are what the dry run stored for "P365 Complete Build"
+// part 5 (the DMP Soft RSA) re-linked to a recoil spring (case r4), with the
+// masked ids filled in.
+const RECAT_SPRING = {
+  name: 'Dryrun RSA Relink', brand: 'Dryrun Test Co', refId: '11111111-2222-3333-4444-555555555555', pending: false,
+  category: 'recoil_spring', imageUrl: 'https://example.com/dryrun/photo.jpg',
+  variantId: '66666666-7777-8888-9999-000000000000', variantColor: 'Black', variantLabel: 'Black · Anodized', variantFinish: 'Anodized',
+};
+// The same, linked to an Other Part instead: its category becomes `other`.
+const RECAT_OTHER = Object.assign({}, RECAT_SPRING, { name: 'ProLedge', brand: 'Tactical Development', category: 'other' });
+// A misc part still pending: nothing to re-categorise, and it must render.
+const PENDING_MISC = { category: 'misc', refId: null, brand: 'DMP Springs', name: 'DMP Soft RSA', pending: true };
 const sameKeysAndValues = (a, b) => {
   const sort = (o) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
   return sort(a) === sort(b);
@@ -183,6 +201,25 @@ for (const [i, site] of SITES.entries()) {
       const [out] = roundTrip(site, [row]);
       assert.ok(sameKeysAndValues(out, row), 'changed on round trip:\n  stored ' + JSON.stringify(row) + '\n  saved  ' + JSON.stringify(out));
     }
+  });
+
+  test(`${where}: a part re-categorised out of Other Parts keeps its section through load → save`, () => {
+    // recoil_spring is both the products.category value and the section key,
+    // so the row comes back exactly.
+    const [spring] = roundTrip(site, [RECAT_SPRING]);
+    assert.ok(sameKeysAndValues(spring, RECAT_SPRING), 'changed: ' + JSON.stringify(spring));
+    assert.equal(normalizePartCategory(spring.category), 'recoil_spring');
+    // `other` is a products.category value whose section key is `misc`; the
+    // builder normalises on read and saves the section key. Same section,
+    // same everything else.
+    const [other] = roundTrip(site, [RECAT_OTHER]);
+    assert.equal(normalizePartCategory(other.category), normalizePartCategory(RECAT_OTHER.category));
+    assert.equal(normalizePartCategory(other.category), 'misc');
+    const rest = (o) => Object.fromEntries(Object.entries(o).filter(([k]) => k !== 'category'));
+    assert.ok(sameKeysAndValues(rest(other), rest(RECAT_OTHER)), 'changed: ' + JSON.stringify(other));
+    // still pending under misc: unchanged
+    const [pend] = roundTrip(site, [PENDING_MISC]);
+    assert.equal(JSON.stringify(pend), JSON.stringify(PENDING_MISC));
   });
 
   test(`${where}: a whole mixed build round-trips in order`, () => {

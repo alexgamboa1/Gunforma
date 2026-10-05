@@ -50,6 +50,9 @@ const MODULE = 'js/build-categories.js';
 const fail = [];
 
 const moduleSrc = await readFile(join(ROOT, MODULE), 'utf8');
+// build-categories.js names its single-category sections from
+// js/category-map.js at parse time, as the pages load it: map first.
+const mapSrc = await readFile(join(ROOT, 'js/category-map.js'), 'utf8');
 
 // ── the emitter: CATEGORIES, read textually ───────────────────────────────
 // Sliced from `const CATEGORIES = [` to its MATCHING `]` by bracket depth,
@@ -99,6 +102,7 @@ if (catBlock) {
 const api = (() => {
   try {
     const sandbox = {};
+    new Function('window', mapSrc)(sandbox);
     new Function('window', moduleSrc)(sandbox);
     if (!sandbox.BuildCategories) {
       fail.push(`${MODULE} evaluated but published no window.BuildCategories`);
@@ -140,15 +144,27 @@ if (categoryLabel) {
     }
   }
 
-  // ── 3. keys that are no longer offered but are still stored ─────────────
-  // These are not in CATEGORIES, so assertion 1 cannot see them. A published
-  // build renders whatever its snapshot says, and these two are in snapshots.
+  // ── 3. keys that are no longer offered but may still be stored ─────────
+  // These are not in CATEGORIES, so assertion 1 cannot see them. Each must
+  // fold into a real section and read as that section's name — otherwise a
+  // published build opens a second heading with the same name beside it.
+  const aliases = api.LEGACY_SECTION_ALIASES || {};
   for (const legacy of ['other_parts', 'sights']) {
-    if (!Object.prototype.hasOwnProperty.call(LABELS, legacy) || !LABELS[legacy]) {
-      fail.push(`legacy key '${legacy}' has no label in ${MODULE} — it still occurs in stored `
-              + 'parts_snapshot rows, so a published build would render it unmapped');
+    const target = aliases[legacy];
+    if (!target || !uiKeys.has(target)) {
+      fail.push(`legacy key '${legacy}' does not fold into a section in ${MODULE} — it may still occur in `
+              + 'stored parts_snapshot rows, and would render under a heading of its own');
+      continue;
+    }
+    if (api.sectionKeyFor(legacy) !== target || LABELS[legacy] !== LABELS[target]) {
+      fail.push(`legacy key '${legacy}' resolves to '${api.sectionKeyFor(legacy)}' / '${LABELS[legacy]}', `
+              + `not its section '${target}' / '${LABELS[target]}'`);
     }
   }
+  // `other` is a products.category value and `other_parts` a retired section
+  // key. Neither may ever be used as the other.
+  if (dbKeys.has('other_parts')) fail.push("'other_parts' is listed as a products.category value — it is a retired section key");
+  if (uiKeys.has('other')) fail.push("'other' is used as a section key — it is a products.category value (its section is misc)");
 }
 
 // ── 4. the groups cover every section, exactly once, in the same order ────

@@ -21,10 +21,19 @@
 // Loaded as a plain `<script src>` global by all three pages, like
 // js/category-map.js and js/build-url.js — these pages have no module loader.
 //
+// NAMES COME FROM js/category-map.js, WHICH MUST LOAD FIRST. A section that
+// holds exactly one products.category takes that category's plural name
+// ("Grip Modules", "Basepads"), so the builder, the catalog and add-a-part
+// cannot name the same thing differently. Only sections that are not one
+// category name themselves: "Barrels & Compensators" (two), and the five
+// with no catalog backing (Magazines, Holsters, Paint Job & Finish, Tactical
+// Knife). scripts/check-script-order.mjs fails a page that loads this file
+// without category-map.js before it.
+//
 // EVERYTHING IS DERIVED FROM `CATEGORIES`. Labels, the db-category reverse
 // map and the grouped render order are all computed below rather than
 // hand-listed, so a new section declares its facts once. The only
-// hand-written map is LEGACY_CATEGORY_LABELS, for keys that are no longer
+// hand-written map is LEGACY_SECTION_ALIASES, for keys that are no longer
 // offered but still sit in old snapshots.
 //
 // GUARDED BY scripts/check-category-labels.mjs, which evaluates this file and
@@ -36,6 +45,14 @@
 // perfectly normal.
 // ─────────────────────────────────────────────────────────────────────────
 (function (global) {
+
+// the one display name of a products.category value, from js/category-map.js
+function name(db) {
+  if (typeof global.categoryPlural !== 'function') {
+    throw new Error('js/build-categories.js needs js/category-map.js loaded before it');
+  }
+  return global.categoryPlural(db);
+}
 
 // The four stages a build is assembled in, in render order. The point of the
 // headings is to make the parts step read as progress through the gun rather
@@ -62,29 +79,33 @@ const CATEGORY_GROUPS = [
 // slide_release, safety_selector, takedown_lever — are now sections of their
 // own, keyed by the products.category value itself, so a saved part carries
 // its real category with no translation in either direction. `other_parts` is
-// gone as a section; a leftover in an old snapshot falls through to
-// Miscellaneous on the builder and renders under its own legacy heading on a
-// published build.
+// gone as a section; a leftover in an old snapshot folds into Other Parts
+// (LEGACY_SECTION_ALIASES below).
+//
+// New sections (recoil_spring, sight) are keyed by the products.category value
+// itself, as the five controls are, so a saved part carries its real category.
 const CATEGORIES = [
   // ── Core build ──────────────────────────────────────────────────────────
-  { key:'grips',    group:'core', label:'Grip Modules',           dbCategory:['frame'] },
-  { key:'slides',   group:'core', label:'Slides',                 dbCategory:['slide'] },
-  { key:'barrels',  group:'core', label:'Barrels & Compensators', dbCategory:['barrel','compensator'] },
-  { key:'optics',   group:'core', label:'Optics',                 dbCategory:['optic'] },
-  { key:'lights',   group:'core', label:'Weapon Lights',          dbCategory:['light'] },
-  { key:'triggers', group:'core', label:'Triggers',               dbCategory:['trigger'] },
+  { key:'grips',         group:'core', label:name('frame'),             dbCategory:['frame'] },
+  { key:'slides',        group:'core', label:name('slide'),             dbCategory:['slide'] },
+  { key:'barrels',       group:'core', label:'Barrels & Compensators',  dbCategory:['barrel','compensator'] },
+  { key:'recoil_spring', group:'core', label:name('recoil_spring'),     dbCategory:['recoil_spring'] },
+  { key:'optics',        group:'core', label:name('optic'),             dbCategory:['optic'] },
+  { key:'sight',         group:'core', label:name('sight'),             dbCategory:['sight'] },
+  { key:'lights',        group:'core', label:name('light'),             dbCategory:['light'] },
+  { key:'triggers',      group:'core', label:name('trigger'),           dbCategory:['trigger'] },
 
   // ── Controls ────────────────────────────────────────────────────────────
-  { key:'mag_release',     group:'controls', label:'Magazine Release', dbCategory:['mag_release'] },
-  { key:'slide_release',   group:'controls', label:'Slide Releases',   dbCategory:['slide_release'] },
-  { key:'takedown_lever',  group:'controls', label:'Takedown Levers',  dbCategory:['takedown_lever'] },
-  { key:'safety_selector', group:'controls', label:'Safety Selectors', dbCategory:['safety_selector'] },
-  { key:'slide_plate',     group:'controls', label:'Slide Plates',     dbCategory:['slide_plate'] },
+  { key:'mag_release',     group:'controls', label:name('mag_release'),     dbCategory:['mag_release'] },
+  { key:'slide_release',   group:'controls', label:name('slide_release'),   dbCategory:['slide_release'] },
+  { key:'takedown_lever',  group:'controls', label:name('takedown_lever'),  dbCategory:['takedown_lever'] },
+  { key:'safety_selector', group:'controls', label:name('safety_selector'), dbCategory:['safety_selector'] },
+  { key:'slide_plate',     group:'controls', label:name('slide_plate'),     dbCategory:['slide_plate'] },
 
   // ── Magazine ────────────────────────────────────────────────────────────
-  { key:'magwells', group:'magazine', label:'Magwells',  dbCategory:['magwell'] },
-  { key:'mags',     group:'magazine', label:'Magazines', dbCategory:null },
-  { key:'basepad',  group:'magazine', label:'Basepads',  dbCategory:['basepad'] },
+  { key:'magwells', group:'magazine', label:name('magwell'), dbCategory:['magwell'] },
+  { key:'mags',     group:'magazine', label:'Magazines',     dbCategory:null },
+  { key:'basepad',  group:'magazine', label:name('basepad'), dbCategory:['basepad'] },
 
   // ── Carry and finish ────────────────────────────────────────────────────
   { key:'holsters', group:'carry', label:'Holsters', dbCategory:null },
@@ -107,21 +128,30 @@ const CATEGORIES = [
       pending:false,
     } },
   { key:'knife', group:'carry', label:'Tactical Knife',  dbCategory:null },
-  { key:'misc',  group:'carry', label:'Miscellaneous',   dbCategory:null },
+  // Other Parts. Its key stays `misc`, the key every part typed here has
+  // always been saved under, so those snapshots still render. It is backed by
+  // the `other` catalog category and keeps the typed-in form for parts we do
+  // not carry. `anyCategory`: it is the catch-all, so the review queue's link
+  // picker and add-a-part offer EVERY category for a pending part from here,
+  // and linking one rewrites its category to the product's own
+  // (create_product() and relink_build_part(), supabase/add_categories.sql).
+  { key:'misc',  group:'carry', label:name('other'), dbCategory:['other'], anyCategory:true },
 ];
 
-// Keys that are no longer offered but still occur in stored snapshots. They
-// must keep a real label: a published build renders whatever its snapshot
-// says, and .part-type is `text-transform: uppercase`, so an unmapped key
-// reaches a reader shouted — "OTHER_PARTS" reads like a leaked enum, not a
-// heading. Two live builds shipped exactly that.
+// Keys that are no longer offered but may occur in stored snapshots, and the
+// section each now renders in. A published build renders whatever its
+// snapshot says, and .part-type is `text-transform: uppercase`, so an
+// unmapped key reaches a reader shouted ("OTHER_PARTS"). Two live builds
+// shipped exactly that; none carries either key today (2026-10-05).
 //
-// `sights` only ever existed on the admin page, which had no DB backing for
-// it and no stored build using it; the label stays anyway, because the cost
-// of keeping it is one line and the cost of being wrong is a shouted key.
-const LEGACY_CATEGORY_LABELS = {
-  other_parts: 'Other Parts',
-  sights:      'Sights',
+// They fold INTO their section rather than rendering under a heading of their
+// own, because the names are now the same: `other_parts` would otherwise open
+// a second "Other Parts" heading beside misc's. `other_parts` is a retired
+// SECTION key; `other` is a products.category value. Neither is ever used as
+// the other, and check-category-labels.mjs asserts it.
+const LEGACY_SECTION_ALIASES = {
+  other_parts: 'misc',    // the pre-#114 "Other Parts / Components" section
+  sights:      'sight',   // only ever existed on the admin page
 };
 
 // Bucket for anything we can't place on the BUILDER pages — a real, rendered
@@ -153,8 +183,8 @@ const CATEGORY_LABELS = (function () {
     labels[cat.key] = cat.label;
     (cat.dbCategory || []).forEach(function (db) { labels[db] = cat.label; });
   });
-  Object.keys(LEGACY_CATEGORY_LABELS).forEach(function (k) {
-    labels[k] = LEGACY_CATEGORY_LABELS[k];
+  Object.keys(LEGACY_SECTION_ALIASES).forEach(function (k) {
+    labels[k] = labels[LEGACY_SECTION_ALIASES[k]];
   });
   return labels;
 })();
@@ -183,7 +213,7 @@ function categoryLabel(key) {
     .replace(/\s+/g, ' ')
     .trim()
     .replace(/\b\w/g, function (m) { return m.toUpperCase(); });
-  return pretty || 'Miscellaneous';
+  return pretty || name('other');
 }
 
 // A stored category value -> the section it renders in, or null when nothing
@@ -195,6 +225,7 @@ function sectionKeyFor(raw) {
   const value = (raw == null ? '' : String(raw)).trim();
   if (!value) return null;
   if (UI_CATEGORY_KEYS.has(value)) return value;        // already a section key
+  if (LEGACY_SECTION_ALIASES[value]) return LEGACY_SECTION_ALIASES[value];
   return DB_CATEGORY_TO_KEY[value] || null;
 }
 
@@ -207,7 +238,7 @@ global.BuildCategories = {
   CATEGORY_GROUPS: CATEGORY_GROUPS,
   GROUPED_CATEGORIES: GROUPED_CATEGORIES,
   CATEGORY_LABELS: CATEGORY_LABELS,
-  LEGACY_CATEGORY_LABELS: LEGACY_CATEGORY_LABELS,
+  LEGACY_SECTION_ALIASES: LEGACY_SECTION_ALIASES,
   DB_CATEGORY_TO_KEY: DB_CATEGORY_TO_KEY,
   FALLBACK_CATEGORY_KEY: FALLBACK_CATEGORY_KEY,
   categoryLabel: categoryLabel,
