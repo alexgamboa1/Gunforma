@@ -919,9 +919,10 @@ in the catalog?" links to it.
 - **The variant logic exists once.** `create_variants_for_product()` turns a
   variant object into a variant — unknown keys, colour vocabulary, the
   option columns folded into the slug, gallery, retailer links with the Awin
-  link built. `create_product()` and `add_variants()` both call it, and it
-  is not callable from the API (EXECUTE revoked; both callers are SECURITY
-  DEFINER). Change variant rules there, not in either caller.
+  link built. `create_product()` and `add_variants()` both call it. EXECUTE
+  is revoked from public, anon and authenticated, so a signed-in user reaches
+  it only through those two SECURITY DEFINER callers; `service_role` keeps
+  EXECUTE. Change variant rules there, not in either caller.
 - **`add_variants()` never changes an existing variant**, except that a new
   variant marked `is_default` takes the default from the old one in the same
   transaction (`variants_one_default_per_product` holds exactly one). Two new
@@ -944,6 +945,16 @@ in the catalog?" links to it.
   the new variants and stated on the form. Without that, a page-added copy
   of an existing variant differs from it only by a column nobody can see,
   and the duplicate rule lets it through.
+  - **This inheritance exists only on the page.** A direct call to
+    `add_variants()` (SQL, a script, the service role) gets no inherited
+    columns, and a copy that leaves out `handedness` passes the duplicate
+    rule against a sibling that says `ambidextrous`.
+  - **The real fix is data, deferred to the field review:** clear
+    `handedness 'ambidextrous'` where it means nothing. On 2026-10-05, 477
+    variants carried it: 122 frames and 19 mag releases, where it is a real
+    option (beside "no thumb ledge", and beside 1 left and 1 right mag
+    release), and **336** across the other categories, where it means
+    nothing. Those 336 are the rows to clear.
 - **Option fields suggest this part's values first, then its category's**,
   unlike add-a-part mode's "used by two or more products". A new value can
   still be typed.

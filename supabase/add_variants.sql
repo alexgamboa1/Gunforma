@@ -1,8 +1,11 @@
 -- add_variants.sql
--- NOT YET APPLIED. Dry-run 2026-10-04 against Gunforma-v2 inside one
--- rolled-back transaction; results, and the A/B comparison of
--- create_product() before and after, in the PR. Apply AFTER the page that
--- calls add_variants() is merged and live.
+-- APPLIED 2026-10-05 as migration add_variants (20261005005427), BEFORE
+-- #138 (the page that calls it) was merged — by decision: nothing on main
+-- called add_variants(), and create_product() kept its signature, so the
+-- live site tolerated both shapes. See the record at the bottom of this file.
+-- Dry-run 2026-10-04 against Gunforma-v2 inside one rolled-back transaction;
+-- results, and the A/B comparison of create_product() before and after, in
+-- #138.
 --
 -- WHY. gunforma-admin-part.html only creates new parts and create_product()
 -- refuses an existing one. create_variant() exists but cannot set the option
@@ -65,10 +68,12 @@ $vi$;
 -- part — discontinued ones included — or to another new one. The refusal
 -- names the match.
 --
--- Not callable from the API: SECURITY INVOKER with EXECUTE revoked from
--- everyone but the owner, so only the two SECURITY DEFINER callers reach it.
--- It repeats their guard anyway. p_caller only prefixes messages, so each
--- caller's refusals read as its own.
+-- Not callable by anon or a signed-in user: SECURITY INVOKER, with EXECUTE
+-- revoked from public, anon and authenticated, so from the API they reach it
+-- only through the two SECURITY DEFINER callers. service_role keeps EXECUTE
+-- (this file never revokes it) and can call it directly; that is the trusted
+-- backend, and the function repeats the callers' guard anyway. p_caller only
+-- prefixes messages, so each caller's refusals read as its own.
 create or replace function public.create_variants_for_product(
   p_product_id uuid, p_product_slug text, p_variants jsonb, p_caller text)
 returns jsonb
@@ -623,11 +628,34 @@ end;
 $av$;
 
 -- grants: create or replace keeps them; restated so this file says the whole
--- of what is live. The helper and the identity function are not callable
--- from the API at all.
+-- of what is live. The helper and the identity function are revoked from
+-- public, anon and authenticated; service_role keeps EXECUTE on both.
 revoke all on function public.variant_identity(text, text, text, text, boolean, text, text, text, text, text, text, text, text) from public, anon, authenticated;
 revoke all on function public.create_variants_for_product(uuid, text, jsonb, text) from public, anon, authenticated;
 revoke all on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) from public, anon;
 grant execute on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) to authenticated, service_role;
 revoke all on function public.add_variants(text, jsonb, boolean) from public, anon;
 grant execute on function public.add_variants(text, jsonb, boolean) to authenticated, service_role;
+
+-- ============================================================
+-- APPLIED 2026-10-05 as migration add_variants (20261005005427) to project
+-- lagjjcpclvzrjlrswojt, from this file as committed in #138 (05e5043),
+-- BEFORE #138 was merged (see the header). Verified live after the change,
+-- md5(pg_proc.prosrc) against the body between each function's quotes:
+--
+--   variant_identity             f2a90c4d6a9ab2c3b94208bdf124d6f9
+--   create_variants_for_product  c163294461927212235e16cc6ee5a9d9
+--   create_product               59e430c28a8b77a69e84a3ad13d861f5
+--   add_variants                 ada3a1d42a1a3b35ada3ce34616e2b71
+--
+--   all identical; one overload each; search_path = ''. create_product and
+--   add_variants are SECURITY DEFINER with EXECUTE for authenticated and
+--   service_role, not anon. variant_identity and create_variants_for_product
+--   are SECURITY INVOKER with EXECUTE for service_role only.
+--
+-- Deploy-preview done-checks 1-4 passed, signed in as admin. First real
+-- variant, 2026-10-05 01:14 UTC: Red on
+-- springer-precision-3-mag-extension-p365xmacro
+-- (springer-precision-3-mag-extension-p365xmacro-red, $36.75, with a photo,
+-- not the default). Tan stays the default and the part stays approved.
+-- ============================================================
