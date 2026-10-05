@@ -1006,7 +1006,11 @@ whole query (every product page, the whole catalog).
   identical.
 - **Sights:** front / rear / set, standard / suppressor height, and night /
   fiber / night + fiber / plain — all required, strict dropdowns, and CHECKs on
-  `sight_specs`. Dovetail and rear notch optional: a required free-text field
+  `sight_specs`. **The three lists live in three places** — those CHECKs,
+  `create_product()` (which refuses a value outside them in words naming the
+  allowed ones, `supabase/sight_values_in_words.sql`, instead of the raw
+  constraint error) and `SIGHT_CHOICES` in `gunforma-admin-part.html`.
+  Change all three together. Dovetail and rear notch optional: a required free-text field
   an admin cannot answer gets filled with guesses. **The front dot colour is a
   variant option** reusing `reticle_color`; add-a-part labels it "Front dot
   colour" for sights through `axisLabel()`, the one place a variant column is

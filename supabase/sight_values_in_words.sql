@@ -1,109 +1,19 @@
--- add_categories.sql
--- APPLIED 2026-10-05 as migration add_categories (20261005024538), BEFORE
--- #140 was merged, after add_categories_enum.sql (20261005020804): Postgres
--- refuses to use an enum value in the transaction that added it. See the
--- record at the foot of this file. Dry-run the same day inside one
--- rolled-back transaction; results, and the A/B comparison of
--- create_product() and relink_build_part() before and after, in #140.
--- create_product() has since been restated by sight_values_in_words.sql.
+-- sight_values_in_words.sql
+-- APPLIED 2026-10-05 as migration sight_values_in_words (20261005033214),
+-- after a rolled-back dry run the same day: 48 cases through the live and
+-- the new create_product() in one transaction, 44 identical, the 4 bad sight
+-- values the only differences (record at the foot; detail in the PR).
 --
--- WHAT.
---   recoil_spring_specs, sight_specs   the two new spec sheets
---   spec_field_rules                   their rules (approved field lists)
---   products.part_type                 an Other Part's one extra fact
---   create_product()                   part_type; recoil-spring slide length;
---                                      guide rod material is the material;
---                                      a misc part re-linked takes the
---                                      product's category
---   relink_build_part()                the same misc rule
+-- One change to create_product(): a sight's position, height or type outside
+-- its list is refused in words that name the allowed values, before the
+-- insert. It used to reach the admin as the raw CHECK violation
+-- ("new row for relation "sight_specs" violates check constraint
+-- "sight_specs_sight_position""). The CHECKs stay; this only says the same
+-- thing first, in a sentence.
 --
--- product_data_status() does not change: it finds a spec sheet by name
--- (<category>_specs) and its rules in spec_field_rules, and an Other Part
--- cannot exist without a part type (the table rule below).
---
--- Both spec tables follow frame_specs/optic_specs: a category column held to
--- its one value, and the (product_id, category) FK into products, so a spec
--- row can only ever belong to a product of that category. Unlike the older
--- spec tables they arrive with grants revoked: SELECT only, to anon and
--- authenticated, behind a read policy (CLAUDE.md, "every new public table
--- needs RLS and an explicit revoke"). The older tables' broad grants are
--- logged, not fixed here.
+-- Restated from add_categories.sql (applied 2026-10-05, 20261005024538);
+-- nothing else in it changes.
 
--- ── recoil springs ──────────────────────────────────────────────────────────
--- A different spring weight or slide length is a different PRODUCT, not a
--- variant: neither is one of the option columns variant_identity() compares,
--- so two weights as variants would be refused as identical.
-create table public.recoil_spring_specs (
-  product_id         uuid primary key,
-  category           public.product_category not null default 'recoil_spring',
-  slide_length_in    numeric(3,2),   -- the slide length it fits; registered in platform_part_lengths
-  spring_weight      text,           -- as the maker writes it: "13 lb", "Reduced (Soft)"
-  captured           boolean,
-  spring_type        text,           -- flat-wire, round-wire, dual
-  guide_rod_material text,           -- filled from products.material ("material is one fact")
-  constraint recoil_spring_specs_category check (category = 'recoil_spring'),
-  constraint recoil_spring_specs_product_fkey foreign key (product_id, category)
-    references public.products (id, category) on delete cascade
-);
-
--- ── sights ──────────────────────────────────────────────────────────────────
--- The front dot colour is a VARIANT option (product_variants.reticle_color,
--- labelled "Front dot colour" for sights), so green and orange fronts are
--- variants of one product.
-create table public.sight_specs (
-  product_id     uuid primary key,
-  category       public.product_category not null default 'sight',
-  sight_position text,   -- front | rear | set
-  height         text,   -- standard | suppressor (makers' "co-witness")
-  sight_type     text,   -- night (tritium) | fiber | night-fiber | plain
-  dovetail       text,   -- the slide cut, as makers write it; optional
-  rear_notch     text,   -- U-notch, square, …; optional
-  constraint sight_specs_category check (category = 'sight'),
-  constraint sight_specs_sight_position check (sight_position in ('front', 'rear', 'set')),
-  constraint sight_specs_height check (height in ('standard', 'suppressor')),
-  constraint sight_specs_sight_type check (sight_type in ('night', 'fiber', 'night-fiber', 'plain')),
-  constraint sight_specs_product_fkey foreign key (product_id, category)
-    references public.products (id, category) on delete cascade
-);
-
-alter table public.recoil_spring_specs enable row level security;
-alter table public.sight_specs enable row level security;
-revoke all on public.recoil_spring_specs, public.sight_specs from public, anon, authenticated;
-grant select on public.recoil_spring_specs, public.sight_specs to anon, authenticated;
-create policy recoil_spring_specs_public_read on public.recoil_spring_specs for select to anon, authenticated using (true);
-create policy sight_specs_public_read on public.sight_specs for select to anon, authenticated using (true);
-
--- ── rules (the approved field lists) ────────────────────────────────────────
-insert into public.spec_field_rules (category, field, requirement, only_when_field, only_when_values, label, sort_order) values
-  ('recoil_spring', 'slide_length_in',    'required', null, null, 'Slide length (in)',    10),
-  ('recoil_spring', 'spring_weight',      'required', null, null, 'Spring weight',        20),
-  ('recoil_spring', 'captured',           'required', null, null, 'Captured',             30),
-  ('recoil_spring', 'spring_type',        'optional', null, null, 'Spring type',          40),
-  ('recoil_spring', 'guide_rod_material', 'optional', null, null, 'Guide rod material',   50),
-  ('sight',         'sight_position',     'required', null, null, 'Front, rear or set',   10),
-  ('sight',         'height',             'required', null, null, 'Height',               20),
-  ('sight',         'sight_type',         'required', null, null, 'Sight type',           30),
-  ('sight',         'dovetail',           'optional', null, null, 'Dovetail / slide cut', 40),
-  ('sight',         'rear_notch',         'optional', null, null, 'Rear notch',           50);
-
--- ── Other Parts: part_type ──────────────────────────────────────────────────
--- Two or three words saying what the part is ("thumb ledge"). An Other Part
--- must have one and no other category may: the rule compares the category as
--- TEXT, so it does not depend on the enum value at plan time. anon reads
--- products through column grants, so the new column is granted explicitly.
-alter table public.products add column part_type text;
-alter table public.products add constraint products_part_type_other
-  check ((category::text = 'other') = (coalesce(btrim(part_type), '') <> ''));
-grant select (part_type) on public.products to anon, authenticated;
-comment on column public.products.part_type is
-  'Other Parts only: what the part is, in two or three words ("thumb ledge"). Required there, absent everywhere else (products_part_type_other).';
-
--- ── create_product(): restated from add_variants.sql (applied) ──────────────
--- Changes, and nothing else: part_type accepted, required for and only for
--- Other Parts; a recoil spring's slide length must be registered for one of
--- its platforms; guide_rod_material is filled from the material, like an
--- optic's housing_material; a re-linked part stored under misc takes the
--- product's category.
 create or replace function public.create_product(
   p_product jsonb, p_variants jsonb, p_specs jsonb default null, p_fits jsonb default null,
   p_build_id uuid default null, p_part_index integer default null, p_dry_run boolean default false)
@@ -127,6 +37,7 @@ declare
   v_tbl regclass; v_rule_fields text[]; v_collist text; v_has_specs boolean := false;
   v_warn text[] := '{}';
   v_vr jsonb;
+  v_allowed text;
 begin
   if not (public.is_admin() or public.is_trusted_backend()) then
     raise exception 'create_product: admin or service_role only' using errcode = '42501';
@@ -233,6 +144,23 @@ begin
     select string_agg(k, ', ') into v_bad from jsonb_object_keys(s) k where k <> all (v_rule_fields);
     if v_bad is not null then
       raise exception 'create_product: spec sheet: no rule for field(s): %. Fields for a %: %', v_bad, v_category, array_to_string(v_rule_fields, ', ');
+    end if;
+
+    -- a sight's three fixed lists. Checked here so an admin reads the
+    -- allowed values, not the name of a sight_specs CHECK constraint. The
+    -- same lists are those CHECKs (supabase/add_categories.sql) and
+    -- SIGHT_CHOICES in gunforma-admin-part.html; change all three together.
+    if v_category::text = 'sight' then
+      foreach v_key in array array['sight_position', 'height', 'sight_type'] loop
+        v_allowed := case v_key when 'sight_position' then 'front, rear, set'
+                                when 'height'         then 'standard, suppressor'
+                                else                       'night, fiber, night-fiber, plain' end;
+        if s ? v_key and not (s->>v_key = any (string_to_array(v_allowed, ', '))) then
+          raise exception 'create_product: a sight''s % must be one of: %. "%" is not one of them.',
+            case v_key when 'sight_position' then 'position' when 'height' then 'height' else 'type' end,
+            v_allowed, s->>v_key;
+        end if;
+      end loop;
     end if;
 
     -- platform: the product's one platform. A disagreeing key is refused.
@@ -483,105 +411,20 @@ $fn$;
 comment on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) is
   'Admin / service_role only. Creates a product with its brand, platforms, spec sheet, every variant (photos + retailer links) and fits-with rules in one transaction, optionally re-links a build''s pending custom part, and returns product_data_status. p_dry_run raises P0DRY with the result instead of writing.';
 
--- ── relink_build_part(): restated from relink_build_part.sql (applied) ──────
--- One change: a part stored under misc (Other Parts, the catch-all) takes the
--- product's own category. Every other section keeps its category.
-create or replace function public.relink_build_part(
-  p_build_id uuid, p_part_index integer, p_product_id uuid, p_variant_id uuid,
-  p_variant_specs text default null)
-returns jsonb
-language plpgsql security definer set search_path = ''
-as $rl$
-declare
-  v_part jsonb; v_history jsonb; v_corrections int; v_entry jsonb;
-  pr record; pv record;
-begin
-  if not (public.is_admin() or public.is_trusted_backend()) then
-    raise exception 'relink_build_part: admin or service_role only' using errcode = '42501';
-  end if;
-  if p_build_id is null or p_part_index is null or p_product_id is null or p_variant_id is null then
-    raise exception 'relink_build_part: build, part index, product and variant are all required';
-  end if;
-  if p_part_index < 0 then
-    raise exception 'relink_build_part: part index must be 0 or more';   -- jsonb -> -1 would read from the end
-  end if;
-
-  select b.parts_snapshot -> p_part_index, coalesce(b.edit_history, '[]'::jsonb)
-    into v_part, v_history
-    from public.builds b where b.id = p_build_id for update;
-  if not found then raise exception 'relink_build_part: no build %', p_build_id; end if;
-  if v_part is null then raise exception 'relink_build_part: that build has no part at index %', p_part_index; end if;
-  if (v_part->>'pending')::boolean is not true or v_part->>'refId' is not null then
-    raise exception 'relink_build_part: part % ("%") on that build is not a pending custom part', p_part_index, v_part->>'name';
-  end if;
-
-  select count(*) into v_corrections from jsonb_array_elements(v_history) e
-   where (e->>'part_index') ~ '^[0-9]+$' and (e->>'part_index')::int = p_part_index;
-  if v_corrections > 0 then
-    raise exception 'relink_build_part: part % ("%") has % correction% in the review queue. The build page shows those over the part, so a linked part would read as the correction. Not linked.',
-      p_part_index, v_part->>'name', v_corrections, case when v_corrections = 1 then '' else 's' end;
-  end if;
-
-  select p.id, p.name, p.category, m.name as brand into pr
-    from public.products p join public.manufacturers m on m.id = p.brand_id
-   where p.id = p_product_id;
-  if not found then raise exception 'relink_build_part: no product %', p_product_id; end if;
-
-  select v.id, v.product_id, v.retired_at, v.primary_image_url, v.color, v.variant_label, v.finish into pv
-    from public.product_variants v where v.id = p_variant_id;
-  if not found or pv.product_id is distinct from p_product_id then
-    raise exception 'relink_build_part: that variant is not one of "%"''s variants', pr.name;
-  end if;
-  if pv.retired_at is not null then
-    raise exception 'relink_build_part: that variant of "%" is retired. Pick a live one.', pr.name;
-  end if;
-
-  v_entry := v_part
-    || jsonb_strip_nulls(jsonb_build_object('name', pr.name, 'brand', pr.brand, 'refId', pr.id,
-         'imageUrl', pv.primary_image_url, 'variantId', pv.id, 'variantColor', pv.color,
-         'variantLabel', pv.variant_label, 'variantFinish', pv.finish,
-         'variantSpecs', nullif(btrim(coalesce(p_variant_specs, '')), '')))
-    || jsonb_build_object('pending', false)
-    -- Other Parts (stored as `misc`) is the catch-all: a linked part takes the
-    -- product's own category and renders in its real section. Every other
-    -- section keeps the category it was saved under.
-    || case when v_part->>'category' = 'misc' then jsonb_build_object('category', pr.category::text) else '{}'::jsonb end;
-
-  update public.builds b set parts_snapshot = jsonb_set(b.parts_snapshot, array[p_part_index::text], v_entry)
-   where b.id = p_build_id;
-
-  return jsonb_build_object('build_id', p_build_id, 'part_index', p_part_index, 'entry', v_entry);
-end;
-$rl$;
-
-comment on function public.relink_build_part(uuid, integer, uuid, uuid, text) is
-  'Admin / service_role only. Swaps a build''s pending custom part (by its original index) for an existing catalog product and variant, as create_product()''s re-link does, plus variantSpecs when given. A part stored under misc (Other Parts) takes the product''s category. Refuses a part that is not pending or carries corrections.';
-
-revoke all on function public.relink_build_part(uuid, integer, uuid, uuid, text) from public, anon;
-grant execute on function public.relink_build_part(uuid, integer, uuid, uuid, text) to authenticated, service_role;
-
--- grants: create or replace keeps them; restated so this file says the whole
--- of what is live.
 revoke all on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) from public, anon;
 grant execute on function public.create_product(jsonb, jsonb, jsonb, jsonb, uuid, integer, boolean) to authenticated, service_role;
 
 -- ============================================================
--- APPLIED 2026-10-05 as migration add_categories (20261005024538) to project
--- lagjjcpclvzrjlrswojt, from this file as committed in #140 (5ecdbd9),
--- BEFORE #140 was merged. Verified live after the change:
+-- APPLIED 2026-10-05 as migration sight_values_in_words (20261005033214) to
+-- project lagjjcpclvzrjlrswojt. Verified live: md5(pg_proc.prosrc) of
+-- create_product d63d25cce9410a130a65461b18719e74, identical to the body
+-- between this file's $fn$ quotes; one overload; SECURITY DEFINER,
+-- search_path = ''; EXECUTE for authenticated and service_role, not anon.
 --
---   md5(pg_proc.prosrc), against the body between each function's quotes:
---     create_product     c240b7860d823bdb4ec4dd606f97a54a
---     relink_build_part  ace62b6572b1935d324b32709fbc0ebc
---   recoil_spring_specs, sight_specs: RLS on; SELECT only, for anon and
---     authenticated, behind a read policy; anon INSERT refused (42501)
---   10 spec_field_rules rows (5 recoil_spring, 5 sight)
---   products.part_type (text) with products_part_type_other; anon can read it
---
--- Done-checks on the deploy preview passed. First parts: the DMP Soft RSA
--- (dmp-springs-soft-rsa-p365, a recoil spring, 2026-10-05 03:07 UTC), linked
--- to "P365 Complete Build" part 5, which now reads category recoil_spring;
--- and the Tactical Development Pro Ledge
--- (tactical-development-pro-ledge-tlr7-sub-1913-p365, an Other Part, part
--- type "Thumb Ledge", 03:13 UTC). Both approved.
+-- Dry run (file md5 0b837b6cd1b2ebbeb2930d75b7d38827), before -> after:
+--   position "middle"  CHECK sight_specs_sight_position -> "a sight's position must be one of: front, rear, set. "middle" is not one of them."
+--   height "tall"      CHECK sight_specs_height         -> "a sight's height must be one of: standard, suppressor. ..."
+--   type "tritium"     CHECK sight_specs_sight_type     -> "a sight's type must be one of: night, fiber, night-fiber, plain. ..."
+--   position "Front"   CHECK sight_specs_sight_position -> "... "Front" is not one of them." (the lists are lowercase)
+--   every other case identical, rows written included; nothing persisted.
 -- ============================================================
