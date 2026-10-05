@@ -39,6 +39,93 @@ artifact before trusting any description of it, including this one.
 
 ---
 
+## Changes made 2026-10-04 (PR #140) — one category list, and three new categories
+
+Every page now reads one list of part categories, and there are three new ones:
+**Recoil Springs, Sights and Other Parts**. The technical detail is in CLAUDE.md
+("One category list, two copies", "Recoil Springs, Sights and Other Parts"); this entry
+is the state and the calls made.
+
+### What shipped
+
+| PR | | |
+|---|---|---|
+| #140 | code + database | one list of categories (URL address, plural and singular name) read by the catalog, builder, add-a-part, Needs data, product pages and `/parts`; the three categories on every surface; guards. **Merged.** |
+| follow-up | records + one fix | applied dates; a sight value outside its list is refused in words (below) |
+
+Three migrations, all applied 2026-10-05 UTC and verified against their files by md5:
+- `add_categories_enum` (20261005020804): the three values only, applied first and **before
+  the PR**, because nothing can use a new enum value in the transaction that adds it.
+- `add_categories` (20261005024538): the two spec sheets, their rules, `products.part_type`,
+  and the re-link rule. Applied **before the merge**, by decision.
+- `sight_values_in_words` (20261005033214): the follow-up fix.
+
+Before the main migration, a rolled-back run took 38 old cases through the live and the new
+functions. They all matched except 2, both the intended re-link change below.
+
+Catalog after, queried 2026-10-05: **245 products, 785 variants, 494 links, 44 brands,
+57 colours, 235 approved.**
+
+**First parts in the new categories:**
+- **The DMP Soft RSA:** a recoil spring, 7.95 lb, captured, 3.1" slide, $134. It is linked to
+  "P365 Complete Build", whose part 5 moved from Other Parts to **Recoil Springs**, which is the
+  reason this work started.
+- **The Tactical Development Pro Ledge:** an Other Part, part type "Thumb Ledge", $33.60.
+
+Both are approved, and both were added through the site.
+
+### Decisions (AG)
+
+- **One display name per category, everywhere. The builder's names won:** "Grip Modules",
+  "Basepads", and "Magazine Releases" in the plural.
+- **Two names per category:** a plural for headings, tabs and sections, and a singular for
+  sentences. Product pages say "Grip Module · Sig Sauer P365", never "Grip Modules for the
+  Sig Sauer P365".
+- **Placement:** Recoil Springs goes in Core build, after Barrels & Compensators. Sights goes
+  in Core build, after Optics. Other Parts goes last, in Carry and finish.
+- **Recoil springs:**
+  - Required: slide length, spring weight (free text) and captured.
+  - Optional: spring type and guide rod material.
+  - A different weight or length is a different product.
+- **Sights:**
+  - Required: position, height and type.
+  - Optional: dovetail and rear notch.
+  - The front dot colour is a variant option.
+- **Other Parts:** no spec sheet. One required "part type", two or three words. The old
+  Miscellaneous section became Other Parts, kept its typed-in form, and takes any category.
+  Linking a part from there moves it into its product's own section.
+- **Guards:**
+  - **At deploy:** every page must read the one list. A check fails the deploy otherwise.
+  - **On a schedule, against production:** every category with products must be on the
+    lists and have a working `/parts` address.
+- **Order:** the enum file was applied first, then the main migration, both before the merge.
+
+### Worth knowing
+
+- **Product pages changed wording, not addresses.** The breadcrumb, the eyebrow and the
+  structured-data category now use the shared names. The canonical URLs and the 264-URL
+  sitemap are unchanged.
+- **A bad sight value used to reach the admin as a raw database error.** It now says what is
+  allowed ("a sight's position must be one of: front, rear, set"). The allowed lists live in
+  three places (the table rule, the function and the page) and must change together.
+- **The DMP RSA's spring type was entered as "Soft Version"**, a weight name rather than
+  flat-wire or round-wire. It is free text, so it saved, and the edit path will be the place
+  to fix it.
+- **A `/parts` fetch right after the merge showed an old copy.** It had singular headings and
+  "Basepad (8)", which makes it at least a day old. That could not be reproduced: every
+  fetch since is current, and neither Netlify nor Cloudflare can serve a copy that old under
+  the current settings. It is open, with a proposal, in the follow-up PR.
+
+### Logged, not started
+
+- Spring weight as a variant option (one product, several weights).
+- The older spec tables carry broad write grants for signed-in users, behind a read-only
+  policy.
+- Catalog backing for magazines, holsters and knives; optic adapter plates, fire control parts
+  and grip weights as categories once builds show them.
+
+---
+
 ## Changes made 2026-10-04 (PR #138) — add a variant to an existing part
 
 The add-a-part page now has a second mode: add a colour or option to a part that is
