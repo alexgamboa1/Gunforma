@@ -383,6 +383,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <!-- The section list, order and group headings. Read at parse time by the
      page code below, so it has to come first. -->
+<script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
 <!-- Before the page code: loadCatalog calls window.variantLabel. -->
 <script src="js/variant-label.js"></script>
@@ -457,9 +458,9 @@ const FALLBACK_CATEGORY_KEY = window.BuildCategories.FALLBACK_CATEGORY_KEY;
 // doing it here also rescues drafts already sitting in the database.
 //
 // Never drop a part: a visible part in the wrong section is fixable by the
-// user, an invisible one looks like data loss. An `other_parts` key from a
-// snapshot written before that section was split into five lands here, and
-// Miscellaneous is where it goes.
+// user, an invisible one looks like data loss. An unrecognised key lands in
+// Other Parts (the `misc` section); a legacy `other_parts` key already
+// resolves there through js/build-categories.js.
 function normalizePartCategory(raw) {
   const value = (raw == null ? '' : String(raw)).trim();
   if (!value) return FALLBACK_CATEGORY_KEY;

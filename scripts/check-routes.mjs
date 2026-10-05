@@ -294,5 +294,36 @@ for (const [label, path] of [
   }
 }
 
+// ── every category that has a product is on every list ───────────────────
+// scripts/check-categories.mjs holds the lists to one another at build time,
+// but the build cannot see the database (the API description is closed to
+// the public key). This is the live half: read every products.category in
+// use, with the same public key and the same visibility a visitor has, and
+// fail when one is missing from _category-meta.mjs — its products would have
+// no /parts/ address, no catalog name and no builder section. A category
+// with no products cannot be hidden from anyone, so it is not asserted.
+// Then one product per category must answer 200 at its /parts/ address.
+{
+  console.log('\n── categories in use');
+  const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
+  const res = await fetch(`${SB_URL}/rest/v1/products?select=category,slug&order=slug.asc&limit=5000`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : null;
+  ok(Array.isArray(rows) && rows.length > 0, 'products readable with the public key', res.status);
+  const firstByCat = new Map();
+  for (const r of rows || []) if (!firstByCat.has(r.category) && r.slug) firstByCat.set(r.category, r.slug);
+  for (const cat of [...new Set((rows || []).map((r) => r.category))].sort()) {
+    ok(Boolean(CATEGORY_META[cat]), `category '${cat}' (has products) is in the category lists`,
+       CATEGORY_META[cat] ? CATEGORY_META[cat][1] : 'MISSING');
+  }
+  for (const [cat, slug] of firstByCat) {
+    if (!CATEGORY_META[cat]) continue;
+    const path = '/parts/' + CATEGORY_META[cat][0] + '/' + slug;
+    const r = await get(path);
+    ok(r.status === 200, `${path}: 200`, r.status);
+  }
+  note('categories with products', [...firstByCat.keys()].length + ' of ' + Object.keys(CATEGORY_META).length);
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures ? 1 : 0);

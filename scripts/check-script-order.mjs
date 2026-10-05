@@ -50,6 +50,10 @@ const RULES = [
   // the whole page is blank.
   { global: 'BuildCategories', defines: 'js/build-categories.js', consumers: [],
     pattern: /\bBuildCategories\s*\./ },
+  // build-categories.js names its sections from category-map.js AT PARSE
+  // TIME (label: name('frame')), and throws if it is missing — so on the
+  // pages that load it, a wrong order blanks the page, exactly as above.
+  { global: 'categoryPlural', defines: 'js/category-map.js', consumers: ['js/build-categories.js'] },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

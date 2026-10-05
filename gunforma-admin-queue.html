@@ -300,9 +300,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
+<script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
 <script src="js/variant-label.js"></script>
-<script src="js/category-map.js"></script>
 <script>
 // admin nav is intentionally NOT the shared nav (distinct admin-only links +
 // Admin tag) so nav.js is not loaded here. Same for the footer: admin has none.
@@ -919,7 +919,8 @@ function partSection(raw) {
   var BC = window.BuildCategories;
   var key = BC.sectionKeyFor(raw);
   var sec = BC.CATEGORIES.find(function (c) { return c.key === key; });
-  return { key: key, label: sec ? sec.label : BC.categoryLabel(raw), dbCategory: (sec && sec.dbCategory) || [] };
+  return { key: key, label: sec ? sec.label : BC.categoryLabel(raw), dbCategory: (sec && sec.dbCategory) || [],
+           anyCategory: !!(sec && sec.anyCategory) };
 }
 function catalogActionsHtml(b, p, i, history) {
   if (p.pending !== true || p.refId) return '';
@@ -965,18 +966,22 @@ function rerenderSelected() {
   if (b) renderDetail(b);
 }
 // Products in the part's section only (the ruling), matching every word of
-// the search against brand + name.
+// the search against brand + name. Other Parts (`misc`) is the catch-all, so
+// a part typed there may be any catalog part: the whole catalog is offered,
+// and linking moves the part into its product's own section.
 function linkCandidates(sec) {
   if (!CATALOG) return [];
   var words = LINK.q.toLowerCase().split(/\s+/).filter(Boolean);
   return CATALOG.products.filter(function (pr) {
-    if (sec.dbCategory.indexOf(pr.category) === -1) return false;
+    if (!sec.anyCategory && sec.dbCategory.indexOf(pr.category) === -1) return false;
     var hay = ((CATALOG.brands[pr.brand_id] || '') + ' ' + pr.name).toLowerCase();
     return words.every(function (w) { return hay.indexOf(w) !== -1; });
   });
 }
 function linkPanelHtml(b, p, i, sec) {
-  var hint = 'Showing ' + escH(sec.dbCategory.map(function (c) { return c.replace(/_/g, ' '); }).join(' and ')) + ' products only.';
+  var hint = sec.anyCategory
+    ? 'Other Parts takes any category, so the whole catalog is searched. Linking moves the part into its product\'s own section (a recoil spring renders under Recoil Springs).'
+    : 'Showing ' + escH(sec.dbCategory.map(function (c) { return window.categoryPlural(c).toLowerCase(); }).join(' and ')) + ' only.';
   return '<div class="link-panel">' +
       '<input type="text" id="link-q" placeholder="Search brand and name" value="' + escH(LINK.q) + '" oninput="linkSearch(this.value)" />' +
       '<div class="catalog-reason">' + hint + ' The entry becomes the catalog part: the builder\'s wording ("' + escH(p.name || '') + '") is replaced by the catalog name.</div>' +

@@ -168,7 +168,23 @@ const SPEC_TABLES = {
     ['has_thumb_rest', 'Thumb Rest', YESNO],
     ['optic_compatibility_notes', 'Optic Compatibility'],
   ]],
+  recoil_spring: ['recoil_spring_specs', [
+    ['slide_length_in', 'Slide Length', (v) => v + '"'],
+    ['spring_weight', 'Spring Weight'],
+    ['captured', 'Captured', YESNO],
+    ['spring_type', 'Spring Type'],
+    ['guide_rod_material', 'Guide Rod Material'],
+  ]],
+  sight: ['sight_specs', [
+    ['sight_position', 'Front, Rear or Set', (v) => ({ front: 'Front', rear: 'Rear', set: 'Set (front and rear)' }[v] || v)],
+    ['height', 'Height', (v) => ({ standard: 'Standard', suppressor: 'Suppressor / co-witness' }[v] || v)],
+    ['sight_type', 'Type', (v) => ({ night: 'Night (tritium)', fiber: 'Fiber optic', 'night-fiber': 'Night + fiber', plain: 'Plain' }[v] || v)],
+    ['dovetail', 'Dovetail / Slide Cut'],
+    ['rear_notch', 'Rear Notch'],
+  ]],
 };
+// slide_plate and other have no spec table (CATEGORIES_WITHOUT_SPEC_SHEET in
+// _category-meta.mjs); check-categories.mjs asserts every other category is here.
 
 // VARIANT_AXES, extractAxes, computeActiveAxes and variantLabel used to
 // live here. They are gone: the label comes from _variant-label.mjs and
@@ -255,6 +271,14 @@ async function fetchProduct(slug) {
 }
 
 async function fetchSpecs(category, productId) {
+  // An Other Part's one extra fact is products.part_type. Asked for here,
+  // for that category only, never in fetchProduct's select: a column named
+  // there that the database does not have yet fails every product page.
+  if (category === 'other') {
+    const rows = await pgGet('products?id=eq.' + productId + '&select=part_type&limit=1');
+    const t = Array.isArray(rows) && rows.length ? rows[0].part_type : null;
+    return t ? [{ label: 'Part Type', value: t, partType: t }] : [];
+  }
   const table = SPEC_TABLES[category];
   if (!table) return null;
   const [tableName, fields] = table;
@@ -272,7 +296,7 @@ async function fetchSpecs(category, productId) {
     .filter(Boolean);
 }
 
-function renderPage({ product, specs, categorySegment, categoryLabel }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -330,7 +354,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     : null;
   const descBase = product.description
     ? product.description.replace(/\s+/g, ' ').trim().slice(0, 220)
-    : (categoryLabel + ' for the Sig Sauer P365' + (brand.name ? ' from ' + brand.name : '') + '.');
+    : (categorySingular + ' for the Sig Sauer P365' + (brand.name ? ' from ' + brand.name : '') + '.');
   const metaDescription = descBase + (priceText ? ' Priced ' + priceText + '.' : '');
   const canonical = SITE + '/parts/' + categorySegment + '/' + product.slug;
 
@@ -342,7 +366,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     sku: (variants.find((v) => v.is_default) || variants[0] || {}).sku || undefined,
     brand: brand.name ? { '@type': 'Brand', name: brand.name } : undefined,
     image: heroImage || undefined,
-    category: categoryLabel,
+    category: categorySingular,
     // A stale-priced listing still ships as an Offer — the URL and stock are
     // true — but WITHOUT price/priceCurrency. Same principle as the
     // availability omission below: absent means "not stated", which is honest,
@@ -519,7 +543,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
 '</nav>' +
 '<div class="breadcrumb">' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a> / ' +
-  '<a href="gunforma-parts-catalog.html?category=' + encodeURIComponent(product.category) + '">' + esc(categoryLabel) + '</a> / ' +
+  '<a href="gunforma-parts-catalog.html?category=' + encodeURIComponent(product.category) + '">' + esc(categoryPlural) + '</a> / ' +
   esc(product.name) +
 '</div>' +
 '<div class="page">' +
@@ -527,7 +551,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel }) {
     ? '<img class="hero-img" src="' + esc(heroImage) + '" alt="' + esc(product.name) + '" loading="eager" />'
     : '<div class="hero-placeholder">No photo yet</div>') + '</div>' +
   '<div>' +
-    '<div class="eyebrow">' + esc(categoryLabel) + ' &middot; Sig Sauer P365</div>' +
+    '<div class="eyebrow">' + esc(categorySingular) + ' &middot; Sig Sauer P365</div>' +
     '<h1>' + esc(product.name) + '</h1>' +
     (brand.name ? '<div class="brand-line">by ' + (brand.website_url ? '<a href="' + esc(brand.website_url) + '" target="_blank" rel="noopener">' + esc(brand.name) + '</a>' : esc(brand.name)) + '</div>' : '') +
     (priceText ? '<div class="price-line">' + esc(priceText) + '</div>' : '') +
@@ -584,8 +608,9 @@ export default async (req) => {
   }
   if (!product) return notFound(slug);
 
-  const meta = CATEGORY_META[product.category] || [product.category, product.category];
-  const [categorySegment, categoryLabel] = meta;
+  const meta = CATEGORY_META[product.category] || [product.category, product.category, product.category];
+  const [categorySegment, categoryPlural] = meta;
+  let categorySingular = meta[2];
 
   let specs = [];
   try {
@@ -595,7 +620,12 @@ export default async (req) => {
     // Non-fatal — page still renders with common specs only.
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryLabel });
+  // An Other Part reads as what it is ("Thumb ledge for the Sig Sauer P365"),
+  // not "Other Part for …": its part type is the singular name.
+  const partType = (specs.find((s) => s.partType) || {}).partType;
+  if (partType) categorySingular = partType.charAt(0).toUpperCase() + partType.slice(1);
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular });
   return new Response(html, {
     status: 200,
     headers: {

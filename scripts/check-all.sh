@@ -64,6 +64,7 @@ check "variant picker runs"        scripts/variant-picker.test.mjs
 check "buy links go through /go/"  scripts/check-buy-links.mjs
 check "analytics on public pages" scripts/check-analytics-snippet.mjs
 check "category labels cover keys" scripts/check-category-labels.mjs
+check "one category list"          scripts/check-categories.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
 check "listing rules pinned"       scripts/listing-rules.test.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
