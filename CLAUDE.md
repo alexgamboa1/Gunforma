@@ -1559,7 +1559,9 @@ reviewable and diffable in git — they are not the thing that sends.
 | Invite user | `admin.inviteUserByEmail()` in BOTH `supabase/functions/launch-invite` and `supabase/functions/invite-builder` | `scripts/invite-email-template.html` |
 
 Magic Link, Change Email Address and Reauthentication are unreachable — nothing
-calls `updateUser`, `signInWithOtp` or `verifyOtp`. If an email-change feature is
+calls `signInWithOtp` or `verifyOtp`, and the only `updateUser` calls set a
+password (the claim page, and the reset form on the sign-in page), which sends
+no email. If an email-change feature is
 ever added to the profile page, that template goes live as Supabase's stock
 default: no logo, no brand, no warning.
 
@@ -1568,6 +1570,28 @@ editing the repo file sends nothing, and editing the dashboard leaves the repo
 describing an email that does not exist. `check-all.sh` does not inspect these
 files and cannot — the live template is readable only through the Management
 API. The only guard is changing both in the same sitting.
+
+**Never delete an invited user in the dashboard.** `launch-invite` links the
+build and its photo rows to the account the moment the invite is sent, and
+`builds.user_id → profiles`, `profiles.id → auth.users` and
+`build_photos.user_id → auth.users` are all `ON DELETE CASCADE` — the build
+goes with the user. `scripts/launch-invites.js --resend <email>` sends a fresh
+link and `--release <email>` undoes an unclaimed invite safely; both are
+actions on the `launch-invite` function. `claude/operations.md`, "The invite
+trap", has the table. `scripts/launch-invite.test.mjs` runs every branch
+against a fake that implements the cascade — run it before deploying the
+function (it is not a build check: it needs Node 22.13).
+
+**A reset link signs the person in, so the sign-in page must hold them.**
+`gunforma-signin.html` tells a recovery arrival from any other signed-in visit
+by `type=recovery` in the URL hash (and, second, by the client's
+`PASSWORD_RECOVERY` event), and shows a "choose a new password" form instead
+of redirecting. Before that form existed the page redirected like any sign-in:
+the reset email's link worked, no password was ever chosen, and nothing
+failed. The hash is read in an inline script placed BEFORE
+`js/supabase-client.js`, because creating the client consumes the hash. With
+supabase-js 2.117.2 a later read still sees it, so the order is a precaution
+against an unpinned CDN library, not a measured failure.
 
 Two things inside those templates are load-bearing and look like decoration:
 

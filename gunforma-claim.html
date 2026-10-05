@@ -64,6 +64,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .field-help.success { color: #22a06b; }
 .field-help.neutral { color: #999; }
 
+/* PASSWORD — show/hide sits inside the field, as on the sign-in page */
+.field-input-wrap { position: relative; }
+.field-input-wrap .field-input { padding-right: 62px; }
+.field-toggle { position: absolute; top: 50%; right: 6px; transform: translateY(-50%); background: none; border: none; padding: 6px 8px; font-family: inherit; font-size: 11px; font-weight: 700; color: #2a7bbd; cursor: pointer; border-radius: 4px; }
+.field-toggle:hover { text-decoration: underline; }
+.field-toggle:focus-visible { outline: 2px solid #4a9edd; outline-offset: 1px; }
+/* Carries the email to the browser's password manager; never seen or focused. */
+.pm-username { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
+
 /* USERNAME AVAILABILITY badge */
 .username-status { font-size: 11px; font-weight: 700; transition: color .18s ease; }
 .username-status.checking { color: #999; }
@@ -178,6 +187,12 @@ var CURRENT_USER = null;
 var LINKED_BUILD = null;    // {id, name, platform, hero_thumb_path}
 var usernameTimer = null;
 var usernameValid = false;
+// The password this page has already saved to the account, if any. A claim
+// can fail AFTER the password is saved (a username taken in the last few
+// hundred ms), and the retry must not send the same password again: Supabase
+// refuses a password equal to the current one.
+var passwordSaved = null;
+var PASSWORD_MIN = 8;   // same floor as gunforma-signup.html
 
 // ============================================================
 // INIT — three cases
@@ -246,11 +261,13 @@ function showExpired() {
     '<div class="state-expired">'+
       '<div class="state-expired-icon">✖</div>'+
       '<div class="state-title">This invite link has expired or was already used</div>'+
-      // Invited users were created by auth.admin.inviteUserByEmail and never
-      // set a password, so "just sign in" was a dead end for exactly the
-      // people who land here. Send them to the reset instead. The label
-      // matches the link on gunforma-signin.html verbatim.
-      '<div class="state-sub">Invites are single-use. If you’ve already claimed your account, sign in below — and if you never set a password, use <strong>Forgot password?</strong> on the sign-in page to create one.</div>'+
+      // Two kinds of people land here. One claimed already and clicked the
+      // email again: they sign in. The other never got in — the link is
+      // single-use and lasts 24 hours — and has no password to sign in with,
+      // so "just sign in" is a dead end for them. Forgot password? is their
+      // way in: its link opens a "choose a new password" form on the sign-in
+      // page. The label matches the link on gunforma-signin.html verbatim.
+      '<div class="state-sub">Invite links work once and last 24 hours. If you’ve already claimed your account, sign in below. If you never got in, use <strong>Forgot password?</strong> on the sign-in page — it emails you a link to choose a password — or reply to your invite email and ask for a fresh link.</div>'+
       '<a class="btn-submit" href="gunforma-signin.html" style="text-decoration:none;">Go to sign in →</a>'+
     '</div>';
 }
@@ -285,9 +302,25 @@ function renderForm() {
     buildPreviewHtml +
     '<div class="signed-in-as">Signed in as <strong>'+escH(email)+'</strong></div>'+
     '<div class="field">'+
-      '<label class="field-label">Pick your username <span class="username-status" id="username-status"></span></label>'+
-      '<input class="field-input" id="username" type="text" placeholder="e.g. jmiller_tx" autocomplete="username" oninput="onUsernameInput()"/>'+
+      '<label class="field-label" for="username">Pick your username <span class="username-status" id="username-status"></span></label>'+
+      // autocomplete is OFF on purpose. This is the public handle, not what
+      // they sign in with — sign-in is by email. Marked "username", a
+      // password manager saves the handle beside the password below, and the
+      // builder's saved login then fails on the sign-in page.
+      '<input class="field-input" id="username" type="text" placeholder="e.g. jmiller_tx" autocomplete="off" autocapitalize="none" spellcheck="false" oninput="onUsernameInput()"/>'+
       '<div class="field-help neutral" id="username-help">Letters, numbers, and underscores only. This shows on your public builds.</div>'+
+    '</div>'+
+    // Without a password an invited builder has no way back in: the invite
+    // link is single-use, and the only session is the one in this browser.
+    '<div class="field">'+
+      '<label class="field-label" for="new-password">Create a password</label>'+
+      // What the password manager should save as the login: the email.
+      '<input class="pm-username" type="email" autocomplete="username" value="'+escH(email)+'" readonly tabindex="-1" aria-hidden="true"/>'+
+      '<div class="field-input-wrap">'+
+        '<input class="field-input" id="new-password" type="password" placeholder="At least '+PASSWORD_MIN+' characters" autocomplete="new-password" oninput="onPasswordInput()"/>'+
+        '<button type="button" class="field-toggle" id="password-toggle" onclick="togglePassword()" aria-pressed="false">Show</button>'+
+      '</div>'+
+      '<div class="field-help neutral" id="password-help">You’ll sign in with '+escH(email)+' and this password.</div>'+
     '</div>'+
     '<div class="checkbox-row">'+
       '<input type="checkbox" id="consent" onchange="refreshSubmitState()"/>'+
@@ -357,25 +390,78 @@ function onUsernameInput() {
   }, 500);
 }
 
+function passwordOk() {
+  var el = document.getElementById('new-password');
+  return !!el && el.value.length >= PASSWORD_MIN;
+}
+
+function onPasswordInput() {
+  var input = document.getElementById('new-password');
+  var help  = document.getElementById('password-help');
+  var len   = input.value.length;
+  if (len > 0 && len < PASSWORD_MIN) {
+    help.textContent = (PASSWORD_MIN - len) + ' more character' + (PASSWORD_MIN - len === 1 ? '' : 's') + ' to go.';
+    help.className = 'field-help neutral';
+  } else {
+    help.textContent = 'You’ll sign in with ' + (CURRENT_USER.email || 'your email') + ' and this password.';
+    help.className = 'field-help ' + (len ? 'success' : 'neutral');
+  }
+  input.className = 'field-input' + (len >= PASSWORD_MIN ? ' success' : '');
+  refreshSubmitState();
+}
+
+function togglePassword() {
+  var input = document.getElementById('new-password');
+  var btn   = document.getElementById('password-toggle');
+  var show  = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btn.textContent = show ? 'Hide' : 'Show';
+  btn.setAttribute('aria-pressed', show ? 'true' : 'false');
+}
+
 function refreshSubmitState() {
   var consent = !!document.getElementById('consent')?.checked;
   var btn = document.getElementById('submit-btn');
-  if (btn) btn.disabled = !(usernameValid && consent);
+  if (btn) btn.disabled = !(usernameValid && consent && passwordOk());
 }
 
 // ============================================================
-// CLAIM — one atomic update to profiles
+// CLAIM — save the password, then one atomic update to profiles
 // ============================================================
+// Password FIRST. onboarding_complete is what marks the claim as done, so if
+// it were written first and the password save then failed, the builder would
+// be sent on to their build with a finished claim and no way to sign back in.
+// In this order a failure at either step leaves them on this page, still
+// signed in, with an error they can act on.
 async function handleClaim() {
   showError('');
 
   var username = document.getElementById('username').value.trim();
   var consent  = document.getElementById('consent').checked;
+  var password = document.getElementById('new-password').value;
 
   if (!username || !usernameValid) { showError('Choose an available username first.'); return; }
+  if (password.length < PASSWORD_MIN) { showError('Choose a password of at least ' + PASSWORD_MIN + ' characters.'); return; }
   if (!consent) { showError('Please accept the terms to claim your account.'); return; }
 
   setLoading(true);
+
+  if (passwordSaved !== password) {
+    var pw = await sb.auth.updateUser({ password: password });
+    // same_password means the account already holds exactly this password —
+    // which is what was asked for, so it is not a failure.
+    if (pw.error && pw.error.code !== 'same_password') {
+      setLoading(false);
+      if (/session/i.test(pw.error.message || '')) {
+        showError('Your invite session expired mid-flow. Reload this page from the invite email and try again.');
+      } else {
+        showError('That password couldn’t be saved: ' + (pw.error.message || 'please try a different one.'));
+      }
+      return;
+    }
+    passwordSaved = password;
+  }
+
   var { error } = await sb
     .from('profiles')
     .update({
@@ -433,7 +519,7 @@ function setLoading(on) {
   var sp  = document.getElementById('spinner');
   var tx  = document.getElementById('btn-text');
   if (!btn) return;
-  btn.disabled = on || !usernameValid || !document.getElementById('consent').checked;
+  btn.disabled = on || !usernameValid || !document.getElementById('consent').checked || !passwordOk();
   sp.classList.toggle('show', on);
   tx.textContent = on ? 'Claiming…' : 'Claim My Account →';
 }
