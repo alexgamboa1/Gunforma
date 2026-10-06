@@ -422,6 +422,9 @@ const BUILDER_AGREEMENT_VERSION = 'v1-2026-01';
 
 let currentUser = null;          // { id, email }
 let hasAcceptedBuilderAgreement = false;
+// From get_my_profile(). Only ever widens what the PAGE offers (editing a
+// build nobody owns); the database decides what an admin may actually write.
+let currentUserIsAdmin = false;
 
 // Live platform list, fetched from public.platforms — replaces the old
 // hardcoded mock array. { id: uuid, name: text }
@@ -500,10 +503,25 @@ let draftId = crypto.randomUUID();
 const editState = {
   active: false,
   buildId: null,
-  previousStatus: null,   // 'draft' | 'rejected' | 'approved'
-  // True on a live build: locks the pistol/photos/parts sections and narrows
-  // the UPDATE to the three columns the DB trigger permits.
+  previousStatus: null,   // 'draft' | 'pending' | 'rejected' | 'approved'
+  // True on a live build its OWNER is editing: locks the pistol/photos/parts
+  // sections and narrows the UPDATE to the three columns the DB trigger
+  // permits. Never true for an admin edit — is_admin() passes that trigger.
   approvedLock: false,
+  // True when an admin is editing a build NOBODY owns: posted from
+  // gunforma-admin-post.html (user_id null) and not claimed yet. The save
+  // keeps whatever status the build has and filters on user_id IS NULL.
+  // A build with an owner is never opened this way — see hydrateFromEditMode.
+  adminEdit: false,
+  // builds.updated_at as loaded, and refreshed by every save. The UPDATE is
+  // filtered on it, so a save over a row somebody else has changed since —
+  // a reviewer's correction, a re-linked part, an approval — matches nothing
+  // instead of silently overwriting it. See submitBuildEdit().
+  updatedAt: null,
+  // uids of loaded parts that must keep their position in parts_snapshot,
+  // because a reviewer's correction in edit_history is addressed to a part
+  // by its INDEX. Empty unless the build carries corrections. See removePart().
+  pinnedPartUids: new Set(),
   existingPhotos: [],     // rows from build_photos, sorted by position
   nextPosition: 1,        // for new photo inserts
   markedForDeletion: new Set(),  // build_photos.id values the user X'd out
@@ -640,6 +658,13 @@ async function selectPlatform(id) {
   renderParts();                            // re-render with real cards
 }
 function changePlatform() {
+  // Changing the pistol drops every catalog part, which moves the parts a
+  // reviewer's corrections are addressed to. Refused for the same reason
+  // removePart() refuses a pinned part.
+  if (editState.pinnedPartUids.size) {
+    showToast('The pistol can’t be changed — a reviewer corrected parts on this build');
+    return;
+  }
   // Catalog picks reference products only guaranteed to fit the current
   // platform — drop them on platform change. Custom (pending) parts survive
   // since they aren't tied to catalog IDs.
@@ -907,7 +932,18 @@ function addCustomPart(k) {
   state.parts.push({ uid:'p'+(uid++), refId:null, category:k, brand, name, pending:true });
   PartPicker.closePickerAfterAdd(k);
 }
+// A reviewer's correction (builds.edit_history) names its part by INDEX in
+// parts_snapshot, and nobody but an admin may rewrite edit_history. Removing
+// a part at or before a corrected one would shift the list under it, and the
+// build page would then lay "name corrected to X" over a different part —
+// with no error anywhere. So those parts are pinned: they stay, in place.
+// Adding is always safe (new parts go on the end), and so is removing a part
+// that sits after the last corrected one.
 function removePart(partUid) {
+  if (editState.pinnedPartUids.has(partUid)) {
+    showToast('That part can’t be removed — a reviewer corrected parts on this build. You can add parts; to drop this one, delete the build and post it again.');
+    return;
+  }
   state.parts = state.parts.filter(p => p.uid!==partUid);
   renderParts(); renderSidebar();
 }
@@ -1059,6 +1095,16 @@ async function submitBuild(status) {
 // pending, which the build_photos DELETE/INSERT RLS both require), then
 // deletes, then hero promotion, then inserts. The 4-photo trigger cap is
 // checked BEFORE any writes so we don't leave the row half-updated.
+//
+// THREE CALLERS NOW, one path:
+//   an owner on a draft or rejected build — as it always was;
+//   an owner on a build IN REVIEW — the same writes, and the status it
+//     sends ('pending') is the status the row already has;
+//   an admin on a build nobody owns (editState.adminEdit) — the same writes
+//     with no status in the payload. Its photo rows carry the admin's own
+//     id, the placeholder gunforma-admin-post.html uses for the same reason
+//     (build_photos.user_id is NOT NULL); launch-invite hands them to the
+//     builder at claim time along with the ones posted originally.
 async function submitBuildEdit(status) {
   // Live build: send the three editable columns and nothing else, then stop.
   //
@@ -1073,15 +1119,22 @@ async function submitBuildEdit(status) {
   // staged, and build_photos' own RLS requires the parent build to be
   // draft or pending anyway.
   if (editState.approvedLock) {
-    const { error } = await sb.from('builds')
+    // .select() and a row count, like the full save below: a filtered UPDATE
+    // that matches nothing (the build was deleted, or released from this
+    // account) returns no error, and this path now ends in "Changes saved".
+    const { data: saved, error } = await sb.from('builds')
       .update({
         name: state.name.trim(),
         description: document.getElementById('build-description').value || null,
         activities: state.activities,
       })
       .eq('id', editState.buildId)
-      .eq('user_id', currentUser.id);
+      .eq('user_id', currentUser.id)
+      .select('id');
     if (error) return { error: error, buildId: editState.buildId };
+    if (!Array.isArray(saved) || saved.length !== 1) {
+      return { error: { message: 'Nothing was saved — this build is no longer yours to edit, or it was removed. Reload to check.' }, buildId: editState.buildId };
+    }
     return { error: null, buildId: editState.buildId };
   }
 
@@ -1099,17 +1152,40 @@ async function submitBuildEdit(status) {
     platform_id: state.platform.id,
     name: state.name.trim(),
     tier: state.parts.length ? 'full' : 'minimum',
-    status: status,
     activities: state.activities,
     description: document.getElementById('build-description').value || null,
     parts_snapshot: buildPartsSnapshot(),
   };
+  // An admin edit never sends a status: the build keeps the one it has, so
+  // fixing a part on a live admin-posted build does not unpublish it, and
+  // fixing one in the queue does not approve it. An owner's save sends the
+  // status the button asked for — 'pending' from a build already in review
+  // is no change, which is exactly what editing one in review should be.
+  if (!editState.adminEdit) payload.status = status;
 
-  const { error } = await sb.from('builds')
-    .update(payload)
-    .eq('id', editState.buildId)
-    .eq('user_id', currentUser.id);   // belt-and-suspenders on top of RLS
+  let update = sb.from('builds').update(payload).eq('id', editState.buildId);
+  // Belt-and-suspenders on top of RLS. An admin-edited build has no owner,
+  // so there is no user_id to match — and requiring NULL here is what keeps
+  // this path from ever writing to a build that belongs to somebody.
+  update = editState.adminEdit ? update.is('user_id', null) : update.eq('user_id', currentUser.id);
+  // Only if nobody has changed the row since it was loaded. A build in
+  // review has a second writer — the reviewer, who can correct a part,
+  // re-link one to the catalog, approve or reject — and without this an
+  // owner's save would quietly put back the list they loaded over all of it.
+  if (editState.updatedAt) update = update.eq('updated_at', editState.updatedAt);
+
+  // .select() so the UPDATE reports what it changed. A filtered UPDATE that
+  // matches nothing returns no error (CLAUDE.md, "A green result is not
+  // evidence the work happened"), and "saved" over a row that was not
+  // written is the failure this is here to prevent.
+  const { data: saved, error } = await update.select('id,updated_at');
   if (error) return { error: error };
+  if (!Array.isArray(saved) || saved.length !== 1) {
+    return { error: { message: 'This build changed since you opened it — reload to see the latest, then make your changes again.' } };
+  }
+  // The row's new stamp, so a second save from this page (Save as draft does
+  // not navigate away) is compared against this save and not the first load.
+  editState.updatedAt = saved[0].updated_at;
 
   // Delete rows first, then storage. build_photos DELETE RLS requires the
   // parent build's status to be draft/pending — the UPDATE above already
@@ -1117,11 +1193,20 @@ async function submitBuildEdit(status) {
   const toDelete = editState.existingPhotos.filter(function(p) { return editState.markedForDeletion.has(p.id); });
   if (toDelete.length) {
     const ids = toDelete.map(function(p) { return p.id; });
-    const { error: delRowErr } = await sb.from('build_photos').delete().in('id', ids);
+    // .select('id'): an RLS-filtered DELETE matches zero rows and returns no
+    // error. The owner policy needs build_photos.user_id = auth.uid(), and a
+    // photo posted for the builder by an admin keeps the admin's id if the
+    // claim-time transfer failed — so "deleted" could be said over a row
+    // that is still there, and the storage remove below would then take the
+    // files out from under a photo that survived.
+    const { data: goneRows, error: delRowErr } = await sb.from('build_photos').delete().in('id', ids).select('id');
     if (delRowErr) return { error: delRowErr, buildId: editState.buildId };
+    const gone = new Set((goneRows || []).map(function(r) { return r.id; }));
 
+    // Files only for the rows that actually went.
     const paths = [];
     toDelete.forEach(function(p) {
+      if (!gone.has(p.id)) return;
       if (p.storage_path) paths.push(p.storage_path);
       if (p.thumb_path)   paths.push(p.thumb_path);
     });
@@ -1132,6 +1217,15 @@ async function submitBuildEdit(status) {
       // resubmit on transient storage weirdness.
       const { error: delStorageErr } = await sb.storage.from('build-photos').remove(paths);
       if (delStorageErr) console.warn('storage delete failed:', delStorageErr);
+    }
+
+    // Stop here rather than carry on: the hero promotion below is worked
+    // out from the photos that were SUPPOSED to be gone, and promoting a
+    // second hero beside one that survived is worse than an unfinished save.
+    if (gone.size !== ids.length) {
+      const kept = ids.length - gone.size;
+      return { error: { message: 'Your details were saved, but ' + kept + ' photo' + (kept === 1 ? '' : 's') +
+        ' could not be removed and no new photos were added. Reload and try the photos again.' }, buildId: editState.buildId };
     }
   }
 
@@ -1224,10 +1318,22 @@ async function publishBuild() {
   renderFirstPostNote();
 
   const isResubmit = editState.active && editState.previousStatus === 'rejected';
-  showToast(isResubmit
-    ? 'Resubmitted — pending review'
-    : (state.parts.length ? 'Submitted — pending review' : 'Submitted — add parts to get it live'));
-  btn.textContent = isResubmit ? 'Resubmitted — redirecting…' : 'Submitted — redirecting…';
+  // A save that submits nothing: an admin edit, an owner's edit of a build
+  // already in review, or of a live one. None of them moves the build, so
+  // none of them may say "Submitted".
+  const isPlainSave = editState.active &&
+    (editState.adminEdit || editState.approvedLock || editState.previousStatus === 'pending');
+  if (isPlainSave) {
+    showToast(editState.previousStatus === 'pending' && !editState.adminEdit
+      ? 'Changes saved — still in review'
+      : 'Changes saved');
+    btn.textContent = 'Saved — redirecting…';
+  } else {
+    showToast(isResubmit
+      ? 'Resubmitted — pending review'
+      : (state.parts.length ? 'Submitted — pending review' : 'Submitted — add parts to get it live'));
+    btn.textContent = isResubmit ? 'Resubmitted — redirecting…' : 'Submitted — redirecting…';
+  }
 
   // NOT /b/<slug>-<id>. That route is SERVER-RENDERED by
   // netlify/functions/build-og.mjs, which makes its own PostgREST call with
@@ -1254,9 +1360,15 @@ async function publishBuild() {
   // Covers the resubmit path too: a rejected build that is resubmitted goes
   // back to `pending`, so it is no more approved than a first submission.
   //
+  // An admin edit goes back to the review queue instead: the build has no
+  // owner, so it is on nobody's profile, and the queue is where it was
+  // opened from.
+  //
   // location.replace so Back doesn't return them to the submit form.
   setTimeout(function () {
-    window.location.replace('gunforma-profile.html?tab=my-builds');
+    window.location.replace(editState.adminEdit
+      ? 'gunforma-admin-queue.html'
+      : 'gunforma-profile.html?tab=my-builds');
   }, 700);
 }
 
@@ -1275,6 +1387,14 @@ async function saveDraft() {
   // suspenders on top of the UI hiding the button in that case.
   if (editState.active && editState.previousStatus === 'rejected') {
     showToast('Rejected builds must be resubmitted for review');
+    return;
+  }
+  // The button is hidden in these three modes; this is the same guard for a
+  // call that does not come from the button. Saving a build that is in
+  // review "as a draft" would pull it out of the queue, and an admin edit
+  // never changes a status at all.
+  if (editState.active && (editState.adminEdit || editState.approvedLock || editState.previousStatus === 'pending')) {
+    showToast('Use Save changes — this build is not a draft');
     return;
   }
   const result = await submitOrDescribeThrow('draft');
@@ -1317,6 +1437,7 @@ async function requireAuthAndLoadUser() {
 
   // Username populated by nav.js updateNavAuth via #nav-signin.
   hasAcceptedBuilderAgreement = !!(profile && profile.builder_agreement_accepted);
+  currentUserIsAdmin = profile.role === 'admin';
   return true;
 }
 
@@ -1457,7 +1578,7 @@ async function hydrateFromEditMode() {
   if (!buildId) return false;
 
   const { data: build, error } = await sb.from('builds')
-    .select('id,user_id,status,platform_id,name,activities,description,parts_snapshot,build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .select('id,user_id,status,updated_at,platform_id,name,activities,description,parts_snapshot,edit_history,build_photos(id,storage_path,thumb_path,is_hero,position)')
     .eq('id', buildId)
     .maybeSingle();
 
@@ -1465,31 +1586,59 @@ async function hydrateFromEditMode() {
     editModeRefuse('That build couldn’t be loaded. It may have been removed or you don’t have access.');
     return false;
   }
-  // Ownership check. RLS would already refuse the SELECT for a build the
-  // caller doesn't own (auth.uid() != user_id), but a defensive check
-  // here keeps the error message honest instead of blaming a load failure.
-  if (build.user_id !== currentUser.id) {
-    editModeRefuse('This build isn’t yours to edit.');
+  // WHO MAY OPEN THIS. Two cases, and nothing else:
+  //
+  //   the owner      — their own build, at any status.
+  //   an admin       — only a build with NO owner: one posted from
+  //                    gunforma-admin-post.html (user_id null) and not
+  //                    claimed yet. Nobody else can ever fix those; before
+  //                    this, a part missed on one meant delete and re-post.
+  //
+  // An admin is deliberately NOT let into a build that has an owner. The
+  // review queue already has the tool for that — a correction, which is
+  // logged in edit_history and shown to the builder — and a silent rewrite
+  // of someone's build from here would leave no record of what changed.
+  //
+  // RLS already refuses the SELECT for a build the caller may not see, so
+  // the checks here are about keeping the message honest, not about access.
+  const isOwner   = !!build.user_id && build.user_id === currentUser.id;
+  const adminEdit = !isOwner && currentUserIsAdmin && build.user_id === null;
+  if (!isOwner && !adminEdit) {
+    editModeRefuse(currentUserIsAdmin
+      ? 'This build belongs to its builder, so it isn’t edited from here. Correct a part from the review queue, or reject it with a reason and the builder can edit and resubmit.'
+      : 'This build isn’t yours to edit.');
     return false;
   }
-  // Approved builds are editable now, but only in part: the DB trigger
-  // restrict_owner_edits_on_approved_build refuses a change to platform_id,
-  // parts_snapshot, status, tier or ownership on a live build. Pending is
-  // still closed — it is mid-review, and an edit under a reviewer is a
-  // different problem from this one.
-  if (build.status !== 'draft' && build.status !== 'rejected' && build.status !== 'approved') {
-    editModeRefuse(build.status === 'pending'
-      ? 'This build is currently in review. You can edit it again once an admin has reviewed it.'
-      : 'This build can’t be edited right now.');
+  // EVERY STATUS OPENS NOW, with different rules:
+  //
+  //   draft, rejected — as before.
+  //   pending         — the owner may change anything while it waits. It
+  //                     used to be closed because "an edit under a reviewer
+  //                     is a different problem": that problem is a lost
+  //                     update, and it is handled where it happens — the
+  //                     save is filtered on updated_at (submitBuildEdit),
+  //                     and the queue's Approve refuses a build that changed
+  //                     since the reviewer loaded it. RLS always allowed
+  //                     this; only this page said no.
+  //   approved        — in part: the DB trigger
+  //                     restrict_owner_edits_on_approved_build refuses a
+  //                     change to platform_id, parts_snapshot, status, tier
+  //                     or ownership on a live build. An admin passes that
+  //                     trigger, so an admin edit is not locked.
+  if (['draft', 'pending', 'rejected', 'approved'].indexOf(build.status) === -1) {
+    editModeRefuse('This build can’t be edited right now.');
     return false;
   }
+  const isPending = build.status === 'pending';
 
   editState.active = true;
   editState.buildId = build.id;
   editState.previousStatus = build.status;
+  editState.adminEdit = adminEdit;
+  editState.updatedAt = build.updated_at || null;
   // Drives both the locked UI and the narrowed UPDATE payload. One flag, so
   // the two can't disagree about what is editable.
-  editState.approvedLock = build.status === 'approved';
+  editState.approvedLock = build.status === 'approved' && !adminEdit;
   editState.existingPhotos = (build.build_photos || []).slice().sort(function(a,b){ return (a.position||0) - (b.position||0); });
   editState.nextPosition = (editState.existingPhotos.reduce(function(m,p){ return Math.max(m, p.position||0); }, 0)) + 1;
 
@@ -1509,25 +1658,45 @@ async function hydrateFromEditMode() {
   const eyebrow = document.getElementById('page-eyebrow');
   const title = document.getElementById('page-title');
   const sub = document.getElementById('page-sub');
-  if (eyebrow) eyebrow.textContent = editState.approvedLock ? 'Edit live build' : (build.status === 'rejected' ? 'Resubmit' : 'Edit draft');
-  if (title) title.textContent = 'Edit your build';
-  if (sub) sub.textContent = editState.approvedLock
+  // Admin edit first: it can be any status, and what the admin needs to be
+  // told is that the status will not move — and, on a live build, that the
+  // save is public the moment it lands.
+  const statusWord = { draft: 'a draft', pending: 'in review', rejected: 'rejected', approved: 'live' }[build.status];
+  if (eyebrow) eyebrow.textContent = adminEdit ? 'Admin edit'
+    : editState.approvedLock ? 'Edit live build'
+    : isPending ? 'Edit build in review'
+    : (build.status === 'rejected' ? 'Resubmit' : 'Edit draft');
+  if (title) title.textContent = adminEdit ? 'Edit this build' : 'Edit your build';
+  if (sub) sub.textContent = adminEdit
+    ? 'Posted from the admin page and not claimed yet, so only an admin can edit it. It is ' + statusWord +
+      ' and saving keeps it that way' +
+      (build.status === 'approved' ? ' — your changes show on the public page as soon as you save.' : '.')
+    : editState.approvedLock
     ? 'This build is live. You can change its name, description and activity.'
+    : isPending
+    ? 'This build is waiting for review. Change anything you need to — it keeps its place in the queue, and the reviewer sees your latest version.'
     : (build.status === 'rejected'
       ? 'Address the reviewer’s feedback, then resubmit for review.'
       : 'Pick up where you left off. Save as a draft or submit for review.');
-  document.title = 'Edit your build — Gunforma';
+  document.title = (adminEdit ? 'Edit build' : 'Edit your build') + ' — Gunforma';
 
   const publishBtn = document.getElementById('publish-btn');
-  if (publishBtn) publishBtn.textContent = editState.approvedLock
+  if (publishBtn) publishBtn.textContent = (editState.approvedLock || adminEdit || isPending)
     ? 'Save changes →'
     : (build.status === 'rejected' ? 'Resubmit for review →' : 'Submit for review →');
 
   // Rejected builds can only transition to pending — hide the draft
   // pathway so the user isn't offered a save that would be refused by
   // both the client guard in saveDraft() and the trigger's expectations.
+  // Hidden for a build in review too (a "draft" save would pull it out of
+  // the queue) and for an admin edit (which never changes the status).
   const draftBtn = document.getElementById('draft-btn');
-  if (draftBtn && (build.status === 'rejected' || editState.approvedLock)) draftBtn.style.display = 'none';
+  if (draftBtn && (build.status === 'rejected' || editState.approvedLock || isPending || adminEdit)) draftBtn.style.display = 'none';
+
+  // "Your existing photos" is the wrong word over a build that is not the
+  // admin's own.
+  const existingLabel = document.querySelector('#existing-photos .existing-photos-label');
+  if (existingLabel && adminEdit) existingLabel.textContent = 'Existing photos';
 
   // Lock the three sections the database will not let a live build change.
   if (editState.approvedLock) lockSectionsForApprovedBuild();
@@ -1577,6 +1746,21 @@ async function hydrateFromEditMode() {
       variantSpecs:  part.variantSpecs  || undefined,
     });
   });
+
+  // Pin every loaded part up to the last one a reviewer has corrected — see
+  // removePart(). state.parts is exactly the stored list in stored order at
+  // this point, so a part's position here IS its index in parts_snapshot,
+  // which is what edit_history entries carry as part_index. Entries without
+  // one (the 'resubmit' marker) are not corrections and pin nothing.
+  const correctedIndexes = (Array.isArray(build.edit_history) ? build.edit_history : [])
+    .map(function (e) { return e ? e.part_index : null; })
+    .filter(function (i) { return Number.isInteger(i) && i >= 0; });
+  if (correctedIndexes.length) {
+    const lastCorrected = Math.max.apply(null, correctedIndexes);
+    state.parts.forEach(function (p, i) { if (i <= lastCorrected) editState.pinnedPartUids.add(p.uid); });
+    const hint = document.getElementById('parts-hint');
+    if (hint && editState.pinnedPartUids.size) hint.textContent = 'A reviewer corrected parts here — you can add parts, but not remove the corrected ones';
+  }
 
   // Consent checkboxes were captured at first submit and are frozen by
   // the prevent_build_consent_tampering trigger — the UPDATE payload

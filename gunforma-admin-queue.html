@@ -75,6 +75,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-content { padding: 28px 32px 60px; max-width: 900px; }
 
 .detail-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; flex-wrap: wrap; }
+.detail-edit { max-width: 300px; text-align: right; }
+.detail-edit .catalog-reason { margin-top: 8px; line-height: 1.5; }
 .detail-eyebrow { font-size: 10px; color: #4a9edd; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 6px; }
 .detail-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 8px; }
 .detail-submeta { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
@@ -422,10 +424,38 @@ async function loadProductImages() {
   });
 }
 
+// One field list for the queue load and for doApprove()'s re-read, so the
+// two can never select different things and compare unequal by construction.
+// user_id says whether anyone owns the build (it decides "Edit build");
+// platform_id and updated_at are there for reviewSignature() and the
+// approve guard.
+const BUILD_FIELDS = 'id,user_id,platform_id,updated_at,name,tier,status,activities,description,legal_confirmed,content_license_confirmed,builder_agreement_version,created_at,reviewed_at,rejection_reason,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)';
+
+// Everything a reviewer is approving, as one comparable string: the words,
+// the pistol, the parts and WHICH photos. Two reads of an unchanged build
+// produce the same string — parts_snapshot comes back from jsonb in
+// Postgres's own key order both times, and photos are sorted by id here
+// because PostgREST returns embedded rows in arbitrary order.
+//
+// Photos are in it by id AND path on purpose. A builder can add or remove a
+// photo on a build in review without touching the builds row at all, so
+// builds.updated_at alone would not see the one change that most needs a
+// second look.
+function reviewSignature(b) {
+  return JSON.stringify({
+    name: b.name || '',
+    description: b.description || '',
+    activities: b.activities || [],
+    platform: b.platform_id || null,
+    parts: b.parts_snapshot || [],
+    photos: (b.build_photos || []).map(function (p) { return p.id + ':' + (p.storage_path || '') + ':' + (p.is_hero ? 1 : 0); }).sort(),
+  });
+}
+
 async function loadBuilds() {
   const { data, error } = await sb
     .from('builds')
-    .select('id,name,tier,status,activities,description,legal_confirmed,content_license_confirmed,builder_agreement_version,created_at,reviewed_at,rejection_reason,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .select(BUILD_FIELDS)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -502,7 +532,7 @@ function selectBuild(id) {
   selectedId = id;
   renderQueue();
   var b = BUILDS.find(function(x){ return x.id===id; });
-  if (b) renderDetail(b);
+  if (b) { markReviewed(b); renderDetail(b); }
 }
 
 function renderDetail(b) {
@@ -607,17 +637,43 @@ function renderDetail(b) {
   if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="'+buildPath(b.id, b.name)+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
   if (b.status==='rejected') reviewedBanner='<div class="reviewed-banner rejected"><div><div class="rb-text">Rejected — '+escH(b.rejection_reason||'')+'</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+'</div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
 
+  // WHO CAN EDIT THIS BUILD, said out loud, because the answer differs and
+  // an admin staring at a wrong parts list needs to know which it is:
+  //
+  //   no owner  — posted from gunforma-admin-post.html and not claimed. Only
+  //               an admin can change it, so the whole-build editor is
+  //               offered here. (It was offered nowhere: the per-part "Edit"
+  //               below writes a correction, it cannot add a part or a
+  //               photo, and Undo only moved the build back to pending.)
+  //   an owner  — theirs to edit, not ours. While it is pending they can
+  //               still change it; every write here re-checks for that
+  //               (ensureUnchanged).
+  //               Once it is live they are limited to name, description and
+  //               activity, so "Undo" is how a builder gets their parts list
+  //               back: pending again, they fix it, it is approved again.
+  var unowned = !b.user_id;
+  var editBuildHtml = unowned
+    ? '<div class="detail-edit">'+
+        '<a class="btn-catalog primary" href="gunforma-post-build.html?id='+encodeURIComponent(b.id)+'&mode=edit">Edit build →</a>'+
+        '<div class="catalog-reason">Posted from the admin page and not claimed, so only an admin can edit it. Parts, photos and details; the status stays '+escH(b.status)+'.</div>'+
+      '</div>'
+    : (isPending
+      ? '<div class="detail-edit"><div class="catalog-reason">'+escH(username)+' can still edit this build while it is in review. Approve, reject, corrections and links all re-check it first — if it changed, the queue reloads and asks you to look again.</div></div>'
+      : (b.status==='approved'
+        ? '<div class="detail-edit"><div class="catalog-reason">Live: '+escH(username)+' can change the name, description and activity. To let them change parts or photos, use Undo — it goes back to pending, they edit it, you approve it again.</div></div>'
+        : ''));
+
   var html =
     '<div class="detail-content">'+
     '<div class="detail-top"><div>'+
-      '<div class="detail-eyebrow">Submitted by '+escH(username)+' · '+relTime(b.created_at)+'</div>'+
+      '<div class="detail-eyebrow">'+(unowned ? 'Posted by an admin · not claimed' : 'Submitted by '+escH(username))+' · '+relTime(b.created_at)+'</div>'+
       '<div class="detail-title">'+escH(b.name)+'</div>'+
       '<div class="detail-submeta">'+
         '<span class="detail-submeta-item"><strong>'+escH(platformName)+'</strong></span>'+
         '<span class="detail-submeta-item">'+(b.activities||[]).map(escH).join(', ')+'</span>'+
         '<span class="tier-badge '+b.tier+'">'+b.tier+' build</span>'+
       '</div>'+
-    '</div></div>'+
+    '</div>'+editBuildHtml+'</div>'+
     reviewedBanner+
     '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Description</div><div class="detail-desc">'+(b.description?escH(b.description):'<span style="color:#bbb">No description provided.</span>')+'</div></div>'+
@@ -723,9 +779,90 @@ function refreshDeleteBtn() {
 // ACTIONS — real updates to builds.status, gated by the
 // admin-only RLS policy and stamped server-side by the DB trigger.
 // ============================================================
+// A BUILD IN REVIEW HAS TWO WRITERS, and this page is the slow one.
+//
+// A builder can edit their build while it is pending (gunforma-post-build
+// .html, edit mode). This page loads once and then sits open, so every write
+// it makes is made against a copy that may be minutes old:
+//
+//   Approve              would publish a description, a parts list or a
+//                        photo swapped in after the reviewer last looked.
+//   Reject               would reject, for the old reason, a build the
+//                        builder fixed a moment ago.
+//   Save correction,     address a part by its INDEX in parts_snapshot. If
+//   Link to existing     the builder removed an earlier part, index 2 is a
+//                        different part now, and the correction or the
+//                        catalog link lands on it. No error anywhere.
+//
+// So each of them goes through ensureUnchanged() first, and the two that
+// write the builds row directly are also conditional on updated_at.
+//
+// WHAT "UNCHANGED" IS COMPARED WITH: REVIEWED[id], the build as the reviewer
+// was last SHOWN it and told about it — not BUILDS, the copy in memory.
+// The difference is the whole point. loadBuilds() runs after every action
+// on this page and silently swaps fresh rows into BUILDS, so comparing with
+// BUILDS would let "save a correction, then approve" publish whatever the
+// builder changed in between: fresh would be compared with fresh.
+// REVIEWED moves in exactly three places, each of them a moment the
+// reviewer is knowingly looking at new content:
+//   selectBuild()        they opened the build
+//   ensureUnchanged()    it refused, said so, and re-rendered the pane
+//   doLink()             their own link changed the parts
+var REVIEWED = {};   // build id -> reviewSignature() of what was shown
+function markReviewed(b) { if (b) REVIEWED[b.id] = reviewSignature(b); }
+
+// Re-reads the build and returns the fresh row, or null after saying why
+// not. `verb` finishes the sentence the reviewer reads ("…then approve.").
+async function ensureUnchanged(id, verb) {
+  var seen = BUILDS.find(function(x){ return x.id===id; });
+  if (!seen) return null;
+
+  const { data: fresh, error } = await sb.from('builds').select(BUILD_FIELDS).eq('id', id).maybeSingle();
+  if (error) { console.error(error); showToast('red','Could not re-check the build — nothing was changed'); return null; }
+  if (!fresh) {
+    showToast('red','This build no longer exists — queue reloaded');
+    await loadBuilds();
+    return null;
+  }
+
+  var statusMoved = fresh.status !== seen.status;
+  var shown = REVIEWED[id] || reviewSignature(seen);
+  if (statusMoved || reviewSignature(fresh) !== shown) {
+    await loadBuilds();
+    // They are being told, and the pane now shows the new version — so this
+    // is what they have been shown. Without it the next click would refuse
+    // again, forever.
+    markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+    showToast('red', statusMoved
+      ? 'This build is no longer ' + seen.status + ' — queue reloaded. Nothing was changed.'
+      : 'This build was edited after you opened it — reloaded. Review it again, then ' + verb + '.');
+    return null;
+  }
+  return fresh;
+}
+
+// Both steps, because they catch different things:
+//   1. ensureUnchanged() compares content, which is the one that sees a
+//      photo change (a photo row can change without touching builds).
+//   2. the UPDATE is conditional on status and on the updated_at that
+//      re-read returned, and counts the rows it wrote. This closes the gap
+//      between the re-read and the write for anything on the builds row.
 async function doApprove(id) {
-  const { error } = await sb.from('builds').update({ status: 'approved' }).eq('id', id);
+  const fresh = await ensureUnchanged(id, 'approve');
+  if (!fresh) return;
+
+  const { data: approved, error } = await sb.from('builds')
+    .update({ status: 'approved' })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .eq('updated_at', fresh.updated_at)
+    .select('id');
   if (error) { console.error(error); showToast('red','Something went wrong'); return; }
+  if (!Array.isArray(approved) || approved.length !== 1) {
+    showToast('red','This build changed while you were approving it — reloaded. Nothing was approved.');
+    await loadBuilds();
+    return;
+  }
   showToast('green','Build approved');
   await loadBuilds();
 }
@@ -734,8 +871,23 @@ async function doReject(id) {
   if (!sel) { showToast('red','Select a rejection reason first'); return; }
   var note = document.getElementById('reject-note').value.trim();
   var reason = sel.value + (note ? ' — ' + note : '');
-  const { error } = await sb.from('builds').update({ status: 'rejected', rejection_reason: reason }).eq('id', id);
+
+  // After the form is read: a refusal re-renders the pane and the form with it.
+  const fresh = await ensureUnchanged(id, 'reject');
+  if (!fresh) return;
+
+  const { data: rejected, error } = await sb.from('builds')
+    .update({ status: 'rejected', rejection_reason: reason })
+    .eq('id', id)
+    .eq('status', 'pending')
+    .eq('updated_at', fresh.updated_at)
+    .select('id');
   if (error) { console.error(error); showToast('red','Something went wrong'); return; }
+  if (!Array.isArray(rejected) || rejected.length !== 1) {
+    showToast('red','This build changed while you were rejecting it — reloaded. Nothing was rejected.');
+    await loadBuilds();
+    return;
+  }
   showToast('red','Build rejected');
   await loadBuilds();
 }
@@ -882,9 +1034,30 @@ async function doSaveEdit(buildId, idx) {
     return;
   }
 
-  var updatedHistory = (b.edit_history || []).concat(newEntries);
-  const { error } = await sb.from('builds').update({ edit_history: updatedHistory }).eq('id', buildId);
+  // A correction names its part by index, so it is only safe against the
+  // list the reviewer is looking at — see ensureUnchanged(). The inputs were
+  // read above, before this can re-render the pane.
+  // Closed first: a refusal re-renders the pane, and an edit panel left open
+  // over the reloaded list would be pointing at whatever now sits at idx.
+  editOpenKey = null;
+  const fresh = await ensureUnchanged(buildId, 'save the correction');
+  if (!fresh) return;
+
+  // Appended to the history just re-read, not the copy in memory, and
+  // written only if the row is still that one.
+  var updatedHistory = (fresh.edit_history || []).concat(newEntries);
+  const { data: written, error } = await sb.from('builds')
+    .update({ edit_history: updatedHistory })
+    .eq('id', buildId)
+    .eq('updated_at', fresh.updated_at)
+    .select('id');
   if (error) { console.error(error); showToast('red', 'Something went wrong'); return; }
+  if (!Array.isArray(written) || written.length !== 1) {
+    editOpenKey = null;
+    showToast('red', 'This build changed while you were saving — reloaded. The correction was not saved.');
+    await loadBuilds();
+    return;
+  }
 
   editOpenKey = null;
   showToast('blue', 'Correction saved — '+newEntries.length+' field'+(newEntries.length!==1?'s':'')+' updated');
@@ -1048,6 +1221,16 @@ async function doLink(buildId, idx) {
   var pr = CATALOG.products.find(function (x) { return x.id === LINK.productId; });
   if (!window.confirm('Link this build\'s part to "' + pr.name + '" (' + window.variantLabelOr(v, 'Unlabelled') + ')? The entry becomes the catalog part.')) return;
   LINK.busy = true; LINK.msg = ''; rerenderSelected();
+  // relink_build_part() swaps the part AT THIS INDEX, and checks only that
+  // whatever sits there is a pending custom part. If the builder has removed
+  // an earlier part since this pane was drawn, that is a different part.
+  const unchanged = await ensureUnchanged(buildId, 'link the part');
+  if (!unchanged) {
+    // Close the panel: its index belongs to the list that was just replaced.
+    LINK = { key: null, q: '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
+    rerenderSelected();
+    return;
+  }
   // The spec line is computed here, with js/variant-label.js, so the formula
   // stays in one place; the function stores it only when non-empty.
   var res = await sb.rpc('relink_build_part', {
@@ -1066,6 +1249,8 @@ async function doLink(buildId, idx) {
   LINK = { key: null, q: '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
   showToast('green', 'Linked to ' + pr.name);
   await loadBuilds();
+  // The parts changed because of this link, and the pane now shows it.
+  markReviewed(BUILDS.find(function (x) { return x.id === buildId; }));
 }
 
 // ============================================================
