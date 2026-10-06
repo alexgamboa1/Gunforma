@@ -325,3 +325,10 @@ own listing saying factory grips only.
 frames listed for them, so they will show as NOT fitting this frame" —
 overstates this: nothing shows it. Reword it to "not verified" the next time
 that function is changed.
+
+**P320 guns have no slide length (`guns.slide_length_in`).** All 11 P320
+models have it blank, so the catalog's fit badge would skip the slide-length
+check for P320 slides and judge them on barrel length alone. No P320 slide is
+in the catalog yet (all 40 are P365). Fill it before the first P320 slide is
+added.
+

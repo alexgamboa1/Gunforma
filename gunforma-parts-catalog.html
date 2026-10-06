@@ -1886,7 +1886,19 @@ function renderDetail(p) {
     var applies = ['frame','slide','barrel','compensator'].indexOf(p.category) !== -1;
     if (applies) {
       var ok = subModelCompat(p, SELECTED_SUBMODEL);
-      compatWrap.innerHTML = ok
+      // Two answers the check cannot back, so no badge rather than a wrong one:
+      // - a compensator's "yes" only means the gun has no integrated comp; it
+      //   never looks at the comp (threads, barrel), so it is not a yes. The
+      //   integrated-comp "no" stands.
+      // - a grip whose housing class no gun in the database has (fuse-xl,
+      //   xmacro-sub today) is "no" for every gun by construction, not because
+      //   anything was compared.
+      var unjudged =
+        (p.category === 'compensator' && ok) ||
+        (p.category === 'frame' && p.frame_specs && p.frame_specs.housing_class &&
+         !GUNS.some(function (g) { return g.housing_class === p.frame_specs.housing_class; }));
+      compatWrap.innerHTML = unjudged ? ''
+        : ok
         ? '<div class="detail-compat-badge ok">✓ Compatible with ' + esc(SELECTED_SUBMODEL.name) + '</div>'
         : '<div class="detail-compat-badge no">✗ May not fit '   + esc(SELECTED_SUBMODEL.name) + '</div>';
     } else {
