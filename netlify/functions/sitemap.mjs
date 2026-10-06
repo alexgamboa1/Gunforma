@@ -98,6 +98,10 @@ async function pgAll(build) {
 async function productUrls() {
   const rows = await pgAll((limit, offset) =>
     'products?select=' + encodeURIComponent('slug,category') +
+    // A discontinued part is out of the catalog and the build pickers, so it
+    // is out of here too. Its page may 301 to a successor (netlify.toml), and
+    // a sitemap must not list a URL that redirects.
+    '&is_discontinued=eq.false' +
     '&order=name.asc&limit=' + limit + '&offset=' + offset);
   const out = [];
   for (const p of rows) {

@@ -73,6 +73,9 @@ async function fetchAllProducts() {
   for (let offset = 0; ; offset += PAGE) {
     const page = await pgGet(
       'products?select=' + encodeURIComponent(cols) +
+      // Discontinued parts are hidden everywhere a reader browses — catalog,
+      // pickers, sitemap — so this manifest leaves them out as well.
+      '&is_discontinued=eq.false' +
       '&order=name.asc&limit=' + PAGE + '&offset=' + offset
     );
     all.push(...page);

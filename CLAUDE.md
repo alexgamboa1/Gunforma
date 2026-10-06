@@ -531,6 +531,26 @@ link is not something the feed failed to account for.
 Partial indexes `idx_affiliate_links_live` and `idx_product_variants_live` cover
 the `where retired_at is null` reads.
 
+### Discontinued parts
+
+A whole **product** leaving the catalog is `products.is_discontinued = true` —
+not `retired_at`, which is per variant and per link, and never a delete.
+Every browse surface filters it: the catalog (and so its search), both build
+pickers, the Armory, the fit guides, `sitemap.mjs` and `parts-index.mjs`.
+
+**The product page does not.** `/parts/<category>/<slug>` still renders a
+discontinued part at 200, so an existing build that lists it keeps a working
+link. When a part has a successor, add an exact-path `301` in `netlify.toml`
+**above** the `/parts/*` rewrite, put the old path in `RETIRED` in
+`scripts/check-sitemap.mjs` (its baseline pins every URL the old static
+sitemap had), and add the pair to the redirect block in
+`scripts/check-routes.mjs`. Worked example: RAMM's comp and non-comp P365
+Leverage kits, merged into `ramm-tactical-leverage-trigger-p365`.
+
+Nothing in the repo or the database sets `is_discontinued` back to false
+(`add_variants()` only reads it to refuse), and no seed or import script
+inserts products — `create_product()` is the one writer.
+
 ## Prices we can stand behind
 
 A price is **stale** when **any** of these holds, and stale prices are never
