@@ -305,3 +305,23 @@ here with its own list:
   `github.event_name == 'schedule'` branch has never executed.
 
 Each of these produces a success message somewhere.
+
+---
+
+## 9. Catalog data with a known gap — verified 2026-10-06
+
+**Magwell frame lists (`magwell_frame_requirements`).** The magwell frame
+lists hold only the 2 SIG factory frames out of 31 xmacro/fuse frames. Do not
+switch the catalog magwell check back on until a frame missing from a list
+counts as unknown, not as no.
+
+Nothing reads the lists today: the catalog's `frameOk()`/`magwellOk()` only
+run against `EMPTY_SELECTION` since "Set as mine" was retired. Left as-is on
+purpose (2026-10-06) — the one candidate addition, the Armory Craft XMACRO/FUSE
+grip on the SIG XMACRO funnel, has the grip maker saying yes and the magwell's
+own listing saying factory grips only.
+
+`create_product()`'s warning for a new frame — "These magwells only fit the
+frames listed for them, so they will show as NOT fitting this frame" —
+overstates this: nothing shows it. Reword it to "not verified" the next time
+that function is changed.
