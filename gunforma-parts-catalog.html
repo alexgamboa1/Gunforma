@@ -186,7 +186,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-compat-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; margin-top: 6px; }
 .detail-compat-badge.ok  { background: #eaf5ee; color: #166534; border: 0.5px solid #86cfad; }
 .detail-compat-badge.no  { background: #fde8e2; color: #9b1c1c; border: 0.5px solid #f5b4a1; }
-.detail-compat-badge.na  { background: #fafaf8; color: #888;    border: 0.5px solid #d9d6cc; }
 
 /* Horizontal category selector — primary way to narrow by category, above
    the grid. Single-select (contrast with the sidebar's other multi-select
@@ -1891,9 +1890,11 @@ function renderDetail(p) {
         ? '<div class="detail-compat-badge ok">✓ Compatible with ' + esc(SELECTED_SUBMODEL.name) + '</div>'
         : '<div class="detail-compat-badge no">✗ May not fit '   + esc(SELECTED_SUBMODEL.name) + '</div>';
     } else {
-      // Universal-fit categories (trigger, optic, light, small parts) —
-      // sub-model doesn't rule on them.
-      compatWrap.innerHTML = '<div class="detail-compat-badge na">Universal fit — no ' + esc(SELECTED_SUBMODEL.name) + ' constraint</div>';
+      // No badge for a category subModelCompat does not judge. This used to
+      // read "Universal fit — no <gun> constraint", which is a claim, not an
+      // absence of one: an XMACRO-only magwell read as universal on a
+      // standard P365. Saying nothing is true; a wrong yes is not.
+      compatWrap.innerHTML = '';
     }
   } else {
     compatWrap.innerHTML = '';
