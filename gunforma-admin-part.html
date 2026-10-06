@@ -1615,6 +1615,24 @@ async function runCheck() {
   }
   renderResult(); renderPanel();
 }
+// Null when the build's part at S.build.index is still, key for key, the one
+// this page was opened for; otherwise the sentence to show. Both sides come
+// back from jsonb, so the key order is Postgres's own both times and a
+// string comparison is exact. A correction does not disturb it: corrections
+// live in edit_history and never touch parts_snapshot.
+async function buildPartMoved() {
+  const { data, error } = await sb.from('builds').select('parts_snapshot').eq('id', S.build.id).maybeSingle();
+  if (error || !data) {
+    return 'Save stopped: the build could not be re-read to confirm that part ' + S.build.index +
+      ' is still the one this page was opened for. Nothing was saved. Try again.';
+  }
+  const now = (data.parts_snapshot || [])[S.build.index];
+  if (JSON.stringify(now) !== JSON.stringify(S.build.part)) {
+    return 'Save stopped: this build was edited after the page was opened, and part ' + S.build.index +
+      ' is no longer "' + (S.build.part.name || 'unnamed') + '". Nothing was saved. Reopen the part from the review queue.';
+  }
+  return null;
+}
 async function runSave() {
   const body = payload();
   const sig = JSON.stringify(body);
@@ -1624,6 +1642,20 @@ async function runSave() {
       ? 'Add ' + n + ' variant' + (n > 1 ? 's' : '') + ' to "' + S.target.name + '"? Variants are never deleted; removing one later means retiring it.'
       : 'Save "' + body.p_product.name + '"? A saved product cannot be deleted.')) return;
   S.busy = 'save'; renderPanel();
+  // create_product() re-links the build's part AT p_part_index, and checks
+  // only that whatever sits there is a pending custom part. This page can be
+  // open for a long time, and a builder may edit a build that is in review —
+  // so if they removed an earlier part since it loaded, that index is a
+  // different part now, and it would silently become this product.
+  if (body.p_build_id) {
+    const moved = await buildPartMoved();
+    if (moved) {
+      S.busy = false;
+      S.check = { sig: sig, ok: false, error: moved };
+      renderResult(); renderPanel();
+      return;
+    }
+  }
   const { data, error } = await sb.rpc(S.target ? 'add_variants' : 'create_product', body);
   S.busy = false;
   if (error) {

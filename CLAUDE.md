@@ -1634,6 +1634,123 @@ message ever sent to it was discarded, with nothing anywhere reporting a
 failure. A catch-all is now enabled. There is no dashboard that says "0 emails
 received"; the only way this surfaces is someone asking why you never replied.
 
+## Editing a build after it is submitted
+
+**One editor: `gunforma-post-build.html?id=<uuid>&mode=edit`.** Who it lets
+in, and what they may change, by status:
+
+| status | its owner | an admin |
+|---|---|---|
+| draft | everything | only if the build has no owner |
+| **pending** | **everything; it stays pending** | only if the build has no owner |
+| rejected | everything; saving resubmits it | only if the build has no owner |
+| approved | name, description, activity | only if the build has no owner — then everything, and it stays live |
+
+**Pending was closed until 2026-10, and only by the page.** The profile card
+was a dead `<div>` and the editor refused the build, so the one build a
+builder most wants to fix — the one submitted a minute ago with a part
+missing — could only be deleted and posted again. RLS allowed the edit all
+along (`Owners can edit their own builds` has no status clause, and the
+`build_photos` owner policies name `draft` and `pending`).
+
+**An admin edits a build only when nobody owns it** (`user_id is null`):
+posted from `gunforma-admin-post.html` and not claimed yet. Those had no
+editor at all — the queue's per-part "Edit" writes a *correction*, and Undo
+only moves a build back to pending. The queue links to the editor for them
+("Edit build →"). The save sends **no `status`**, so a live build stays live
+and a pending one stays pending, and it filters on `user_id is null`.
+
+**An admin is deliberately not let into a build that has an owner.** The
+tool for that is the correction, which is logged in `edit_history` and shown
+to the builder. A rewrite from the editor would leave no record. To let a
+builder change the parts or photos of a build that is already live: **Undo**
+(back to pending), they edit it, approve it again.
+
+### A build in review has two writers
+
+That is the reason pending was closed. It is handled where each write
+happens, on both sides, and none of it is a lock:
+
+**The owner's save is conditional on `updated_at`.** It is read when the
+build loads and sent as a filter; the UPDATE asks for its row back, and a
+save that matches nothing is reported, not toasted as "saved". Without it,
+an owner who opened the form before a reviewer re-linked a part would put
+the old list back over the link. The stamp is refreshed from every save,
+because "Save as draft" does not leave the page.
+
+**Every reviewer write goes through `ensureUnchanged()`** in
+`gunforma-admin-queue.html` first — Approve, Reject, Save correction and
+Link to existing part. It re-reads the build and compares it with
+`REVIEWED[id]`: `reviewSignature()` (words, pistol, parts, and photos by id)
+of the build **as the reviewer was last shown it**. A mismatch reloads the
+queue, says so, and writes nothing. Approve, Reject and Save correction are
+then also conditional on the `updated_at` that re-read returned, with a row
+count.
+
+Three things about that are easy to undo by accident:
+
+- **It compares with `REVIEWED`, not with `BUILDS`.** `loadBuilds()` runs
+  after every action on the page and silently swaps fresh rows into
+  `BUILDS`. Compared with that, "save a correction, then approve" would
+  publish whatever the builder changed in between — fresh against fresh.
+  `REVIEWED` moves only in `selectBuild()`, in `ensureUnchanged()`'s own
+  refusal, and after the reviewer's own link. Do not set it in
+  `loadBuilds()`.
+- **Photos are compared directly, not through `updated_at`.** A photo row
+  can be added or removed without touching `builds`, so the stamp alone
+  would miss the one change that most needs a second look.
+- **Corrections and links need it more than Approve does.** They address a
+  part by its **index**, so against a list the builder has since shortened
+  they land on a different part, with no error. "Add to catalog" has the
+  same exposure across a page load, so `gunforma-admin-part.html` re-reads
+  the part at that index just before Save (`buildPartMoved()`) and stops if
+  it is not, key for key, the one the page was opened for.
+
+What is left is the gap between a re-check and its write: milliseconds, and
+closed for anything on the `builds` row by the `updated_at` condition. A
+photo swapped inside that gap is not caught, and `relink_build_part()` and
+`create_product()` take no `updated_at` at all. Closing those properly means
+a database-side check, not another client one.
+
+### Corrections pin parts in place
+
+A correction in `builds.edit_history` names its part by **index** in
+`parts_snapshot`, and only an admin may write `edit_history`
+(`prevent_owner_edit_history_change`). So an owner who removes a part at or
+before a corrected one shifts the list under the correction, and the build
+page lays "name corrected to X" over a different part — no error anywhere.
+This was already reachable through reject → resubmit.
+
+The editor pins every loaded part up to the last corrected index
+(`editState.pinnedPartUids`): `removePart()` and `changePlatform()` refuse.
+Adding is always safe, since new parts go on the end. Entries with no
+`part_index` (the `resubmit` marker) pin nothing.
+
+**This takes something away, on purpose.** A build that carries a correction
+and is then rejected for a wrong part or the wrong pistol can no longer have
+that part removed by its owner: the way out is delete and re-post, and the
+toast says so. Before, the removal worked and quietly moved the correction.
+So do not correct a part on a build you are about to reject for its parts.
+
+**The pin is the page's, not the database's** — a direct API call can still
+reorder `parts_snapshot` under a correction. The real fix for both is
+corrections that address a part by something other than its position.
+
+### Only a reviewer can approve — once the migration is applied
+
+`supabase/restrict_build_status_to_reviewers.sql`, **not yet applied**.
+Until it is, any signed-in user can `update builds set status = 'approved'`
+on their own build, or insert one already approved: the owner policies check
+`auth.uid() = user_id` and nothing else, and `status` is a column owners
+must be able to write (draft → pending is how a build is submitted). The
+existing guard, `restrict_owner_edits_on_approved_build`, only looks at
+builds that are *already* live. The file's header has the measurement and
+its footer the seventeen-case dry run.
+
+It is independent of the editor changes above: they need no migration, and
+it breaks no deployed code, because nothing on the site writes `approved` or
+`rejected` as anyone but an admin or the service role.
+
 ## Replacing the builder's contents: identity, and asking first
 
 **Any action that REPLACES the builder's contents, or CHANGES which row it
