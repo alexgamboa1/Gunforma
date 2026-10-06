@@ -302,11 +302,12 @@ for (const [label, path] of [
 // fail when one is missing from _category-meta.mjs — its products would have
 // no /parts/ address, no catalog name and no builder section. A category
 // with no products cannot be hidden from anyone, so it is not asserted.
-// Then one product per category must answer 200 at its /parts/ address.
+// Then one product per category must answer 200 at its /parts/ address —
+// a live one: a discontinued part may 301 to its successor (netlify.toml).
 {
   console.log('\n── categories in use');
   const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
-  const res = await fetch(`${SB_URL}/rest/v1/products?select=category,slug&order=slug.asc&limit=5000`,
+  const res = await fetch(`${SB_URL}/rest/v1/products?select=category,slug&is_discontinued=eq.false&order=slug.asc&limit=5000`,
     { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
   const rows = res.ok ? await res.json() : null;
   ok(Array.isArray(rows) && rows.length > 0, 'products readable with the public key', res.status);
@@ -323,6 +324,25 @@ for (const [label, path] of [
     ok(r.status === 200, `${path}: 200`, r.status);
   }
   note('categories with products', [...firstByCat.keys()].length + ' of ' + Object.keys(CATEGORY_META).length);
+}
+
+// ── discontinued parts redirect to their successor ──────────────────────
+// The rules are exact paths in netlify.toml, above the /parts/* rewrite. If
+// one slips below it, product-page.mjs answers instead and the old page
+// renders at 200 — so assert the 301 and its target on the wire.
+{
+  console.log('\n── discontinued parts');
+  for (const [from, to] of [
+    ['/parts/triggers/ramm-tactical-leverage-c-p365',  '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
+    ['/parts/triggers/ramm-tactical-leverage-nc-p365', '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
+  ]) {
+    const r = await get(from);
+    const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');
+    ok(r.status === 301, `${from}: 301`, r.status);
+    ok(loc === to, `  -> ${to}`, r.location);
+    const t = await get(to);
+    ok(t.status === 200, `  and ${to} answers 200`, t.status);
+  }
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
