@@ -1,6 +1,7 @@
 -- ============================================================
 -- Gunforma-v2 — revoke TRUNCATE from anon and authenticated in public
--- NOT YET APPLIED. Rollback: revoke_truncate_grants_rollback.sql
+-- APPLIED 2026-10-06. See the record at the bottom of this file.
+-- Rollback: revoke_truncate_grants_rollback.sql
 --
 -- WHY
 -- TRUNCATE is the one write privilege row-level security does not govern.
@@ -68,4 +69,14 @@ commit;
 --
 -- A table created in public by Supabase's own tooling arrives with TRUNCATE
 -- for both roles. Re-run the sweep above rather than assuming it holds.
+-- ============================================================
+
+-- ============================================================
+-- APPLIED 2026-10-06 as migration revoke_truncate_grants (20261006160738) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #145.
+-- Verified live, before -> after:
+--   anon/authenticated TRUNCATE grants in public ........... 64 -> 0
+--   every other anon/authenticated grant in public ........ 592 -> 592
+--   default ACL, owner postgres, tables ... authenticated=arwdxtm (no D)
+-- Public reads unchanged: 247 live products via the anon key, /parts 200.
 -- ============================================================
