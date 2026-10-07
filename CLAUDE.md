@@ -175,6 +175,26 @@ Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
 emit the same canonical instead of one declaring the id-less one until its
 fetch lands. **An id that cannot be resolved gets a real 404 on both.**
 
+It server-renders the build's **body**, not just its meta: the H1, the
+builder's description, the photos, and a flat parts list whose entries link
+to their `/parts/` pages, plus Article + ItemList JSON-LD. It does this by
+exact-string-replacing the page's placeholder elements ("—", "Loading…", the
+empty containers), which the page's own JS then hydrates over with identical
+content. Every one of those literals is held to the page byte-for-byte by
+`scripts/check-canonical-coupling.mjs` — editing a placeholder in
+`gunforma-build-detail.html` means changing the matching literal in
+`build-og.mjs` in the same commit, and the guard says so. Replacements are
+arrow functions on purpose: a plain replacement string interprets `$`
+sequences, and builders write "$250" in descriptions. The parts list is
+deliberately flat — the section taxonomy lives in `js/build-categories.js`,
+and a server copy of it is the drift `check-categories.mjs` refuses.
+The title and meta description are built from the DATA (platform + most
+notable parts by category priority), not from the builder's caption alone,
+because nobody searches a caption. `product-page.mjs` renders the mirror
+link — "Used in these builds" — so builds and parts link both ways in
+served HTML. `scripts/check-routes.mjs` asserts the served /b/ body on every
+scheduled run: real H1, parts links, JSON-LD.
+
 It briefly had a split: hard 404 on `/b/…`, and a 200 serving the page
 unadorned on the legacy URL so the client could render its own "Build not
 found", on the reasoning that an old link should not start refusing. That was

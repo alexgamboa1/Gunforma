@@ -90,18 +90,26 @@ const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 
 async function pickLiveBuild() {
   const res = await fetch(
-    `${SB_URL}/rest/v1/builds?select=id,name&status=eq.approved&limit=1`,
+    `${SB_URL}/rest/v1/builds?select=id,name,parts_snapshot&status=eq.approved&limit=1`,
     { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } },
   );
   if (!res.ok) return null;
   const rows = await res.json();
   if (!Array.isArray(rows) || !rows.length) return null;
-  const { id, name } = rows[0];
+  const { id, name, parts_snapshot } = rows[0];
   // The slug form is built the same way the site builds it, so this exercises
   // the real URL a reader would follow rather than a hand-made one.
   const { buildPath } = await import('../netlify/functions/_build-url.mjs');
-  return { id, path: buildPath(id, name), bare: '/b/' + id };
+  const partRefIds = (Array.isArray(parts_snapshot) ? parts_snapshot : [])
+    .map((p) => p && p.refId).filter(Boolean);
+  return { id, name, partRefIds, path: buildPath(id, name), bare: '/b/' + id };
 }
+
+// Same escaping build-og.mjs applies before writing a build's name into the
+// page, so the assertion below looks for the exact bytes the server emits.
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
 
 console.log(`checking routes on ${origin}\n`);
 
@@ -144,6 +152,26 @@ if (!live) {
 
   ok(bare.status === 200 && bare.canon[0] === a.canon[0],
      '/b/<bare uuid> resolves to the same build and canonical', bare.status + ' ' + bare.canon[0]);
+
+  // ── the body is server-rendered, not the "—" shell ──────────────────
+  // Google's first fetch does not run JS, so the ranking content has to be
+  // in these bytes: the real H1 (not the placeholder), and — when the build
+  // lists catalog parts — at least one /parts/ link in the parts list.
+  ok(!a.body.includes('<h1 class="build-title" id="build-title">—</h1>'),
+     'slug URL: H1 is server-rendered, not the — placeholder');
+  ok(a.body.includes(escHtml(live.name)),
+     'slug URL: build name present in the served HTML', JSON.stringify(live.name));
+  ok(!a.body.includes('<div id="parts-container"></div>'),
+     'slug URL: parts container is server-rendered, not empty');
+  if (live.partRefIds.length) {
+    ok(/href="\/parts\//.test(a.body),
+       'slug URL: at least one /parts/ link in the server-rendered parts list',
+       (a.body.match(/href="\/parts\//g) || []).length + ' links');
+  } else {
+    note('parts links', 'build has no catalog parts — link assertion skipped');
+  }
+  ok(a.body.includes('application/ld+json'),
+     'slug URL: JSON-LD present');
 
   // Recorded, not asserted — see the header of this file.
   note('id source, /b/ slug   ', `${a.idSource}   (x-nf-original-path ${a.origHeader})`);
