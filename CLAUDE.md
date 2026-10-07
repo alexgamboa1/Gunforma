@@ -685,13 +685,17 @@ Three rules that look like decoration:
 we can stand behind in rich results; `product-page.mjs` filters maker rows
 out of `offers` explicitly.
 
-**`link_clicks` needs `product_id` to store these clicks** —
-`supabase/link_clicks_product_id.sql`, applied after the code is live. Until
-then a maker click's insert fails with PGRST204 and the function treats it
-as every other logging failure: the redirect goes out, the click is not
-counted, `x-go-debug: 1` reports it. The legacy `/go/<link id>` shape is the
-money path and is unchanged by a byte. `scripts/check-routes.mjs` exercises
-both shapes on the wire, always with `x-go-no-log: 1`.
+**`link_clicks.product_id` is what stores these clicks** —
+`supabase/link_clicks_product_id.sql`, applied 2026-10-07 (migration
+`20261007055811`), after #149 was live; the record at the bottom of that
+file is what was read back. A row carries exactly one of `link_id` /
+`product_id`, enforced by a check constraint. The function was written to
+tolerate the column's absence — a failed insert reports as `x-go-debug`'s
+`PGRST204` and the redirect still goes out — and still is, which is the
+shape to keep: logging must never be able to break buying. The legacy
+`/go/<link id>` shape is the money path and is unchanged by a byte.
+`scripts/check-routes.mjs` exercises both shapes on the wire, always with
+`x-go-no-log: 1`.
 
 ## Build-time guards
 
