@@ -15,9 +15,13 @@
 //
 // TWO RULES, because either alone has a hole:
 //
-//   1. Every anchor carrying rel="... sponsored ..." — the marker every buy
-//      link already uses — must build its href from a /go/ path. Catches a new
-//      emit site that reuses the existing shape.
+//   1. Every anchor carrying rel="... nofollow ..." — the marker every buy
+//      link uses, partner (sponsored nofollow, /go/<link>) and maker (nofollow
+//      alone, /go/part/<product>) — must build its href from a /go/ path.
+//      Catches a new emit site that reuses the existing shape. Keyed on
+//      nofollow rather than sponsored since the maker buttons arrived: those
+//      are deliberately NOT sponsored, and a rule keyed on sponsored would
+//      wave through a maker button that bypassed the click layer.
 //   2. No retailer or affiliate-network domain may appear inside an href
 //      anywhere in these files. Catches someone hardcoding a URL rather than
 //      reusing the shape, which rule 1 would miss entirely.
@@ -67,15 +71,17 @@ for (const rel of FILES) {
   try { src = await readFile(join(ROOT, rel), 'utf8'); }
   catch { fail(`${rel} is listed here but does not exist — update the list or restore the file`); continue; }
 
-  // ── rule 1: sponsored anchors must go through /go/ ──────────────────────
+  // ── rule 1: nofollow anchors (every buy button) must go through /go/ ───
+  // MAKER_REL is the maker buttons' rel, held in a variable rather than
+  // written out, so the tag carries the name — it counts as nofollow too.
   for (const m of src.matchAll(ANCHOR_RE)) {
     const tag = m[0];
-    if (!/sponsored/.test(tag)) continue;
+    if (!/nofollow|MAKER_REL/.test(tag)) continue;
     checkedAnchors++;
     const href = (tag.match(/href\s*=\s*(?:"|\\")([^"]*)/) || [])[1] || tag;
     if (!/\/go\//.test(href) && !/goUrl/.test(href)) {
       const line = src.slice(0, m.index).split('\n').length;
-      fail(`${rel}:${line} a sponsored anchor does not build its href from /go/ — ` +
+      fail(`${rel}:${line} a buy anchor does not build its href from /go/ — ` +
            `that click is not logged\n        ${tag.replace(/\s+/g, ' ').slice(0, 132)}`);
     }
   }
@@ -90,7 +96,7 @@ for (const rel of FILES) {
   }
 }
 
-console.log(`checked ${checkedAnchors} sponsored anchor(s) across ${FILES.length} files`);
+console.log(`checked ${checkedAnchors} buy anchor(s) across ${FILES.length} files`);
 console.log(failures === 0
   ? 'ok: every buy link goes through the /go/ click layer'
   : `${failures} FAILURE(S)`);

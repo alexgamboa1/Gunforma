@@ -598,6 +598,55 @@ writer in this repo, it caused the mismatch above, and the sort has a
 deterministic tiebreak now instead. See `supabase/retire_is_primary.sql`; the
 values are archived in `affiliate_links_is_primary_archive`.
 
+## Unpaid links to a part's own store
+
+A variant with no live partner listing is **not a dead end**. It renders a
+button to the part's own `products.url` through **`/go/part/<product id>`**,
+the second shape of the `go.js` edge function, which 302s to that url and
+logs the click against the product. Four surfaces render it — the part page,
+the guide table, the catalog detail panel (via `js/affiliate.js`) and the
+build page — and partner rows always sort first. Catalog grid cards do not
+carry it: `renderHero()` returns `''` for a product with no partner listing.
+
+This **reverses** an earlier decision not to use `products.url` as a buy
+link because it earns no commission. A dead end earns nothing either, and
+counted clicks to a maker are what we take to that maker when we ask for a
+partnership. Measured 2026-10-07: 89 of 250 live parts had no listing at all
+(242 rows), 25 more had one on some options only (86 rows); 88 of the 89 had
+a url.
+
+Three rules that look like decoration:
+
+- **The label is decided from the host, not assumed.** `products.url` is
+  usually the maker's page but not always — three Olight lights point at
+  illumn.com, two Grayguns modules at sigsauer.com, the RAMM trigger at
+  thetriggerguyusa.com. `makerLink()` reads "Buy from <maker>" only when
+  the url's host is the maker's `manufacturers.website_url` host or a
+  subdomain of it (`www.` ignored), and "Buy at <host>" otherwise —
+  including when the maker has no website saved, and including
+  true-precision.com vs trueprecision.com, which is a different host and
+  reads as one.
+- **`rel="noopener nofollow"`, never `sponsored`.** Nobody pays for these.
+  Partner buttons keep `noopener sponsored nofollow` unchanged, and
+  `check-buy-links.mjs` now keys on `nofollow` so both kinds must go
+  through `/go/`.
+- **The disclosure line says what is true of the buttons above it**:
+  partner-only, maker-only, both, or no line at all. `buyDisclosure()` holds
+  the wording. The guide page keeps its first sentence about prices and
+  applies the rule to the second.
+
+**Not in the JSON-LD.** A maker link with a hand-typed MSRP is not an offer
+we can stand behind in rich results; `product-page.mjs` filters maker rows
+out of `offers` explicitly.
+
+**`link_clicks` needs `product_id` to store these clicks** —
+`supabase/link_clicks_product_id.sql`, applied after the code is live. Until
+then a maker click's insert fails with PGRST204 and the function treats it
+as every other logging failure: the redirect goes out, the click is not
+counted, `x-go-debug: 1` reports it. The legacy `/go/<link id>` shape is the
+money path and is unchanged by a byte. `scripts/check-routes.mjs` exercises
+both shapes on the wire, always with `x-go-no-log: 1`.
+
 ## Build-time guards
 
 `publish = "."` means there is no compile step, so the Netlify build command's
@@ -621,6 +670,9 @@ Registered today:
 | `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
 | `scripts/check-categories.mjs` | the browser and server category lists differing; a category in no build section; a page carrying its own category list; a spec sheet the product page never renders |
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
+| `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
+| `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
+| `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -1260,6 +1312,15 @@ listing reads differently depending on which page you are on:
   cannot import the browser module. `scripts/listing-rules.test.mjs` pins
   its behaviour to the documented rules on every deploy.
 - `gunforma-build-detail.html` — inline copy for a build's parts list
+
+**The unpaid buy button has its own pair**, split the same way as
+`js/build-url.js` ↔ `_build-url.mjs`: `js/maker-link.js` (browser global,
+loaded by the catalog, the Armory and the build page — `check-script-order`
+enforces the order) and `netlify/functions/_maker-link.mjs` (imported by
+`product-page.mjs` and `guide-page.mjs`). Both hold `makerLink()` — the
+"Buy from <maker>" / "Buy at <host>" rule — and `buyDisclosure()`, the
+three-way disclosure line. `scripts/maker-link.test.mjs` runs both over the
+same inputs on every deploy. See **Unpaid links to a part's own store**.
 
 ### One category list, two copies
 

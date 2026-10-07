@@ -440,6 +440,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/footer.js"></script>
 <!-- Before affiliate.js: it calls window.variantLabel at render time. -->
 <script src="js/variant-label.js"></script>
+<!-- Before affiliate.js: it calls window.makerLink at render time. -->
+<script src="js/maker-link.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -461,10 +463,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // Buy links: routed through the shared js/affiliate.js module, which
 // pulls tracked listings from affiliate_links → partners (see
 // build-detail for the reference implementation this was extracted from).
-// products.url is intentionally NOT used as a buy link — it's an
-// untracked manufacturer page. affiliate.renderHero is called per card
-// and returns '' when the product has no listing yet; a console.warn
-// fires from runBuyUrlAudit when >20% of visible parts lack listings.
+// A product with no partner listing links to its own products.url through
+// /go/part/<id> (a counted, unpaid link — see js/affiliate.js).
+// affiliate.renderHero is called per card and returns '' when the product
+// has no PARTNER listing; a console.warn fires from runBuyUrlAudit when
+// >20% of visible parts lack listings.
 // ============================================================
 var sb = window.sb;
 
@@ -1798,16 +1801,20 @@ function renderGuideCard(g) {
     var priceCell = price != null
       ? '<div class="guide-part-price">$' + price.toFixed(price < 100 ? 2 : 0) + '</div>'
       : '<div class="guide-part-price na">—</div>';
-    // Affiliate buy — hero URL from affiliate_links (tracked). No untracked
-    // fallback to products.url. Renders as an empty span when no listing
-    // exists so the 4-column grid layout stays intact.
+    // Affiliate buy — the hero row from js/affiliate.js: a partner listing
+    // (sponsored, /go/<link>) or, when the product has none, its own store
+    // (not sponsored, /go/part/<product>). Renders as an empty span when
+    // neither exists so the 4-column grid layout stays intact.
+    //
+    // /go/, like every other buy link — the click layer's whole point is
+    // that no buy button bypasses it. This page is parked (no nav, noindex)
+    // but it still answers on its own URL, and Loadouts inherits this
+    // renderer, so leaving it pointing straight at the retailer would ship
+    // an unlogged buy link into the rebuild.
     var buyCell = aff && aff.hero
-      // /go/<link id>, like every other buy link — the click layer's whole
-      // point is that no buy button bypasses it. This page is parked (no nav,
-      // noindex) but it still answers on its own URL, and Loadouts inherits
-      // this renderer, so leaving it pointing straight at the retailer would
-      // ship an unlogged buy link into the rebuild.
-      ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>'
+      ? (aff.hero.maker
+          ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="' + escAttr(window.MAKER_REL) + '">' + esc(aff.hero.maker.label) + '</a>'
+          : '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>')
       : '<span></span>';
     return '<div class="guide-part">' +
       '<span class="guide-part-cat">' + esc(catLabel(part.category)) + '</span>' +

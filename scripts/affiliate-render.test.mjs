@@ -32,12 +32,23 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // classic scripts against the same global. check-script-order.mjs is what
 // enforces that ordering in the HTML; this mirrors it.
 const win = {};
-for (const f of ['js/variant-label.js', 'js/affiliate.js']) {
+for (const f of ['js/variant-label.js', 'js/maker-link.js', 'js/affiliate.js']) {
   new Function('window', await readFile(join(ROOT, f), 'utf8'))(win);
 }
 
-const PRODUCT = '04628757-d54f-4bba-b288-435b7bb74351';
+const PRODUCT    = '04628757-d54f-4bba-b288-435b7bb74351';
+// A part with no partner listing on any colour, and a url: every row is a
+// maker row (Icarus's own site, so "Buy from Icarus Precision").
+const MAKER_ONLY = '11111111-1111-4111-8111-111111111111';
+// A part with no partner listing and no url: no entry at all, as before.
+const NO_URL     = '22222222-2222-4222-8222-222222222222';
 const today = new Date().toISOString().slice(0, 10);
+
+// The products embed for the mixed product: a url on the maker's own site.
+const MIXED_PRODUCT = {
+  category: 'slide', url: 'https://www.norsso.com/p365-slide', is_discontinued: false,
+  manufacturers: { name: 'Norsso', website_url: 'https://norsso.com' },
+};
 
 // Shaped exactly like the real select: variants, each with embedded
 // affiliate_links, each with an embedded partner.
@@ -71,6 +82,30 @@ const ROWS = [
     affiliate_links: [{ id: 'l-ovr', url: 'https://shop/ovr', affiliate_url: null,
       street_price: 400.00, in_stock: false, last_checked: today, op_last_matched_by: 'stored_op_gtin',
       partners: { name: 'OpticsPlanet (Awin)' } }] },
+  // The MIXED case: a colour with no listing on a product that has one on
+  // other colours. Used to be dropped; now a maker row, sorted last.
+  { id: 'v-odg-maker', product_id: PRODUCT, variant_label: null, color: 'ODG', finish: 'Cerakote',
+    is_default: false, primary_image_url: null, msrp: 415, products: MIXED_PRODUCT,
+    affiliate_links: [] },
+
+  // MAKER-ONLY: two colours, no listing on either, url on the maker's site.
+  { id: 'v-mo-black', product_id: MAKER_ONLY, variant_label: null, color: 'Black', finish: null,
+    is_default: true, primary_image_url: null, msrp: 379.99,
+    products: { category: 'frame', url: 'https://www.icarusprecision.com/evo', is_discontinued: false,
+                manufacturers: { name: 'Icarus Precision', website_url: 'https://icarusprecision.com' } },
+    affiliate_links: [] },
+  { id: 'v-mo-fde', product_id: MAKER_ONLY, variant_label: null, color: 'FDE', finish: null,
+    is_default: false, primary_image_url: null, msrp: null,
+    products: { category: 'frame', url: 'https://www.icarusprecision.com/evo', is_discontinued: false,
+                manufacturers: { name: 'Icarus Precision', website_url: 'https://icarusprecision.com' } },
+    affiliate_links: [] },
+
+  // NO URL: nothing to link to. Must produce no entry, exactly as before.
+  { id: 'v-nourl', product_id: NO_URL, variant_label: null, color: 'Black', finish: null,
+    is_default: true, primary_image_url: null, msrp: 120,
+    products: { category: 'light', url: null, is_discontinued: false,
+                manufacturers: { name: 'Streamlight', website_url: 'https://www.streamlight.com' } },
+    affiliate_links: [] },
 ];
 
 // Minimal chainable stub matching the calls affiliate.js makes.
@@ -89,7 +124,9 @@ test('loadFor runs end to end and labels every listing', async () => {
   await win.affiliate.loadFor(sb, [PRODUCT]);
   const aff = win.affiliate.get(PRODUCT);
   assert.ok(aff, 'product was not cached');
-  assert.equal(aff.listings.length, 5);
+  assert.equal(aff.listings.length, 6);
+  assert.equal(aff.partnerCount, 5);
+  assert.equal(aff.makerCount, 1);
 
   const labels = aff.listings.map((l) => l.variantLabel);
   // This is the drift that shipped: the two Black variants MUST be
@@ -138,13 +175,75 @@ test('both renderers produce markup with nothing undefined in it', async () => {
     // Every buy anchor goes through /go/. A renderer that emitted the retailer
     // URL directly would still sell the part and silently log nothing, which
     // is exactly the failure scripts/check-buy-links.mjs exists to refuse.
-    for (const m of html.matchAll(/<a\b[^>]*sponsored[^>]*>/g)) {
+    for (const m of html.matchAll(/<a\b[^>]*nofollow[^>]*>/g)) {
       assert.match(m[0], /href="\/go\//, `${fn} emitted a buy link that bypasses /go/: ` + m[0].slice(0, 110));
     }
   }
   const block = win.affiliate.renderBlock(PRODUCT);
   assert.match(block, /Black \/ Nitride/, 'renderBlock did not print variant labels');
   assert.match(block, /Black \/ DLC/);
+});
+
+// ── maker rows: the unpaid link for a colour or a part with no listing ────
+
+test('a mixed product keeps its partner hero and lists the unlisted colour last, as a maker row', async () => {
+  await win.affiliate.loadFor(sb, [PRODUCT]);
+  const aff = win.affiliate.get(PRODUCT);
+  assert.equal(aff.hero.variantId, 'v-black-nit', 'the hero must stay the partner listing');
+  const last = aff.listings[aff.listings.length - 1];
+  assert.equal(last.variantId, 'v-odg-maker', 'maker rows sort after every partner row');
+  assert.ok(last.maker, 'the unlisted colour did not become a maker row');
+  assert.equal(last.goUrl, '/go/part/' + PRODUCT);
+  assert.equal(last.url, null, 'a maker row must not carry a retailer url');
+  assert.equal(last.maker.label, 'Buy from Norsso');
+  // The range is still anchored on partner prices only.
+  assert.equal(aff.minPrice, 318.99);
+
+  const block = win.affiliate.renderBlock(PRODUCT);
+  assert.match(block, /href="\/go\/part\/04628757-d54f-4bba-b288-435b7bb74351"/);
+  assert.match(block, /ODG \/ Cerakote/);
+  assert.match(block, /MSRP \$415\.00/, 'a maker row shows its MSRP, labelled');
+  assert.match(block, /Gunforma may earn a commission on retailer links\. Links to a maker&#39;s own store earn us nothing\./,
+    'mixed block must carry the mixed disclosure');
+  // The maker anchor is nofollow and NOT sponsored; the partner anchors are
+  // untouched.
+  const makerTag = block.match(/<a\b[^>]*\/go\/part\/[^>]*>/)[0];
+  assert.match(makerTag, /rel="noopener nofollow"/);
+  assert.doesNotMatch(makerTag, /sponsored/);
+  assert.match(makerTag, /target="_blank"/);
+  assert.doesNotMatch(block, /No retailer/);
+});
+
+test('a maker-only product renders a block with no partner markup, and NO card hero', async () => {
+  await win.affiliate.loadFor(sb, [MAKER_ONLY]);
+  const aff = win.affiliate.get(MAKER_ONLY);
+  assert.ok(aff, 'maker-only product was not cached');
+  assert.equal(aff.partnerCount, 0);
+  assert.equal(aff.makerCount, 2);
+  assert.equal(aff.minPrice, null, 'MSRP must never enter the price range');
+  // Grid cards stay as they are: no button for a maker-only part.
+  assert.equal(win.affiliate.renderHero(MAKER_ONLY), '');
+
+  const block = win.affiliate.renderBlock(MAKER_ONLY);
+  assert.ok(block.length > 40, 'renderBlock returned nothing for a maker-only product');
+  assert.doesNotMatch(block, /sponsored/, 'a maker-only block must not say sponsored anywhere');
+  assert.match(block, /Buy from Icarus Precision ↗/);
+  assert.match(block, /These links go straight to the seller&#39;s own store\. Gunforma earns nothing on them\./);
+  assert.doesNotMatch(block, /may earn a commission/);
+  assert.match(block, /MSRP \$379\.99/, 'the hero shows the MSRP when there is one');
+  assert.match(block, /Check price/, 'a colour with no MSRP says so rather than inventing a number');
+  assert.doesNotMatch(block, /No retailer/);
+  for (const m of block.matchAll(/<a\b[^>]*nofollow[^>]*>/g)) {
+    assert.match(m[0], /href="\/go\/part\//, 'maker button bypasses /go/part/: ' + m[0].slice(0, 110));
+  }
+});
+
+test('a product with no listing and no url has no entry, so the panel falls back to renderEmpty', async () => {
+  await win.affiliate.loadFor(sb, [NO_URL]);
+  assert.equal(win.affiliate.get(NO_URL), null);
+  assert.equal(win.affiliate.renderBlock(NO_URL), '');
+  assert.equal(win.affiliate.renderHero(NO_URL), '');
+  assert.match(win.affiliate.renderEmpty(), /No retailer listings/);
 });
 
 test('an unknown product returns null rather than throwing', () => {
