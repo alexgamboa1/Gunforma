@@ -23,7 +23,7 @@
 // this function makes three of them Netlify functions). A nav change now
 // means changing fifteen files — update CLAUDE.md's count when sweeping.
 
-import { GUIDE_FAMILIES, GUIDE_PAGES, guidePath, isLiveGuidePage } from './_guide-meta.mjs';
+import { GUIDE_FAMILIES, GUIDE_PAGES, guidePath, isLiveGuidePage, hubPath, isLiveGunHub } from './_guide-meta.mjs';
 import { GUIDE_CONTENT } from './_guide-content.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
@@ -453,7 +453,16 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
 '</style>' +
 '</head><body>' +
   navHtml() +
-'<div class="breadcrumb"><a href="/">Home</a> / <a href="/parts">Parts</a> / ' + esc(familyMeta.label) + ' for the ' + esc(gunName) + '</div>' +
+// The link UP to the gun's hub — the other half of "links in both
+// directions". The hub links down to every fit page it declares; without
+// this, a reader who lands here from search has no route to the rest of
+// the P365 cluster. Only when the hub is declared live, so a fit page can
+// never emit a dead /p365/ URL. check-routes.mjs asserts it on the wire.
+'<div class="breadcrumb"><a href="/">Home</a> / ' +
+  (isLiveGunHub(gun.slug)
+    ? '<a href="' + esc(hubPath(gun.slug)) + '">Sig Sauer ' + esc(gunName) + '</a>'
+    : '<a href="/parts">Parts</a>') +
+  ' / ' + esc(familyMeta.label) + ' for the ' + esc(gunName) + '</div>' +
 '<div class="page">' +
   '<div class="eyebrow">Fit guide &middot; Sig Sauer ' + esc(gunName) + '</div>' +
   '<h1>' + esc(familyMeta.label) + ' That Fit the Sig Sauer ' + esc(gunName) + '</h1>' +
@@ -472,6 +481,9 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
   buildsHtml +
   '<h2>Frequently asked</h2>' + faqHtml +
   '<div class="related"><div class="section-title">Related</div>' +
+    (isLiveGunHub(gun.slug)
+      ? '<a href="' + esc(hubPath(gun.slug)) + '">Everything for the Sig Sauer ' + esc(gunName) + ' &rarr;</a>'
+      : '') +
     '<a href="/parts/' + esc(familyMeta.categorySegment) + '">All P365 ' + esc(familyMeta.label.toLowerCase()) + ' &rarr;</a>' +
     '<a href="/parts">Parts by category &rarr;</a>' +
     '<a href="/gunforma-builds.html">Real builds &rarr;</a>' +

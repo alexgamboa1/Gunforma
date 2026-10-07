@@ -433,7 +433,7 @@ for (const [label, path] of [
 // fails the build earlier, in scripts/check-guide-content.mjs.
 {
   console.log('\n── /fit/ guide pages');
-  const { GUIDE_PAGES, guidePath } = await import('../netlify/functions/_guide-meta.mjs');
+  const { GUIDE_PAGES, guidePath, hubPath, isLiveGunHub } = await import('../netlify/functions/_guide-meta.mjs');
 
   for (const p of GUIDE_PAGES) {
     const path = guidePath(p.family, p.gun);
@@ -444,6 +444,13 @@ for (const [label, path] of [
        `${path}: canonical is the apex /fit/ form`, r.canon[0]);
     ok(/application\/ld\+json/.test(r.body), `${path}: JSON-LD present`);
     ok(r.body.includes('href="/go/'), `${path}: buy links go through /go/`);
+    // The other direction of "links in both directions": a fit page links UP
+    // to its hub. #120 asserted hub → fit and shipped without this one, so
+    // the hub was reachable from nowhere a fit-page reader could see.
+    if (isLiveGunHub(p.gun)) {
+      ok(r.body.includes('href="' + hubPath(p.gun) + '"'),
+         `${path}: links up to its hub ${hubPath(p.gun)}`);
+    }
     // Recorded, not asserted — live counts are time-dependent facts.
     note('optics on page', r.guideOptics + ' (' + r.guideFresh + ' fresh-priced)');
   }
