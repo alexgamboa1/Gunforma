@@ -1736,20 +1736,40 @@ So do not correct a part on a build you are about to reject for its parts.
 reorder `parts_snapshot` under a correction. The real fix for both is
 corrections that address a part by something other than its position.
 
-### Only a reviewer can approve — once the migration is applied
+### Only a reviewer can approve or reject
 
-`supabase/restrict_build_status_to_reviewers.sql`, **not yet applied**.
-Until it is, any signed-in user can `update builds set status = 'approved'`
-on their own build, or insert one already approved: the owner policies check
+**The database enforces the review queue; the pages do not have to.**
+`trg_restrict_build_status` on `builds` (BEFORE INSERT OR UPDATE,
+`supabase/restrict_build_status_to_reviewers.sql`, applied 2026-10-06 as
+`20261006235015`): a caller who is not an admin and not a trusted backend
+may insert a build only as `draft` or `pending`, and may change a status
+only *to* `draft` or `pending`. Writing `approved` or `rejected` is refused
+with `42501` and a sentence a person can read.
+
+Before it, any signed-in user could `update builds set status = 'approved'`
+on their own build, or insert one already approved. The owner policies check
 `auth.uid() = user_id` and nothing else, and `status` is a column owners
-must be able to write (draft → pending is how a build is submitted). The
-existing guard, `restrict_owner_edits_on_approved_build`, only looks at
-builds that are *already* live. The file's header has the measurement and
-its footer the seventeen-case dry run.
+must be able to write (draft → pending is how a build is submitted) — RLS
+says which rows, never which values. The older guard,
+`restrict_owner_edits_on_approved_build`, only looks at builds that are
+*already* live, so it said nothing about how one becomes live. Nothing on
+the site did this; the anon key is public and the browser console is one
+line away. Checked before closing it: it had never been used.
 
-It is independent of the editor changes above: they need no migration, and
-it breaks no deployed code, because nothing on the site writes `approved` or
-`rejected` as anyone but an admin or the service role.
+Who passes: `is_admin()` (the queue's approve / reject / undo, and
+`gunforma-admin-post.html`, which inserts `approved`) and
+`is_trusted_backend()` (a service-role request, or a session with no request
+context — the SQL editor, a migration). **A new server-side path that sets a
+build's status must run as one of those**, or it is refused exactly like a
+stranger; that is the "service_role bypasses RLS, not triggers" trap above,
+and here the service role is let through by name.
+
+**Do not drop it to make something work.** The rollback file reopens the
+hole. If the guard refuses a caller it should admit, admit that caller in
+the function.
+
+The file's header has the measurement, and its footer the seventeen-case
+dry run and the same seventeen re-run against the applied guard.
 
 ## Replacing the builder's contents: identity, and asking first
 

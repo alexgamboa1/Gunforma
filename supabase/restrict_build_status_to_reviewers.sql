@@ -1,6 +1,7 @@
 -- ============================================================
 -- Gunforma-v2 — only a reviewer can approve or reject a build
--- NOT YET APPLIED. Rollback: restrict_build_status_to_reviewers_rollback.sql
+-- APPLIED 2026-10-06. See the record at the bottom of this file.
+-- Rollback: restrict_build_status_to_reviewers_rollback.sql
 --
 -- WHAT WAS OPEN
 -- Any signed-in user could publish their own build without review.
@@ -168,4 +169,36 @@ commit;
 --
 --   await sb.from('builds').update({ status: 'approved' }).eq('id', '<your own pending build>')
 --                                   -- error.code '42501', "Only a reviewer can…"
+-- ============================================================
+
+-- ============================================================
+-- APPLIED 2026-10-06 as migration restrict_build_status_to_reviewers
+-- (20261006235015) to project lagjjcpclvzrjlrswojt, from this file as merged
+-- in #147 — after #147 was merged (fa4794d) and its three deploy-preview
+-- checks had passed signed in. The house order, though nothing here needed
+-- it (see ORDER above).
+--
+-- Checked just before applying: no build had been approved by its own
+-- non-admin owner. Whatever the hole's age, it had not been used.
+--
+-- Verified live, read back rather than assumed:
+--   trg_restrict_build_status on public.builds ...... present, enabled
+--   the function .......... SECURITY DEFINER, search_path=public, and its
+--                           body is the one above (pg_get_functiondef)
+--   EXECUTE on it ......... postgres and service_role only
+--   BEFORE UPDATE triggers on builds, in firing order:
+--     builds_updated_at, trg_prevent_build_consent_tampering,
+--     trg_prevent_owner_edit_history_change, trg_restrict_build_status,
+--     trg_restrict_owner_edits_on_approved, trg_stamp_build_review
+--
+-- And the seventeen cases in the table above were run again, this time
+-- against the APPLIED guard rather than one created inside the test: same
+-- result on every row. Rolled back; read back afterwards as 5 builds, no
+-- test rows, the trigger still in place.
+--
+-- NOT DONE: the browser-console check above. The seventeen cases set the
+-- caller's role and a real `sub` in request.jwt.claims on a SQL connection,
+-- which is what the guard reads — but that is not a request PostgREST
+-- actually routed. If a refusal ever needs proving on the wire, that one
+-- line, signed in as a non-admin on the live site, is the test.
 -- ============================================================
