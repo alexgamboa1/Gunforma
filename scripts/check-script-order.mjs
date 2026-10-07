@@ -39,6 +39,13 @@ const RULES = [
   // addPartWithVariant(), and the build page in resolveVariant().
   { global: 'variantSpecs', defines: 'js/variant-label.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
+  // The maker-link label and the disclosure wording. affiliate.js reads
+  // window.makerLink / window.buyDisclosure / window.MAKER_REL at call time;
+  // gunforma-build-detail.html calls window.makerLink inline from
+  // loadAffiliates(). A page that loads affiliate.js without this throws
+  // inside loadFor() and the buy rows silently render empty — the exact
+  // shape the rule above describes.
+  { global: 'makerLink',    defines: 'js/maker-link.js',    consumers: ['js/affiliate.js'] },
   // BuildCategories is an OBJECT, not a function, so the inline-call regex
   // below cannot see it — `BuildCategories.CATEGORIES` is a member read. It
   // gets an explicit `pattern` instead.

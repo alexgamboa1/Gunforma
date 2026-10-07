@@ -607,6 +607,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
      photo. Without it the picker below can only show variants we happen
      to have photographed, which is not the same as what Icarus sells. -->
 <script src="js/variant-swatch.js"></script>
+<!-- Before affiliate.js: it calls window.makerLink and window.buyDisclosure
+     at render time, for the parts with no partner listing. -->
+<script src="js/maker-link.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -2023,10 +2026,13 @@ function renderDetail(p) {
   }
 
   // Affiliate block (hero row + optional variants list + disclosure).
-  // Falls back to a muted "No retailer listings" message so the panel
-  // never shows a dead untracked link (products.url is deliberately
-  // NOT used as a buy link anywhere — it's an untracked manufacturer
-  // page that earns zero commission).
+  // A variant with no partner listing gets a button to the part's own
+  // products.url through /go/part/<id> — js/affiliate.js builds that row.
+  // This REVERSES an earlier decision not to use products.url as a buy link
+  // because it earns no commission: a dead end earns nothing either, and
+  // the counted clicks to a maker are what we take to that maker when we
+  // ask for a partnership. The muted "No retailer listings" fallback is now
+  // only for a part with no partner listing AND no url saved.
   var affWrap = document.getElementById('detail-affiliate-wrap');
   if (window.affiliate) {
     var block = window.affiliate.renderBlock(p.id);

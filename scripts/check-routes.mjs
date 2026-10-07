@@ -259,6 +259,141 @@ for (const [label, path] of [
     ok(r.status === 404, `${label}: hard 404, never a redirect home`,
        r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
   }
+
+  // ── /go/part/<product id> — the unpaid link to a part's own store ──────
+  // Same edge function, second shape. The destination is products.url, read
+  // from the database; a discontinued part and an unknown id share the 404.
+  // x-go-no-log on every request, as above: a maker click is a number we
+  // take to that maker, and this script must not be in it.
+  console.log('\n── /go/part/ click layer');
+  const partLive = await (async () => {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/products?select=id,url&is_discontinued=eq.false&url=like.http*&limit=1`,
+      { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  })();
+  const partGone = await (async () => {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/products?select=id,url&is_discontinued=eq.true&url=like.http*&limit=1`,
+      { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  })();
+  ok(!!partLive, 'found a live part with a url to exercise /go/part/ with');
+  if (partLive) {
+    const r = await get('/go/part/' + partLive.id, NO_LOG);
+    ok(r.status === 302, '/go/part/<live id>: 302', r.status);
+    ok(r.location === partLive.url, '302 Location is products.url byte for byte',
+       r.location === partLive.url ? 'identical' : `got ${r.location}\n        want ${partLive.url}`);
+    ok(/no-store/.test(r.cacheControl || ''), 'not cacheable', r.cacheControl);
+    ok(r.goLog === 'skipped', 'click was NOT logged (x-go-no-log honoured)', r.goLog);
+    ok(r.goKey === 'ok', 'service key still reported on this shape', r.goKey);
+  }
+  // A discontinued part still has a product page (old builds keep their
+  // links) but no buy button — so its /go/part/ must be a 404, not a
+  // redirect to a page for something nobody can buy. Two exist today; if
+  // none did, this would be a skip and say so, not a silent pass.
+  if (partGone) {
+    const r = await get('/go/part/' + partGone.id, NO_LOG);
+    ok(r.status === 404, '/go/part/<discontinued id>: hard 404', r.status +
+       (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
+  } else {
+    note('discontinued case not exercised', 'no discontinued product with a url');
+  }
+  for (const [label, path] of [
+    ['/go/part/<unknown uuid>',   '/go/part/00000000-0000-4000-8000-000000000000'],
+    ['/go/part/nope',             '/go/part/nope'],
+    ['/go/part (no id)',          '/go/part'],
+    ['/go/x/<uuid> (not a shape)', '/go/x/00000000-0000-4000-8000-000000000000'],
+  ]) {
+    const r = await get(path, NO_LOG);
+    ok(r.status === 404, `${label}: hard 404, never a redirect home`,
+       r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
+  }
+}
+
+// ── buy rows on the served part page: no dead ends, honest disclosure ───
+// Three parts are picked from the database with the public key — one with no
+// partner listing at all, one with a listing on some options only, one with
+// a listing on every option — and the SERVED HTML of each is read. Asserted:
+// a part with a url never renders "No listing yet"; a maker button goes
+// through /go/part/ and is nofollow without sponsored; the disclosure line
+// matches what the buy area contains. The functions build this at request
+// time, so only the wire can confirm it — same reason as everything above.
+{
+  console.log('\n── part pages: maker buttons and disclosure');
+  const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
+  const res = await fetch(`${SB_URL}/rest/v1/products?select=id,slug,category,url,` +
+    encodeURIComponent('product_variants!product_variants_product_id_fkey(id,affiliate_links(id))') +
+    '&is_discontinued=eq.false&product_variants.retired_at=is.null&product_variants.affiliate_links.retired_at=is.null' +
+    '&order=slug.asc&limit=5000',
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : [];
+  ok(Array.isArray(rows) && rows.length > 0, 'products with their listings readable with the public key', res.status);
+
+  const classify = (p) => {
+    const vs = p.product_variants || [];
+    const listed = vs.filter((v) => (v.affiliate_links || []).length).length;
+    if (!vs.length) return null;
+    if (listed === 0) return 'maker-only';
+    if (listed === vs.length) return 'partner-only';
+    return 'mixed';
+  };
+  const hasUrl = (p) => /^https?:\/\//i.test(p.url || '');
+  const pick = (kind, needUrl) => rows.find((p) => classify(p) === kind && (!needUrl || hasUrl(p)) && CATEGORY_META[p.category]);
+  const EXPECT = {
+    'maker-only':   "These links go straight to the seller&#39;s own store. Gunforma earns nothing on them.",
+    'mixed':        "Gunforma may earn a commission on retailer links. Links to a maker&#39;s own store earn us nothing.",
+    'partner-only': 'Gunforma may earn a commission on purchases made through these links.',
+  };
+  const ALL = Object.values(EXPECT);
+
+  for (const kind of ['maker-only', 'mixed', 'partner-only']) {
+    const p = pick(kind, kind !== 'partner-only');
+    if (!p) { ok(false, `found a ${kind} part to check`, 'none in the catalog'); continue; }
+    const path = '/parts/' + CATEGORY_META[p.category][0] + '/' + p.slug;
+    const r = await get(path);
+    ok(r.status === 200, `${kind}: ${path}: 200`, r.status);
+    const makerTags   = [...r.body.matchAll(/<a\b[^>]*href="\/go\/part\/[^>]*>/g)].map((m) => m[0]);
+    const partnerTags = [...r.body.matchAll(/<a\b[^>]*href="\/go\/(?!part\/)[^>]*>/g)].map((m) => m[0]);
+    if (kind !== 'partner-only') {
+      ok(!r.body.includes('No listing yet'), `${kind}: never renders "No listing yet" when a url exists`);
+      ok(makerTags.length > 0, `${kind}: renders a /go/part/ button`, makerTags.length);
+      ok(makerTags.every((t) => /rel="noopener nofollow"/.test(t) && !/sponsored/.test(t)),
+         `${kind}: maker buttons are nofollow and never sponsored`, makerTags[0]);
+      ok(makerTags.every((t) => t.includes('/go/part/' + p.id)), `${kind}: maker buttons name THIS product`, p.id);
+      // Verbatim from the page: the label the reader sees.
+      note('maker label', (r.body.match(/\/go\/part\/[^>]*>([^<]+)</) || [])[1]);
+    } else {
+      ok(makerTags.length === 0, `${kind}: no /go/part/ button on a fully-listed part`, makerTags.length);
+    }
+    ok((kind === 'maker-only') === (partnerTags.length === 0),
+       `${kind}: partner buttons ${kind === 'maker-only' ? 'absent' : 'present'}`, partnerTags.length);
+    ok(partnerTags.every((t) => /rel="noopener sponsored nofollow"/.test(t)),
+       `${kind}: partner buttons keep their rel unchanged`);
+    const found = ALL.filter((t) => r.body.includes(t));
+    ok(found.length === 1 && found[0] === EXPECT[kind],
+       `${kind}: disclosure line matches the buy area`, found.length ? found.map((t) => t.slice(0, 40) + '…').join(' | ') : 'no disclosure');
+    note('part', p.slug);
+  }
+
+  // The one live part with no listing AND no url keeps its non-link state —
+  // and no disclosure at all, because there is nothing to disclose.
+  const bare = rows.find((p) => classify(p) === 'maker-only' && !hasUrl(p) && CATEGORY_META[p.category]);
+  if (bare) {
+    const path = '/parts/' + CATEGORY_META[bare.category][0] + '/' + bare.slug;
+    const r = await get(path);
+    ok(r.status === 200 && r.body.includes('No listing yet') && !r.body.includes('/go/'),
+       `no-url part keeps "No listing yet" and no /go/ link`, bare.slug);
+    ok(!ALL.some((t) => r.body.includes(t)), 'no-url part carries no disclosure line');
+  } else {
+    note('no-url case not exercised', 'every unlisted part has a url now');
+  }
 }
 
 // ── /fit/ — the guide pages ────────────────────────────────────────────

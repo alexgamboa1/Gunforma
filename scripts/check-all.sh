@@ -67,6 +67,7 @@ check "category labels cover keys" scripts/check-category-labels.mjs
 check "one category list"          scripts/check-categories.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
 check "listing rules pinned"       scripts/listing-rules.test.mjs
+check "maker-link copies agree"    scripts/maker-link.test.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────

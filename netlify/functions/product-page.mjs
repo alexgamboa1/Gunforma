@@ -37,6 +37,11 @@ import { variantLabel } from './_variant-label.mjs';
 // (js/affiliate.js, gunforma-build-detail.html) remain hand-synced; see
 // CLAUDE.md "Duplicated logic to keep in sync".
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
+// A variant with no partner listing links to the part's own products.url
+// through /go/part/<id>. The label ("Buy from <maker>" vs "Buy at <host>")
+// and the disclosure wording are decided in _maker-link.mjs, mirrored by
+// js/maker-link.js and parity-tested on every deploy.
+import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
@@ -247,7 +252,7 @@ async function fetchProduct(slug) {
   const cols = [
     'id', 'slug', 'name', 'category', 'description', 'best_for', 'pros', 'cons',
     'material', 'material_family', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
-    'build_warning', 'fitment_notes', 'lowest_price',
+    'build_warning', 'fitment_notes', 'lowest_price', 'url', 'is_discontinued',
     'manufacturers!products_brand_id_fkey(name,slug,website_url)',
     // Must name the FK: products has two relationships to product_variants
     // (product_variants.product_id -> products.id, and
@@ -300,16 +305,31 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
+  // A variant with no partner listing gets a MAKER row instead of a dead
+  // "No listing yet": a button to the part's own products.url through
+  // /go/part/<id>, so the click is counted. Null when there is no usable url
+  // (one live part today, streamlight-tlr-7-sub) — that row keeps the
+  // non-link state. A discontinued part gets none: /go/part/ 404s it.
+  const maker = product.is_discontinued ? null
+    : makerLink(product.url, brand.name, brand.website_url);
+
   // Flatten to (variant, link) rows, same shape/ordering rule as affiliate.js.
-  const rows = [];
+  // partnerRows and otherRows are kept apart so partner rows ALWAYS sort
+  // first: the shared comparator's tiebreak would otherwise put an unnamed
+  // maker row ahead of a stale partner listing.
+  const partnerRows = [];
+  const otherRows = [];
   variants.forEach((v) => {
     const links = v.affiliate_links || [];
     if (!links.length) {
-      rows.push({ v, price: null, stale: true, url: null, in_stock: null, partnerName: null });
+      otherRows.push(maker
+        ? { v, price: null, stale: true, url: null, in_stock: null, partnerName: null,
+            maker, goUrl: '/go/part/' + product.id }
+        : { v, price: null, stale: true, url: null, in_stock: null, partnerName: null });
       return;
     }
     links.forEach((l) => {
-      rows.push({
+      partnerRows.push({
         v,
         price: l.street_price != null ? Number(l.street_price) : null,
         stale: isStalePrice(l),
@@ -324,11 +344,17 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   // alone, so it no longer changes when a sibling variant is added or
   // retired. That instability was fine for a comparison table and wrong for
   // a build page, where the same label gets written into parts_snapshot.
-  rows.forEach((r) => { r.label = variantLabel(r.v); });
+  partnerRows.forEach((r) => { r.label = variantLabel(r.v); });
+  otherRows.forEach((r) => { r.label = variantLabel(r.v); });
   // Fresh-and-priced first, so the top buy row is the one the headline
   // price quotes; the shared comparator keeps equal listings in a stable
-  // order. Full ordering documented in _listing-rules.mjs.
-  rows.sort(compareListingRows);
+  // order. Full ordering documented in _listing-rules.mjs. The unlisted
+  // variants follow, by label — PostgREST returns them in arbitrary order.
+  partnerRows.sort(compareListingRows);
+  otherRows.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  const rows = partnerRows.concat(otherRows);
+  const hasPartner = partnerRows.some((r) => r.url);
+  const hasMaker = otherRows.some((r) => r.maker);
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
   // be anchored on a number no feed has confirmed.
@@ -371,7 +397,11 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     // true — but WITHOUT price/priceCurrency. Same principle as the
     // availability omission below: absent means "not stated", which is honest,
     // where a stale number positively asserts something we can't stand behind.
-    offers: rows.filter((r) => r.url).map((r) => ({
+    //
+    // MAKER ROWS ARE NOT OFFERS. A link to the maker's store with a hand-typed
+    // MSRP is not a price we can stand behind in rich results, so the
+    // structured data is exactly what it was before those rows existed.
+    offers: rows.filter((r) => !r.maker && r.url).map((r) => ({
       '@type': 'Offer',
       ...(r.price != null && !r.stale
             ? { price: r.price.toFixed(2), priceCurrency: 'USD' }
@@ -425,16 +455,24 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     const stock = r.in_stock === true ? '<span class="stock in">In stock</span>'
       : r.in_stock === false ? '<span class="stock out">Out of stock</span>' : '';
     const partner = r.partnerName ? ' at <strong>' + esc(r.partnerName) + '</strong>' : '';
+    // Three buttons: a partner listing (sponsored, through /go/<link>), the
+    // part's own store (NOT sponsored — nobody pays for it — through
+    // /go/part/<product>), or no link at all when products.url is empty.
     const btn = r.url
       ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' +
           (r.partnerName ? 'Buy at ' + esc(r.partnerName) + ' ↗' : 'View listing ↗') + '</a>'
-      : '<span class="buy-btn disabled">No listing yet</span>';
+      : r.maker
+        ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="' + MAKER_REL + '">' +
+            esc(r.maker.label) + ' ↗</a>'
+        : '<span class="buy-btn disabled">No listing yet</span>';
     return '<div class="variant-row">' +
         '<div class="variant-info"><span class="variant-label">' + esc(r.label) + '</span>' +
         '<span class="variant-sub">' + price + partner + ' ' + stock + '</span></div>' +
         btn +
       '</div>';
   }).join('') || '<div class="variant-row"><div class="variant-info"><span class="variant-sub">No retailer listings available yet.</span></div></div>';
+
+  const disclosure = buyDisclosure(hasPartner, hasMaker);
 
   const bestForHtml = (product.best_for || []).length
     ? '<div class="chips">' + product.best_for.map((b) => '<span class="chip">' + esc(String(b).replace(/-/g, ' ')) + '</span>').join('') + '</div>'
@@ -563,7 +601,9 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     commonSpecs + specRowsHtml +
     '<div class="section-title">Buy</div>' +
     variantRowsHtml +
-    '<div class="disclosure">Gunforma may earn a commission on purchases made through these links.</div>' +
+    // Says what is true of the links above it: partner-only, maker-only,
+    // both — or nothing at all when there is no link to disclose.
+    (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
   '</div>' +
 '</div>' +
 '<div class="footer-bar">' +

@@ -477,6 +477,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
+<!-- The label and rel for a buy button to a part's own store, for parts with
+     no partner listing. Mirrored by netlify/functions/_maker-link.mjs. -->
+<script src="js/maker-link.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -603,6 +606,11 @@ var VARIANT_BY_ID = {};
 // A.C.E. XL EVO sells in FDE, Gray and ODG with a listing on none of them, and
 // a panel that hid them would tell a reader the part comes in one color.
 var VARIANTS_BY_PRODUCT_ID = {};
+// productId -> { host, ownStore, label } from window.makerLink, or null. The
+// unpaid fallback button for a part (or a colour) with no partner listing:
+// /go/part/<productId>, to the part's own products.url. Null when the url is
+// empty or the part is discontinued, and the row keeps its no-button state.
+var MAKER_BY_PRODUCT_ID = {};
 
 async function loadBuild() {
   // Served at two URLs: /b/:id (the shareable one, rewritten to build-og.mjs
@@ -694,7 +702,9 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,color,finish,reticle,reticle_color,battery_type,mount_system,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
+    // products.url, is_discontinued and the maker's website feed
+    // MAKER_BY_PRODUCT_ID. Both embeds name their FK — CLAUDE.md, PGRST201.
+    .select('id,product_id,variant_label,color,finish,reticle,reticle_color,battery_type,mount_system,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category,url,is_discontinued,manufacturers!products_brand_id_fkey(name,website_url)),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
@@ -715,6 +725,13 @@ async function loadAffiliates(build) {
     VARIANT_BY_ID[v.id] = v;
     if (!VARIANTS_BY_PRODUCT_ID[v.product_id]) VARIANTS_BY_PRODUCT_ID[v.product_id] = [];
     VARIANTS_BY_PRODUCT_ID[v.product_id].push(v);
+    // Same product on every variant row; computed once per product.
+    if (!(v.product_id in MAKER_BY_PRODUCT_ID)) {
+      var p = v.products || {};
+      MAKER_BY_PRODUCT_ID[v.product_id] = p.is_discontinued ? null
+        : window.makerLink(p.url, p.manufacturers ? p.manufacturers.name : null,
+                                  p.manufacturers ? p.manufacturers.website_url : null);
+    }
   });
 
   // Group variants by product, flatten to (variant, link) rows, drop
@@ -1225,24 +1242,37 @@ function listingsForVariant(productId, variantId) {
   return aff.listings.filter(function(l) { return l.variantId === variantId; });
 }
 
-// Only rendered when the part maps to a real product that has at least one
-// affiliate listing across any of its variants. Hand-typed pending parts
-// have no refId; products without seller coverage have no lookup entry;
-// both silently omit the CTA row.
+// The buy button for a part with no partner listing: its own store, through
+// /go/part/<productId>, NOT sponsored (nobody pays for it). '' when the
+// product has no usable url — the caller keeps its no-button state.
+function makerBtnHtml(productId, cls) {
+  var maker = MAKER_BY_PRODUCT_ID[productId];
+  if (!maker) return '';
+  return '<a class="'+cls+'" href="/go/part/'+escH(productId)+'" target="_blank" rel="'+escH(window.MAKER_REL)+'">'+
+    escH(maker.label)+' ↗</a>';
+}
+
+// Rendered when the part maps to a real product. Hand-typed pending parts
+// have no refId and silently omit the CTA row. A product with no partner
+// listing on any variant gets its MSRP and a button to its own store; with
+// no url saved either, the MSRP alone, as before.
 function renderAffiliateRow(part, vr) {
   if (!part.refId) return '';
   var aff = AFFILIATE_BY_PRODUCT_ID[part.refId];
   if (!aff || !aff.hero) {
     // No listing anywhere on the product. MSRP is the only number there is,
-    // so it shows — labelled, and with no Buy button to misread it against.
-    if (vr && vr.msrp != null) {
-      return '<div class="part-affiliate">'+
-        '<div class="part-affiliate-info">'+
-          '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
-          '<span class="part-affiliate-msrp-tag">MSRP</span>'+
-        '</div></div>';
-    }
-    return '';
+    // so it shows — labelled — beside the maker button, or alone when there
+    // is no url to link to. Nothing at all only when there is neither.
+    var makerBtn = makerBtnHtml(part.refId, 'part-affiliate-btn');
+    var msrpHtml = (vr && vr.msrp != null)
+      ? '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
+        '<span class="part-affiliate-msrp-tag">MSRP</span>'
+      : (makerBtn ? '<span class="part-affiliate-price">Check price</span>' : '');
+    if (!msrpHtml && !makerBtn) return '';
+    return '<div class="part-affiliate">'+
+      '<div class="part-affiliate-info">'+msrpHtml+'</div>'+
+      makerBtn+
+    '</div>';
   }
 
   // ── THE THREE TIERS ───────────────────────────────────────────────────
@@ -1380,13 +1410,15 @@ function renderAffiliateRow(part, vr) {
       btnHtml = anyLink
         ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
             (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
-        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+        : (makerBtnHtml(part.refId, 'part-affiliate-variant-btn') ||
+           '<span class="part-affiliate-variant-none">No retailer yet</span>');
     } else {
       priceHtml = 'Check price';
       btnHtml = anyLink
         ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
             (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
-        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+        : (makerBtnHtml(part.refId, 'part-affiliate-variant-btn') ||
+           '<span class="part-affiliate-variant-none">No retailer yet</span>');
     }
 
     return '<div class="part-affiliate-variant-row'+(mine ? ' is-chosen' : '')+'">'+

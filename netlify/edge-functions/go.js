@@ -1,8 +1,29 @@
 // go.js — /go/<affiliate_link_id> → 302 to the retailer, click logged behind it.
+//         /go/part/<product_id>  → 302 to the part's own products.url, same.
 // -----------------------------------------------------------------------------
 // Every buy button on the site now points here instead of straight at the
 // retailer. Nothing recorded a click before this; Awin's own report is the only
 // number we have, and there is no way to hold it against anything.
+//
+// TWO SHAPES, ONE CONTRACT. The second shape exists because a part with no
+// partner listing used to be a dead end ("No listing yet"), and 89 of 250
+// live parts were one. It now links to the part's own products.url — usually
+// the maker's store, sometimes a reseller — and the click is counted against
+// the PRODUCT, because counted clicks to a maker are what we take to that
+// maker when we ask for a partnership. Everything below the lookup is shared:
+// the redirect is never delayed by logging, the two opt-in headers behave the
+// same, and the 404 is the same real 404. The affiliate shape is the money
+// path and its behaviour is unchanged by a byte.
+//
+// THE DESTINATION COMES FROM THE DATABASE, NEVER THE REQUEST. Both shapes
+// resolve an id to a stored URL; nothing in the path or query is ever
+// redirected to. The maker shape additionally refuses anything that is not
+// http(s), since products.url is hand-entered.
+//
+// BEFORE THE link_clicks.product_id COLUMN EXISTS (supabase/
+// link_clicks_product_id.sql), a maker click's insert fails with PGRST204 and
+// the click goes uncounted — which is exactly how every other logging failure
+// is treated here. x-go-debug: 1 reports it rather than guessing.
 //
 // AN EDGE FUNCTION, NOT A SERVERLESS ONE, AND THE REASON IS THE MONEY PATH.
 // This sits between a reader and a purchase. A Netlify serverless function
@@ -54,6 +75,18 @@ const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 // which is also what keeps arbitrary path input out of the PostgREST query.
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+// Mirrors isHttpUrl in netlify/functions/_maker-link.mjs. Not imported: an
+// edge function runs on Deno and must stay self-contained, the same reason it
+// carries its own SB_URL.
+function isHttpUrl(u) {
+  try {
+    const p = new URL(String(u)).protocol;
+    return p === "http:" || p === "https:";
+  } catch {
+    return false;
+  }
+}
+
 function notFound() {
   return new Response(
     '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
@@ -72,26 +105,50 @@ function notFound() {
 export default async (request, context) => {
   const url = new URL(request.url);
 
-  // /go/<id> — the id is the LAST path segment, so a future /go/<something>/<id>
-  // shape would still resolve rather than silently 404ing.
-  const id = url.pathname.replace(/\/+$/, "").split("/").pop() || "";
+  // The id is the LAST path segment on both shapes; the segment before it is
+  // what tells them apart. /go/<id> has "go" there, /go/part/<id> has "part".
+  // Anything else — /go/part, /go/x/y/<id> — is not a shape and 404s.
+  const segs = url.pathname.replace(/\/+$/, "").split("/");
+  const id = segs[segs.length - 1] || "";
+  const kind = segs[segs.length - 2] || "";
   if (!UUID_RE.test(id)) return notFound();
+  if (kind !== "go" && kind !== "part") return notFound();
+  const isPart = kind === "part";
 
-  // retired_at=is.null is load-bearing: it is what makes a retired link behave
-  // as an unknown one instead of still sending traffic to a listing we have
-  // deliberately taken down.
   let dest = null;
   try {
-    const res = await fetch(
-      `${SB_URL}/rest/v1/affiliate_links?select=url,affiliate_url&retired_at=is.null&id=eq.${encodeURIComponent(id)}&limit=1`,
-      { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
-    );
-    if (res.ok) {
-      const rows = await res.json();
-      const row = Array.isArray(rows) ? rows[0] : null;
-      // Same preference the buy rows used before this existed: the tracked URL
-      // when there is one, the plain retailer URL otherwise.
-      if (row) dest = row.affiliate_url || row.url || null;
+    if (isPart) {
+      // is_discontinued=eq.false is this shape's retired_at: a discontinued
+      // part returns zero rows exactly as an unknown id does. The product page
+      // still renders one (so old builds keep their links), but a buy button
+      // to a part that is no longer made is not a buy button.
+      const res = await fetch(
+        `${SB_URL}/rest/v1/products?select=url&is_discontinued=eq.false&id=eq.${encodeURIComponent(id)}&limit=1`,
+        { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        const row = Array.isArray(rows) ? rows[0] : null;
+        // Hand-entered column, so the scheme is checked: a value that is not
+        // http(s) is a data error and 404s rather than being redirected to.
+        // Same rule _maker-link.mjs applies before it draws the button.
+        if (row && row.url && isHttpUrl(row.url)) dest = row.url;
+      }
+    } else {
+      // retired_at=is.null is load-bearing: it is what makes a retired link
+      // behave as an unknown one instead of still sending traffic to a
+      // listing we have deliberately taken down.
+      const res = await fetch(
+        `${SB_URL}/rest/v1/affiliate_links?select=url,affiliate_url&retired_at=is.null&id=eq.${encodeURIComponent(id)}&limit=1`,
+        { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+      );
+      if (res.ok) {
+        const rows = await res.json();
+        const row = Array.isArray(rows) ? rows[0] : null;
+        // Same preference the buy rows used before this existed: the tracked
+        // URL when there is one, the plain retailer URL otherwise.
+        if (row) dest = row.affiliate_url || row.url || null;
+      }
     }
   } catch {
     // Lookup failed at the network level. Fall through to 404 rather than
@@ -185,7 +242,15 @@ export default async (request, context) => {
       "Content-Type": "application/json",
       Prefer: "return=minimal",
     },
-    body: JSON.stringify({ link_id: id, referrer_path: referrerPath }),
+    // One target per row — link_id OR product_id, never both. The table's
+    // check constraint (once link_clicks_product_id.sql is applied) refuses
+    // anything else; before it is applied the product_id key is unknown to
+    // PostgREST and the insert fails, which is the documented, harmless case.
+    body: JSON.stringify(
+      isPart
+        ? { product_id: id, referrer_path: referrerPath }
+        : { link_id: id, referrer_path: referrerPath },
+    ),
   });
 
   // DEBUG PATH, request-header gated so no normal click can reach it.
