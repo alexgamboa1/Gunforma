@@ -42,12 +42,17 @@ import { isStalePrice, compareListingRows, displayPartnerName } from './_listing
 // and the disclosure wording are decided in _maker-link.mjs, mirrored by
 // js/maker-link.js and parity-tested on every deploy.
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+// For the "Used in these builds" row: /b/ links are built with the shared
+// builder, never by hand — see CLAUDE.md, "A build's URL is built in two
+// places, on purpose".
+import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
 const SITE = 'https://gunforma.com';
+const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -301,7 +306,38 @@ async function fetchSpecs(category, productId) {
     .filter(Boolean);
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular }) {
+// Approved builds that run this product, newest first, with a hero photo for
+// the card. Same fetch-and-filter shape as guide-page.mjs's
+// fetchBuildsUsing(): builds fit in one page today (5 approved), so one query
+// and a local filter beats a cs.[] contains-query per product — revisit if
+// approved builds outgrow the limit.
+//
+// This section is what makes a product page more than a copy of the
+// retailer's listing: Search Console judged 63% of /parts/ to be thin
+// duplicates, and real builds using the part are the one thing a retailer
+// page cannot have. It also gives every build inbound links from pages
+// Google already crawls, instead of the sitemap being a build's only door.
+async function fetchBuildsUsing(productId) {
+  const rows = await pgGet('builds?status=eq.approved' +
+    '&select=' + encodeURIComponent('id,name,parts_snapshot,profiles!builds_user_id_fkey(username),build_photos(storage_path,is_hero,position)') +
+    '&order=updated_at.desc&limit=100');
+  const out = [];
+  for (const b of (Array.isArray(rows) ? rows : [])) {
+    const snap = Array.isArray(b.parts_snapshot) ? b.parts_snapshot : [];
+    if (!snap.some((p) => p && p.refId === productId)) continue;
+    const photos = (b.build_photos || []).slice().sort((x, y) =>
+      (y.is_hero === true) - (x.is_hero === true) || (x.position ?? 9) - (y.position ?? 9));
+    out.push({
+      id: b.id, name: b.name,
+      owner: b.profiles ? b.profiles.username : null,
+      photo: photos.length && photos[0].storage_path ? PHOTO_BASE + photos[0].storage_path : null,
+    });
+    if (out.length === 4) break;
+  }
+  return out;
+}
+
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -478,6 +514,21 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     ? '<div class="chips">' + product.best_for.map((b) => '<span class="chip">' + esc(String(b).replace(/-/g, ' ')) + '</span>').join('') + '</div>'
     : '';
 
+  // Same card guide-page.mjs draws for its "Used in these builds" row.
+  // Nothing renders for a product no approved build runs — an empty heading
+  // would be the thin-content problem restated.
+  const buildsHtml = (builds && builds.length)
+    ? '<div class="section-title">Used in these builds</div>' +
+      '<div class="builds-row">' +
+        builds.map((b) =>
+          '<a class="build-card" href="' + esc(buildPath(b.id, b.name)) + '">' +
+            (b.photo ? '<img src="' + esc(b.photo) + '" alt="' + esc(b.name) + '" loading="lazy"/>' : '') +
+            '<span class="build-name">' + esc(b.name) + '</span>' +
+            (b.owner ? '<span class="build-owner">by ' + esc(b.owner) + '</span>' : '') +
+          '</a>').join('') +
+      '</div>'
+    : '';
+
   return '<!DOCTYPE html><html lang="en"><head>' +
 '<meta charset="UTF-8"/>' +
 '<base href="/"/>' +
@@ -540,6 +591,10 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.stock.in { color: #1e7d32; margin-left: 6px; } .stock.out { color: #b23; margin-left: 6px; }' +
 '.buy-btn { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; padding: 8px 14px; border-radius: 6px; text-decoration: none; white-space: nowrap; }' +
 '.buy-btn.disabled { background: #ddd; color: #888; }' +
+'.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +
+'.build-card { display: flex; flex-direction: column; gap: 4px; width: 160px; text-decoration: none; color: #1a1a1a; }' +
+'.build-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; border: 0.5px solid #e5e5e5; }' +
+'.build-name { font-size: 13px; font-weight: 600; } .build-owner { font-size: 11px; color: #888; }' +
 '.disclosure { font-size: 11px; color: #999; margin-top: 10px; font-style: italic; }' +
 '.footer-bar { max-width: 900px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; border-top: 0.5px solid #e5e5e5; font-size: 11px; color: #999; }' +
 '.footer-bar a { color: #999; }' +
@@ -604,6 +659,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     // Says what is true of the links above it: partner-only, maker-only,
     // both — or nothing at all when there is no link to disclose.
     (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
+    buildsHtml +
   '</div>' +
 '</div>' +
 '<div class="footer-bar">' +
@@ -665,7 +721,16 @@ export default async (req) => {
   const partType = (specs.find((s) => s.partType) || {}).partType;
   if (partType) categorySingular = partType.charAt(0).toUpperCase() + partType.slice(1);
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular });
+  let builds = [];
+  try {
+    builds = await fetchBuildsUsing(product.id);
+  } catch (err) {
+    // Non-fatal: the product page is the product page with or without the
+    // builds row, and a builds hiccup must not take down a buy page.
+    console.error('[product-page] builds lookup failed', err);
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds });
   return new Response(html, {
     status: 200,
     headers: {

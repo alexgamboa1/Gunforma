@@ -33,6 +33,10 @@
      Not og:* either: social scrapers do not run JS, so runtime OG tags buy
      nothing. Previews are fixed by linking to /b/<slug>-<uuid> in the first
      place, which every internal link does. -->
+<!-- The description line BELOW is matched byte for byte by build-og.mjs,
+     which strips it at /b/... before injecting a per-build one — same
+     coupling, and same guard, as the canonical above. Change the two
+     together. -->
 <meta name="description" content="View a complete pistol build — every part, every photo, total cost, and affiliate links to buy." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -119,6 +123,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-title { font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .build-author-row { font-size: 12px; color: #888; }
 .build-author-row strong { color: #1a1a1a; font-weight: 600; }
+/* The builder's own words. pre-line keeps their paragraph breaks without
+   letting arbitrary whitespace lay the page out. Hidden until there is text:
+   renderBuild() shows it, and build-og.mjs replaces the hidden div outright
+   when it server-renders a build that has a description. */
+.build-desc { font-size: 13px; line-height: 1.6; color: #444; white-space: pre-line; }
 .build-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 .build-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 3px 8px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .build-tag.blue { color: #1d6fb8; border-color: #a7cdec; background: #eaf4fc; }
@@ -170,6 +179,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-type { font-size: 10px; color: #2a7bbd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
 .part-brand { font-size: 16px; font-weight: 700; line-height: 1.2; }
 .part-model { font-size: 12px; color: #666; }
+.part-model-link { color: #2a7bbd; text-decoration: none; }
+.part-model-link:hover { text-decoration: underline; }
 .part-tags { display: flex; gap: 4px; flex-wrap: wrap; }
 /* The chosen variant's spec line ("2 MOA · Red dot"), under its tag. Plain
    muted text, not another pill: it qualifies the tag, it is not a second one. */
@@ -402,6 +413,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <h1 class="build-title" id="build-title">—</h1>
       </div>
       <div class="build-author-row" id="build-author-row">—</div>
+      <!-- The builder's description. This exact line is replaced byte-for-byte
+           by build-og.mjs when the build has one (same coupling as the
+           canonical above — change the two together; the guard will say so). -->
+      <div class="build-desc" id="build-desc" style="display:none;"></div>
       <div class="build-tags" id="build-tags"></div>
       <div class="build-total">
         <div class="build-total-label">This build</div>
@@ -702,9 +717,10 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    // products.url, is_discontinued and the maker's website feed
-    // MAKER_BY_PRODUCT_ID. Both embeds name their FK — CLAUDE.md, PGRST201.
-    .select('id,product_id,variant_label,color,finish,reticle,reticle_color,battery_type,mount_system,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category,url,is_discontinued,manufacturers!products_brand_id_fkey(name,website_url)),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
+    // products(...): url, is_discontinued and the maker's website feed
+    // MAKER_BY_PRODUCT_ID; slug is what links the part card to its /parts/
+    // page (partModelHtml). Both embeds name their FK — CLAUDE.md, PGRST201.
+    .select('id,product_id,variant_label,color,finish,reticle,reticle_color,battery_type,mount_system,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category,slug,url,is_discontinued,manufacturers!products_brand_id_fkey(name,website_url)),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
@@ -1025,6 +1041,21 @@ function renderBuild(b) {
   document.getElementById('build-title').textContent = b.name;
   document.getElementById('build-author-row').innerHTML = 'Built by <strong>'+escH(username)+'</strong> · Posted '+formatDate(b.created_at);
 
+  // The builder's own words, shown under the author line. textContent, never
+  // innerHTML — this is free text. At /b/… build-og.mjs has already rendered
+  // the same words server-side; this write makes the two identical, and on
+  // the legacy ?id= URL it is the only render.
+  var descEl = document.getElementById('build-desc');
+  if (descEl) {
+    if (b.description && String(b.description).trim()) {
+      descEl.textContent = String(b.description).trim();
+      descEl.style.display = 'block';
+    } else {
+      descEl.textContent = '';
+      descEl.style.display = 'none';
+    }
+  }
+
   document.getElementById('build-tags').innerHTML =
     '<span class="build-tag blue">'+escH(platformName)+'</span>'+
     (b.activities||[]).map(function(a){ return '<span class="build-tag">'+escH(a)+'</span>'; }).join('');
@@ -1177,7 +1208,7 @@ function renderPartCard(build, part, idx) {
       '<div class="part-body">'+
         '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
         '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
-        '<div class="part-model">'+escH(part.name||'Unnamed part')+'</div>'+
+        '<div class="part-model">'+partModelHtml(part)+'</div>'+
         ((pendingTag || variantTag || chosenTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+'</div>' : '')+
         // "2 MOA · Red dot" under the chosen-variant tag — the label alone
         // does not say which of three "Black · Anodized" optics this is.
@@ -1187,6 +1218,24 @@ function renderPartCard(build, part, idx) {
     '</div>'+
     affiliateHtml+
   '</div>';
+}
+
+// The part's name, linked to its /parts/ page when the catalog can address
+// it. The slug rides in on the variants query (products.category + slug), so
+// a product with no live variants — or a hand-typed pending part — renders as
+// plain text, exactly as before. productPath() is js/category-map.js's
+// builder and returns null rather than a dead href for a category it does
+// not know. build-og.mjs emits the same link server-side, so what a crawler
+// follows and what a reader clicks are the same URL.
+function partModelHtml(part) {
+  var nameHtml = escH(part.name || 'Unnamed part');
+  var firstV = part.refId ? (VARIANTS_BY_PRODUCT_ID[part.refId] || [])[0] : null;
+  var prod = firstV && firstV.products;
+  var href = (prod && typeof window.productPath === 'function')
+    ? window.productPath(prod.category, prod.slug) : null;
+  return href
+    ? '<a class="part-model-link" href="'+escH(href)+'">'+nameHtml+'</a>'
+    : nameHtml;
 }
 
 // ── The chosen variant ──────────────────────────────────────────────────
