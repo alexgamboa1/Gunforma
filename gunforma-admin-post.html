@@ -330,6 +330,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="check-item" id="chk2"><div class="check-dot"></div> Add at least one photo</div>
       <div class="check-item" id="chk3"><div class="check-dot"></div> Name your build</div>
     </div>
+    <!-- Filled by PartPicker.renderUnlinkedNudge(); empty when no typed part
+         looks like a catalog part. -->
+    <div id="unlinked-nudge"></div>
     <div class="submit-status incomplete" id="submit-status">
       <div class="submit-status-label">Not ready yet</div>
       <div class="submit-status-desc" id="submit-status-desc">Complete sections 1–3 to submit your build.</div>
@@ -656,10 +659,16 @@ function customFormFieldsHtml(cat) {
       '<div class="custom-part-note">' + c.note + '</div>' +
       '<button class="custom-part-submit" onclick="addCustomPart(\'' + cat.key + '\')">' + c.submit + '</button>';
   }
+  // The two oninput handlers and #cs-<key> are js/part-picker.js's catalog
+  // match: as the brand and name are typed it lists catalog parts they most
+  // likely mean, so a part that IS in the catalog is not added by hand. The
+  // module writes only into that mount — this form is never re-rendered while
+  // someone is typing in it.
   return '<div class="custom-part-grid">' +
-      '<input type="text" placeholder="Brand" id="cb-'+cat.key+'" />' +
-      '<input type="text" placeholder="Part name" id="cn-'+cat.key+'" />' +
+      '<input type="text" placeholder="Brand" id="cb-'+cat.key+'" oninput="PartPicker.suggestWhileTyping(\''+cat.key+'\')" />' +
+      '<input type="text" placeholder="Part name" id="cn-'+cat.key+'" oninput="PartPicker.suggestWhileTyping(\''+cat.key+'\')" />' +
     '</div>' +
+    '<div class="custom-suggest" id="cs-'+cat.key+'"></div>' +
     '<input class="custom-link-input" type="text" placeholder="Link to where you bought it (optional)" id="cl-'+cat.key+'" />' +
     '<div class="custom-part-note">Your part goes into your build immediately as "Pending review." Once verified by Gunforma it\'s added to the catalog permanently — with your build as the first to list it.</div>' +
     '<button class="custom-part-submit" onclick="addCustomPart(\''+cat.key+'\')">Add for review →</button>';
@@ -840,6 +849,9 @@ function removePart(partUid) {
 
 // ===== SIDEBAR =====
 function renderSidebar() {
+  // Typed parts that look like catalog parts, offered beside the submit
+  // button. js/part-picker.js owns it; this is the one call.
+  PartPicker.renderUnlinkedNudge('unlinked-nudge');
   const hasPistol=!!state.platform, hasPhoto=photoCount()>0, hasName=state.name.trim().length>0;
   const hasParts=state.parts.length>0;
   // Admin has no consent gate — the real builder accepts via the claim flow.

@@ -333,6 +333,9 @@
   function closePickerAfterAdd(k) {
     var c = need();
     var state = c.state();
+    // Before the render: a "Use this" from the catalog-match prompt swaps the
+    // catalog part into the typed part's place. See CATALOG MATCH below.
+    applySwap(state);
     state.openPicker = null;
     state.customOpen = null;
     c.render();
@@ -446,6 +449,418 @@
     if (count) count.textContent = variantsOf(item).length + ' colors';
     host.scrollIntoView({ block: 'nearest' });
     return true;
+  }
+
+  // ===== CATALOG MATCH =====
+  //
+  // WHAT THIS IS FOR
+  // A builder who cannot find their part types it by hand: "Holosun", "407k".
+  // That entry is a pending custom part — no photo, no price, no buy link, and
+  // a job for whoever reviews the build. Very often the part IS in the catalog
+  // and they looked in the wrong section, or searched for "407" where the
+  // catalog says "407K X2". A typed part that could have been a catalog part
+  // is a buy link the build does not have.
+  //
+  // So the catalog is searched for them, in two places:
+  //   while they type   — under the custom form's Brand / Part name inputs
+  //                       (suggestWhileTyping), before the typed part exists
+  //   before they submit — a prompt in the sidebar listing every typed part
+  //                       that looks like a catalog part (renderUnlinkedNudge)
+  //
+  // IT ONLY EVER OFFERS. Nothing is replaced without a click, nothing blocks
+  // submitting, and "Keep what I typed" removes a part from the prompt for
+  // good — the builder knows what is on their gun and this does not.
+  //
+  // WHY IT LIVES HERE: both builder pages need it, and the two pages' copies
+  // of customFormFieldsHtml and renderSidebar are exactly the duplication this
+  // file's header warns about. Each page adds two attributes, one mount and
+  // one call; the matching, the markup and the CSS exist once.
+
+  // Lowercased words. Single characters are dropped: the "x" of "X2" and the
+  // "7" of "TLR 7" say nothing alone, and squash() below still sees them.
+  function words(s) {
+    return String(s == null ? '' : s).toLowerCase()
+      .replace(/[^a-z0-9]+/g, ' ').split(' ')
+      .filter(function (w) { return w.length > 1; });
+  }
+  // Words a builder adds to say WHICH ONE they have, not what it is: a colour,
+  // a dot size, the kind of thing. The catalog keeps those on the variant, not
+  // in the product's name, so "Holosun EPS Carry green 2 MOA" would otherwise
+  // look like a name the catalog only half explains. Left out of the typed
+  // words before anything is scored.
+  var DESCRIPTOR = {};
+  ('black fde green red gold silver grey gray tan coyote bronze od blue purple ' +
+   'stainless nitride cerakote dlc tin moa dot reticle optic sight light ' +
+   'for with and the').split(' ').forEach(function (w) { DESCRIPTOR[w] = true; });
+  function isDescriptor(w) { return !!DESCRIPTOR[w] || /^\d+moa$/.test(w); }
+
+  // Letters and digits only, so "TLR-7 Sub", "tlr7 sub" and "TLR 7 SUB" are
+  // one string. This is what makes a missing hyphen not matter.
+  function squash(s) {
+    return String(s == null ? '' : s).toLowerCase().replace(/[^a-z0-9]+/g, '');
+  }
+
+  // One searchable row per catalog item, built once per catalog OBJECT. The
+  // pages reassign CATALOG wholesale on every platform change, so a new
+  // object is a new index and a stale one cannot be served.
+  var indexCache = (typeof WeakMap === 'function') ? new WeakMap() : null;
+  function indexOf(catalog) {
+    if (!catalog || typeof catalog !== 'object') return [];
+    if (indexCache && indexCache.has(catalog)) return indexCache.get(catalog);
+    var rows = [];
+    Object.keys(catalog).forEach(function (catKey) {
+      (catalog[catKey] || []).forEach(function (item) {
+        if (!item || !item.id) return;
+        var text = (item.brand || '') + ' ' + (item.name || '');
+        var set = {};
+        words(text).forEach(function (w) { set[w] = true; });
+        // Where a BRAND can be found: the brand field, and the first word of
+        // the name — "PMM P365 Compensator" is filed under Parker Mountain
+        // Machine, and "PMM" is what people type. Not the rest of the name:
+        // "Strike Industries SIG P365 Grip Module" is not a Sig part.
+        var brandSet = {};
+        words(item.brand).forEach(function (w) { brandSet[w] = true; });
+        var lead = words(item.name)[0];
+        if (lead) brandSet[lead] = true;
+        rows.push({
+          catKey: catKey, item: item,
+          tokens: set, tokenList: Object.keys(set),
+          brandList: Object.keys(brandSet),
+          squash: squash(text),
+          nameSquash: squash(item.name || ''),
+        });
+      });
+    });
+    if (indexCache) indexCache.set(catalog, rows);
+    return rows;
+  }
+
+  // Does this catalog row contain this typed word?
+  //   exact      "407k"  is a word of "Holosun 407K X2"
+  //   prefix     "comp"  starts "compensator"            (3+ characters)
+  //   squashed   "tlr7"  is inside "streamlighttlr7sub"  (4+ characters)
+  function rowHas(row, w) {
+    if (row.tokens[w]) return true;
+    if (w.length >= 3) {
+      for (var i = 0; i < row.tokenList.length; i++) {
+        if (row.tokenList[i].indexOf(w) === 0) return true;
+      }
+    }
+    return w.length >= 4 && row.squash.indexOf(w) !== -1;
+  }
+
+  // Is this typed word the row's brand? Exact, or a 3+ character start of it
+  // ("tyrant" for Tyrant CNC, "wilson" for Wilson Combat).
+  function rowHasBrand(row, w) {
+    for (var i = 0; i < row.brandList.length; i++) {
+      var b = row.brandList[i];
+      if (b === w || (w.length >= 3 && b.indexOf(w) === 0)) return true;
+    }
+    return false;
+  }
+
+  // The catalog parts a typed Brand + Part name most likely means, best first.
+  //
+  // PURE: takes the catalog, returns rows. No DOM, no cfg — so
+  // scripts/part-match.test.mjs can run it against real catalog names.
+  //
+  // HOW IT SCORES. Each typed word is worth more the fewer catalog parts
+  // contain it: "p365" is in a hundred names and says almost nothing, "407k"
+  // is in one and says nearly everything. A candidate's score is the sum of
+  // the words it contains.
+  //
+  // THE BRAND DECIDES TIES THAT WORDS CANNOT. "Sig" + "P365 XL grip module"
+  // shares more words with Wilson Combat's "WCP365 XL Grip Module" than with
+  // Sig's own "P365 XL OEM". So a typed brand that is a brand we carry adds
+  // to the candidates that have it and halves the ones that do not. A brand
+  // we have never heard of does neither — it is a typo or a new maker, and
+  // either way it is not evidence against a match.
+  //
+  // WHAT COUNTS AS A MATCH AT ALL. One common word is not enough: "Custom" +
+  // "my trigger job" contains "trigger" and nothing else, and offering three
+  // triggers for it is noise. A candidate needs the brand, or two words, or
+  // one word that is almost unique.
+  //
+  // `strong` is the stricter bar the sidebar prompt uses: it makes a specific
+  // claim ("this looks like X") and stays on screen, where the typing list is
+  // a glance that disappears. It needs the catalog name to explain nearly all
+  // of what was typed. "Sig" + "Romeo Zero" is offered the Romeo-X while
+  // typing, which is fair — but "Zero" is the model, the catalog does not
+  // have it, and the prompt must not tell that builder their optic "looks
+  // like" a different one.
+  //
+  // opts.exclude   { <products.id>: true } — parts already on the build
+  // opts.fromKey   the section being typed in; a small nudge toward it
+  // opts.limit     default 3
+  function matchIn(catalog, brand, name, opts) {
+    opts = opts || {};
+    var rows = indexOf(catalog);
+    var N = rows.length;
+    if (!N) return [];
+
+    var brandWords = words(brand);
+    var nameWords = words(name).filter(function (w) { return !isDescriptor(w); });
+    var seen = {};
+    var q = brandWords.concat(nameWords).filter(function (w) {
+      if (seen[w]) return false;
+      seen[w] = true;
+      return true;
+    });
+    // "Whole name" matching is for a name typed in pieces that the catalog
+    // joins differently — "tlr 7 sub" for "TLR-7 Sub". One bare word is not
+    // that: "grip" sits inside every grip module's name, and saying so is
+    // the single-common-word noise the rules below exist to refuse.
+    var qNameSquash = squash(name);
+    var pieces = String(name == null ? '' : name).toLowerCase().split(/[^a-z0-9]+/).filter(Boolean).length;
+    var wholeable = pieces >= 2 && qNameSquash.length >= 4;
+    // A brand alone is not a part. With only "Holosun" typed there are
+    // nineteen candidates and no reason to show three of them.
+    if (!nameWords.length && !wholeable) return [];
+
+    // How many catalog parts contain each typed word, and so what it is worth.
+    var df = {}, weight = {};
+    q.forEach(function (w) {
+      var n = 0;
+      for (var i = 0; i < N; i++) if (rowHas(rows[i], w)) n++;
+      df[w] = n;
+      // A word no catalog part has ("green", "v2") still counts against how
+      // much of what was typed a candidate explains — lightly.
+      weight[w] = n ? Math.log(1 + N / n) : 2;
+    });
+    var total = q.reduce(function (sum, w) { return sum + weight[w]; }, 0);
+    var knownBrand = brandWords.some(function (w) {
+      for (var i = 0; i < N; i++) if (rowHasBrand(rows[i], w)) return true;
+      return false;
+    });
+
+    var out = [];
+    rows.forEach(function (row) {
+      if (opts.exclude && opts.exclude[row.item.id]) return;
+      var matched = 0, hits = 0, rarest = Infinity;
+      q.forEach(function (w) {
+        if (!rowHas(row, w)) return;
+        matched += weight[w];
+        hits++;
+        if (df[w] < rarest) rarest = df[w];
+      });
+      // A name word that narrows things down: in at most a tenth of the
+      // catalog. "trigger" and "ramjet" do; "p365" does not.
+      var distinctive = nameWords.some(function (w) {
+        return df[w] > 0 && df[w] <= Math.max(2, N * 0.1) && rowHas(row, w);
+      });
+      // The whole typed name, punctuation aside, sitting inside the catalog
+      // name: "tlr 7 sub" in "TLR-7 Sub".
+      var whole = wholeable && row.nameSquash.indexOf(qNameSquash) !== -1;
+      if (!hits && !whole) return;
+
+      var hasBrand = brandWords.some(function (w) { return rowHasBrand(row, w); });
+      var nameHits = nameWords.filter(function (w) { return rowHas(row, w); }).length;
+      if (!(hasBrand || hits >= 2 || rarest <= 2 || whole)) return;
+
+      var score = matched + (whole ? 4 : 0);
+      if (knownBrand) score = hasBrand ? score + 3 : score * 0.5;
+      if (opts.fromKey && row.catKey === opts.fromKey) score += 1;
+
+      var coverage = total ? matched / total : 0;
+      out.push({
+        catKey: row.catKey, item: row.item, score: score, nameHits: nameHits,
+        // Never strong against a brand we carry that this part is not: the
+        // builder named the maker, and a different maker's part is at best
+        // an alternative to show while typing.
+        strong: !(knownBrand && !hasBrand) &&
+                (whole || (coverage >= 0.8 && distinctive && (hasBrand || hits >= 2))),
+        // Fewer words left over is the closer name: "TLR-7 Sub" before
+        // "TLR-7 HL-X Sub USB" when both contain everything typed.
+        extra: row.tokenList.length - hits,
+      });
+    });
+    if (!out.length) return [];
+
+    out.sort(function (a, b) {
+      return (b.score - a.score) || (a.extra - b.extra) ||
+             String(a.item.name).localeCompare(String(b.item.name));
+    });
+    // Only what is in the same league as the best. "Holosun" + "407k" must
+    // not trail every other Holosun optic behind the one that was meant: once
+    // the best candidate matches the NAME, a candidate that matches only the
+    // brand is not a candidate.
+    var floor = out[0].score * 0.7;
+    var needName = out[0].nameHits > 0;
+    return out.filter(function (m) { return m.score >= floor && (!needName || m.nameHits > 0); })
+              .slice(0, opts.limit || 3);
+  }
+
+  // Products already on the build, so they are never offered twice.
+  function addedIds() {
+    var parts = need().state().parts || [];
+    var ids = {};
+    parts.forEach(function (p) { if (p.refId) ids[p.refId] = true; });
+    return ids;
+  }
+
+  // A section only gets suggestions if the catalog has parts in it for this
+  // pistol. Magazines, holsters and knives are typed-only sections, and
+  // searching the catalog for one finds things it is not: a typed "Sig 17rd
+  // magazine" is a close match for a +3 basepad, and offering that is wrong.
+  function sectionHasCatalog(catalog, catKey) {
+    return !!(catalog && catalog[catKey] && catalog[catKey].length);
+  }
+
+  function matchThumbHtml(item) {
+    return item.image
+      ? '<span class="match-thumb"><img src="' + escAttr(item.image) + '" alt="" loading="lazy" onerror="this.remove()"/></span>'
+      : '<span class="match-thumb"></span>';
+  }
+  // The catalog name, without repeating a brand the name already starts with
+  // ("Holosun" + "Holosun 407K X2").
+  function matchNameHtml(item) {
+    var brand = String(item.brand || ''), name = String(item.name || '');
+    var rest = name.toLowerCase().indexOf(brand.toLowerCase()) === 0 ? name.slice(brand.length).trim() : name;
+    return '<span class="match-name"><b>' + escAttr(brand) + '</b> ' + escAttr(rest || name) + '</span>';
+  }
+
+  // ----- while they type -----
+  //
+  // Called from the custom form's Brand and Part name inputs, on every
+  // keystroke. Writes into #cs-<catKey> and NOTHING ELSE — the same reason
+  // noteVariant() re-renders nothing: renderParts() would rebuild the form
+  // and drop focus on the first character.
+  function suggestWhileTyping(catKey) {
+    var host = document.getElementById('cs-' + catKey);
+    if (!host) return;
+    var c = need(), catalog = c.catalog() || {};
+    var b = document.getElementById('cb-' + catKey);
+    var n = document.getElementById('cn-' + catKey);
+    var brand = b ? b.value : '', name = n ? n.value : '';
+    var list = sectionHasCatalog(catalog, catKey)
+      ? matchIn(catalog, brand, name, { exclude: addedIds(), fromKey: catKey })
+      : [];
+    host.innerHTML = typingSuggestHtml(list);
+  }
+  function typingSuggestHtml(list) {
+    if (!list || !list.length) return '';
+    return '<div class="custom-suggest-title">Already in the catalog?</div>' +
+      list.map(function (m) {
+        return '<button type="button" class="match-row" onclick="PartPicker.useMatch(\'' + m.catKey + '\',\'' + m.item.id + '\')">' +
+            matchThumbHtml(m.item) + matchNameHtml(m.item) +
+            '<span class="match-go">Add this instead &rarr;</span>' +
+          '</button>';
+      }).join('') +
+      '<div class="custom-suggest-foot">Catalog parts show a photo, a price and where to buy. Not it? Keep typing and add yours below.</div>';
+  }
+
+  // ----- the swap -----
+  //
+  // "Use this" on a typed part must REPLACE it, in the same position, and
+  // only once the catalog part has really been added — a product with colours
+  // goes through the colour step first, and the builder can back out of that.
+  // So the typed part is left alone here and the intent is remembered; every
+  // add on both pages ends in closePickerAfterAdd(), which calls applySwap().
+  var pendingSwap = null;   // { uid: <typed part>, itemId: <products.id> }
+
+  function applySwap(state) {
+    var sw = pendingSwap;
+    pendingSwap = null;      // one add consumes it, whatever that add was
+    if (!sw) return;
+    var parts = (state && state.parts) || [];
+    var added = parts[parts.length - 1];
+    // The add that just finished has to be the product that was offered. If
+    // they backed out of the colour step and added something else, this was
+    // not a swap and the typed part stays.
+    if (!added || added.refId !== sw.itemId) return;
+    var at = -1;
+    for (var i = 0; i < parts.length - 1; i++) if (parts[i].uid === sw.uid) at = i;
+    if (at === -1) return;
+    if (cfg.canSwap && !cfg.canSwap(sw.uid)) return;
+    // In place: the catalog part takes the typed part's position, so the
+    // order the builder listed their parts in does not change.
+    parts.splice(at, 1, parts.pop());
+  }
+
+  // Add a catalog part that was offered as a match. With swapUid, it replaces
+  // that typed part once the add completes.
+  //
+  // Opens the part's own section first: the colour step renders into that
+  // section's grid, and a match can come from a different section than the
+  // one being typed in.
+  function useMatch(catKey, itemId, swapUid) {
+    var c = need(), st = c.state();
+    pendingSwap = swapUid ? { uid: swapUid, itemId: itemId } : null;
+    st.openPicker = catKey;
+    st.customOpen = null;
+    c.render();
+    global.addCatalogPart(catKey, itemId);
+    // A direct add has already closed the picker and scrolled. If the colour
+    // step is what opened instead, bring it into view.
+    if (st.openPicker === catKey) scrollToCategory(catKey);
+  }
+
+  // ----- before they submit -----
+
+  // Typed parts the builder said are right as typed. In memory only: it is
+  // about this sitting, and a reload asking once more is not a cost.
+  var dismissed = {};
+  function dismissMatch(uid) {
+    dismissed[uid] = true;
+    var c = need();
+    if (c.onChange) c.onChange();
+  }
+
+  // Every typed part that looks like a catalog part: [{ part, matches }].
+  // Strong matches only — see matchIn().
+  function unlinkedMatches() {
+    var c = need(), catalog = c.catalog() || {};
+    var parts = c.state().parts || [];
+    var exclude = addedIds();
+    var out = [];
+    parts.forEach(function (p) {
+      // A typed part: pending, no catalog id. `finish` marks a Paint Job &
+      // Finish entry, which is a description, not a product.
+      if (!p.pending || p.refId || p.finish) return;
+      if (dismissed[p.uid]) return;
+      if (!sectionHasCatalog(catalog, p.category)) return;
+      // Not offered where the page will not allow the swap (a part pinned
+      // under a reviewer's correction).
+      if (c.canSwap && !c.canSwap(p.uid)) return;
+      var m = matchIn(catalog, p.brand, p.name, { exclude: exclude, fromKey: p.category, limit: 2 })
+        .filter(function (x) { return x.strong; });
+      if (m.length) out.push({ part: p, matches: m });
+    });
+    return out;
+  }
+
+  function unlinkedNudgeHtml(found) {
+    if (!found || !found.length) return '';
+    var n = found.length;
+    return '<div class="unlinked-nudge">' +
+      '<div class="unlinked-nudge-title">' + n + ' typed part' + (n === 1 ? ' looks' : 's look') + ' like ' + (n === 1 ? 'a catalog part' : 'catalog parts') + '</div>' +
+      '<div class="unlinked-nudge-sub">Switch and the build shows the part&rsquo;s photo, price and where to buy, with nothing left to review.</div>' +
+      found.map(function (f) {
+        var typed = ((f.part.brand ? f.part.brand + ' ' : '') + (f.part.name || '')).trim();
+        return '<div class="unlinked-row">' +
+            '<div class="unlinked-typed">You typed <b>' + escAttr(typed) + '</b></div>' +
+            f.matches.map(function (m) {
+              return '<div class="match-row static">' +
+                  matchThumbHtml(m.item) + matchNameHtml(m.item) +
+                  '<button type="button" class="match-use" onclick="PartPicker.useMatch(\'' + m.catKey + '\',\'' + m.item.id + '\',\'' + escAttr(f.part.uid) + '\')">Use this</button>' +
+                '</div>';
+            }).join('') +
+            '<button type="button" class="unlinked-keep" onclick="PartPicker.dismissMatch(\'' + escAttr(f.part.uid) + '\')">Keep what I typed</button>' +
+          '</div>';
+      }).join('') +
+    '</div>';
+  }
+
+  // Called from each page's renderSidebar(). Draws the prompt into the mount,
+  // or empties it. Never throws into the page: this is an offer beside the
+  // submit button, and a failure here must not stop a build being submitted.
+  function renderUnlinkedNudge(mountId) {
+    var host = document.getElementById(mountId || 'unlinked-nudge');
+    if (!host) return;
+    var html = '';
+    try { html = unlinkedNudgeHtml(unlinkedMatches()); }
+    catch (e) { if (global.console) global.console.warn('[part-picker] catalog-match prompt skipped', e); }
+    host.innerHTML = html;
   }
 
   // ===== CSS =====
@@ -730,6 +1145,37 @@
   .variant-media { width: 40px; height: 40px; }
   .variant-row-go { display: none; }   /* the whole row is the target anyway */
 }
+/* ============ CATALOG MATCH ============ */
+/* One row shape for both places a catalog part is offered: under the custom
+   form while typing (a button, the whole row is the target) and in the
+   sidebar prompt (.static, with its own "Use this" button). */
+.custom-suggest:empty { display: none; }
+.custom-suggest { margin: 10px 0 4px; padding: 10px; background: #f3f8fd; border: 0.5px solid #cfe2f3; border-radius: 6px; }
+.custom-suggest-title { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1c4f7c; margin-bottom: 7px; }
+.custom-suggest-foot { font-size: 10.5px; color: #6b8299; line-height: 1.5; margin-top: 7px; }
+.match-row { display: flex; align-items: center; gap: 9px; width: 100%; min-width: 0; padding: 6px 8px; margin-top: 5px; background: #fff; border: 0.5px solid #dbe6f0; border-radius: 5px; font-family: inherit; font-size: 12px; color: #1a1a1a; text-align: left; }
+button.match-row { cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+button.match-row:hover, button.match-row:focus-visible { border-color: #4a9edd; background: #f7fbff; outline: none; }
+.match-thumb { flex: 0 0 34px; width: 34px; height: 34px; border-radius: 4px; background: #f1f0ea; overflow: hidden; }
+.match-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+/* min-width: 0 or a long catalog name refuses to shrink and pushes the
+   button out of the row — the sidebar is 300px wide. */
+.match-name { flex: 1 1 auto; min-width: 0; line-height: 1.35; overflow-wrap: anywhere; }
+.match-go { flex: 0 0 auto; font-size: 11px; font-weight: 700; color: #2a7bbd; white-space: nowrap; }
+.match-use { flex: 0 0 auto; font-family: inherit; font-size: 11px; font-weight: 700; color: #fff; background: #2a7bbd; border: none; border-radius: 4px; padding: 6px 9px; cursor: pointer; white-space: nowrap; }
+.match-use:hover { background: #1c5f96; }
+
+.unlinked-nudge { margin-bottom: 12px; padding: 12px; background: #f3f8fd; border: 0.5px solid #cfe2f3; border-radius: 6px; }
+.unlinked-nudge-title { font-size: 12px; font-weight: 700; color: #1c4f7c; margin-bottom: 4px; }
+.unlinked-nudge-sub { font-size: 11px; color: #4a6781; line-height: 1.55; }
+.unlinked-row { margin-top: 11px; padding-top: 10px; border-top: 0.5px solid #d9e6f2; }
+.unlinked-typed { font-size: 11px; color: #555; overflow-wrap: anywhere; }
+.unlinked-typed b { color: #1a1a1a; }
+.unlinked-keep { margin-top: 7px; padding: 0; background: none; border: none; font-family: inherit; font-size: 11px; color: #6b8299; text-decoration: underline; cursor: pointer; }
+.unlinked-keep:hover { color: #1c4f7c; }
+@media (max-width: 560px) {
+  .match-go { display: none; }   /* the whole row is the target anyway */
+}
 `;
 
   var cssInjected = false;
@@ -757,6 +1203,12 @@
     });
     if (options.onChange != null && typeof options.onChange !== 'function') {
       throw new Error('PartPicker.init: onChange must be a function when given');
+    }
+    // Optional: (uid) => may this typed part be replaced by a catalog match?
+    // gunforma-post-build.html says no for a part pinned under a reviewer's
+    // correction. Absent means every typed part may.
+    if (options.canSwap != null && typeof options.canSwap !== 'function') {
+      throw new Error('PartPicker.init: canSwap must be a function when given');
     }
     // Fail at mount rather than at first click. These are the two globals the
     // emitted onclick attributes name; a page that renamed one would ship
@@ -786,5 +1238,14 @@
     variantsOf: variantsOf,
     variantListHtml: variantListHtml,
     openColorStep: openColorStep,
+    // Catalog match.
+    matchIn: matchIn,
+    suggestWhileTyping: suggestWhileTyping,
+    typingSuggestHtml: typingSuggestHtml,
+    useMatch: useMatch,
+    dismissMatch: dismissMatch,
+    unlinkedMatches: unlinkedMatches,
+    unlinkedNudgeHtml: unlinkedNudgeHtml,
+    renderUnlinkedNudge: renderUnlinkedNudge,
   };
 })(window);

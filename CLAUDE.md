@@ -685,6 +685,7 @@ Registered today:
 | `scripts/snapshot-roundtrip.test.mjs` | a builder hydration path (edit mode, Armory handoff) dropping a `parts_snapshot` field, so the next save deletes it — runs the page's own code, load → save, and requires byte-identical rows |
 | `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
 | `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
+| `scripts/part-match.test.mjs` | the catalog-match prompt offering noise ("my trigger job" → three triggers), going silent on a real match ("holosun 407k"), claiming a model the catalog does not have, or swapping a catalog part into the wrong position — run against real catalog names |
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
 | `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
 | `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
@@ -1559,6 +1560,60 @@ no photo to check them against. The byte-identical code in
 `style="object-fit:cover"` that made the CSS fix a no-op. Same shape as the
 uploader and the redact modal before it: the page nobody is looking at keeps
 the old behaviour, and nothing fails.
+
+#### The catalog match lives there too
+
+A builder who cannot find a part types it by hand, and a typed part is a
+pending custom part: no photo, no price, **no buy link**, and work for
+whoever reviews the build. Often the part is in the catalog and they looked
+in the wrong section. So `js/part-picker.js` searches the catalog for them,
+in two places, on both builder pages:
+
+- **while they type** — under the custom form's Brand / Part name inputs
+  ("Already in the catalog?"), before a typed part exists
+- **beside the submit button** — a prompt listing every typed part that looks
+  like a catalog part, with "Use this" and "Keep what I typed"
+
+**It only ever offers.** Nothing is replaced without a click and nothing
+blocks submitting. Each page's share is two `oninput` attributes and a
+`#cs-<key>` mount in `customFormFieldsHtml`, a `#unlinked-nudge` mount in the
+sidebar, and one `PartPicker.renderUnlinkedNudge()` call at the top of
+`renderSidebar()`. The matching, the markup and the CSS exist once.
+
+Four things about it that are decisions, not accidents:
+
+- **`matchIn()` is pure, and its judgement is pinned by a build check.** It
+  scores each typed word by how few catalog parts contain it ("p365" says
+  nothing, "407k" says everything), lets a typed brand outrank shared words
+  (a Sig is not a Wilson Combat), and refuses one common word as a match.
+  Every one of those fails silently in a browser — an empty mount is what "no
+  match" looks like — so `scripts/part-match.test.mjs` runs it against real
+  catalog names on every deploy. Change a threshold there, not by eye.
+- **The sidebar prompt uses a stricter bar (`strong`) than the typing list.**
+  The typing list is a glance; the prompt makes a claim and stays on screen.
+  "Sig" + "Romeo Zero" is offered the Romeo-X while typing and is never told
+  it "looks like" one: the catalog has no Zero, and that builder's optic is
+  not the one we carry.
+- **"Use this" replaces the typed part IN PLACE, and only when the add
+  completes.** A product with colours goes through the colour step first and
+  the builder can back out, so the intent is remembered (`pendingSwap`) and
+  applied in `closePickerAfterAdd()` — the one function every add on both
+  pages ends in. It is consumed by the next add whatever that add was, so a
+  stale intent cannot swap something later.
+- **Typed-only sections get nothing.** Magazines, holsters and knives have no
+  catalog parts, and searching for one finds things it is not (a typed "Sig
+  17rd magazine" is a close match for a +3 basepad). The test is whether
+  `CATALOG` has rows under that section for this pistol.
+
+`PartPicker.init()` takes an optional `canSwap(uid)`. `gunforma-post-build.html`
+passes it so a part pinned under a reviewer's correction is neither offered
+nor swapped — see **Corrections pin parts in place**.
+
+**Not measured yet.** On 2026-10-07 the live builds held one typed part
+between them, and it was a paint job. Every build so far was posted by an
+admin picking from the catalog. Whether real builders type parts the catalog
+already has is unknown until they arrive; the number to watch is typed parts
+in catalog-backed sections per submitted build.
 
 **What is still duplicated**, and is the obvious next extraction — these live
 in both pages and must be changed in both: `renderParts`,
