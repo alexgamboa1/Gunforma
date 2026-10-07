@@ -440,6 +440,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/footer.js"></script>
 <!-- Before affiliate.js: it calls window.variantLabel at render time. -->
 <script src="js/variant-label.js"></script>
+<!-- Before affiliate.js: it calls window.makerLink at render time. -->
+<script src="js/maker-link.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -461,10 +463,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // Buy links: routed through the shared js/affiliate.js module, which
 // pulls tracked listings from affiliate_links → partners (see
 // build-detail for the reference implementation this was extracted from).
-// products.url is intentionally NOT used as a buy link — it's an
-// untracked manufacturer page. affiliate.renderHero is called per card
-// and returns '' when the product has no listing yet; a console.warn
-// fires from runBuyUrlAudit when >20% of visible parts lack listings.
+// A product with no partner listing links to its own products.url through
+// /go/part/<id> (a counted, unpaid link — see js/affiliate.js).
+// affiliate.renderHero is called per card and returns '' when the product
+// has no PARTNER listing; a console.warn fires from runBuyUrlAudit when
+// >20% of visible parts lack listings.
 // ============================================================
 var sb = window.sb;
 
@@ -495,15 +498,8 @@ var STATE = {
 };
 var partUid = 1;
 
-var CATEGORY_LABELS = {
-  slide: 'Slides', barrel: 'Barrels', compensator: 'Compensators',
-  frame: 'Frame Modules', trigger: 'Triggers', light: 'Weapon Lights', optic: 'Optics',
-  mag_release: 'Magazine Releases', magwell: 'Magwells',
-  basepad: 'Basepads', slide_release: 'Slide Releases',
-  safety_selector: 'Safety Selectors', takedown_lever: 'Takedown Levers',
-  slide_plate: 'Slide Plates',
-};
-function catLabel(c) { return CATEGORY_LABELS[c] || (c || '').replace(/_/g, ' ').replace(/\b\w/g, function(m){return m.toUpperCase();}); }
+// Category names come from js/category-map.js, the one list every surface reads.
+function catLabel(c) { return window.categoryPlural(c); }
 
 var GUIDE_CATEGORIES = [
   { key: 'all',                label: 'All' },
@@ -949,7 +945,7 @@ function normalizeSnapshotCategory(part) {
   if (live && live.category) return live.category;          // ground truth
   var raw = (part.category == null ? '' : String(part.category)).trim();
   if (!raw) return null;
-  if (CATEGORY_LABELS[raw] || PRODUCTS_BY_CATEGORY[raw]) return raw;   // already a DB category
+  if (window.CATEGORY_URL_SEGMENT[raw] || PRODUCTS_BY_CATEGORY[raw]) return raw;   // already a DB category
   if (UI_KEY_TO_DB_CATEGORY[raw]) return UI_KEY_TO_DB_CATEGORY[raw];
   // Kept rather than dropped, so the part still counts and can be removed.
   console.warn('[armory] unmapped part category ' + JSON.stringify(raw) +
@@ -1038,6 +1034,7 @@ async function loadBuildById(buildId) {
       variantId:     part.variantId     || undefined,
       variantLabel:  part.variantLabel  || undefined,
       variantColor:  part.variantColor  || undefined,
+      variantSpecs:  part.variantSpecs  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
       price: live ? live.price : null,
@@ -1562,6 +1559,7 @@ function buildPartsSnapshot() {
     if (p.variantId)     row.variantId     = p.variantId;
     if (p.variantLabel)  row.variantLabel  = p.variantLabel;
     if (p.variantColor)  row.variantColor  = p.variantColor;
+    if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
     if (p.variantFinish) row.variantFinish = p.variantFinish;
     if (p.imageUrl)      row.imageUrl      = p.imageUrl;
     return row;
@@ -1803,16 +1801,20 @@ function renderGuideCard(g) {
     var priceCell = price != null
       ? '<div class="guide-part-price">$' + price.toFixed(price < 100 ? 2 : 0) + '</div>'
       : '<div class="guide-part-price na">—</div>';
-    // Affiliate buy — hero URL from affiliate_links (tracked). No untracked
-    // fallback to products.url. Renders as an empty span when no listing
-    // exists so the 4-column grid layout stays intact.
+    // Affiliate buy — the hero row from js/affiliate.js: a partner listing
+    // (sponsored, /go/<link>) or, when the product has none, its own store
+    // (not sponsored, /go/part/<product>). Renders as an empty span when
+    // neither exists so the 4-column grid layout stays intact.
+    //
+    // /go/, like every other buy link — the click layer's whole point is
+    // that no buy button bypasses it. This page is parked (no nav, noindex)
+    // but it still answers on its own URL, and Loadouts inherits this
+    // renderer, so leaving it pointing straight at the retailer would ship
+    // an unlogged buy link into the rebuild.
     var buyCell = aff && aff.hero
-      // /go/<link id>, like every other buy link — the click layer's whole
-      // point is that no buy button bypasses it. This page is parked (no nav,
-      // noindex) but it still answers on its own URL, and Loadouts inherits
-      // this renderer, so leaving it pointing straight at the retailer would
-      // ship an unlogged buy link into the rebuild.
-      ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>'
+      ? (aff.hero.maker
+          ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="' + escAttr(window.MAKER_REL) + '">' + esc(aff.hero.maker.label) + '</a>'
+          : '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>')
       : '<span></span>';
     return '<div class="guide-part">' +
       '<span class="guide-part-cat">' + esc(catLabel(part.category)) + '</span>' +
@@ -1898,6 +1900,7 @@ function remixGuide(guideId) {
       variantId:     part.variantId     || undefined,
       variantLabel:  part.variantLabel  || undefined,
       variantColor:  part.variantColor  || undefined,
+      variantSpecs:  part.variantSpecs  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
       price: live ? live.price : null,
@@ -1963,5 +1966,6 @@ function toast(msg, href, linkText) {
 init();
 </script>
 
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

@@ -92,6 +92,10 @@ ok(locs.every((u) => u.startsWith(SITE + '/')), 'every URL is an apex https://gu
 // is what should happen when the Armory is un-parked (see claude/loadouts-spec.md).
 const RETIRED = new Set([
   '/gunforma-armory.html',  // PR #88 — Armory parked: no nav, noindex, out of the sitemap
+  // RAMM merged its comp and non-comp P365 Leverage kits into one product.
+  // Both are discontinued and 301 to ramm-tactical-leverage-trigger-p365.
+  '/parts/triggers/ramm-tactical-leverage-c-p365',
+  '/parts/triggers/ramm-tactical-leverage-nc-p365',
 ]);
 
 const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'))

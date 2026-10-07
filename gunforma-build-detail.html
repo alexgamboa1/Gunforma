@@ -33,6 +33,10 @@
      Not og:* either: social scrapers do not run JS, so runtime OG tags buy
      nothing. Previews are fixed by linking to /b/<slug>-<uuid> in the first
      place, which every internal link does. -->
+<!-- The description line BELOW is matched byte for byte by build-og.mjs,
+     which strips it at /b/... before injecting a per-build one — same
+     coupling, and same guard, as the canonical above. Change the two
+     together. -->
 <meta name="description" content="View a complete pistol build — every part, every photo, total cost, and affiliate links to buy." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -119,6 +123,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-title { font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .build-author-row { font-size: 12px; color: #888; }
 .build-author-row strong { color: #1a1a1a; font-weight: 600; }
+/* The builder's own words. pre-line keeps their paragraph breaks without
+   letting arbitrary whitespace lay the page out. Hidden until there is text:
+   renderBuild() shows it, and build-og.mjs replaces the hidden div outright
+   when it server-renders a build that has a description. */
+.build-desc { font-size: 13px; line-height: 1.6; color: #444; white-space: pre-line; }
 .build-tags { display: flex; gap: 5px; flex-wrap: wrap; }
 .build-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 3px 8px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 .build-tag.blue { color: #1d6fb8; border-color: #a7cdec; background: #eaf4fc; }
@@ -170,7 +179,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-type { font-size: 10px; color: #2a7bbd; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
 .part-brand { font-size: 16px; font-weight: 700; line-height: 1.2; }
 .part-model { font-size: 12px; color: #666; }
+.part-model-link { color: #2a7bbd; text-decoration: none; }
+.part-model-link:hover { text-decoration: underline; }
 .part-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+/* The chosen variant's spec line ("2 MOA · Red dot"), under its tag. Plain
+   muted text, not another pill: it qualifies the tag, it is not a second one. */
+.part-variant-specs { font-size: 11px; color: #777; line-height: 1.35; margin-top: 4px; }
 .part-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 /* Variant note reads as the builder's own words, so it keeps its casing
    rather than being upper-cased like the structural tags beside it. */
@@ -227,6 +241,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-affiliate-variant-row:first-child { border-top: none; }
 .part-affiliate-variant-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .part-affiliate-variant-label { font-size: 12px; color: #333; font-weight: 600; }
+/* Spec line under the label — muted like .part-variant-specs on the card. */
+.part-affiliate-variant-specs { font-size: 11px; color: #777; line-height: 1.3; }
 .part-affiliate-variant-sub { font-size: 11px; color: #888; }
 .part-affiliate-variant-sub strong { color: #444; font-weight: 600; }
 .part-affiliate-variant-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; padding: 6px 12px; border-radius: 4px; text-decoration: none; transition: background 0.15s; }
@@ -397,6 +413,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <h1 class="build-title" id="build-title">—</h1>
       </div>
       <div class="build-author-row" id="build-author-row">—</div>
+      <!-- The builder's description. This exact line is replaced byte-for-byte
+           by build-og.mjs when the build has one (same coupling as the
+           canonical above — change the two together; the guard will say so). -->
+      <div class="build-desc" id="build-desc" style="display:none;"></div>
       <div class="build-tags" id="build-tags"></div>
       <div class="build-total">
         <div class="build-total-label">This build</div>
@@ -467,10 +487,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <!-- Section order + category labels. Read by the render code below. -->
+<script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
+<!-- The label and rel for a buy button to a part's own store, for parts with
+     no partner listing. Mirrored by netlify/functions/_maker-link.mjs. -->
+<script src="js/maker-link.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -597,6 +621,11 @@ var VARIANT_BY_ID = {};
 // A.C.E. XL EVO sells in FDE, Gray and ODG with a listing on none of them, and
 // a panel that hid them would tell a reader the part comes in one color.
 var VARIANTS_BY_PRODUCT_ID = {};
+// productId -> { host, ownStore, label } from window.makerLink, or null. The
+// unpaid fallback button for a part (or a colour) with no partner listing:
+// /go/part/<productId>, to the part's own products.url. Null when the url is
+// empty or the part is discontinued, and the row keeps its no-button state.
+var MAKER_BY_PRODUCT_ID = {};
 
 async function loadBuild() {
   // Served at two URLs: /b/:id (the shareable one, rewritten to build-og.mjs
@@ -688,7 +717,10 @@ async function loadAffiliates(build) {
   // the user bought — surface all buyable listings and let the shopper pick.
   var { data, error } = await sb
     .from('product_variants')
-    .select('id,product_id,variant_label,color,finish,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
+    // products(...): url, is_discontinued and the maker's website feed
+    // MAKER_BY_PRODUCT_ID; slug is what links the part card to its /parts/
+    // page (partModelHtml). Both embeds name their FK — CLAUDE.md, PGRST201.
+    .select('id,product_id,variant_label,color,finish,reticle,reticle_color,battery_type,mount_system,is_default,primary_image_url,msrp,products!product_variants_product_id_fkey(category,slug,url,is_discontinued,manufacturers!products_brand_id_fkey(name,website_url)),affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))')
     // Retired rows are hidden from buy surfaces: the variant filter is
     // top-level (drops the variant outright), the affiliate_links one is an
     // embed filter (keeps the variant, drops only the dead listing).
@@ -709,6 +741,13 @@ async function loadAffiliates(build) {
     VARIANT_BY_ID[v.id] = v;
     if (!VARIANTS_BY_PRODUCT_ID[v.product_id]) VARIANTS_BY_PRODUCT_ID[v.product_id] = [];
     VARIANTS_BY_PRODUCT_ID[v.product_id].push(v);
+    // Same product on every variant row; computed once per product.
+    if (!(v.product_id in MAKER_BY_PRODUCT_ID)) {
+      var p = v.products || {};
+      MAKER_BY_PRODUCT_ID[v.product_id] = p.is_discontinued ? null
+        : window.makerLink(p.url, p.manufacturers ? p.manufacturers.name : null,
+                                  p.manufacturers ? p.manufacturers.website_url : null);
+    }
   });
 
   // Group variants by product, flatten to (variant, link) rows, drop
@@ -1002,6 +1041,21 @@ function renderBuild(b) {
   document.getElementById('build-title').textContent = b.name;
   document.getElementById('build-author-row').innerHTML = 'Built by <strong>'+escH(username)+'</strong> · Posted '+formatDate(b.created_at);
 
+  // The builder's own words, shown under the author line. textContent, never
+  // innerHTML — this is free text. At /b/… build-og.mjs has already rendered
+  // the same words server-side; this write makes the two identical, and on
+  // the legacy ?id= URL it is the only render.
+  var descEl = document.getElementById('build-desc');
+  if (descEl) {
+    if (b.description && String(b.description).trim()) {
+      descEl.textContent = String(b.description).trim();
+      descEl.style.display = 'block';
+    } else {
+      descEl.textContent = '';
+      descEl.style.display = 'none';
+    }
+  }
+
   document.getElementById('build-tags').innerHTML =
     '<span class="build-tag blue">'+escH(platformName)+'</span>'+
     (b.activities||[]).map(function(a){ return '<span class="build-tag">'+escH(a)+'</span>'; }).join('');
@@ -1058,9 +1112,10 @@ function renderParts(b) {
     var cat = known || raw;
     if (!groups[cat]) {
       groups[cat] = [];
-      // Kept under its own raw key rather than folded into Miscellaneous: a
-      // legacy snapshot ('other_parts', 'sights') still renders every part,
-      // under a real heading, and nothing is silently relabelled.
+      // Kept under its own raw key rather than folded into Other Parts: an
+      // unrecognised key still renders every part, under a real heading, and
+      // nothing is silently relabelled. (The legacy keys 'other_parts' and
+      // 'sights' are recognised: they fold into their sections.)
       if (!known) unknownOrder.push(cat);
     }
     groups[cat].push(idx);
@@ -1153,13 +1208,34 @@ function renderPartCard(build, part, idx) {
       '<div class="part-body">'+
         '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
         '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
-        '<div class="part-model">'+escH(part.name||'Unnamed part')+'</div>'+
+        '<div class="part-model">'+partModelHtml(part)+'</div>'+
         ((pendingTag || variantTag || chosenTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+'</div>' : '')+
+        // "2 MOA · Red dot" under the chosen-variant tag — the label alone
+        // does not say which of three "Black · Anodized" optics this is.
+        (vr.specs ? '<div class="part-variant-specs">'+escH(vr.specs)+'</div>' : '')+
         verifiedHtml+
       '</div>'+
     '</div>'+
     affiliateHtml+
   '</div>';
+}
+
+// The part's name, linked to its /parts/ page when the catalog can address
+// it. The slug rides in on the variants query (products.category + slug), so
+// a product with no live variants — or a hand-typed pending part — renders as
+// plain text, exactly as before. productPath() is js/category-map.js's
+// builder and returns null rather than a dead href for a category it does
+// not know. build-og.mjs emits the same link server-side, so what a crawler
+// follows and what a reader clicks are the same URL.
+function partModelHtml(part) {
+  var nameHtml = escH(part.name || 'Unnamed part');
+  var firstV = part.refId ? (VARIANTS_BY_PRODUCT_ID[part.refId] || [])[0] : null;
+  var prod = firstV && firstV.products;
+  var href = (prod && typeof window.productPath === 'function')
+    ? window.productPath(prod.category, prod.slug) : null;
+  return href
+    ? '<a class="part-model-link" href="'+escH(href)+'">'+nameHtml+'</a>'
+    : nameHtml;
 }
 
 // ── The chosen variant ──────────────────────────────────────────────────
@@ -1178,6 +1254,8 @@ function resolveVariant(part) {
       live: true,
       id: live.id,
       label: window.variantLabel(live),
+      // Live first, like the label: a corrected spec reaches old builds.
+      specs: window.variantSpecs(live),
       imageUrl: live.primary_image_url || null,
       msrp: live.msrp != null ? Number(live.msrp) : null,
     };
@@ -1198,6 +1276,8 @@ function resolveVariant(part) {
     live: false,
     id: part.variantId || null,
     label: fromSnapshot || '',
+    // Composed at pick time and stored; only read when the live row is gone.
+    specs: part.variantSpecs || '',
     imageUrl: part.imageUrl || null,
     msrp: null,          // never stored in the snapshot; MSRP moves
   };
@@ -1211,24 +1291,37 @@ function listingsForVariant(productId, variantId) {
   return aff.listings.filter(function(l) { return l.variantId === variantId; });
 }
 
-// Only rendered when the part maps to a real product that has at least one
-// affiliate listing across any of its variants. Hand-typed pending parts
-// have no refId; products without seller coverage have no lookup entry;
-// both silently omit the CTA row.
+// The buy button for a part with no partner listing: its own store, through
+// /go/part/<productId>, NOT sponsored (nobody pays for it). '' when the
+// product has no usable url — the caller keeps its no-button state.
+function makerBtnHtml(productId, cls) {
+  var maker = MAKER_BY_PRODUCT_ID[productId];
+  if (!maker) return '';
+  return '<a class="'+cls+'" href="/go/part/'+escH(productId)+'" target="_blank" rel="'+escH(window.MAKER_REL)+'">'+
+    escH(maker.label)+' ↗</a>';
+}
+
+// Rendered when the part maps to a real product. Hand-typed pending parts
+// have no refId and silently omit the CTA row. A product with no partner
+// listing on any variant gets its MSRP and a button to its own store; with
+// no url saved either, the MSRP alone, as before.
 function renderAffiliateRow(part, vr) {
   if (!part.refId) return '';
   var aff = AFFILIATE_BY_PRODUCT_ID[part.refId];
   if (!aff || !aff.hero) {
     // No listing anywhere on the product. MSRP is the only number there is,
-    // so it shows — labelled, and with no Buy button to misread it against.
-    if (vr && vr.msrp != null) {
-      return '<div class="part-affiliate">'+
-        '<div class="part-affiliate-info">'+
-          '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
-          '<span class="part-affiliate-msrp-tag">MSRP</span>'+
-        '</div></div>';
-    }
-    return '';
+    // so it shows — labelled — beside the maker button, or alone when there
+    // is no url to link to. Nothing at all only when there is neither.
+    var makerBtn = makerBtnHtml(part.refId, 'part-affiliate-btn');
+    var msrpHtml = (vr && vr.msrp != null)
+      ? '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
+        '<span class="part-affiliate-msrp-tag">MSRP</span>'
+      : (makerBtn ? '<span class="part-affiliate-price">Check price</span>' : '');
+    if (!msrpHtml && !makerBtn) return '';
+    return '<div class="part-affiliate">'+
+      '<div class="part-affiliate-info">'+msrpHtml+'</div>'+
+      makerBtn+
+    '</div>';
   }
 
   // ── THE THREE TIERS ───────────────────────────────────────────────────
@@ -1310,13 +1403,19 @@ function renderAffiliateRow(part, vr) {
   // MSRP and no button, because the alternative is telling the reader this
   // part comes in one color.
   //
-  // Ordered default-first then by label, matching PartPicker.variantsOf().
-  // PostgREST returns embedded rows in arbitrary order, so the second key is
-  // what stops the list reshuffling between requests.
+  // Ordered default-first, then by label, then by spec line — exactly
+  // PartPicker.variantsOf(), so the panel lists colors in the same order the
+  // picker offered them. The spec key matters when labels tie: the Holosun
+  // 407C X3's three "Black · Anodized" rows sort Gold / Green / Red by dot
+  // colour rather than by variant id. PostgREST returns embedded rows in
+  // arbitrary order, so the keys are what stop the list reshuffling.
   var allVariants = (VARIANTS_BY_PRODUCT_ID[part.refId] || []).slice().sort(function(a, b) {
     if (!!b.is_default !== !!a.is_default) return a.is_default ? -1 : 1;
     var al = window.variantLabel(a), bl = window.variantLabel(b);
-    return al < bl ? -1 : al > bl ? 1 : (a.id < b.id ? -1 : 1);
+    if (al !== bl) return al < bl ? -1 : 1;
+    var as = window.variantSpecs(a), bs = window.variantSpecs(b);
+    if (as !== bs) return as < bs ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
   });
 
   // Nothing to open when there is only one color. 81 of 231 products are in
@@ -1333,6 +1432,9 @@ function renderAffiliateRow(part, vr) {
 
   var variantRows = allVariants.map(function(v) {
     var vLabel = window.variantLabel(v) || 'This color';
+    // "2 MOA · Red dot" — the same line the picker row and the part card
+    // show. Without it, same-label variants are identical rows here.
+    var vSpecs = window.variantSpecs(v);
     var mine   = vr && vr.id === v.id;
     // Cheapest fresh listing on THIS variant — the same tier-1 rule the main
     // row uses, so the two cannot disagree about a color's price.
@@ -1357,13 +1459,15 @@ function renderAffiliateRow(part, vr) {
       btnHtml = anyLink
         ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
             (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
-        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+        : (makerBtnHtml(part.refId, 'part-affiliate-variant-btn') ||
+           '<span class="part-affiliate-variant-none">No retailer yet</span>');
     } else {
       priceHtml = 'Check price';
       btnHtml = anyLink
         ? '<a class="part-affiliate-variant-btn" href="'+escH(anyLink.goUrl)+'" target="_blank" rel="noopener sponsored nofollow">'+
             (anyLink.partnerName ? escH(anyLink.partnerName)+' ↗' : 'View ↗')+'</a>'
-        : '<span class="part-affiliate-variant-none">No retailer yet</span>';
+        : (makerBtnHtml(part.refId, 'part-affiliate-variant-btn') ||
+           '<span class="part-affiliate-variant-none">No retailer yet</span>');
     }
 
     return '<div class="part-affiliate-variant-row'+(mine ? ' is-chosen' : '')+'">'+
@@ -1371,6 +1475,7 @@ function renderAffiliateRow(part, vr) {
         '<div class="part-affiliate-variant-info">'+
           '<span class="part-affiliate-variant-label">'+escH(vLabel)+
             (mine ? '<span class="part-affiliate-variant-mine">On this build</span>' : '')+'</span>'+
+          (vSpecs ? '<span class="part-affiliate-variant-specs">'+escH(vSpecs)+'</span>' : '')+
           '<span class="part-affiliate-variant-sub">'+priceHtml+'</span>'+
         '</div>'+
         btnHtml+
@@ -1668,5 +1773,6 @@ async function vote(id, value) {
 
 loadBuild();
 </script>
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

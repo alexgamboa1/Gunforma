@@ -1,4 +1,4 @@
-# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-02)
+# Gunforma Ops Tracker — notes (rewritten 2026-09-23, updated 2026-10-05)
 
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
@@ -36,6 +36,252 @@ by Claude through the artifact database tool. The "manual deploy log" was never 
 This file was wrong for two weeks and nothing surfaced it. Same failure the START-HERE
 doc warns about, inside the notes file for the tool built to prevent it. Re-read the
 artifact before trusting any description of it, including this one.
+
+---
+
+## Changes made 2026-10-04 (PR #140) — one category list, and three new categories
+
+Every page now reads one list of part categories, and there are three new ones:
+**Recoil Springs, Sights and Other Parts**. The technical detail is in CLAUDE.md
+("One category list, two copies", "Recoil Springs, Sights and Other Parts"); this entry
+is the state and the calls made.
+
+### What shipped
+
+| PR | | |
+|---|---|---|
+| #140 | code + database | one list of categories (URL address, plural and singular name) read by the catalog, builder, add-a-part, Needs data, product pages and `/parts`; the three categories on every surface; guards. **Merged.** |
+| follow-up | records + one fix | applied dates; a sight value outside its list is refused in words (below) |
+
+Three migrations, all applied 2026-10-05 UTC and verified against their files by md5:
+- `add_categories_enum` (20261005020804): the three values only, applied first and **before
+  the PR**, because nothing can use a new enum value in the transaction that adds it.
+- `add_categories` (20261005024538): the two spec sheets, their rules, `products.part_type`,
+  and the re-link rule. Applied **before the merge**, by decision.
+- `sight_values_in_words` (20261005033214): the follow-up fix.
+
+Before the main migration, a rolled-back run took 38 old cases through the live and the new
+functions. They all matched except 2, both the intended re-link change below.
+
+Catalog after, queried 2026-10-05: **245 products, 785 variants, 494 links, 44 brands,
+57 colours, 235 approved.**
+
+**First parts in the new categories:**
+- **The DMP Soft RSA:** a recoil spring, 7.95 lb, captured, 3.1" slide, $134. It is linked to
+  "P365 Complete Build", whose part 5 moved from Other Parts to **Recoil Springs**, which is the
+  reason this work started.
+- **The Tactical Development Pro Ledge:** an Other Part, part type "Thumb Ledge", $33.60.
+
+Both are approved, and both were added through the site.
+
+### Decisions (AG)
+
+- **One display name per category, everywhere. The builder's names won:** "Grip Modules",
+  "Basepads", and "Magazine Releases" in the plural.
+- **Two names per category:** a plural for headings, tabs and sections, and a singular for
+  sentences. Product pages say "Grip Module · Sig Sauer P365", never "Grip Modules for the
+  Sig Sauer P365".
+- **Placement:** Recoil Springs goes in Core build, after Barrels & Compensators. Sights goes
+  in Core build, after Optics. Other Parts goes last, in Carry and finish.
+- **Recoil springs:**
+  - Required: slide length, spring weight (free text) and captured.
+  - Optional: spring type and guide rod material.
+  - A different weight or length is a different product.
+- **Sights:**
+  - Required: position, height and type.
+  - Optional: dovetail and rear notch.
+  - The front dot colour is a variant option.
+- **Other Parts:** no spec sheet. One required "part type", two or three words. The old
+  Miscellaneous section became Other Parts, kept its typed-in form, and takes any category.
+  Linking a part from there moves it into its product's own section.
+- **Guards:**
+  - **At deploy:** every page must read the one list. A check fails the deploy otherwise.
+  - **On a schedule, against production:** every category with products must be on the
+    lists and have a working `/parts` address.
+- **Order:** the enum file was applied first, then the main migration, both before the merge.
+
+### Worth knowing
+
+- **Product pages changed wording, not addresses.** The breadcrumb, the eyebrow and the
+  structured-data category now use the shared names. The canonical URLs and the 264-URL
+  sitemap are unchanged.
+- **A bad sight value used to reach the admin as a raw database error.** It now says what is
+  allowed ("a sight's position must be one of: front, rear, set"). The allowed lists live in
+  three places (the table rule, the function and the page) and must change together.
+- **The DMP RSA's spring type was entered as "Soft Version"**, a weight name rather than
+  flat-wire or round-wire. It is free text, so it saved, and the edit path will be the place
+  to fix it.
+- **A `/parts` fetch right after the merge showed an old copy.** It had singular headings and
+  "Basepad (8)", which makes it at least a day old. That could not be reproduced: every
+  fetch since is current, and neither Netlify nor Cloudflare can serve a copy that old under
+  the current settings. It is open, with a proposal, in the follow-up PR.
+
+### Logged, not started
+
+- Spring weight as a variant option (one product, several weights).
+- The older spec tables carry broad write grants for signed-in users, behind a read-only
+  policy.
+- Catalog backing for magazines, holsters and knives; optic adapter plates, fire control parts
+  and grip weights as categories once builds show them.
+
+---
+
+## Changes made 2026-10-04 (PR #138) — add a variant to an existing part
+
+The add-a-part page now has a second mode: add a colour or option to a part that is
+already in the catalog. Every part listed under "Already in the catalog?" has an **Add a
+variant** link to `gunforma-admin-part.html?product=<slug>`. The technical detail is in
+CLAUDE.md ("Adding a variant to an existing part"); this entry is the state and the calls
+made.
+
+### What shipped
+
+| PR | | |
+|---|---|---|
+| #138 | database + page | `add_variants()` (new variants on an existing part; dry run raises `P0DRY`), the variant logic moved into one shared function used by both `create_product()` and `add_variants()`, and the page's add-a-variant mode. Also widened the embed guard (below). **Merged.** |
+| #139 | records | applied date and comment corrections only, no code |
+
+One migration, `add_variants` (**20261005005427**), applied 2026-10-05 UTC **before #138
+merged**, by decision. Nothing on main called it, so the live site tolerated both shapes.
+All four functions were verified against the file by md5.
+
+Before it was applied, a rolled-back A/B run took every old add-a-part test case through
+`create_product()` before and after the change. All matched except two duplicate cases,
+both intended. One of them was a real bug: the old function **saved "Anodized" and
+"anodized " as two variants of one part.** The new rule refuses that.
+
+Catalog after, queried 2026-10-05: **243 products, 781 variants, 493 links, 43 brands, 57
+colours. 233 of 243 approved.**
+
+**First variant added through the page:** **Red** on the Springer Precision +3 base plate
+(`springer-precision-3-mag-extension-p365xmacro-red`, $36.75, with a photo). Tan stays the
+default and the part stays approved. Done-checks 1–4 passed on the deploy preview, signed
+in as admin.
+
+### Decisions (AG)
+
+- **Every new variant needs a photo and an MSRP**, refused in the database, not only on
+  the page. Adding a variant must never unapprove a part.
+- **Duplicates are refused and named.** A new variant is compared with every live variant
+  of the part, **discontinued ones included**, and with the other new ones. The comparison
+  ignores case and stray spaces, and blank = none. The same rule now applies when adding a
+  new part.
+- **One default.** Two new variants marked default are refused. A new default takes over
+  from the old one in the same save. Unmarked, the current default stays.
+- **A taken slug gets a unique one** (`…-black-2`), never a raw database error.
+- **Option fields suggest this part's values first, then the category's.** A new value
+  can still be typed.
+- **The existing-variants list shows each variant's option values**, not just its label.
+- **Applied before the merge** this time, not after.
+
+### Worth knowing
+
+- **Hidden columns.** The bulk load set handedness "ambidextrous" on most parts. The form
+  has no handedness field outside frames and mag releases, so a copy of an existing
+  variant would have passed the duplicate rule. Treating "ambidextrous" as blank was tried
+  and reverted, because on frames it is a real option (Icarus's ambi thumb ledge). Instead
+  **the page** copies a value that every existing variant of the part shares and says so
+  on the form. **A direct call to `add_variants()` does not.**
+- **Mag releases gained a Handedness field.** 1 left and 1 right exist; the other 19 are
+  ambidextrous.
+- **The embed guard had a gap.** It let `products!inner(…)`, a join hint with no FK name,
+  through, and that form is just as ambiguous. It was found by breaking the new page's
+  query on purpose; the guard now catches it.
+
+### Logged, not started
+
+- **Clear handedness "ambidextrous" where it means nothing**, the real fix for hidden
+  columns. 477 variants carry it, but 122 are frames and 19 mag releases, where it is a
+  real option. **336 rows** are to clear. Deferred to the field review.
+- **An edit path for existing parts and variants** (photo, price, spec fix) and **retiring
+  a variant**. The page only adds.
+- `sig-sauer-manual-safety-kit-p365` has **two identical "Rose Gold" variants** (SKUs
+  8901340 and 8901337). Left alone by ruling, for the edit path.
+- `create_product()`'s "already exists" refusals still say "use create_variant". The Add a
+  variant link is the real answer now.
+
+---
+
+## Changes made 2026-10-03/04 (PRs #131–#134) — add one part from the site
+
+Until now a product could only arrive in a bulk load. There is now one admin page that
+adds a single part: `gunforma.com/gunforma-admin-part.html`, linked from the Admin bar on
+the review-queue and post-a-build pages. The technical detail lives in CLAUDE.md
+("Adding a product", "The add-a-part page"); this entry is the state and the calls made.
+
+### What shipped
+
+| PR | | |
+|---|---|---|
+| #131, #132 | database | `create_product()` (one atomic call: brand, product, platforms, spec sheet, variants, links, fits-with, optional build re-link; dry run raises `P0DRY`), `product_data_status()`, `spec_field_rules` (101 rows, measured from live data), view `products_needing_data` |
+| #133 | the page | Check (dry run) then Save; live "needed to save / needed to be approved" panel; colour add; short slug suggestion |
+| #134 | records | applied dates on the three migrations below (comments only). **Merged.** |
+
+Six migrations, all applied from their merged files and verified against them by md5:
+`spec_field_rules`, `create_product`, `fix_product_data_status_url` (2026-10-03 UTC);
+`colors_admin_insert`, `fix_strip_blank_and_link_result`, `material_optional`
+(**2026-10-04 UTC**).
+
+Catalog after, queried 2026-10-04: **243 products, 780 variants, 493 links, 43 brands,
+57 colours. 233 of 243 approved.** The 10 unapproved are all older parts and none can be
+fixed from the site yet — there is no edit path. Most are missing variant photos
+(`icarus-precision-axg-fuse` alone has 22); `streamlight-tlr-7-sub` lacks an MSRP and a
+source URL; `zaffiri-zpsp-p365-xl` a port count.
+
+**First part added through the page:** Springer Precision "+3 Magazine Extension for Sig
+Sauer X Macro 17rd Mags", slug `springer-precision-3-mag-extension-p365xmacro` (AG
+shortened the generated 70-character slug in the database). One variant, Tan, $36.75; no
+retailer link; material family Unspecified; approved. **It is not yet attached to
+"P365 Complete Build"** — that build's part 6, "Base Plate +3", is still a pending custom
+part. It was saved without the build parameters, so `create_product()` would now refuse
+it as a duplicate; PR 3's "link to existing part" is what attaches it.
+
+### Decisions (AG)
+
+- Spec rules as measured. Compensator `length_in` optional, and only when sold without a
+  barrel. Optic `housing_material` stays required and is filled from the material.
+- **Material family is required; "Unspecified" is a valid answer** and approves, but is
+  listed so those parts can be found later. The exact material wording is optional.
+- **Source URL required; retailer links optional** and never block approval. No
+  "direct from maker" partner.
+- **Platform explicit on every part.** Slides and barrels take exactly one.
+- Install difficulty and best-for tags are off the form. Weight and fitment notes optional.
+- **Product photos are pasted image URLs, not uploads.**
+- No retailer item-ID field: the page sends retailer + URL only; the nightly sync fills
+  the feed identifiers.
+- Slugs: brand, what it is, what it fits, suggested at ≤ 50 characters. The name stays
+  the maker's wording.
+- The dry run keeps code `P0DRY` (it answers HTTP 500); the page branches on the code.
+- Warnings from Check sit between Check and Save, so they are read before saving.
+
+### Open
+
+- **One check from #133 still to run:** add a colour through the live page as admin. The
+  database side is proven (admin can insert; non-admin and anon refused; colours still
+  57). As of 2026-10-04 no insert has reached `colors` from the page.
+- **PR 3**: from the review queue, "Add to catalog" / "Link to existing part" beside each
+  pending build part, and a "Needs data" view for admins. Next after that: an **edit path
+  for existing products** (including adding a colour to an existing part).
+
+### Logged, not started
+
+- Copy pasted image URLs into our own storage, so a maker changing their site does not
+  break our photos.
+- Vocabulary tables for clamp, mount, optic type, emitter and reticle type — the live
+  data carries typos ("Rail climp", "1914 clamp").
+- The stored "Colour · Finish" variant label overrides the label formula on 650 of 779
+  variants, so the formula is effectively dead.
+- Whether a variant's UPC should also be stored on its retailer link as `op_gtin`, so the
+  link is matched exactly on the first sync.
+- `restrict_owner_edits_on_approved_build` tests `claims is null`; it should use
+  `nullif(..., '')` as `is_trusted_backend()` does.
+- anon can execute the two pure helpers (`jsonb_strip_blank`, `url_encode`). Harmless.
+- P320 slides and barrels need length rows **and** changes to the two length CHECKs
+  (3.1/3.7/4.3 only today). Base-pad and magazine type lists are P365-only.
+- Links: 17 Olight links carry OpticsPlanet's Awin id; 2 Awin links have no clickref and
+  1 has no awinaffid. `partners` also holds `optics-planet` (no Awin id, near-twin of
+  `awin-optics-planet`) and a placeholder `partner-one`.
+- No recoil-spring category. `products.lowest_price` is maintained by nothing.
 
 ---
 

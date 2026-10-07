@@ -20,6 +20,7 @@
 // -----------------------------------------------------------------------------
 
 import { CATEGORY_META } from './_category-meta.mjs';
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -72,6 +73,9 @@ async function fetchAllProducts() {
   for (let offset = 0; ; offset += PAGE) {
     const page = await pgGet(
       'products?select=' + encodeURIComponent(cols) +
+      // Discontinued parts are hidden everywhere a reader browses — catalog,
+      // pickers, sitemap — so this manifest leaves them out as well.
+      '&is_discontinued=eq.false' +
       '&order=name.asc&limit=' + PAGE + '&offset=' + offset
     );
     all.push(...page);
@@ -261,7 +265,7 @@ function renderPage(products) {
 '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>' +
 '<script src="js/supabase-client.js"></script>' +
 '<script src="js/nav.js"></script>' +
-'</body></html>';
+ANALYTICS_SNIPPET + '</body></html>';
 }
 
 export default async () => {

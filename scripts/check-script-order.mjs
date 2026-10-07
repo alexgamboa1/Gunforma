@@ -34,7 +34,18 @@ const RULES = [
   // anyway, because "it happens to work because of when we call it" is not a
   // thing to leave to memory.
   { global: 'variantMediaHtml', defines: 'js/variant-swatch.js', consumers: ['js/part-picker.js'] },
+  // The spec line beside a variant's label. part-picker.js reads it at render
+  // time; the two builder pages call it inline in loadCatalog() and
+  // addPartWithVariant(), and the build page in resolveVariant().
+  { global: 'variantSpecs', defines: 'js/variant-label.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
+  // The maker-link label and the disclosure wording. affiliate.js reads
+  // window.makerLink / window.buyDisclosure / window.MAKER_REL at call time;
+  // gunforma-build-detail.html calls window.makerLink inline from
+  // loadAffiliates(). A page that loads affiliate.js without this throws
+  // inside loadFor() and the buy rows silently render empty — the exact
+  // shape the rule above describes.
+  { global: 'makerLink',    defines: 'js/maker-link.js',    consumers: ['js/affiliate.js'] },
   // BuildCategories is an OBJECT, not a function, so the inline-call regex
   // below cannot see it — `BuildCategories.CATEGORIES` is a member read. It
   // gets an explicit `pattern` instead.
@@ -46,6 +57,10 @@ const RULES = [
   // the whole page is blank.
   { global: 'BuildCategories', defines: 'js/build-categories.js', consumers: [],
     pattern: /\bBuildCategories\s*\./ },
+  // build-categories.js names its sections from category-map.js AT PARSE
+  // TIME (label: name('frame')), and throws if it is missing — so on the
+  // pages that load it, a wrong order blanks the page, exactly as above.
+  { global: 'categoryPlural', defines: 'js/category-map.js', consumers: ['js/build-categories.js'] },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

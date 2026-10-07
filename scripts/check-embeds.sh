@@ -41,6 +41,13 @@
 #   where c.contype = 'f' and tgt.relname in ('products','product_variants')
 #   order by tgt.relname, src.relname;
 #
+# A JOIN-TYPE HINT IS NOT AN FK NAME. `products!inner(...)` and
+# `product_variants!left(...)` say how to join, not which FK, so they are
+# exactly as ambiguous as the bare form and are flagged the same way. The
+# first version matched only `table(` and let `products!inner(category)` off
+# product_variants through — caught while adding the add-a-variant mode's
+# category suggestions, by breaking that embed on purpose and seeing exit 0.
+#
 # HOW THE PARENT IS DETERMINED — AND WHY THE TWO DIRECTIONS DIFFER
 # Queries are commonly built across several lines, so the parent table name
 # often sits on an earlier line than the embed.
@@ -80,7 +87,7 @@ matches_pv=$(printf '%s\n' "$files" | while IFS= read -r f; do
   awk -v FNAME="$f" -v W="$WINDOW" -v SAFE="$SAFE_PARENTS" '
     {
       line[NR] = $0
-      if ($0 ~ /[^!_]product_variants\(/) {
+      if ($0 ~ /[^!_]product_variants(!(inner|left))?\(/) {
         if ($0 ~ /^[[:space:]]*(\/\/|\*|<!--)/) next
         safe = 0
         start = NR - W; if (start < 1) start = 1
@@ -156,7 +163,7 @@ matches_p=$(printf '%s\n' "$files" | while IFS= read -r f; do
         s = substr(s, RSTART + RLENGTH)
       }
 
-      if ($0 ~ /[^!_a-zA-Z]products\(/) {
+      if ($0 ~ /[^!_a-zA-Z]products(!(inner|left))?\(/) {
         if ($0 ~ /^[[:space:]]*(\/\/|\*|<!--)/) next
         if (lastParent == AMBIG && lastParentLine > 0 && (NR - lastParentLine) <= W)
           printf "%s:%d:%s\n", FNAME, NR, $0

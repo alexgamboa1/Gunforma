@@ -127,6 +127,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-card-sub { font-size: 11px; color: #888; }
 .build-card-rejection { font-size: 11px; color: #9b1c1c; line-height: 1.4; }
 .build-card-rejection-meta { font-size: 10.5px; color: #b46a5e; }
+.build-card-pending-note { font-size: 11px; color: #b45309; line-height: 1.4; }
 .build-card-footer { display: flex; align-items: center; justify-content: space-between; margin-top: auto; padding-top: 8px; border-top: 0.5px solid #eee; }
 .build-card-total { font-size: 12px; font-weight: 700; }
 .remove-btn { font-family: inherit; font-size: 10px; color: #a25334; background: #fafaf8; border: 0.5px solid #eec2ae; padding: 4px 9px; border-radius: 20px; cursor: pointer; }
@@ -669,14 +670,21 @@ function renderStatusBuildCard(b) {
   const platform = b.platforms ? b.platforms.name : '';
   const partsCount = Array.isArray(b.parts_snapshot) ? b.parts_snapshot.length : 0;
   const statusLabel = { approved: 'Live', pending: 'In review', draft: 'Draft', rejected: 'Needs changes' }[b.status] || b.status;
-  // Draft and rejected are owner-editable; approved routes to the public
-  // detail page; only pending stays locked while the admin queue works it.
-  const editable = b.status === 'draft' || b.status === 'rejected';
+  // Draft, pending and rejected all open in post-build's edit mode; approved
+  // routes to the public detail page. Pending used to be a dead card — the
+  // one build a builder is most likely to want to fix, a minute after
+  // submitting it, was the one they could not open. It is editable until it
+  // is approved; post-build keeps it in the queue (see hydrateFromEditMode).
+  const editable = b.status === 'draft' || b.status === 'pending' || b.status === 'rejected';
   const clickable = b.status === 'approved' || editable;
   const rejectionHtml = b.status === 'rejected'
     ? '<div class="build-card-rejection">'+escH(b.rejection_reason || 'Needs changes — open to edit and resubmit')+'</div>'+
       '<div class="build-card-rejection-meta">Reviewed '+escH(relTime(b.reviewed_at))+'</div>'
-    : '';
+    : (b.status === 'pending' && IS_OWN_PROFILE
+      // Says the card does something. Without it "In review" reads as
+      // "locked", which is what it meant until now.
+      ? '<div class="build-card-pending-note">Missed something? Open it to edit — it stays in review.</div>'
+      : '');
   const inner =
       '<div class="build-card-photo">'+photoHtml+'<div class="status-badge '+escH(b.status)+'">'+escH(statusLabel)+'</div></div>'+
       '<div class="build-card-body">'+
@@ -1028,5 +1036,6 @@ window.signOutAccount = async function() {
 
 init();
 </script>
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

@@ -186,7 +186,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-compat-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; margin-top: 6px; }
 .detail-compat-badge.ok  { background: #eaf5ee; color: #166534; border: 0.5px solid #86cfad; }
 .detail-compat-badge.no  { background: #fde8e2; color: #9b1c1c; border: 0.5px solid #f5b4a1; }
-.detail-compat-badge.na  { background: #fafaf8; color: #888;    border: 0.5px solid #d9d6cc; }
 
 /* Horizontal category selector — primary way to narrow by category, above
    the grid. Single-select (contrast with the sidebar's other multi-select
@@ -619,6 +618,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
      photo. Without it the picker below can only show variants we happen
      to have photographed, which is not the same as what Icarus sells. -->
 <script src="js/variant-swatch.js"></script>
+<!-- Before affiliate.js: it calls window.makerLink and window.buyDisclosure
+     at render time, for the parts with no partner listing. -->
+<script src="js/maker-link.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -647,6 +649,7 @@ var sb = window.sb;
 // ─── STATE ────────────────────────────────────────────────
 var CURRENT_USER = null;
 var PRODUCTS = [];              // denormalized flat rows (see loadEverything)
+var PART_TYPES = {};            // product id -> products.part_type, Other Parts only
 var PLATFORMS_BY_ID = {};       // {id: {id,name,slug}}
 var FAVORITES = new Set();      // product_ids the signed-in user has favorited
 // Retired (#4): "Set as mine" pinned owned components here and narrowed the
@@ -854,6 +857,16 @@ async function loadEverything() {
     return product;
   });
 
+  // An Other Part's part type, read for that category only and never in the
+  // main select: a column named there that the database does not have yet
+  // would fail the whole catalog. Not fatal: the card falls back to "Other Part".
+  if (PRODUCTS.some(function (p) { return p.category === 'other'; })) {
+    try {
+      var pt = await sb.from('products').select('id,part_type').eq('category', 'other');
+      (pt.data || []).forEach(function (r) { if (r.part_type) PART_TYPES[r.id] = r.part_type; });
+    } catch (e) { console.warn('[catalog] part types failed', e); }
+  }
+
   await loadFavoritesAndRender(/*skipRender*/ true);
   // Affiliate listings for every visible product (one query, ~233 ids).
   // Never fatal — renderers handle missing entries by hiding the block.
@@ -1025,19 +1038,15 @@ function hasActiveFilters() {
 }
 
 // ─── FILTERS ────────────────────────────────────────────
-// Category label overrides so ugly enum values ("mag_release") read cleanly
-// in the sidebar. Anything not in this map falls back to a Title-Case-ish
-// transform.
-var CATEGORY_LABELS = {
-  slide: 'Slides', barrel: 'Barrels', compensator: 'Compensators',
-  frame: 'Frame Modules', trigger: 'Triggers',
-  light: 'Weapon Lights', optic: 'Optics',
-  mag_release: 'Magazine Releases', magwell: 'Magwells',
-  basepad: 'Basepads', slide_release: 'Slide Releases',
-  safety_selector: 'Safety Selectors', takedown_lever: 'Takedown Levers',
-  slide_plate: 'Slide Plates',
-};
-function catLabel(c) { return CATEGORY_LABELS[c] || (c || '').replace(/_/g, ' ').replace(/\b\w/g, function(m){return m.toUpperCase();}); }
+// Category names come from js/category-map.js, the one list every surface
+// reads: the plural for tabs, filters and headings ("Grip Modules"), the
+// singular for one part's own label ("Grip Module"). An Other Part reads as
+// its part type instead ("Thumb ledge").
+function catLabel(c) { return window.categoryPlural(c); }
+function partCatLabel(p) {
+  if (p.category === 'other' && PART_TYPES[p.id]) return PART_TYPES[p.id].charAt(0).toUpperCase() + PART_TYPES[p.id].slice(1);
+  return window.categorySingular(p.category);
+}
 
 function renderFilters() {
   var s = document.getElementById('sidebar');
@@ -1817,7 +1826,7 @@ function renderCard(r) {
   return '<div class="part-card" data-id="' + r.id + '" data-open-detail="1">' +
     '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
     '<div class="part-card-photo">' + photoHtml +
-      (r.category ? '<div class="part-card-cat">' + esc(catLabel(r.category)) + '</div>' : '') +
+      (r.category ? '<div class="part-card-cat">' + esc(partCatLabel(r)) + '</div>' : '') +
     '</div>' +
     '<div class="part-card-body">' +
       '<div class="part-card-brand">' + esc(r.brand) + '</div>' +
@@ -1896,11 +1905,11 @@ document.addEventListener('keydown', function (e) {
 });
 
 function renderDetail(p) {
-  document.getElementById('detail-eyebrow').textContent = p.category ? catLabel(p.category) : 'Product';
+  document.getElementById('detail-eyebrow').textContent = p.category ? partCatLabel(p) : 'Product';
   document.getElementById('detail-brand').textContent = p.brand;
   document.getElementById('detail-title').textContent = p.name;
   document.getElementById('detail-cat-badge-wrap').innerHTML = p.category
-    ? '<div class="detail-cat-badge">' + esc(catLabel(p.category)) + '</div>' : '';
+    ? '<div class="detail-cat-badge">' + esc(partCatLabel(p)) + '</div>' : '';
 
   // Sub-model compat badge — only rendered when a sub-model is selected.
   // Recomputes the fitment rules against SELECTED_SUBMODEL in isolation
@@ -1911,13 +1920,27 @@ function renderDetail(p) {
     var applies = ['frame','slide','barrel','compensator'].indexOf(p.category) !== -1;
     if (applies) {
       var ok = subModelCompat(p, SELECTED_SUBMODEL);
-      compatWrap.innerHTML = ok
+      // Two answers the check cannot back, so no badge rather than a wrong one:
+      // - a compensator's "yes" only means the gun has no integrated comp; it
+      //   never looks at the comp (threads, barrel), so it is not a yes. The
+      //   integrated-comp "no" stands.
+      // - a grip whose housing class no gun in the database has (fuse-xl,
+      //   xmacro-sub today) is "no" for every gun by construction, not because
+      //   anything was compared.
+      var unjudged =
+        (p.category === 'compensator' && ok) ||
+        (p.category === 'frame' && p.frame_specs && p.frame_specs.housing_class &&
+         !GUNS.some(function (g) { return g.housing_class === p.frame_specs.housing_class; }));
+      compatWrap.innerHTML = unjudged ? ''
+        : ok
         ? '<div class="detail-compat-badge ok">✓ Compatible with ' + esc(SELECTED_SUBMODEL.name) + '</div>'
         : '<div class="detail-compat-badge no">✗ May not fit '   + esc(SELECTED_SUBMODEL.name) + '</div>';
     } else {
-      // Universal-fit categories (trigger, optic, light, small parts) —
-      // sub-model doesn't rule on them.
-      compatWrap.innerHTML = '<div class="detail-compat-badge na">Universal fit — no ' + esc(SELECTED_SUBMODEL.name) + ' constraint</div>';
+      // No badge for a category subModelCompat does not judge. This used to
+      // read "Universal fit — no <gun> constraint", which is a claim, not an
+      // absence of one: an XMACRO-only magwell read as universal on a
+      // standard P365. Saying nothing is true; a wrong yes is not.
+      compatWrap.innerHTML = '';
     }
   } else {
     compatWrap.innerHTML = '';
@@ -2034,10 +2057,13 @@ function renderDetail(p) {
   }
 
   // Affiliate block (hero row + optional variants list + disclosure).
-  // Falls back to a muted "No retailer listings" message so the panel
-  // never shows a dead untracked link (products.url is deliberately
-  // NOT used as a buy link anywhere — it's an untracked manufacturer
-  // page that earns zero commission).
+  // A variant with no partner listing gets a button to the part's own
+  // products.url through /go/part/<id> — js/affiliate.js builds that row.
+  // This REVERSES an earlier decision not to use products.url as a buy link
+  // because it earns no commission: a dead end earns nothing either, and
+  // the counted clicks to a maker are what we take to that maker when we
+  // ask for a partnership. The muted "No retailer listings" fallback is now
+  // only for a part with no partner listing AND no url saved.
   var affWrap = document.getElementById('detail-affiliate-wrap');
   if (window.affiliate) {
     var block = window.affiliate.renderBlock(p.id);
@@ -2227,5 +2253,6 @@ function toast(msg, href, linkText) {
 init();
 </script>
 
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

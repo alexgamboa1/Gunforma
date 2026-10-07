@@ -92,18 +92,26 @@ const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 
 async function pickLiveBuild() {
   const res = await fetch(
-    `${SB_URL}/rest/v1/builds?select=id,name&status=eq.approved&limit=1`,
+    `${SB_URL}/rest/v1/builds?select=id,name,parts_snapshot&status=eq.approved&limit=1`,
     { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } },
   );
   if (!res.ok) return null;
   const rows = await res.json();
   if (!Array.isArray(rows) || !rows.length) return null;
-  const { id, name } = rows[0];
+  const { id, name, parts_snapshot } = rows[0];
   // The slug form is built the same way the site builds it, so this exercises
   // the real URL a reader would follow rather than a hand-made one.
   const { buildPath } = await import('../netlify/functions/_build-url.mjs');
-  return { id, path: buildPath(id, name), bare: '/b/' + id };
+  const partRefIds = (Array.isArray(parts_snapshot) ? parts_snapshot : [])
+    .map((p) => p && p.refId).filter(Boolean);
+  return { id, name, partRefIds, path: buildPath(id, name), bare: '/b/' + id };
 }
+
+// Same escaping build-og.mjs applies before writing a build's name into the
+// page, so the assertion below looks for the exact bytes the server emits.
+const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+  { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+));
 
 console.log(`checking routes on ${origin}\n`);
 
@@ -146,6 +154,26 @@ if (!live) {
 
   ok(bare.status === 200 && bare.canon[0] === a.canon[0],
      '/b/<bare uuid> resolves to the same build and canonical', bare.status + ' ' + bare.canon[0]);
+
+  // ── the body is server-rendered, not the "—" shell ──────────────────
+  // Google's first fetch does not run JS, so the ranking content has to be
+  // in these bytes: the real H1 (not the placeholder), and — when the build
+  // lists catalog parts — at least one /parts/ link in the parts list.
+  ok(!a.body.includes('<h1 class="build-title" id="build-title">—</h1>'),
+     'slug URL: H1 is server-rendered, not the — placeholder');
+  ok(a.body.includes(escHtml(live.name)),
+     'slug URL: build name present in the served HTML', JSON.stringify(live.name));
+  ok(!a.body.includes('<div id="parts-container"></div>'),
+     'slug URL: parts container is server-rendered, not empty');
+  if (live.partRefIds.length) {
+    ok(/href="\/parts\//.test(a.body),
+       'slug URL: at least one /parts/ link in the server-rendered parts list',
+       (a.body.match(/href="\/parts\//g) || []).length + ' links');
+  } else {
+    note('parts links', 'build has no catalog parts — link assertion skipped');
+  }
+  ok(a.body.includes('application/ld+json'),
+     'slug URL: JSON-LD present');
 
   // Recorded, not asserted — see the header of this file.
   note('id source, /b/ slug   ', `${a.idSource}   (x-nf-original-path ${a.origHeader})`);
@@ -261,6 +289,141 @@ for (const [label, path] of [
     ok(r.status === 404, `${label}: hard 404, never a redirect home`,
        r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
   }
+
+  // ── /go/part/<product id> — the unpaid link to a part's own store ──────
+  // Same edge function, second shape. The destination is products.url, read
+  // from the database; a discontinued part and an unknown id share the 404.
+  // x-go-no-log on every request, as above: a maker click is a number we
+  // take to that maker, and this script must not be in it.
+  console.log('\n── /go/part/ click layer');
+  const partLive = await (async () => {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/products?select=id,url&is_discontinued=eq.false&url=like.http*&limit=1`,
+      { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  })();
+  const partGone = await (async () => {
+    const res = await fetch(
+      `${SB_URL}/rest/v1/products?select=id,url&is_discontinued=eq.true&url=like.http*&limit=1`,
+      { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } },
+    );
+    if (!res.ok) return null;
+    const rows = await res.json();
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  })();
+  ok(!!partLive, 'found a live part with a url to exercise /go/part/ with');
+  if (partLive) {
+    const r = await get('/go/part/' + partLive.id, NO_LOG);
+    ok(r.status === 302, '/go/part/<live id>: 302', r.status);
+    ok(r.location === partLive.url, '302 Location is products.url byte for byte',
+       r.location === partLive.url ? 'identical' : `got ${r.location}\n        want ${partLive.url}`);
+    ok(/no-store/.test(r.cacheControl || ''), 'not cacheable', r.cacheControl);
+    ok(r.goLog === 'skipped', 'click was NOT logged (x-go-no-log honoured)', r.goLog);
+    ok(r.goKey === 'ok', 'service key still reported on this shape', r.goKey);
+  }
+  // A discontinued part still has a product page (old builds keep their
+  // links) but no buy button — so its /go/part/ must be a 404, not a
+  // redirect to a page for something nobody can buy. Two exist today; if
+  // none did, this would be a skip and say so, not a silent pass.
+  if (partGone) {
+    const r = await get('/go/part/' + partGone.id, NO_LOG);
+    ok(r.status === 404, '/go/part/<discontinued id>: hard 404', r.status +
+       (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
+  } else {
+    note('discontinued case not exercised', 'no discontinued product with a url');
+  }
+  for (const [label, path] of [
+    ['/go/part/<unknown uuid>',   '/go/part/00000000-0000-4000-8000-000000000000'],
+    ['/go/part/nope',             '/go/part/nope'],
+    ['/go/part (no id)',          '/go/part'],
+    ['/go/x/<uuid> (not a shape)', '/go/x/00000000-0000-4000-8000-000000000000'],
+  ]) {
+    const r = await get(path, NO_LOG);
+    ok(r.status === 404, `${label}: hard 404, never a redirect home`,
+       r.status + (r.status >= 300 && r.status < 400 ? ` — REDIRECTED to ${r.location}` : ''));
+  }
+}
+
+// ── buy rows on the served part page: no dead ends, honest disclosure ───
+// Three parts are picked from the database with the public key — one with no
+// partner listing at all, one with a listing on some options only, one with
+// a listing on every option — and the SERVED HTML of each is read. Asserted:
+// a part with a url never renders "No listing yet"; a maker button goes
+// through /go/part/ and is nofollow without sponsored; the disclosure line
+// matches what the buy area contains. The functions build this at request
+// time, so only the wire can confirm it — same reason as everything above.
+{
+  console.log('\n── part pages: maker buttons and disclosure');
+  const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
+  const res = await fetch(`${SB_URL}/rest/v1/products?select=id,slug,category,url,` +
+    encodeURIComponent('product_variants!product_variants_product_id_fkey(id,affiliate_links(id))') +
+    '&is_discontinued=eq.false&product_variants.retired_at=is.null&product_variants.affiliate_links.retired_at=is.null' +
+    '&order=slug.asc&limit=5000',
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : [];
+  ok(Array.isArray(rows) && rows.length > 0, 'products with their listings readable with the public key', res.status);
+
+  const classify = (p) => {
+    const vs = p.product_variants || [];
+    const listed = vs.filter((v) => (v.affiliate_links || []).length).length;
+    if (!vs.length) return null;
+    if (listed === 0) return 'maker-only';
+    if (listed === vs.length) return 'partner-only';
+    return 'mixed';
+  };
+  const hasUrl = (p) => /^https?:\/\//i.test(p.url || '');
+  const pick = (kind, needUrl) => rows.find((p) => classify(p) === kind && (!needUrl || hasUrl(p)) && CATEGORY_META[p.category]);
+  const EXPECT = {
+    'maker-only':   "These links go straight to the seller&#39;s own store. Gunforma earns nothing on them.",
+    'mixed':        "Gunforma may earn a commission on retailer links. Links to a maker&#39;s own store earn us nothing.",
+    'partner-only': 'Gunforma may earn a commission on purchases made through these links.',
+  };
+  const ALL = Object.values(EXPECT);
+
+  for (const kind of ['maker-only', 'mixed', 'partner-only']) {
+    const p = pick(kind, kind !== 'partner-only');
+    if (!p) { ok(false, `found a ${kind} part to check`, 'none in the catalog'); continue; }
+    const path = '/parts/' + CATEGORY_META[p.category][0] + '/' + p.slug;
+    const r = await get(path);
+    ok(r.status === 200, `${kind}: ${path}: 200`, r.status);
+    const makerTags   = [...r.body.matchAll(/<a\b[^>]*href="\/go\/part\/[^>]*>/g)].map((m) => m[0]);
+    const partnerTags = [...r.body.matchAll(/<a\b[^>]*href="\/go\/(?!part\/)[^>]*>/g)].map((m) => m[0]);
+    if (kind !== 'partner-only') {
+      ok(!r.body.includes('No listing yet'), `${kind}: never renders "No listing yet" when a url exists`);
+      ok(makerTags.length > 0, `${kind}: renders a /go/part/ button`, makerTags.length);
+      ok(makerTags.every((t) => /rel="noopener nofollow"/.test(t) && !/sponsored/.test(t)),
+         `${kind}: maker buttons are nofollow and never sponsored`, makerTags[0]);
+      ok(makerTags.every((t) => t.includes('/go/part/' + p.id)), `${kind}: maker buttons name THIS product`, p.id);
+      // Verbatim from the page: the label the reader sees.
+      note('maker label', (r.body.match(/\/go\/part\/[^>]*>([^<]+)</) || [])[1]);
+    } else {
+      ok(makerTags.length === 0, `${kind}: no /go/part/ button on a fully-listed part`, makerTags.length);
+    }
+    ok((kind === 'maker-only') === (partnerTags.length === 0),
+       `${kind}: partner buttons ${kind === 'maker-only' ? 'absent' : 'present'}`, partnerTags.length);
+    ok(partnerTags.every((t) => /rel="noopener sponsored nofollow"/.test(t)),
+       `${kind}: partner buttons keep their rel unchanged`);
+    const found = ALL.filter((t) => r.body.includes(t));
+    ok(found.length === 1 && found[0] === EXPECT[kind],
+       `${kind}: disclosure line matches the buy area`, found.length ? found.map((t) => t.slice(0, 40) + '…').join(' | ') : 'no disclosure');
+    note('part', p.slug);
+  }
+
+  // The one live part with no listing AND no url keeps its non-link state —
+  // and no disclosure at all, because there is nothing to disclose.
+  const bare = rows.find((p) => classify(p) === 'maker-only' && !hasUrl(p) && CATEGORY_META[p.category]);
+  if (bare) {
+    const path = '/parts/' + CATEGORY_META[bare.category][0] + '/' + bare.slug;
+    const r = await get(path);
+    ok(r.status === 200 && r.body.includes('No listing yet') && !r.body.includes('/go/'),
+       `no-url part keeps "No listing yet" and no /go/ link`, bare.slug);
+    ok(!ALL.some((t) => r.body.includes(t)), 'no-url part carries no disclosure line');
+  } else {
+    note('no-url case not exercised', 'every unlisted part has a url now');
+  }
 }
 
 // ── /fit/ — the guide pages ────────────────────────────────────────────
@@ -354,6 +517,57 @@ for (const [label, path] of [
   ok(linked.length > 0,
      'an optic product page links to at least one fit guide', linked.length + ' linked');
   note('fit guides linked from that product page', linked.map((g) => g.gun).join(', '));
+}
+
+// ── every category that has a product is on every list ───────────────────
+// scripts/check-categories.mjs holds the lists to one another at build time,
+// but the build cannot see the database (the API description is closed to
+// the public key). This is the live half: read every products.category in
+// use, with the same public key and the same visibility a visitor has, and
+// fail when one is missing from _category-meta.mjs — its products would have
+// no /parts/ address, no catalog name and no builder section. A category
+// with no products cannot be hidden from anyone, so it is not asserted.
+// Then one product per category must answer 200 at its /parts/ address —
+// a live one: a discontinued part may 301 to its successor (netlify.toml).
+{
+  console.log('\n── categories in use');
+  const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
+  const res = await fetch(`${SB_URL}/rest/v1/products?select=category,slug&is_discontinued=eq.false&order=slug.asc&limit=5000`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : null;
+  ok(Array.isArray(rows) && rows.length > 0, 'products readable with the public key', res.status);
+  const firstByCat = new Map();
+  for (const r of rows || []) if (!firstByCat.has(r.category) && r.slug) firstByCat.set(r.category, r.slug);
+  for (const cat of [...new Set((rows || []).map((r) => r.category))].sort()) {
+    ok(Boolean(CATEGORY_META[cat]), `category '${cat}' (has products) is in the category lists`,
+       CATEGORY_META[cat] ? CATEGORY_META[cat][1] : 'MISSING');
+  }
+  for (const [cat, slug] of firstByCat) {
+    if (!CATEGORY_META[cat]) continue;
+    const path = '/parts/' + CATEGORY_META[cat][0] + '/' + slug;
+    const r = await get(path);
+    ok(r.status === 200, `${path}: 200`, r.status);
+  }
+  note('categories with products', [...firstByCat.keys()].length + ' of ' + Object.keys(CATEGORY_META).length);
+}
+
+// ── discontinued parts redirect to their successor ──────────────────────
+// The rules are exact paths in netlify.toml, above the /parts/* rewrite. If
+// one slips below it, product-page.mjs answers instead and the old page
+// renders at 200 — so assert the 301 and its target on the wire.
+{
+  console.log('\n── discontinued parts');
+  for (const [from, to] of [
+    ['/parts/triggers/ramm-tactical-leverage-c-p365',  '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
+    ['/parts/triggers/ramm-tactical-leverage-nc-p365', '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
+  ]) {
+    const r = await get(from);
+    const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');
+    ok(r.status === 301, `${from}: 301`, r.status);
+    ok(loc === to, `  -> ${to}`, r.location);
+    const t = await get(to);
+    ok(t.status === 200, `  and ${to} answers 200`, t.status);
+  }
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

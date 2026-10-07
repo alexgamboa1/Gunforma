@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Admin — Needs data — Gunforma</title>
+<meta name="description" content="Admin list of catalog products that are missing data." />
+<meta name="robots" content="noindex, nofollow" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 200; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav { padding: 0 16px; } .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
+.nav-admin-tag { font-size: 9px; color: #f9b860; background: rgba(249,184,96,0.12); border: 0.5px solid #6b4a1e; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-left: 12px; }
+.nav-right-link { font-size: 11px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-right-link.here { color: #f9b860; }
+/* One line at any width (see gunforma-admin-post.html): the bar is 52px tall. */
+.nav-right { display: flex; align-items: center; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; margin-left: 12px; }
+.nav-right .nav-right-link { margin-left: 0; white-space: nowrap; }
+@media (max-width: 600px) { .nav-right { gap: 11px; } .nav-right .nav-right-link { font-size: 10px; letter-spacing: 0.03em; } }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 720px; line-height: 1.6; }
+.gate { padding: 60px 36px; font-size: 14px; color: #666; }
+.gate strong { color: #1a1a1a; font-size: 18px; display: block; margin-bottom: 6px; }
+.wrap { padding: 24px 36px 80px; display: flex; flex-direction: column; gap: 22px; max-width: 1100px; }
+@media (max-width: 700px) { .page-header, .wrap { padding-left: 16px; padding-right: 16px; } }
+
+.toolbar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; font-size: 12px; }
+.toolbar select { font: inherit; font-size: 13px; padding: 6px 8px; border: 0.5px solid #ccc; border-radius: 4px; }
+.banner { border-radius: 6px; padding: 11px 13px; font-size: 12px; line-height: 1.6; background: #eef6fd; border: 0.5px solid #b9d7f0; color: #24557d; }
+.card { border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 18px 20px; }
+.card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.count { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.card-hint { font-size: 11px; color: #888; line-height: 1.5; margin-bottom: 12px; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; font-weight: 700; padding: 6px 8px; border-bottom: 0.5px solid #e5e5e5; }
+td { padding: 8px; border-bottom: 0.5px solid #f0f0f0; vertical-align: top; line-height: 1.5; }
+td .slug { color: #888; font-size: 11px; }
+.miss { color: #8a2a2a; }
+.tag { display: inline-block; font-size: 10px; background: #f3f3f1; border-radius: 3px; padding: 1px 6px; margin: 0 4px 2px 0; }
+.num { text-align: right; white-space: nowrap; }
+details summary { cursor: pointer; font-size: 12px; font-weight: 700; color: #444; margin: 6px 0; }
+.brand-row { font-size: 12px; padding: 4px 0; }
+.empty { font-size: 12px; color: #888; padding: 6px 0; }
+@media (max-width: 700px) { .hide-sm { display: none; } }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div style="display:flex;align-items:center;">
+    <a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
+    <span class="nav-admin-tag">Admin</span>
+  </div>
+  <div class="nav-right">
+    <a href="gunforma-admin-queue.html" class="nav-right-link">Review queue</a>
+    <a href="gunforma-admin-post.html" class="nav-right-link">Post a build</a>
+    <a href="gunforma-admin-part.html" class="nav-right-link">Add a part</a>
+    <a href="gunforma-admin-data.html" class="nav-right-link here">Needs data</a>
+    <a href="index.html" class="nav-right-link">← Site</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="page-eyebrow">Admin — Needs data</div>
+  <div class="page-title">Catalog parts that need something</div>
+  <p class="page-sub">Read-only. <strong>Editing an existing product is the next project</strong>, so these rows do not link to an editor yet — they say what is missing, and where each part is used.</p>
+</div>
+
+<!-- Nothing below renders until requireAdmin() passes. -->
+<div id="gate" class="gate">Checking your session…</div>
+<div id="app" class="wrap" style="display:none"></div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/category-map.js"></script>
+<script>
+var sb = window.sb;
+
+// Session watchdog — copied from gunforma-admin-post.html.
+sb.auth.onAuthStateChange(function (event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+function $(id) { return document.getElementById(id); }
+
+// ============================================================
+// AUTH GATE — the same requireAdmin() as gunforma-admin-part.html (copied
+// from gunforma-admin-post.html): no onboarding bounce, nothing renders
+// until it passes, and a signed-in non-admin is told "Admins only".
+// ============================================================
+async function requireAdmin() {
+  const { data } = await sb.auth.getSession();
+  const session = data && data.session;
+  if (!session) { window.location.href = 'gunforma-signin.html'; return false; }
+  const { data: profile } = await sb.rpc('get_my_profile').maybeSingle();
+  if (!profile || profile.role !== 'admin') {
+    $('gate').innerHTML = '<strong>Admins only</strong>This page lists catalog data gaps. Your account is not an admin.';
+    return false;
+  }
+  return true;
+}
+
+// ============================================================
+// DATA
+// ============================================================
+const D = {};
+const STATUS_LABELS = {
+  description: 'Description', material_family: 'Material family', platform: 'Platform', url: 'Source URL',
+  variant: 'A variant', 'light compatibility': 'Light compatibility',
+};
+let platformFilter = '';
+
+async function load() {
+  const q = await Promise.all([
+    // products_needing_data: unapproved products and what each is missing.
+    // An admin sees its rows; anyone else sees none (the view filters).
+    sb.from('products_needing_data').select('product_id,slug,name,brand,category,platforms,missing'),
+    sb.from('builds').select('id,parts_snapshot').eq('status', 'approved'),
+    sb.from('products').select('id,slug,name,category,brand_id,material_family').order('name'),
+    sb.from('manufacturers').select('id,name'),
+    sb.from('product_platforms').select('product_id,platform_id'),
+    sb.from('platforms').select('id,slug,name,is_live').order('name'),
+    sb.from('product_variants').select('id,product_id').is('retired_at', null),
+    sb.from('affiliate_links').select('variant_id').is('retired_at', null),
+    sb.from('spec_field_rules').select('category,field,label'),
+  ]);
+  const bad = q.find(function (r) { return r.error; });
+  if (bad) throw new Error(bad.error.message);
+  const [needing, builds, products, brands, pp, platforms, variants, links, rules] = q.map(function (r) { return r.data || []; });
+
+  // "approved builds using this product" — answerable from parts_snapshot:
+  // each approved build counts once per product it references.
+  const usage = {};
+  builds.forEach(function (b) {
+    const seen = {};
+    (b.parts_snapshot || []).forEach(function (part) {
+      if (part && part.refId && !seen[part.refId]) { seen[part.refId] = 1; usage[part.refId] = (usage[part.refId] || 0) + 1; }
+    });
+  });
+  const brandName = {}; brands.forEach(function (m) { brandName[m.id] = m.name; });
+  const platformSlugs = {}; pp.forEach(function (x) { (platformSlugs[x.product_id] = platformSlugs[x.product_id] || []).push(x.platform_id); });
+  const productOfVariant = {}; variants.forEach(function (v) { productOfVariant[v.id] = v.product_id; });
+  const withLink = {}; links.forEach(function (l) { const pid = productOfVariant[l.variant_id]; if (pid) withLink[pid] = 1; });
+  const unapproved = {}; needing.forEach(function (n) { unapproved[n.product_id] = 1; });
+  const ruleLabel = {}; rules.forEach(function (r) { ruleLabel[r.category + '.' + r.field] = r.label; });
+
+  Object.assign(D, { needing: needing, usage: usage, products: products, brandName: brandName, platformSlugs: platformSlugs,
+                     platforms: platforms, withLink: withLink, unapproved: unapproved, ruleLabel: ruleLabel });
+}
+
+function missingLabel(category, m) {
+  if (m.indexOf('spec.') === 0) return D.ruleLabel[category + '.' + m.slice(5)] || m.slice(5);
+  const v = m.match(/^variant (.+): (photo|msrp)$/);
+  if (v) return (v[2] === 'photo' ? 'Photo' : 'MSRP') + ' (' + v[1] + ')';
+  return STATUS_LABELS[m] || m;
+}
+function onPlatform(productId, slugs) {
+  if (!platformFilter) return true;
+  if (slugs) return slugs.indexOf(platformFilter) !== -1;
+  const ids = D.platformSlugs[productId] || [];
+  const pl = D.platforms.find(function (x) { return x.slug === platformFilter; });
+  return !!pl && ids.indexOf(pl.id) !== -1;
+}
+function used(id) { const n = D.usage[id] || 0; return n ? 'in ' + n + ' approved build' + (n > 1 ? 's' : '') : '<span class="slug">in no approved build</span>'; }
+function partLine(p) {
+  const path = window.productPath(p.category, p.slug);
+  return '<strong>' + esc(p.brand) + '</strong> — ' + esc(p.name) + '<br><span class="slug">' + esc(path || p.slug) + '</span>';
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function render() {
+  // 1. Not approved — sorted by how many approved builds use it, then by
+  // fewest missing (the quickest to finish first), then by name.
+  const rows = D.needing.filter(function (n) { return onPlatform(n.product_id, n.platforms); }).sort(function (a, b) {
+    return (D.usage[b.product_id] || 0) - (D.usage[a.product_id] || 0) || a.missing.length - b.missing.length || a.name.localeCompare(b.name);
+  });
+  // 2. Approved, but no live retailer link on any live variant — the
+  // partnership pipeline, not a data-entry task.
+  const noLink = D.products.filter(function (p) { return !D.unapproved[p.id] && !D.withLink[p.id] && onPlatform(p.id); })
+    .map(function (p) { return Object.assign({}, p, { brand: D.brandName[p.brand_id] || '' }); });
+  const byBrand = {};
+  noLink.forEach(function (p) { (byBrand[p.brand] = byBrand[p.brand] || []).push(p); });
+  const brandsSorted = Object.keys(byBrand).sort(function (a, b) { return byBrand[b].length - byBrand[a].length || a.localeCompare(b); });
+  // 3. Material family "Unspecified" — approved or not, for follow-up.
+  const unspec = D.products.filter(function (p) { return p.material_family === 'Unspecified' && onPlatform(p.id); })
+    .map(function (p) { return Object.assign({}, p, { brand: D.brandName[p.brand_id] || '' }); });
+
+  $('app').innerHTML =
+    '<div class="toolbar"><label>Platform <select id="pf"><option value="">All</option>' +
+      D.platforms.map(function (pl) { return '<option value="' + esc(pl.slug) + '"' + (platformFilter === pl.slug ? ' selected' : '') + '>' + esc(pl.name) + (pl.is_live ? '' : ' (not live)') + '</option>'; }).join('') +
+    '</select></label></div>' +
+
+    '<div class="card"><div class="card-title">Not approved <span class="count" id="count-needing">' + rows.length + '</span>' +
+      (platformFilter ? '<span class="slug">of ' + D.needing.length + ' in all</span>' : '') + '</div>' +
+      '<div class="card-hint">From <code>products_needing_data</code>. Sorted by how many approved builds use the part, then by fewest missing.</div>' +
+      (rows.length ? '<table><thead><tr><th>Part</th><th class="hide-sm">Category</th><th class="hide-sm">Platform</th><th>Used</th><th>Missing</th></tr></thead><tbody>' +
+        rows.map(function (n) {
+          return '<tr><td>' + partLine(n) + '</td><td class="hide-sm">' + esc(window.categorySingular(n.category)) + '</td><td class="hide-sm">' + esc((n.platforms || []).join(', ')) + '</td>' +
+            '<td>' + used(n.product_id) + '</td>' +
+            '<td class="miss">' + n.missing.length + ': ' + n.missing.map(function (m) { return esc(missingLabel(n.category, m)); }).join(', ') + '</td></tr>';
+        }).join('') + '</tbody></table>' : '<div class="empty">Nothing on this platform.</div>') +
+    '</div>' +
+
+    '<div class="card"><div class="card-title">Approved, no buy link <span class="count" id="count-nolink">' + noLink.length + '</span></div>' +
+      '<div class="card-hint">The partnership pipeline, not data entry: these parts are complete, but no retailer we work with sells them. Grouped by brand.</div>' +
+      (brandsSorted.length ? '<details><summary>' + brandsSorted.length + ' brands</summary>' +
+        brandsSorted.map(function (b) {
+          return '<div class="brand-row"><strong>' + esc(b) + '</strong> · ' + byBrand[b].length + '<br>' +
+            byBrand[b].map(function (p) { return '<span class="tag">' + esc(p.name) + '</span>'; }).join('') + '</div>';
+        }).join('') + '</details>' : '<div class="empty">None.</div>') +
+    '</div>' +
+
+    '<div class="card"><div class="card-title">Material family "Unspecified" <span class="count" id="count-unspec">' + unspec.length + '</span></div>' +
+      '<div class="card-hint">Approved anyway (Unspecified is a valid answer), listed so the material can be found later.</div>' +
+      (unspec.length ? '<table><tbody>' + unspec.map(function (p) {
+        return '<tr><td>' + partLine(p) + '</td><td>' + used(p.id) + '</td><td>' + (D.unapproved[p.id] ? '<span class="miss">not approved</span>' : 'approved') + '</td></tr>';
+      }).join('') + '</tbody></table>' : '<div class="empty">None.</div>') +
+    '</div>';
+
+  $('pf').onchange = function (e) { platformFilter = e.target.value; render(); };
+}
+
+// ============================================================
+// INIT — nothing renders until the gate passes.
+// ============================================================
+(async function init() {
+  const ok = await requireAdmin();
+  if (!ok) return;
+  try { await load(); }
+  catch (err) { $('gate').innerHTML = '<strong>Could not load the catalog</strong>' + esc(err.message); return; }
+  $('gate').style.display = 'none';
+  $('app').style.display = 'flex';
+  render();
+})();
+</script>
+</body>
+</html>

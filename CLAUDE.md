@@ -103,6 +103,10 @@ products!inner(id, name, product_variants!product_variants_product_id_fkey(msrp,
 product_variants!inner(id, sku, products!product_variants_product_id_fkey(name, category))
 ```
 
+A join-type hint is not an FK name: `products!inner(...)` off
+`product_variants` is exactly as ambiguous as `products(...)`. Write
+`products!product_variants_product_id_fkey!inner(...)`.
+
 This fails quietly: `supabase-js` returns an error object rather than throwing, so the page
 renders its generic "could not load" state with nothing in the console. It has shipped
 broken twice. Before pushing:
@@ -186,6 +190,26 @@ Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
 emit the same canonical instead of one declaring the id-less one until its
 fetch lands. **An id that cannot be resolved gets a real 404 on both.**
 
+It server-renders the build's **body**, not just its meta: the H1, the
+builder's description, the photos, and a flat parts list whose entries link
+to their `/parts/` pages, plus Article + ItemList JSON-LD. It does this by
+exact-string-replacing the page's placeholder elements ("—", "Loading…", the
+empty containers), which the page's own JS then hydrates over with identical
+content. Every one of those literals is held to the page byte-for-byte by
+`scripts/check-canonical-coupling.mjs` — editing a placeholder in
+`gunforma-build-detail.html` means changing the matching literal in
+`build-og.mjs` in the same commit, and the guard says so. Replacements are
+arrow functions on purpose: a plain replacement string interprets `$`
+sequences, and builders write "$250" in descriptions. The parts list is
+deliberately flat — the section taxonomy lives in `js/build-categories.js`,
+and a server copy of it is the drift `check-categories.mjs` refuses.
+The title and meta description are built from the DATA (platform + most
+notable parts by category priority), not from the builder's caption alone,
+because nobody searches a caption. `product-page.mjs` renders the mirror
+link — "Used in these builds" — so builds and parts link both ways in
+served HTML. `scripts/check-routes.mjs` asserts the served /b/ body on every
+scheduled run: real H1, parts links, JSON-LD.
+
 It briefly had a split: hard 404 on `/b/…`, and a 200 serving the page
 unadorned on the legacy URL so the client could render its own "Build not
 found", on the reasoning that an old link should not start refusing. That was
@@ -240,6 +264,23 @@ ways.
 That is twice now that a rewrite behaved differently in production than
 locally, and twice that a green local test covered it. A rewrite's behaviour
 is not verified until it has been observed on a deploy.
+
+### The analytics tag: one module, sixteen literals, four deliberate absences
+
+Cloudflare Web Analytics loads from `netlify/functions/_analytics.mjs`
+(`ANALYTICS_SNIPPET`), placed immediately before `</body>`. Every function
+that emits an HTML document imports it; the static pages carry it as a
+literal, held byte-for-byte to the module by
+`scripts/check-analytics-snippet.mjs`.
+
+**It is absent on purpose from** `gunforma-admin-*.html`, `auth-callback.html`
+and `gunforma-claim.html` (both receive an access token in the URL hash), and
+`netlify/edge-functions/go.js`. **Do not add it to `build-og.mjs` or
+`profile-og.mjs`'s main path:** they serve the static build and profile pages,
+which already carry it, and a second copy counts every `/b/` and `/u/` view
+twice. The guard fails on all of these. No host check is needed for deploy
+previews: Cloudflare only accepts beacons from hostnames ending in the
+registered site's.
 
 ### The nav exists in 15 places, three of which are functions
 
@@ -536,6 +577,26 @@ link is not something the feed failed to account for.
 Partial indexes `idx_affiliate_links_live` and `idx_product_variants_live` cover
 the `where retired_at is null` reads.
 
+### Discontinued parts
+
+A whole **product** leaving the catalog is `products.is_discontinued = true` —
+not `retired_at`, which is per variant and per link, and never a delete.
+Every browse surface filters it: the catalog (and so its search), both build
+pickers, the Armory, the fit guides, `sitemap.mjs` and `parts-index.mjs`.
+
+**The product page does not.** `/parts/<category>/<slug>` still renders a
+discontinued part at 200, so an existing build that lists it keeps a working
+link. When a part has a successor, add an exact-path `301` in `netlify.toml`
+**above** the `/parts/*` rewrite, put the old path in `RETIRED` in
+`scripts/check-sitemap.mjs` (its baseline pins every URL the old static
+sitemap had), and add the pair to the redirect block in
+`scripts/check-routes.mjs`. Worked example: RAMM's comp and non-comp P365
+Leverage kits, merged into `ramm-tactical-leverage-trigger-p365`.
+
+Nothing in the repo or the database sets `is_discontinued` back to false
+(`add_variants()` only reads it to refuse), and no seed or import script
+inserts products — `create_product()` is the one writer.
+
 ## Prices we can stand behind
 
 A price is **stale** when **any** of these holds, and stale prices are never
@@ -583,6 +644,55 @@ writer in this repo, it caused the mismatch above, and the sort has a
 deterministic tiebreak now instead. See `supabase/retire_is_primary.sql`; the
 values are archived in `affiliate_links_is_primary_archive`.
 
+## Unpaid links to a part's own store
+
+A variant with no live partner listing is **not a dead end**. It renders a
+button to the part's own `products.url` through **`/go/part/<product id>`**,
+the second shape of the `go.js` edge function, which 302s to that url and
+logs the click against the product. Four surfaces render it — the part page,
+the guide table, the catalog detail panel (via `js/affiliate.js`) and the
+build page — and partner rows always sort first. Catalog grid cards do not
+carry it: `renderHero()` returns `''` for a product with no partner listing.
+
+This **reverses** an earlier decision not to use `products.url` as a buy
+link because it earns no commission. A dead end earns nothing either, and
+counted clicks to a maker are what we take to that maker when we ask for a
+partnership. Measured 2026-10-07: 89 of 250 live parts had no listing at all
+(242 rows), 25 more had one on some options only (86 rows); 88 of the 89 had
+a url.
+
+Three rules that look like decoration:
+
+- **The label is decided from the host, not assumed.** `products.url` is
+  usually the maker's page but not always — three Olight lights point at
+  illumn.com, two Grayguns modules at sigsauer.com, the RAMM trigger at
+  thetriggerguyusa.com. `makerLink()` reads "Buy from <maker>" only when
+  the url's host is the maker's `manufacturers.website_url` host or a
+  subdomain of it (`www.` ignored), and "Buy at <host>" otherwise —
+  including when the maker has no website saved, and including
+  true-precision.com vs trueprecision.com, which is a different host and
+  reads as one.
+- **`rel="noopener nofollow"`, never `sponsored`.** Nobody pays for these.
+  Partner buttons keep `noopener sponsored nofollow` unchanged, and
+  `check-buy-links.mjs` now keys on `nofollow` so both kinds must go
+  through `/go/`.
+- **The disclosure line says what is true of the buttons above it**:
+  partner-only, maker-only, both, or no line at all. `buyDisclosure()` holds
+  the wording. The guide page keeps its first sentence about prices and
+  applies the rule to the second.
+
+**Not in the JSON-LD.** A maker link with a hand-typed MSRP is not an offer
+we can stand behind in rich results; `product-page.mjs` filters maker rows
+out of `offers` explicitly.
+
+**`link_clicks` needs `product_id` to store these clicks** —
+`supabase/link_clicks_product_id.sql`, applied after the code is live. Until
+then a maker click's insert fails with PGRST204 and the function treats it
+as every other logging failure: the redirect goes out, the click is not
+counted, `x-go-debug: 1` reports it. The legacy `/go/<link id>` shape is the
+money path and is unchanged by a byte. `scripts/check-routes.mjs` exercises
+both shapes on the wire, always with `x-go-no-log: 1`.
+
 ## Build-time guards
 
 `publish = "."` means there is no compile step, so the Netlify build command's
@@ -598,11 +708,17 @@ Registered today:
 | `scripts/variant-label.test.mjs` | the variant-label copies drifting apart |
 | `scripts/check-script-order.mjs` | a page using a shared global without loading its definition first |
 | `scripts/check-snapshot-fields.mjs` | the `parts_snapshot` field whitelists drifting apart |
+| `scripts/snapshot-roundtrip.test.mjs` | a builder hydration path (edit mode, Armory handoff) dropping a `parts_snapshot` field, so the next save deletes it — runs the page's own code, load → save, and requires byte-identical rows |
 | `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
 | `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
+| `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
 | `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
+| `scripts/check-categories.mjs` | the browser and server category lists differing; a category in no build section; a page carrying its own category list; a spec sheet the product page never renders |
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
+| `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
+| `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
+| `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -696,12 +812,420 @@ transform is only exercised by swapping the origin, which that script does.
 Testing through Facebook's Sharing Debugger instead will tell you about its
 cache for days after you have fixed something.
 
+## Adding a product
+
+**One product is added with one call: `create_product()`**
+(`supabase/create_product.sql`). It writes the brand (found or created), the
+product, its platforms, its spec sheet, every variant with its photos and
+retailer links, and its fits-with rules in one transaction. It can also swap a
+build's pending custom part for the new product. It is `SECURITY DEFINER`, and
+its guard is `is_admin() or is_trusted_backend()`. `anon` cannot execute it.
+Before it, products arrived only in bulk loads, and `create_variant()` could
+only add to a product that already existed. **New variants on an existing
+part go through `add_variants()`** — see **Adding a variant to an existing
+part** below. Both share one copy of the variant logic.
+
+**What a category needs lives in a table, not in code:
+`spec_field_rules`** (`supabase/spec_field_rules.sql`).
+
+- It holds one row per (category, field), and each row is `required` or
+  `optional`.
+- A row can be scoped by `only_when_field` / `only_when_values`. Example: a
+  barrel's `thread_pitch` applies only when `barrel_type` is threaded.
+- Three readers use the same rows:
+  - `create_product()` accepts a spec key only if it has a row.
+  - `product_data_status()` decides what makes a part approved.
+  - `gunforma-admin-part.html` decides what to ask and how to label it.
+- To change what a category needs, change a row. Do not add a list anywhere
+  else.
+
+**Saving and approval are separate on purpose.**
+
+- **To save, a part needs:** brand, name, category, at least one platform,
+  the source `url`, one variant, and a photo and an MSRP on the default
+  variant.
+- **To be approved, it needs** everything
+  `product_data_status(product_id)` checks, which returns
+  `{approved, missing[], optional_blank[], platforms[]}`.
+- `create_product()` always returns that status, so an unapproved save is
+  never silent.
+- Only an approved part may carry a `fitment_confidence` other than
+  `unverified`.
+  - This applies to `create_product()` only. Existing products were not
+    re-graded.
+- `products_needing_data` lists every unapproved product with what it is
+  missing. Only admins and the service role see rows.
+
+**Five things that look like omissions and are not:**
+
+- **Platform is explicit.** Nothing defaults to P365, and a part with no
+  platform is refused.
+  - A slide or barrel belongs to **exactly one** platform. Its spec row's
+    platform is that platform, and a `platform` spec key that disagrees is
+    refused.
+  - A platform that is not live yet is accepted, with a warning.
+  - A slide or barrel length the platform has not registered in
+    `platform_part_lengths` is refused with a readable sentence, not the
+    class trigger's raw error.
+  - **P320 has no registered lengths yet.** The `slide_length_valid` and
+    `barrel_length_valid` CHECKs allow only 3.1/3.7/4.3, so registering them
+    takes both changes.
+- **Retailer links are optional:** zero, one or several per variant. A
+  missing link shows in `optional_blank` as "retailer link" and never blocks
+  approval.
+  - There is no "direct from maker" partner, and do not add one. A partner
+    without an Awin id is never matched by the sync, so its price is stale
+    forever and the buy row reads "Check price" with no MSRP.
+- **`products.url` is required, and it is a reference.** It is the page the
+  data came from.
+  - A product without one is not approved: `product_data_status()` reports a
+    blank `url` in `missing`, not `optional_blank`
+    (`supabase/fix_product_data_status_url.sql`).
+  - No public page renders it: the catalog and the Armory map it to a
+    `buy_url` that nothing reads.
+  - Do not start rendering it, and do not drop it.
+- **Defaulted spec columns pass silently.** Several required fields have a
+  column default: `caliber '9mm'`, `capacity_change 0`, `drop_in true`,
+  `is_combo false`, and others.
+  - A spec sheet that omits one is saved holding the default, and
+    `product_data_status()` then calls it approved.
+  - The function does not refuse them, by decision. The page does: see
+    **The add-a-part page** below.
+- **Material is one fact.**
+  - `optic_specs.housing_material` and `mag_release_specs.material` are
+    filled from `products.material`.
+  - A spec value that disagrees with it is refused.
+- **Material family is required for approval; the material's wording is
+  not** (`supabase/material_optional.sql`).
+  - `'Unspecified'` is a valid family. It approves, and `optional_blank`
+    carries "material family unspecified" so those parts can be found later.
+  - A blank `material` sits in `optional_blank`, not `missing`.
+  - Except for optics: the optic rule row `housing_material` is required and
+    is filled from `material`, so an optic with no material still reads
+    missing "spec.housing_material". That is the rule as it stands, not an
+    accident; changing it is one row in `spec_field_rules`.
+
+**Never entered by `create_product()`:**
+
+- the sync's columns: `street_price`, `in_stock`, `last_checked` and
+  `op_last_matched_by`
+- `slide_class` and `barrel_class`, which are owned by triggers
+- any spec column with no rule row
+- `installation_difficulty` and `best_for`, which are refused by name.
+  Existing values stay, and the product page still reads them.
+
+**Try a part with `p_dry_run => true`.** The function does everything, then
+raises errcode `P0DRY` with the would-be result JSON in the error's DETAIL, so
+nothing is written.
+
+- Through PostgREST it arrives as an error body that carries the result.
+- **It is the only safe way to test against production.** `affiliate_links`
+  and `price_history` are `ON DELETE RESTRICT`, so a real test product that
+  got a link can never be removed.
+- For a multi-case test, use one `DO` block that ends in `RAISE EXCEPTION`.
+  - Run any case that relies on the direct session's NULL
+    `request.jwt.claims` **before** any case that sets the claims. Once a
+    connection has set it, a rolled-back or reset value reads `''`, not NULL.
+  - **Known defect, logged and not yet fixed:**
+    `restrict_owner_edits_on_approved_build` tests `claims is null`, so it
+    treats `''` as an API caller. A direct session on such a connection is
+    refused an edit to an approved build. The fix is
+    `nullif(current_setting('request.jwt.claims', true), '')`, which is what
+    `is_trusted_backend()` already does.
+
+**Tracked links are built, not typed.**
+
+- For a partner with an `awin_merchant_id`, the Awin URL is built with the
+  clickref `build-detail_<product slug>`.
+- A supplied Awin link whose merchant id disagrees with the partner's is
+  refused.
+
+### The add-a-part page
+
+`gunforma-admin-part.html` is the form over `create_product()`. Like the
+other admin pages it carries its own Admin bar, not the site nav, so it is
+not a sixteenth nav copy; it has no analytics tag (the guard exempts
+`gunforma-admin-*`) and is `noindex`.
+
+- **The gate is `requireAdmin()` from `gunforma-admin-post.html`.** Nothing
+  renders until it passes. A signed-in non-admin gets "Admins only"; anyone
+  signed out goes to sign-in.
+- **Platform first, then category, then everything else.** Slide and barrel
+  lengths come from `platform_part_lengths`; when the chosen platform has
+  none, the page prints the same sentence the function would and offers no
+  Check or Save.
+- **The form is rendered from `spec_field_rules`.** What the page holds
+  itself is only how to draw a field (`BOOL_FIELDS`, `NUMBER_FIELDS`,
+  `LOOKUP_FIELDS`): column types are not readable through PostgREST. Check
+  runs the real function, so a wrong entry there is refused, not saved.
+- **Lookup tables and enums are strict dropdowns. Free-text fields suggest
+  only values already used by two or more products**, which is what keeps
+  the typos in `mount_system` ("Rail climp", "1914 clamp") from spreading.
+  `mag_release.caliber` stays free text: its live value `9mm/.380` is not in
+  `calibers`.
+- **Required yes/no and number fields start empty.** When one is left blank
+  and the dry run says nothing is missing, the column's default would be
+  stored silently, so Save waits until it is answered. That is the page
+  honouring the defaults rule above.
+- **Check, then Save.** Check calls `create_product(…, p_dry_run => true)`,
+  which answers **HTTP 500 with `error.code === 'P0DRY'`** and the result in
+  `error.details`. The page branches on the code and never on the status.
+  Save is enabled only while the form is byte-for-byte what was last checked.
+- **`p_specs` and `p_fits` are omitted when empty, never sent as `null`.** A
+  JSON null that reaches the function as the jsonb value `'null'` made
+  `jsonb_strip_blank()` throw "cannot call jsonb_each on a non-object".
+  `supabase/fix_strip_blank_and_link_result.sql` makes it read any
+  non-object as empty; the page keeps omitting them anyway.
+- **The page suggests a short slug and always sends it.** `create_product()`
+  falls back to brand + full name, which produced a 70-character address
+  (Springer's "+3 Magazine Extension for Sig Sauer X Macro 17rd Mags").
+  The suggestion is brand, then the name with filler dropped ("for", "sig",
+  "sauer", "the", "with", "and", "all", "of", "a", "an"; "magazine"/"mags" →
+  "mag") and leading brand words removed, then the model it fits, found in
+  the name against the chosen platform's guns ("X Macro" on P365 →
+  `p365xmacro`), else the platform. Over 50 characters it drops words from
+  the middle, keeping the first word and the last two (the noun). It warns
+  over 60, refuses anything but lowercase letters, digits and single
+  hyphens, and says "already taken" as the admin types — from the catalog
+  loaded with the page, then `products.slug` live.
+  - Run over all 243 live products: average 30 characters, longest 52, none
+    over 60. Trimming can make two near-identical names collide (the two
+    ECM mag releases); the "already taken" check is what catches that.
+  - A slug can be changed afterwards in the database (Springer's was), but
+    it is the shared address: the old one 404s at once.
+- **A retailer row is a retailer and a URL, nothing else.** The page never
+  sends `op_merchant_product_id`, `op_mpn` or `op_gtin`: they are the
+  retailer feed's own identifiers, which an admin cannot see on the
+  retailer's page, and the nightly sync fills them on its first match.
+- **After Check, every retailer link says whether a tracked link was
+  built.** A partner with no `awin_merchant_id` gets none, and the page says
+  so plainly: "untracked: no commission". This matters because `partners`
+  lists `optics-planet` (no Awin id) beside `awin-optics-planet`, and the two
+  read almost the same in the dropdown. The answer comes from
+  `variants[].retailers[].tracked_url` in the function's result (same fix
+  file); before that file is applied the page says tracking is not reported.
+- **Product photos are pasted https URLs, not uploads, for now.** The page
+  previews each one; a photo that does not load is flagged and counts as no
+  photo (it is not sent). Nothing writes to the `product-images` bucket, and
+  a maker changing their site breaks the photo — copying them into our own
+  storage is logged for later.
+- **The label preview runs `variantLabel()` over what `create_variant()`
+  stores.** `create_variant()` always writes `variant_label` as
+  `coalesce(p_variant_label, color || ' · ' || finish)`, and `variantLabel()`
+  returns a stored label verbatim — so 650 of 779 live variants read
+  "Colour · Finish", not the formula's "Colour / Finish". The page mirrors
+  that one coalesce, and every Check compares it with the labels the server
+  returns.
+- **Adding a colour** inserts into `colors` and needs
+  `supabase/colors_admin_insert.sql`. Without it the database refuses and
+  the page says so.
+- **`?build=<uuid>&part=<index>`** prefills brand, name, category and the
+  build's platform from a pending custom part and passes both through, so
+  Save re-links the part. A section with two categories ("Barrels &
+  Compensators") makes the admin pick; a section with none says so.
+
+### Adding a variant to an existing part
+
+`gunforma-admin-part.html?product=<slug>` is the add-a-part page in
+**add-a-variant mode**, over `add_variants(p_product_slug, p_variants,
+p_dry_run)` (`supabase/add_variants.sql`). Every part listed under "Already
+in the catalog?" links to it.
+
+- **The part is read-only:** name, brand, category, platforms, and every
+  live variant with its photo, MSRP and option values. Only new variants are
+  entered, in the same variant table, then Check → warnings → Save as
+  before. Save links to the part's `/parts` page.
+- **The variant logic exists once.** `create_variants_for_product()` turns a
+  variant object into a variant — unknown keys, colour vocabulary, the
+  option columns folded into the slug, gallery, retailer links with the Awin
+  link built. `create_product()` and `add_variants()` both call it. EXECUTE
+  is revoked from public, anon and authenticated, so a signed-in user reaches
+  it only through those two SECURITY DEFINER callers; `service_role` keeps
+  EXECUTE. Change variant rules there, not in either caller.
+- **`add_variants()` never changes an existing variant**, except that a new
+  variant marked `is_default` takes the default from the old one in the same
+  transaction (`variants_one_default_per_product` holds exactly one). Two new
+  defaults are refused. Unmarked, the current default stays.
+- **Every new variant needs a photo and an MSRP**, refused in the function:
+  adding a variant must never unapprove a part.
+- **Duplicates are refused against every live variant, discontinued ones
+  included, and against the other new ones**, and the message names the
+  match. `variant_identity()` is what "the same" means: all 13 option
+  columns, trimmed, case-folded, blank = null, `optic_cut 'none'` = none,
+  manual safety missing = false. The same rule now applies in
+  `create_product()`, which used to compare raw values and saved "Anodized"
+  beside "anodized ".
+- **`handedness 'ambidextrous'` is NOT normalised away.** The bulk load set
+  it on nearly every slide, barrel, light and trigger, and the form has no
+  handedness field outside frames and mag releases — but on frames it is a
+  real option (Icarus's "Ambi thumb ledge" beside "No thumb ledge", which is
+  null). So the PAGE closes the gap instead: a column the form does not show
+  that holds one value on every live variant of the part is carried onto
+  the new variants and stated on the form. Without that, a page-added copy
+  of an existing variant differs from it only by a column nobody can see,
+  and the duplicate rule lets it through.
+  - **This inheritance exists only on the page.** A direct call to
+    `add_variants()` (SQL, a script, the service role) gets no inherited
+    columns, and a copy that leaves out `handedness` passes the duplicate
+    rule against a sibling that says `ambidextrous`.
+  - **The real fix is data, deferred to the field review:** clear
+    `handedness 'ambidextrous'` where it means nothing. On 2026-10-05, 477
+    variants carried it: 122 frames and 19 mag releases, where it is a real
+    option (beside "no thumb ledge", and beside 1 left and 1 right mag
+    release), and **336** across the other categories, where it means
+    nothing. Those 336 are the rows to clear.
+- **Option fields suggest this part's values first, then its category's**,
+  unlike add-a-part mode's "used by two or more products". A new value can
+  still be typed.
+- **A discontinued part is refused.** (`products` has no `retired_at`; it
+  has `is_discontinued`.)
+
+Logged for later, not built:
+
+- **Editing an existing part or variant** (photo, price, a spec fix) and
+  **retiring a variant**. This page only adds.
+- **`sig-sauer-manual-safety-kit-p365` has two live variants identical on
+  every option**: "Rose Gold", `…-matte-rose` (SKU 8901340) and
+  `…-rose-gold` (SKU 8901337). Left alone by ruling; they are for the edit
+  path. Until then nothing more can be added identical to either.
+- `create_product()`'s "already exists" refusals still say "use
+  create_variant"; the page's "Add a variant" link is the real answer.
+
+### Recoil Springs, Sights and Other Parts
+
+Three categories added together (`supabase/add_categories_enum.sql`, then
+`supabase/add_categories.sql`), on every surface: catalog tab, `/parts/`
+address and index, build section, add-a-part with its rules, Needs data and
+the sitemap.
+
+**An enum value is its own migration, applied first.** Postgres refuses to
+USE a value in the transaction that added it, so `add_categories_enum.sql`
+holds only the three `add value` lines and was applied before anything that
+names them could even be dry-run. It touches no row, and no page reads a
+value until a product has it. The pages tolerate both states: categories and
+names live in code, a Check on a new category before its rules exist says
+"not available yet", and nothing reads `products.part_type` except for an
+`other` product — a column named in a main query before it exists fails the
+whole query (every product page, the whole catalog).
+
+| category | segment | build section | group | spec sheet |
+|---|---|---|---|---|
+| `recoil_spring` | `recoil-springs` | Recoil Springs | Core build, after Barrels & Compensators | `recoil_spring_specs` |
+| `sight` | `sights` | Sights | Core build, after Optics | `sight_specs` |
+| `other` | `other-parts` | Other Parts (`misc`) | Carry and finish, last | none |
+
+- **Recoil springs:** slide length (required, one of the slide lengths
+  registered for the part's platforms — refused in words otherwise), spring
+  weight (required, free text: makers write "13 lb" or "Reduced (Soft)"),
+  captured (required), spring type and guide rod material (optional; the guide
+  rod material is filled from the product's material, "material is one fact").
+  **A different weight or length is a different product, not a variant**: neither
+  is an option column, so `variant_identity()` would refuse two weights as
+  identical.
+- **Sights:** front / rear / set, standard / suppressor height, and night /
+  fiber / night + fiber / plain — all required, strict dropdowns, and CHECKs on
+  `sight_specs`. **The three lists live in three places** — those CHECKs,
+  `create_product()` (which refuses a value outside them in words naming the
+  allowed ones, `supabase/sight_values_in_words.sql`, instead of the raw
+  constraint error) and `SIGHT_CHOICES` in `gunforma-admin-part.html`.
+  Change all three together. Dovetail and rear notch optional: a required free-text field
+  an admin cannot answer gets filled with guesses. **The front dot colour is a
+  variant option** reusing `reticle_color`; add-a-part labels it "Front dot
+  colour" for sights through `axisLabel()`, the one place a variant column is
+  named per category.
+- **Other Parts:** catalog parts that fit no other category. No spec sheet;
+  one extra fact, **`products.part_type`** — two or three words ("thumb
+  ledge"), suggested from the values already entered in the category. The
+  table rule `products_part_type_other` ties it to the category both ways (an
+  Other Part must have one; nothing else may), comparing the category as text
+  so it does not depend on the enum at plan time; `create_product()` refuses
+  either case in words first. anon reads `products` through COLUMN grants, so
+  the column is granted explicitly. Pages show the part type in place of the
+  category name in a sentence ("Thumb ledge for the Sig Sauer P365").
+- Both new spec tables arrive with RLS on, every grant revoked, and SELECT
+  only, for anon and authenticated, behind a read policy.
+
+Logged for later, not built:
+
+- **Spring weight as a variant option** (one product, several weights).
+- **The older spec tables carry broad grants** — `authenticated` holds
+  INSERT/UPDATE/DELETE/TRUNCATE on `slide_release_specs` and its siblings,
+  behind a read-only policy. RLS refuses the writes; the grants are the drift
+  pattern under **A revoke is not permanent**.
+- **Catalog backing for magazines, holsters and knives**, and **optic adapter
+  plates, fire control parts and grip weights** as categories once builds show
+  them.
+- `create_product()` refuses a spec sheet sent for a category without one as
+  "a other has no spec sheet" — the generic "a %" sentence; the page never
+  sends one.
+
+### Pending build parts → the catalog, and the needs-data page
+
+A builder's hand-typed part is stored as a **pending custom part**
+(`pending: true`, no `refId`) and shows "Pending catalog review" in
+`gunforma-admin-queue.html`. Beside each one the queue offers:
+
+- **Add to catalog** → `gunforma-admin-part.html?build=<id>&part=<index>`.
+  `create_product()` re-links the part when it saves.
+- **Link to existing part** → pick a product (only those in the part's
+  section, by `js/build-categories.js`) and a variant; the page calls
+  `relink_build_part(build, index, product, variant, variant_specs)`
+  (`supabase/relink_build_part.sql`).
+- A part whose section has **no catalog category** (mags, holsters, paintjob,
+  knife) gets a reason line and neither action.
+- **Other Parts (`misc`) is the catch-all.** Add to catalog pre-selects no
+  category and offers all of them; Link searches the whole catalog. Linking a
+  part stored under `misc` — through either `create_product()` or
+  `relink_build_part()` — **rewrites its `category` to the product's own**, so
+  the DMP recoil spring typed under Other Parts renders under Recoil Springs.
+  Only `misc`: a part in any other section keeps the category it was saved
+  under (`supabase/add_categories.sql`; the dry run in that PR shows both).
+
+**The index is the part's ORIGINAL index in `parts_snapshot`.** The queue
+renders parts in stored order, so its row index is that index.
+
+`relink_build_part()` writes what `create_product()`'s re-link writes, **plus
+`variantSpecs`**, which the queue computes with `js/variant-label.js` and the
+function stores only when non-empty. It refuses a part that is not pending,
+a variant that is not the product's or is retired, and **a part with
+corrections in `builds.edit_history`** — the build page lays those over the
+entry, so a linked part would read as the correction; it says how many. It
+does not check category against section: the page restricts the picker, and
+a SQL copy of the taxonomy would be a third one.
+
+`scripts/snapshot-roundtrip.test.mjs` runs post-build's two hydration paths
+and `buildPartsSnapshot()` over the exact entry the function stored in its
+dry run, so a re-linked part surviving an edit-and-save is checked on every
+deploy. (Its keys are compared as a set: Postgres stores jsonb keys in its
+own order, so a stored row never had the writer's order.)
+
+**`gunforma-admin-data.html` ("Needs data")** lists `products_needing_data`
+by how many approved builds use each part, then fewest missing; approved
+parts with no buy link (the partnership pipeline, grouped by brand); and
+material family "Unspecified". Read-only: editing an existing product is
+the next project, and the page says so instead of linking to a dead end.
+Same gate as the add-a-part page, `noindex`, no analytics tag.
+
+Two things noticed here and not fixed:
+
+- `create_product()`'s own re-link writes no `variantSpecs`, and does not
+  refuse a part that has corrections. `relink_build_part()` does both.
+- `prevent_owner_edit_history_change()` lets only `is_admin()` change
+  `builds.edit_history`, so the service role and a direct session are
+  refused — the "service_role bypasses RLS, not triggers" trap above, failing
+  closed.
+
 ## Adding an affiliate link (CSV import)
 
-New `affiliate_links` rows are added **by hand**, through the Supabase dashboard's
-CSV import. Nothing in this repo inserts into that table — the nightly sync only
-PATCHes existing rows, and no page writes it. So the import template is the one
-place a new link's columns are decided.
+New `affiliate_links` rows come from two places:
+
+- **`create_product()`**, for a new product's links. See **Adding a
+  product**. It builds the tracked URL and never sets the sync's columns.
+- **The Supabase dashboard's CSV import**, for a link on a product that
+  already exists. This section covers the CSV.
+
+Nothing else inserts into the table. The nightly sync only PATCHes existing
+rows, and no page writes it.
 
 **The template's columns, in order:**
 
@@ -835,11 +1359,53 @@ listing reads differently depending on which page you are on:
   its behaviour to the documented rules on every deploy.
 - `gunforma-build-detail.html` — inline copy for a build's parts list
 
-The category → URL-segment mapping is duplicated for the same reason:
-`netlify/functions/_category-meta.mjs` (shared by `product-page.mjs` and
-`parts-index.mjs`) and `js/category-map.js` (the browser mirror, loaded as a
-plain `<script>` global). A category that exists in only one of them ships links
-that 404.
+**The unpaid buy button has its own pair**, split the same way as
+`js/build-url.js` ↔ `_build-url.mjs`: `js/maker-link.js` (browser global,
+loaded by the catalog, the Armory and the build page — `check-script-order`
+enforces the order) and `netlify/functions/_maker-link.mjs` (imported by
+`product-page.mjs` and `guide-page.mjs`). Both hold `makerLink()` — the
+"Buy from <maker>" / "Buy at <host>" rule — and `buyDisclosure()`, the
+three-way disclosure line. `scripts/maker-link.test.mjs` runs both over the
+same inputs on every deploy. See **Unpaid links to a part's own store**.
+
+### One category list, two copies
+
+Every `products.category` value — its `/parts/` URL segment, its plural name
+("Grip Modules", for headings, tabs and sections) and its singular name ("Grip
+Module", for sentences, the product page's eyebrow and its JSON-LD
+`category`) — lives in two files with **identical contents**:
+
+- `js/category-map.js` — the browser copy, a plain `<script>` global
+  (`categoryPlural()`, `categorySingular()`, `productPath()`,
+  `CATEGORY_KEYS`).
+- `netlify/functions/_category-meta.mjs` — the server copy (`CATEGORY_META`,
+  `CATEGORIES_WITHOUT_SPEC_SHEET`), imported by `product-page.mjs`,
+  `parts-index.mjs` and `sitemap.mjs`.
+
+Two copies for the usual reason (no module loader on the pages). **Every other
+surface derives from them**: the catalog's and Armory's tabs and labels,
+add-a-part's category list and sentences, Needs data, and the build sections
+in `js/build-categories.js` (a one-category section takes that category's
+plural). **One name per category, everywhere; the builder's names won**:
+"Grip Modules" not "Frame Modules", "Basepads" not "Base plate", "Magazine
+Releases" (plural, like the rest). "Barrels & Compensators" is one build
+section over two catalog categories: layout, not a second name.
+
+`scripts/check-categories.mjs` (every deploy) fails when the two copies differ
+by a character, when a category sits in no build section or in two, when any
+other file maps three or more categories to strings itself, when
+`product-page.mjs`'s `SPEC_TABLES` misses a category that has a spec sheet,
+and when a page reads the globals without loading `js/category-map.js`. The
+build cannot see the database, so `scripts/check-routes.mjs` (scheduled,
+against production) adds the live half: every category that has a product
+must be in the lists, and one product per category must answer 200 at its
+`/parts/` address. A category with no products cannot be hidden from anyone,
+so it is not asserted.
+
+**Adding a category** is therefore: the enum value (its own migration — see
+**Adding a product**), one line in each copy, its build section, and — if it
+has a spec sheet — its `SPEC_TABLES` entry and rules. The guard names whatever
+is missing.
 
 The axis columns they read (`reticle`, `reticle_color`, `color`, `optic_cut`,
 `bundle`, `clamp`, `manual_safety_variant`) feed **labels only**. Nothing filters
@@ -1056,9 +1622,22 @@ window.BuildCategories.sectionKeyFor(raw);   // stored value -> section, or null
 
 **Everything is derived from `CATEGORIES`.** Labels, the
 `products.category` -> section reverse map and the grouped order are computed,
-not hand-listed, so a new section declares its facts once. The only
-hand-written map is `LEGACY_CATEGORY_LABELS`, for keys no longer offered that
-still sit in stored snapshots (`other_parts`, `sights`).
+not hand-listed, so a new section declares its facts once. A section holding
+one category takes that category's plural from `js/category-map.js`, **which
+must load first** (`check-script-order.mjs` enforces it; the module throws
+without it). The only hand-written map is `LEGACY_SECTION_ALIASES`: retired
+keys that may sit in old snapshots fold into the section that replaced them —
+`other_parts` → `misc` (Other Parts), `sights` → `sight` — so they never open
+a second heading with the same name.
+
+**Other Parts is the `misc` section, renamed.** Its key stays `misc` (every
+part typed there was saved under it), it is backed by the `other` catalog
+category, and it keeps the typed-in form. It is the catch-all, so it carries
+`anyCategory`: the review queue's link picker and add-a-part offer every
+category for a pending part from it, and linking one rewrites its category to
+the product's own (see **Pending build parts**). `other` is a
+`products.category` value and `other_parts` a retired section key; neither is
+ever used as the other, and `check-category-labels.mjs` asserts it.
 
 **The admin page is the worked example again, and it had drifted three ways:**
 no Magazine Release section, `magwells` with its `dbCategory` hint dropped so
@@ -1087,12 +1666,11 @@ along with an unlabelled key and a group order that disagrees with
 `CATEGORIES` order — which would make the builder and the published build list
 the same sections differently.
 
-**What is NOT here, on purpose:** `gunforma-parts-catalog.html` and
-`gunforma-armory.html` keep their own `CATEGORY_LABELS`. Those are catalog
-labels keyed by `products.category` alone ("Frame Modules", "Barrels"), a
-different vocabulary from a build's sections ("Grip Modules",
-"Barrels & Compensators"), and the `/parts/` URL segments in
-`js/category-map.js` are a third. Do not merge them.
+**The catalog's names are no longer a separate vocabulary.** This section
+used to say the catalog's own `CATEGORY_LABELS` ("Frame Modules") were a
+different vocabulary from the build's sections and must not be merged. That
+was the drift: one part had four names depending on the page. They are one
+list now — see **One category list, two copies** above.
 
 ### Auth emails live in the dashboard, not in this repo
 
@@ -1108,7 +1686,9 @@ reviewable and diffable in git — they are not the thing that sends.
 | Invite user | `admin.inviteUserByEmail()` in BOTH `supabase/functions/launch-invite` and `supabase/functions/invite-builder` | `scripts/invite-email-template.html` |
 
 Magic Link, Change Email Address and Reauthentication are unreachable — nothing
-calls `updateUser`, `signInWithOtp` or `verifyOtp`. If an email-change feature is
+calls `signInWithOtp` or `verifyOtp`, and the only `updateUser` calls set a
+password (the claim page, and the reset form on the sign-in page), which sends
+no email. If an email-change feature is
 ever added to the profile page, that template goes live as Supabase's stock
 default: no logo, no brand, no warning.
 
@@ -1117,6 +1697,28 @@ editing the repo file sends nothing, and editing the dashboard leaves the repo
 describing an email that does not exist. `check-all.sh` does not inspect these
 files and cannot — the live template is readable only through the Management
 API. The only guard is changing both in the same sitting.
+
+**Never delete an invited user in the dashboard.** `launch-invite` links the
+build and its photo rows to the account the moment the invite is sent, and
+`builds.user_id → profiles`, `profiles.id → auth.users` and
+`build_photos.user_id → auth.users` are all `ON DELETE CASCADE` — the build
+goes with the user. `scripts/launch-invites.js --resend <email>` sends a fresh
+link and `--release <email>` undoes an unclaimed invite safely; both are
+actions on the `launch-invite` function. `claude/operations.md`, "The invite
+trap", has the table. `scripts/launch-invite.test.mjs` runs every branch
+against a fake that implements the cascade — run it before deploying the
+function (it is not a build check: it needs Node 22.13).
+
+**A reset link signs the person in, so the sign-in page must hold them.**
+`gunforma-signin.html` tells a recovery arrival from any other signed-in visit
+by `type=recovery` in the URL hash (and, second, by the client's
+`PASSWORD_RECOVERY` event), and shows a "choose a new password" form instead
+of redirecting. Before that form existed the page redirected like any sign-in:
+the reset email's link worked, no password was ever chosen, and nothing
+failed. The hash is read in an inline script placed BEFORE
+`js/supabase-client.js`, because creating the client consumes the hash. With
+supabase-js 2.117.2 a later read still sees it, so the order is a precaution
+against an unpinned CDN library, not a measured failure.
 
 Two things inside those templates are load-bearing and look like decoration:
 
@@ -1138,6 +1740,143 @@ times across `privacy-policy.html`, `terms-of-service.html` and
 message ever sent to it was discarded, with nothing anywhere reporting a
 failure. A catch-all is now enabled. There is no dashboard that says "0 emails
 received"; the only way this surfaces is someone asking why you never replied.
+
+## Editing a build after it is submitted
+
+**One editor: `gunforma-post-build.html?id=<uuid>&mode=edit`.** Who it lets
+in, and what they may change, by status:
+
+| status | its owner | an admin |
+|---|---|---|
+| draft | everything | only if the build has no owner |
+| **pending** | **everything; it stays pending** | only if the build has no owner |
+| rejected | everything; saving resubmits it | only if the build has no owner |
+| approved | name, description, activity | only if the build has no owner — then everything, and it stays live |
+
+**Pending was closed until 2026-10, and only by the page.** The profile card
+was a dead `<div>` and the editor refused the build, so the one build a
+builder most wants to fix — the one submitted a minute ago with a part
+missing — could only be deleted and posted again. RLS allowed the edit all
+along (`Owners can edit their own builds` has no status clause, and the
+`build_photos` owner policies name `draft` and `pending`).
+
+**An admin edits a build only when nobody owns it** (`user_id is null`):
+posted from `gunforma-admin-post.html` and not claimed yet. Those had no
+editor at all — the queue's per-part "Edit" writes a *correction*, and Undo
+only moves a build back to pending. The queue links to the editor for them
+("Edit build →"). The save sends **no `status`**, so a live build stays live
+and a pending one stays pending, and it filters on `user_id is null`.
+
+**An admin is deliberately not let into a build that has an owner.** The
+tool for that is the correction, which is logged in `edit_history` and shown
+to the builder. A rewrite from the editor would leave no record. To let a
+builder change the parts or photos of a build that is already live: **Undo**
+(back to pending), they edit it, approve it again.
+
+### A build in review has two writers
+
+That is the reason pending was closed. It is handled where each write
+happens, on both sides, and none of it is a lock:
+
+**The owner's save is conditional on `updated_at`.** It is read when the
+build loads and sent as a filter; the UPDATE asks for its row back, and a
+save that matches nothing is reported, not toasted as "saved". Without it,
+an owner who opened the form before a reviewer re-linked a part would put
+the old list back over the link. The stamp is refreshed from every save,
+because "Save as draft" does not leave the page.
+
+**Every reviewer write goes through `ensureUnchanged()`** in
+`gunforma-admin-queue.html` first — Approve, Reject, Save correction and
+Link to existing part. It re-reads the build and compares it with
+`REVIEWED[id]`: `reviewSignature()` (words, pistol, parts, and photos by id)
+of the build **as the reviewer was last shown it**. A mismatch reloads the
+queue, says so, and writes nothing. Approve, Reject and Save correction are
+then also conditional on the `updated_at` that re-read returned, with a row
+count.
+
+Three things about that are easy to undo by accident:
+
+- **It compares with `REVIEWED`, not with `BUILDS`.** `loadBuilds()` runs
+  after every action on the page and silently swaps fresh rows into
+  `BUILDS`. Compared with that, "save a correction, then approve" would
+  publish whatever the builder changed in between — fresh against fresh.
+  `REVIEWED` moves only in `selectBuild()`, in `ensureUnchanged()`'s own
+  refusal, and after the reviewer's own link. Do not set it in
+  `loadBuilds()`.
+- **Photos are compared directly, not through `updated_at`.** A photo row
+  can be added or removed without touching `builds`, so the stamp alone
+  would miss the one change that most needs a second look.
+- **Corrections and links need it more than Approve does.** They address a
+  part by its **index**, so against a list the builder has since shortened
+  they land on a different part, with no error. "Add to catalog" has the
+  same exposure across a page load, so `gunforma-admin-part.html` re-reads
+  the part at that index just before Save (`buildPartMoved()`) and stops if
+  it is not, key for key, the one the page was opened for.
+
+What is left is the gap between a re-check and its write: milliseconds, and
+closed for anything on the `builds` row by the `updated_at` condition. A
+photo swapped inside that gap is not caught, and `relink_build_part()` and
+`create_product()` take no `updated_at` at all. Closing those properly means
+a database-side check, not another client one.
+
+### Corrections pin parts in place
+
+A correction in `builds.edit_history` names its part by **index** in
+`parts_snapshot`, and only an admin may write `edit_history`
+(`prevent_owner_edit_history_change`). So an owner who removes a part at or
+before a corrected one shifts the list under the correction, and the build
+page lays "name corrected to X" over a different part — no error anywhere.
+This was already reachable through reject → resubmit.
+
+The editor pins every loaded part up to the last corrected index
+(`editState.pinnedPartUids`): `removePart()` and `changePlatform()` refuse.
+Adding is always safe, since new parts go on the end. Entries with no
+`part_index` (the `resubmit` marker) pin nothing.
+
+**This takes something away, on purpose.** A build that carries a correction
+and is then rejected for a wrong part or the wrong pistol can no longer have
+that part removed by its owner: the way out is delete and re-post, and the
+toast says so. Before, the removal worked and quietly moved the correction.
+So do not correct a part on a build you are about to reject for its parts.
+
+**The pin is the page's, not the database's** — a direct API call can still
+reorder `parts_snapshot` under a correction. The real fix for both is
+corrections that address a part by something other than its position.
+
+### Only a reviewer can approve or reject
+
+**The database enforces the review queue; the pages do not have to.**
+`trg_restrict_build_status` on `builds` (BEFORE INSERT OR UPDATE,
+`supabase/restrict_build_status_to_reviewers.sql`, applied 2026-10-06 as
+`20261006235015`): a caller who is not an admin and not a trusted backend
+may insert a build only as `draft` or `pending`, and may change a status
+only *to* `draft` or `pending`. Writing `approved` or `rejected` is refused
+with `42501` and a sentence a person can read.
+
+Before it, any signed-in user could `update builds set status = 'approved'`
+on their own build, or insert one already approved. The owner policies check
+`auth.uid() = user_id` and nothing else, and `status` is a column owners
+must be able to write (draft → pending is how a build is submitted) — RLS
+says which rows, never which values. The older guard,
+`restrict_owner_edits_on_approved_build`, only looks at builds that are
+*already* live, so it said nothing about how one becomes live. Nothing on
+the site did this; the anon key is public and the browser console is one
+line away. Checked before closing it: it had never been used.
+
+Who passes: `is_admin()` (the queue's approve / reject / undo, and
+`gunforma-admin-post.html`, which inserts `approved`) and
+`is_trusted_backend()` (a service-role request, or a session with no request
+context — the SQL editor, a migration). **A new server-side path that sets a
+build's status must run as one of those**, or it is refused exactly like a
+stranger; that is the "service_role bypasses RLS, not triggers" trap above,
+and here the service role is let through by name.
+
+**Do not drop it to make something work.** The rollback file reopens the
+hole. If the guard refuses a caller it should admit, admit that caller in
+the function.
+
+The file's header has the measurement, and its footer the seventeen-case
+dry run and the same seventeen re-run against the applied guard.
 
 ## Replacing the builder's contents: identity, and asking first
 

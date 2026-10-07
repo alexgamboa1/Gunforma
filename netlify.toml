@@ -272,6 +272,25 @@
   to = "/.netlify/functions/parts-index"
   status = 200
 
+# Discontinued parts that have a successor. A permanent redirect, so an old
+# link or search result lands on the replacement rather than on a part that
+# has left the catalog. Exact paths, so these MUST sit above the /parts/*
+# rewrite below — first match wins. The old rows stay in the database with
+# is_discontinued = true (never deleted); see CLAUDE.md "Discontinued parts".
+#
+# RAMM Tactical sells one P365 Leverage kit now, not comp and non-comp.
+[[redirects]]
+  from = "/parts/triggers/ramm-tactical-leverage-c-p365"
+  to = "/parts/triggers/ramm-tactical-leverage-trigger-p365"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/parts/triggers/ramm-tactical-leverage-nc-p365"
+  to = "/parts/triggers/ramm-tactical-leverage-trigger-p365"
+  status = 301
+  force = true
+
 # Per-product pages, server-rendered so crawlers see real content instead of
 # the "Loading parts…" shell the client-side catalog shows before Supabase
 # resolves. :splat carries "category/slug" (or just "slug" — the function

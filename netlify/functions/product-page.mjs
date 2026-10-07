@@ -41,11 +41,22 @@ import { GUIDE_PAGES, GUIDE_FAMILIES, guidePath, hubPath, GUN_META } from './_gu
 // (js/affiliate.js, gunforma-build-detail.html) remain hand-synced; see
 // CLAUDE.md "Duplicated logic to keep in sync".
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
+// A variant with no partner listing links to the part's own products.url
+// through /go/part/<id>. The label ("Buy from <maker>" vs "Buy at <host>")
+// and the disclosure wording are decided in _maker-link.mjs, mirrored by
+// js/maker-link.js and parity-tested on every deploy.
+import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+// For the "Used in these builds" row: /b/ links are built with the shared
+// builder, never by hand — see CLAUDE.md, "A build's URL is built in two
+// places, on purpose".
+import { buildPath } from './_build-url.mjs';
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
 const SITE = 'https://gunforma.com';
+const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -171,7 +182,23 @@ const SPEC_TABLES = {
     ['has_thumb_rest', 'Thumb Rest', YESNO],
     ['optic_compatibility_notes', 'Optic Compatibility'],
   ]],
+  recoil_spring: ['recoil_spring_specs', [
+    ['slide_length_in', 'Slide Length', (v) => v + '"'],
+    ['spring_weight', 'Spring Weight'],
+    ['captured', 'Captured', YESNO],
+    ['spring_type', 'Spring Type'],
+    ['guide_rod_material', 'Guide Rod Material'],
+  ]],
+  sight: ['sight_specs', [
+    ['sight_position', 'Front, Rear or Set', (v) => ({ front: 'Front', rear: 'Rear', set: 'Set (front and rear)' }[v] || v)],
+    ['height', 'Height', (v) => ({ standard: 'Standard', suppressor: 'Suppressor / co-witness' }[v] || v)],
+    ['sight_type', 'Type', (v) => ({ night: 'Night (tritium)', fiber: 'Fiber optic', 'night-fiber': 'Night + fiber', plain: 'Plain' }[v] || v)],
+    ['dovetail', 'Dovetail / Slide Cut'],
+    ['rear_notch', 'Rear Notch'],
+  ]],
 };
+// slide_plate and other have no spec table (CATEGORIES_WITHOUT_SPEC_SHEET in
+// _category-meta.mjs); check-categories.mjs asserts every other category is here.
 
 // VARIANT_AXES, extractAxes, computeActiveAxes and variantLabel used to
 // live here. They are gone: the label comes from _variant-label.mjs and
@@ -225,7 +252,7 @@ function notFound(slug) {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Part not found</div>' +
     '<div class="s">' + (s ? 'No listing at &ldquo;' + s + '&rdquo;.' : 'That part link is not valid.') + '</div>' +
-    '<a href="' + SITE + '/gunforma-parts-catalog.html">Browse the catalog &rarr;</a></div></body></html>',
+    '<a href="' + SITE + '/gunforma-parts-catalog.html">Browse the catalog &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
   );
 }
@@ -234,7 +261,7 @@ async function fetchProduct(slug) {
   const cols = [
     'id', 'slug', 'name', 'category', 'description', 'best_for', 'pros', 'cons',
     'material', 'material_family', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
-    'build_warning', 'fitment_notes', 'lowest_price',
+    'build_warning', 'fitment_notes', 'lowest_price', 'url', 'is_discontinued',
     'manufacturers!products_brand_id_fkey(name,slug,website_url)',
     // Must name the FK: products has two relationships to product_variants
     // (product_variants.product_id -> products.id, and
@@ -258,6 +285,14 @@ async function fetchProduct(slug) {
 }
 
 async function fetchSpecs(category, productId) {
+  // An Other Part's one extra fact is products.part_type. Asked for here,
+  // for that category only, never in fetchProduct's select: a column named
+  // there that the database does not have yet fails every product page.
+  if (category === 'other') {
+    const rows = await pgGet('products?id=eq.' + productId + '&select=part_type&limit=1');
+    const t = Array.isArray(rows) && rows.length ? rows[0].part_type : null;
+    return t ? [{ label: 'Part Type', value: t, partType: t }] : [];
+  }
   const table = SPEC_TABLES[category];
   if (!table) return null;
   const [tableName, fields] = table;
@@ -320,20 +355,66 @@ async function fetchFitGuides(category, productId) {
     }));
 }
 
-function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides }) {
+// Approved builds that run this product, newest first, with a hero photo for
+// the card. Same fetch-and-filter shape as guide-page.mjs's
+// fetchBuildsUsing(): builds fit in one page today (5 approved), so one query
+// and a local filter beats a cs.[] contains-query per product — revisit if
+// approved builds outgrow the limit.
+//
+// This section is what makes a product page more than a copy of the
+// retailer's listing: Search Console judged 63% of /parts/ to be thin
+// duplicates, and real builds using the part are the one thing a retailer
+// page cannot have. It also gives every build inbound links from pages
+// Google already crawls, instead of the sitemap being a build's only door.
+async function fetchBuildsUsing(productId) {
+  const rows = await pgGet('builds?status=eq.approved' +
+    '&select=' + encodeURIComponent('id,name,parts_snapshot,profiles!builds_user_id_fkey(username),build_photos(storage_path,is_hero,position)') +
+    '&order=updated_at.desc&limit=100');
+  const out = [];
+  for (const b of (Array.isArray(rows) ? rows : [])) {
+    const snap = Array.isArray(b.parts_snapshot) ? b.parts_snapshot : [];
+    if (!snap.some((p) => p && p.refId === productId)) continue;
+    const photos = (b.build_photos || []).slice().sort((x, y) =>
+      (y.is_hero === true) - (x.is_hero === true) || (x.position ?? 9) - (y.position ?? 9));
+    out.push({
+      id: b.id, name: b.name,
+      owner: b.profiles ? b.profiles.username : null,
+      photo: photos.length && photos[0].storage_path ? PHOTO_BASE + photos[0].storage_path : null,
+    });
+    if (out.length === 4) break;
+  }
+  return out;
+}
+
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
+  // A variant with no partner listing gets a MAKER row instead of a dead
+  // "No listing yet": a button to the part's own products.url through
+  // /go/part/<id>, so the click is counted. Null when there is no usable url
+  // (one live part today, streamlight-tlr-7-sub) — that row keeps the
+  // non-link state. A discontinued part gets none: /go/part/ 404s it.
+  const maker = product.is_discontinued ? null
+    : makerLink(product.url, brand.name, brand.website_url);
+
   // Flatten to (variant, link) rows, same shape/ordering rule as affiliate.js.
-  const rows = [];
+  // partnerRows and otherRows are kept apart so partner rows ALWAYS sort
+  // first: the shared comparator's tiebreak would otherwise put an unnamed
+  // maker row ahead of a stale partner listing.
+  const partnerRows = [];
+  const otherRows = [];
   variants.forEach((v) => {
     const links = v.affiliate_links || [];
     if (!links.length) {
-      rows.push({ v, price: null, stale: true, url: null, in_stock: null, partnerName: null });
+      otherRows.push(maker
+        ? { v, price: null, stale: true, url: null, in_stock: null, partnerName: null,
+            maker, goUrl: '/go/part/' + product.id }
+        : { v, price: null, stale: true, url: null, in_stock: null, partnerName: null });
       return;
     }
     links.forEach((l) => {
-      rows.push({
+      partnerRows.push({
         v,
         price: l.street_price != null ? Number(l.street_price) : null,
         stale: isStalePrice(l),
@@ -348,11 +429,17 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
   // alone, so it no longer changes when a sibling variant is added or
   // retired. That instability was fine for a comparison table and wrong for
   // a build page, where the same label gets written into parts_snapshot.
-  rows.forEach((r) => { r.label = variantLabel(r.v); });
+  partnerRows.forEach((r) => { r.label = variantLabel(r.v); });
+  otherRows.forEach((r) => { r.label = variantLabel(r.v); });
   // Fresh-and-priced first, so the top buy row is the one the headline
   // price quotes; the shared comparator keeps equal listings in a stable
-  // order. Full ordering documented in _listing-rules.mjs.
-  rows.sort(compareListingRows);
+  // order. Full ordering documented in _listing-rules.mjs. The unlisted
+  // variants follow, by label — PostgREST returns them in arbitrary order.
+  partnerRows.sort(compareListingRows);
+  otherRows.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
+  const rows = partnerRows.concat(otherRows);
+  const hasPartner = partnerRows.some((r) => r.url);
+  const hasMaker = otherRows.some((r) => r.maker);
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
   // be anchored on a number no feed has confirmed.
@@ -378,7 +465,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
     : null;
   const descBase = product.description
     ? product.description.replace(/\s+/g, ' ').trim().slice(0, 220)
-    : (categoryLabel + ' for the Sig Sauer P365' + (brand.name ? ' from ' + brand.name : '') + '.');
+    : (categorySingular + ' for the Sig Sauer P365' + (brand.name ? ' from ' + brand.name : '') + '.');
   const metaDescription = descBase + (priceText ? ' Priced ' + priceText + '.' : '');
   const canonical = SITE + '/parts/' + categorySegment + '/' + product.slug;
 
@@ -390,12 +477,16 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
     sku: (variants.find((v) => v.is_default) || variants[0] || {}).sku || undefined,
     brand: brand.name ? { '@type': 'Brand', name: brand.name } : undefined,
     image: heroImage || undefined,
-    category: categoryLabel,
+    category: categorySingular,
     // A stale-priced listing still ships as an Offer — the URL and stock are
     // true — but WITHOUT price/priceCurrency. Same principle as the
     // availability omission below: absent means "not stated", which is honest,
     // where a stale number positively asserts something we can't stand behind.
-    offers: rows.filter((r) => r.url).map((r) => ({
+    //
+    // MAKER ROWS ARE NOT OFFERS. A link to the maker's store with a hand-typed
+    // MSRP is not a price we can stand behind in rich results, so the
+    // structured data is exactly what it was before those rows existed.
+    offers: rows.filter((r) => !r.maker && r.url).map((r) => ({
       '@type': 'Offer',
       ...(r.price != null && !r.stale
             ? { price: r.price.toFixed(2), priceCurrency: 'USD' }
@@ -464,10 +555,16 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
     const stock = r.in_stock === true ? '<span class="stock in">In stock</span>'
       : r.in_stock === false ? '<span class="stock out">Out of stock</span>' : '';
     const partner = r.partnerName ? ' at <strong>' + esc(r.partnerName) + '</strong>' : '';
+    // Three buttons: a partner listing (sponsored, through /go/<link>), the
+    // part's own store (NOT sponsored — nobody pays for it — through
+    // /go/part/<product>), or no link at all when products.url is empty.
     const btn = r.url
       ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' +
           (r.partnerName ? 'Buy at ' + esc(r.partnerName) + ' ↗' : 'View listing ↗') + '</a>'
-      : '<span class="buy-btn disabled">No listing yet</span>';
+      : r.maker
+        ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="' + MAKER_REL + '">' +
+            esc(r.maker.label) + ' ↗</a>'
+        : '<span class="buy-btn disabled">No listing yet</span>';
     return '<div class="variant-row">' +
         '<div class="variant-info"><span class="variant-label">' + esc(r.label) + '</span>' +
         '<span class="variant-sub">' + price + partner + ' ' + stock + '</span></div>' +
@@ -475,8 +572,25 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
       '</div>';
   }).join('') || '<div class="variant-row"><div class="variant-info"><span class="variant-sub">No retailer listings available yet.</span></div></div>';
 
+  const disclosure = buyDisclosure(hasPartner, hasMaker);
+
   const bestForHtml = (product.best_for || []).length
     ? '<div class="chips">' + product.best_for.map((b) => '<span class="chip">' + esc(String(b).replace(/-/g, ' ')) + '</span>').join('') + '</div>'
+    : '';
+
+  // Same card guide-page.mjs draws for its "Used in these builds" row.
+  // Nothing renders for a product no approved build runs — an empty heading
+  // would be the thin-content problem restated.
+  const buildsHtml = (builds && builds.length)
+    ? '<div class="section-title">Used in these builds</div>' +
+      '<div class="builds-row">' +
+        builds.map((b) =>
+          '<a class="build-card" href="' + esc(buildPath(b.id, b.name)) + '">' +
+            (b.photo ? '<img src="' + esc(b.photo) + '" alt="' + esc(b.name) + '" loading="lazy"/>' : '') +
+            '<span class="build-name">' + esc(b.name) + '</span>' +
+            (b.owner ? '<span class="build-owner">by ' + esc(b.owner) + '</span>' : '') +
+          '</a>').join('') +
+      '</div>'
     : '';
 
   return '<!DOCTYPE html><html lang="en"><head>' +
@@ -547,6 +661,10 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
 '.fg-gun { font-size: 13px; font-weight: 700; color: #1a1a1a; }' +
 '.fg-go { font-size: 11px; color: #4a9edd; }' +
 '.fitguide-note { font-size: 11.5px; color: #888; margin: 6px 0 2px; }' +
+'.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +
+'.build-card { display: flex; flex-direction: column; gap: 4px; width: 160px; text-decoration: none; color: #1a1a1a; }' +
+'.build-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; border: 0.5px solid #e5e5e5; }' +
+'.build-name { font-size: 13px; font-weight: 600; } .build-owner { font-size: 11px; color: #888; }' +
 '.disclosure { font-size: 11px; color: #999; margin-top: 10px; font-style: italic; }' +
 '.footer-bar { max-width: 900px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; border-top: 0.5px solid #e5e5e5; font-size: 11px; color: #999; }' +
 '.footer-bar a { color: #999; }' +
@@ -588,7 +706,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
 '</nav>' +
 '<div class="breadcrumb">' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a> / ' +
-  '<a href="gunforma-parts-catalog.html?category=' + encodeURIComponent(product.category) + '">' + esc(categoryLabel) + '</a> / ' +
+  '<a href="gunforma-parts-catalog.html?category=' + encodeURIComponent(product.category) + '">' + esc(categoryPlural) + '</a> / ' +
   esc(product.name) +
 '</div>' +
 '<div class="page">' +
@@ -596,7 +714,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
     ? '<img class="hero-img" src="' + esc(heroImage) + '" alt="' + esc(product.name) + '" loading="eager" />'
     : '<div class="hero-placeholder">No photo yet</div>') + '</div>' +
   '<div>' +
-    '<div class="eyebrow">' + esc(categoryLabel) + ' &middot; Sig Sauer P365</div>' +
+    '<div class="eyebrow">' + esc(categorySingular) + ' &middot; Sig Sauer P365</div>' +
     '<h1>' + esc(product.name) + '</h1>' +
     (brand.name ? '<div class="brand-line">by ' + (brand.website_url ? '<a href="' + esc(brand.website_url) + '" target="_blank" rel="noopener">' + esc(brand.name) + '</a>' : esc(brand.name)) + '</div>' : '') +
     (priceText ? '<div class="price-line">' + esc(priceText) + '</div>' : '') +
@@ -609,7 +727,10 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
     fitGuidesHtml +
     '<div class="section-title">Buy</div>' +
     variantRowsHtml +
-    '<div class="disclosure">Gunforma may earn a commission on purchases made through these links.</div>' +
+    // Says what is true of the links above it: partner-only, maker-only,
+    // both — or nothing at all when there is no link to disclose.
+    (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
+    buildsHtml +
   '</div>' +
 '</div>' +
 '<div class="footer-bar">' +
@@ -635,7 +756,7 @@ function renderPage({ product, specs, categorySegment, categoryLabel, fitGuides 
   'm.addEventListener("click",function(e){if(e.target.closest("a"))c();});' +
   'window.addEventListener("resize",function(){if(window.innerWidth>820)c();});' +
 '})();</script>' +
-'</body></html>';
+ANALYTICS_SNIPPET + '</body></html>';
 }
 
 export default async (req) => {
@@ -654,8 +775,9 @@ export default async (req) => {
   }
   if (!product) return notFound(slug);
 
-  const meta = CATEGORY_META[product.category] || [product.category, product.category];
-  const [categorySegment, categoryLabel] = meta;
+  const meta = CATEGORY_META[product.category] || [product.category, product.category, product.category];
+  const [categorySegment, categoryPlural] = meta;
+  let categorySingular = meta[2];
 
   let specs = [];
   try {
@@ -663,6 +785,20 @@ export default async (req) => {
   } catch (err) {
     console.error('[product-page] spec lookup failed for ' + product.category, err);
     // Non-fatal — page still renders with common specs only.
+  }
+
+  // An Other Part reads as what it is ("Thumb ledge for the Sig Sauer P365"),
+  // not "Other Part for …": its part type is the singular name.
+  const partType = (specs.find((s) => s.partType) || {}).partType;
+  if (partType) categorySingular = partType.charAt(0).toUpperCase() + partType.slice(1);
+
+  let builds = [];
+  try {
+    builds = await fetchBuildsUsing(product.id);
+  } catch (err) {
+    // Non-fatal: the product page is the product page with or without the
+    // builds row, and a builds hiccup must not take down a buy page.
+    console.error('[product-page] builds lookup failed', err);
   }
 
   let fitGuides = [];
@@ -674,7 +810,7 @@ export default async (req) => {
     console.error('[product-page] fit-guide lookup failed', err);
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryLabel, fitGuides });
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides });
   return new Response(html, {
     status: 200,
     headers: {

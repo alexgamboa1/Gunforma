@@ -58,12 +58,16 @@ check "build URL copies agree"     scripts/build-url.test.mjs
 check "variant label copies agree" scripts/variant-label.test.mjs
 check "shared globals loaded"      scripts/check-script-order.mjs
 check "snapshot whitelists agree" scripts/check-snapshot-fields.mjs
+check "snapshot round-trips"    scripts/snapshot-roundtrip.test.mjs
 check "affiliate module runs"      scripts/affiliate-render.test.mjs
 check "variant picker runs"        scripts/variant-picker.test.mjs
 check "buy links go through /go/"  scripts/check-buy-links.mjs
+check "analytics on public pages" scripts/check-analytics-snippet.mjs
 check "category labels cover keys" scripts/check-category-labels.mjs
+check "one category list"          scripts/check-categories.mjs
 check "build-og page literals"     scripts/check-canonical-coupling.mjs
 check "listing rules pinned"       scripts/listing-rules.test.mjs
+check "maker-link copies agree"    scripts/maker-link.test.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
@@ -121,6 +125,15 @@ NOT_BUILD_CHECKS=(
   # deploying rather than whoever maintains the catalogue. Runs daily from
   # .github/workflows/check-variant-images.yml and raises an issue.
   scripts/check-variant-image-sku.mjs
+
+  # Runs every branch of supabase/functions/launch-invite against a fake
+  # Supabase. The function is TypeScript, and the test strips its types with
+  # node:module's stripTypeScriptTypes, which needs Node 22.13 — the site
+  # build is pinned to Node 20 in netlify.toml, so here it would fail for the
+  # wrong reason. It also guards nothing a site deploy ships: an Edge Function
+  # is deployed separately, by hand. Run it before
+  # `supabase functions deploy launch-invite`.
+  scripts/launch-invite.test.mjs
 
   # NOT a unit test, despite the name. It signs in as a real user and writes
   # to live Storage, so it needs SMOKE_TEST_EMAIL / SMOKE_TEST_PASSWORD and a

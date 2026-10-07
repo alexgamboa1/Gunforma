@@ -26,6 +26,12 @@ import {
   hubPath, isLiveGunHub, guidePagesForGun, guidePath,
 } from './_guide-meta.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
+// The Cloudflare Web Analytics tag, at the end of every document this
+// function emits — the same rule as every other HTML-emitting function, and the one this
+// file shipped without: hub pages exist to draw traffic, and were invisible
+// to the thing that counts it. scripts/check-analytics-snippet.mjs discovers
+// HTML-emitting functions and refuses the build without this import.
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -76,7 +82,7 @@ function notFound(detail) {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Page not found</div>' +
     '<div class="s">' + esc(detail || 'No model page at this address.') + '</div>' +
-    '<a href="' + SITE + HUB_INDEX_PATH + '">See the P365 models we cover &rarr;</a></div></body></html>',
+    '<a href="' + SITE + HUB_INDEX_PATH + '">See the P365 models we cover &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
   );
 }
@@ -213,7 +219,7 @@ function renderHub({ hub, gun, cuts, vocab, guides }) {
       '<div class="author"><span>Last reviewed ' + esc(hub.updated) + '</span></div>' +
     '</div>' +
     footerHtml() +
-    navScript() +
+    navScript() + ANALYTICS_SNIPPET +
     '</body></html>';
 }
 
@@ -268,7 +274,7 @@ function renderIndex({ hubs }) {
       '</div>' +
     '</div>' +
     footerHtml() +
-    navScript() +
+    navScript() + ANALYTICS_SNIPPET +
     '</body></html>';
 }
 

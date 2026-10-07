@@ -46,6 +46,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .field-toggle-visibility { position: absolute; top: 50%; right: 10px; transform: translateY(-50%); background: none; border: none; padding: 4px; cursor: pointer; color: #999; display: flex; align-items: center; justify-content: center; }
 .field-toggle-visibility:hover { color: #555; }
 .field-toggle-visibility svg { width: 18px; height: 18px; }
+/* Carries the email to the browser's password manager; never seen or focused. */
+.pm-username { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); border: 0; }
 
 .btn-submit { width: 100%; font-size: 13px; font-weight: 700; background: #1a1a1a; color: #fff; border: none; padding: 13px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; transition: background 0.15s; display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 14px; }
 .btn-submit:hover:not(:disabled) { background: #333; }
@@ -136,9 +138,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div id="nav-mount" data-nav="auth-signin"></div>
 
 <div class="hero-strip">
-  <div class="hero-eyebrow">Welcome back</div>
-  <div class="hero-title">Sign in to Gunforma</div>
-  <p class="hero-sub">Your builds, your community.</p>
+  <div class="hero-eyebrow" id="hero-eyebrow">Welcome back</div>
+  <div class="hero-title" id="hero-title">Sign in to Gunforma</div>
+  <p class="hero-sub" id="hero-sub">Your builds, your community.</p>
 </div>
 
 <div class="card-wrap">
@@ -211,13 +213,56 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <div class="reset-sent" id="reset-sent">
       <div class="reset-icon">✉️</div>
       <div class="reset-title">Reset link sent</div>
-      <div class="reset-sub">Check your email for a link to reset your password. It expires in 1 hour.</div>
+      <!-- 24 hours is Supabase's Email OTP Expiration (86400s), the same
+           number the reset email states. See claude/operations.md: change
+           the setting, change the copy. This read "1 hour" until the setting
+           was raised and nobody came back for it. -->
+      <div class="reset-sub">Check your email for a link to choose a new password. It expires in 24 hours.</div>
       <div class="card-footer" style="margin-top:16px;"><a href="gunforma-signin.html">Back to sign in</a></div>
+    </div>
+
+    <!-- CHOOSE A NEW PASSWORD — where the link in the reset email lands -->
+    <div class="forgot-section" id="newpw-section">
+      <!-- No title here: showNewPassword() puts "Choose a new password" in
+           the hero, and a second copy directly under it read as a stutter. -->
+      <div class="forgot-sub">For <strong id="newpw-email">your account</strong>. You'll use it to sign in from now on.</div>
+      <div class="field" style="margin-bottom:20px;">
+        <label class="field-label" for="new-password">New password</label>
+        <!-- What the password manager should save as the login: the email. -->
+        <input class="pm-username" type="email" id="newpw-username" autocomplete="username" readonly tabindex="-1" aria-hidden="true" />
+        <div class="field-input-wrap">
+          <input class="field-input" type="password" id="new-password" placeholder="At least 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')handleNewPassword()" />
+          <button type="button" class="field-toggle-visibility" onclick="togglePasswordVisibility('new-password', this)" aria-label="Show password">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="btn-submit" id="newpw-btn" onclick="handleNewPassword()" style="background:#4a9edd;">
+        <div class="spinner" id="newpw-spinner"></div>
+        <span id="newpw-btn-text">Save password →</span>
+      </button>
     </div>
 
   </div>
 </div>
 
+<script>
+// Read the URL hash BEFORE js/supabase-client.js. Creating the client reads
+// the sign-in tokens out of the hash and then clears it, and the hash is the
+// only sign that this visit came from a password-reset email:
+//   #access_token=…&type=recovery         a reset link that worked
+//   #error=access_denied&error_code=otp_expired&…   one that expired or was reused
+//
+// Placed here, the read does not depend on WHEN the client clears it. Measured
+// with supabase-js 2.117.2, a read placed after the client still sees the hash
+// (the client clears it asynchronously) — but that is the library's timing,
+// and this page loads @supabase/supabase-js@2 unpinned from a CDN. Keep it
+// first.
+(function () {
+  var h = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
+  window.GF_AUTH_LANDING = { type: h.get('type') || '', errorCode: h.get('error_code') || '' };
+})();
+</script>
 <script src="js/supabase-client.js"></script>
 <script src="js/site-url.js"></script>
 <script src="js/nav.js"></script>
@@ -248,12 +293,103 @@ function resetTurnstileWidget(widgetElId) {
   if (window.turnstile && wid) turnstile.reset(wid);
 }
 
-// Redirect if already signed in
-sb.auth.getSession().then(function(res) {
-  if (res.data && res.data.session) {
-    redirectByRole();
+// ============================================================
+// ARRIVING — already signed in, or from a password-reset email
+// ============================================================
+// A reset link signs the person in. That used to be the whole of "reset":
+// this page saw a session, redirected like any other sign-in, and nothing
+// anywhere let them choose a password — the email promised one and the site
+// had no screen for it. For a builder who was invited (and so never had a
+// password at all) there was no way to get one.
+//
+// So a recovery arrival is held here until a password is saved.
+var AUTH_LANDING = window.GF_AUTH_LANDING || { type: '', errorCode: '' };
+var IS_RECOVERY  = AUTH_LANDING.type === 'recovery';
+
+// Second signal, in case the hash was not readable for any reason: the client
+// announces a recovery sign-in itself.
+sb.auth.onAuthStateChange(function (event, session) {
+  if (event === 'PASSWORD_RECOVERY') {
+    IS_RECOVERY = true;
+    showNewPassword(session && session.user);
   }
 });
+
+// getSession() waits for the client to finish reading the URL, so a session
+// from the hash is already in place when this resolves.
+sb.auth.getSession().then(function(res) {
+  var session = res.data && res.data.session;
+  if (IS_RECOVERY) {
+    if (session) showNewPassword(session.user);
+    else showResetLinkDead();
+    return;
+  }
+  // Only otp_expired. A cancelled Google sign-in also comes back as
+  // error=access_denied, and telling that person their link expired would be
+  // wrong.
+  if (AUTH_LANDING.errorCode === 'otp_expired') { showResetLinkDead(); return; }
+  if (session) redirectByRole();
+});
+
+function showNewPassword(user) {
+  document.getElementById('signin-section').style.display = 'none';
+  document.getElementById('forgot-section').classList.remove('show');
+  document.getElementById('reset-sent').classList.remove('show');
+  document.getElementById('newpw-section').classList.add('show');
+  document.getElementById('hero-eyebrow').textContent = 'Account security';
+  document.getElementById('hero-title').textContent   = 'Choose a new password';
+  document.getElementById('hero-sub').textContent     = 'One step, then you’re in.';
+  var email = (user && user.email) || '';
+  if (email) {
+    document.getElementById('newpw-email').textContent = email;
+    document.getElementById('newpw-username').value = email;
+  }
+  showError('');
+  document.getElementById('new-password').focus();
+}
+
+// The link was already used, or is older than 24 hours. Put them one click
+// from a new one instead of leaving them on a sign-in form they cannot use.
+function showResetLinkDead() {
+  document.getElementById('newpw-section').classList.remove('show');
+  showForgot();
+  showError('That link has expired or was already used. Enter your email and we’ll send a new one.');
+}
+
+async function handleNewPassword() {
+  var password = document.getElementById('new-password').value;
+  showError('');
+  if (password.length < 8) { showError('Choose a password of at least 8 characters.'); return; }
+
+  setNewPasswordLoading(true);
+  try {
+    var res = await sb.auth.updateUser({ password: password });
+    // same_password: they chose the one they already had. It is set, which
+    // is all they asked for.
+    if (res.error && res.error.code !== 'same_password') {
+      setNewPasswordLoading(false);
+      if (/session/i.test(res.error.message || '')) {
+        showResetLinkDead();
+      } else {
+        showError('That password couldn’t be saved: ' + (res.error.message || 'please try a different one.'));
+      }
+      return;
+    }
+    // Signed in already, by the link. Route exactly as a normal sign-in
+    // does — an invited builder who never finished claiming goes on to pick
+    // a username.
+    await redirectByRole();
+  } catch (err) {
+    setNewPasswordLoading(false);
+    showError('Something went wrong. Please try again.');
+  }
+}
+
+function setNewPasswordLoading(on) {
+  document.getElementById('newpw-spinner').classList.toggle('show', on);
+  document.getElementById('newpw-btn-text').textContent = on ? 'Saving…' : 'Save password →';
+  document.getElementById('newpw-btn').disabled = on;
+}
 
 // ============================================================
 // REDIRECT BY ROLE
@@ -440,5 +576,6 @@ function togglePasswordVisibility(inputId, btn) {
     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
 }
 </script>
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

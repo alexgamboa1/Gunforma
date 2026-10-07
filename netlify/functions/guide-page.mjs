@@ -27,7 +27,11 @@ import { GUIDE_FAMILIES, GUIDE_PAGES, guidePath, isLiveGuidePage } from './_guid
 import { GUIDE_CONTENT } from './_guide-content.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
+// An optic with no partner listing links to its own products.url through
+// /go/part/<id>; label and disclosure rules live in _maker-link.mjs.
+import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 import { buildPath } from './_build-url.mjs';
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -81,7 +85,7 @@ function notFound(detail) {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Page not found</div>' +
     '<div class="s">' + esc(detail || 'No fit guide at this address.') + '</div>' +
-    '<a href="' + SITE + '/parts">Browse parts by category &rarr;</a></div></body></html>',
+    '<a href="' + SITE + '/parts">Browse parts by category &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
   );
 }
@@ -130,8 +134,8 @@ async function fetchFitOptics(cutNames) {
   const cols =
     'footprint_id,optic_type,reticle,dot_size_moa,window_size,battery_life,enclosed_emitter,shake_awake,solar_power,' +
     'footprints!optic_specs_footprint_id_fkey(slug,common_name),' +
-    'products!optic_specs_product_id_fkey(id,slug,name,fitment_confidence,is_discontinued,' +
-      'manufacturers!products_brand_id_fkey(name),' +
+    'products!optic_specs_product_id_fkey(id,slug,name,url,fitment_confidence,is_discontinued,' +
+      'manufacturers!products_brand_id_fkey(name,website_url),' +
       'product_variants!product_variants_product_id_fkey(id,msrp,is_default,primary_image_url,' +
         'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))))';
   const retiredFilters =
@@ -185,6 +189,10 @@ async function fetchFitOptics(cutNames) {
       mountFit: mapping ? mapping.fit : null,
       hero, msrp,
       productId: p.id,
+      // The unpaid fallback for the buy cell. Null when products.url is
+      // empty or not http(s), and the cell stays "No listing yet".
+      maker: makerLink(p.url, p.manufacturers ? p.manufacturers.name : null,
+                       p.manufacturers ? p.manufacturers.website_url : null),
     });
   }
   // Fresh-priced first (ascending), then the rest alphabetically — a reader
@@ -239,12 +247,30 @@ function priceCell(o) {
   return o.msrp != null ? 'MSRP $' + o.msrp.toFixed(2) : 'Check price';
 }
 
+// A partner listing first (sponsored, /go/<link>); otherwise the optic's own
+// store (not sponsored — nobody pays for it — /go/part/<product>); otherwise
+// the non-link state, for the rare optic with no url saved.
+function hasPartnerLink(o) { return !!(o.hero && o.hero.url); }
+function hasMakerLink(o)   { return !hasPartnerLink(o) && !!o.maker; }
+
 function buyCell(o) {
-  if (o.hero && o.hero.url) {
+  if (hasPartnerLink(o)) {
     const label = o.hero.partnerName ? 'Buy at ' + esc(o.hero.partnerName) : 'View listing';
     return '<a class="buy-btn" href="' + esc(o.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' + label + ' ↗</a>';
   }
+  if (hasMakerLink(o)) {
+    return '<a class="buy-btn" href="/go/part/' + esc(o.productId) + '" target="_blank" rel="' + MAKER_REL + '">' + esc(o.maker.label) + ' ↗</a>';
+  }
   return '<span class="buy-btn disabled">No listing yet</span>';
+}
+
+// The line under the table. The first sentence is about the prices and
+// stays; the second says what is true of the buttons above it — partner,
+// maker, both — and is absent when there is no button at all.
+function tableDisclosure(optics) {
+  const second = buyDisclosure(optics.some(hasPartnerLink), optics.some(hasMakerLink));
+  return 'Prices update from retailer feeds; a listing we could not verify in the last 7 days shows &ldquo;Check price&rdquo;.' +
+    (second ? ' ' + esc(second) : '');
 }
 
 function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, builds, updated }) {
@@ -439,7 +465,7 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
   '<div class="table-wrap"><table><thead><tr>' +
     '<th>Optic</th><th>Footprint</th><th>Reticle</th><th>Window</th><th>Battery life</th><th>Price</th><th></th>' +
   '</tr></thead><tbody>' + tableRows + '</tbody></table></div>' +
-  '<div class="disclosure">Prices update from retailer feeds; a listing we could not verify in the last 7 days shows &ldquo;Check price&rdquo;. Gunforma may earn a commission on purchases made through these links.</div>' +
+  '<div class="disclosure">' + tableDisclosure(optics) + '</div>' +
   '<h2>Which optic cut does my ' + esc(gunName) + ' have?</h2>' +
   decoderRows +
   (picks.length ? '<h2>Top picks</h2><div class="picks">' + picksHtml + '</div>' : '') +
@@ -457,8 +483,10 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
   footerHtml() +
 // Same dependency-free hamburger as product-page.mjs, same reason: this page
 // ships no client JS, so without it the nav is unreachable below 820px.
-  navScript() +
-'</body></html>';
+  // navScript() is that inline toggle, byte for byte, now shared with
+  // gun-hub.mjs through _page-chrome.mjs. The analytics tag closes the
+  // document, as on every HTML-emitting function.
+  navScript() + ANALYTICS_SNIPPET + '</body></html>';
 }
 
 export default async (req) => {

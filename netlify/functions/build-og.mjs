@@ -1,9 +1,24 @@
-// build-og — server-renders OG/Twitter meta for /b/:id
+// build-og — server-renders /b/:id for crawlers: OG/Twitter meta, JSON-LD,
+// and the build's actual BODY — h1, the builder's words, the parts list with
+// /parts/ links, the photos.
 // -----------------------------------------------------------------------------
 // Crawlers (Facebook, X, Slack, iMessage, LinkedIn) do not run JavaScript, so
 // a shared build link currently previews as a bare URL — no title, no image.
 // That matters more than it sounds: sharing the build page IS the value for a
 // builder, and we are about to invite ~20 of them.
+//
+// THE BODY IS INJECTED THE SAME WAY THE META IS: exact-string replaces of the
+// page's placeholder elements ("—", "Loading…"). The page's own JS then
+// hydrates over them with identical content. Every one of those literals is
+// held to the page byte-for-byte by scripts/check-canonical-coupling.mjs —
+// edit a placeholder in gunforma-build-detail.html and the matching literal
+// here in the same commit, or the build refuses to ship. Every replacement is
+// an arrow function on purpose: a plain string replacement interprets `$`
+// sequences, and builders write things like "$250" in their descriptions.
+//
+// Before this, Google fetched a build and saw an H1 of "—", "Loading…", and a
+// legal disclaimer shared by every build on the site — nothing to rank, and
+// every build a thin duplicate of the next. See the PR that introduced it.
 //
 // Direct sibling of profile-og.mjs, deliberately: same shape, same failure
 // modes, same conventions. This sits in front of /b/:id, confirms the build is
@@ -31,6 +46,12 @@
 // -----------------------------------------------------------------------------
 import { readFile } from 'node:fs/promises';
 import { buildUrl, buildIdFromPath } from './_build-url.mjs';
+// The server's one category list — /parts/ URL segments and display names
+// for the parts this function now server-renders into the page body. Import,
+// never a local copy: scripts/check-categories.mjs fails any file carrying
+// its own category map.
+import { CATEGORY_META } from './_category-meta.mjs';
+import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -129,30 +150,89 @@ function clamp(s, max) {
   return t.slice(0, max - 1).replace(/\s+\S*$/, '') + '…';
 }
 
+// ── What a build is CALLED, to a search engine ─────────────────────────────
+// Nobody searches a builder's caption ("My X Macro. Love this EDC."). They
+// search the parts — so the title and description carry the build's most
+// notable parts by name, drawn from parts_snapshot rather than typed by
+// anyone. The caption still leads, because it is the h1 and the thing the
+// builder shared.
+
+// A part's display name: brand + name, except when the stored name already
+// repeats the brand ("True Precision" + "True Precision Axiom P365" is a
+// live example — concatenating blindly ships the brand twice).
+function partDisplayName(p) {
+  const name  = (p && p.name  ? String(p.name)  : '').replace(/\s+/g, ' ').trim();
+  const brand = (p && p.brand ? String(p.brand) : '').replace(/\s+/g, ' ').trim();
+  if (!name) return brand;
+  if (!brand || name.toLowerCase().startsWith(brand.toLowerCase())) return name;
+  return brand + ' ' + name;
+}
+
+// Up to `max` parts worth naming in a title or description, most searched-for
+// categories first. parts_snapshot carries two vocabularies (section keys
+// like 'optics' and raw products.category values like 'optic' — see
+// js/build-categories.js), so both spellings are listed. This is a priority
+// ORDER over keys, not a key→label map — labels stay in _category-meta.mjs.
+const HEADLINE_PRIORITY = [
+  'optics', 'optic', 'slides', 'slide', 'barrels', 'barrel', 'compensator',
+  'grips', 'frame', 'lights', 'light', 'triggers', 'trigger',
+];
+function headlineParts(build, max) {
+  const parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
+  const rank = (p) => {
+    const i = HEADLINE_PRIORITY.indexOf(p && p.category);
+    return i === -1 ? HEADLINE_PRIORITY.length : i;
+  };
+  return parts
+    .map((p, i) => ({ p, i }))
+    .filter((x) => partDisplayName(x.p))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)   // stable: snapshot order breaks ties
+    .slice(0, max)
+    .map((x) => clamp(partDisplayName(x.p), 38));
+}
+
 function buildTitle(build) {
   const platform = build.platforms && build.platforms.name;
   const name     = (build.name || '').trim() || 'Untitled build';
-  // "P365 EDC Carry — SIG P365 build on Gunforma". Platform is dropped when
-  // the name already carries it, so we don't ship "P365 EDC Carry — SIG P365".
+  // Platform is dropped when the name already carries it, so we don't ship
+  // "P365 EDC Carry — SIG P365".
   const nameHasPlatform = platform &&
     name.toLowerCase().includes(platform.toLowerCase().replace(/^sig\s+/i, ''));
-  return nameHasPlatform || !platform
-    ? name + ' on Gunforma'
-    : name + ' — ' + platform + ' build on Gunforma';
+  const lead = nameHasPlatform || !platform
+    ? clamp(name, 65)
+    : clamp(name, 48) + ' — ' + platform + ' build';
+  // "My X Macro. Love this EDC. — SIG P365 build: Holosun EPS Carry,
+  // Streamlight TLR-7 Sub | Gunforma". Longer than Google displays, which is
+  // fine — a truncated title still ranks on the part names; a title without
+  // them cannot.
+  const parts = headlineParts(build, 2);
+  return parts.length
+    ? lead + ': ' + parts.join(', ') + ' | Gunforma'
+    : lead + ' on Gunforma';
 }
 
 function buildDescription(build) {
-  // The builder's own words win when they wrote any.
-  const own = clamp(build.description, 160);
-  if (own) return own;
-
-  // Otherwise a generated summary — still specific enough to be worth reading
-  // in a preview card, and never an empty description tag.
   const platform = (build.platforms && build.platforms.name) || 'Custom';
-  const parts    = Array.isArray(build.parts_snapshot) ? build.parts_snapshot.length : 0;
   const by       = build.profiles && build.profiles.username;
-  const partsTxt = parts === 1 ? '1 part' : parts + ' parts';
-  return platform + ' build with ' + partsTxt + (by ? ', by ' + by : '') + '.';
+  const parts    = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
+  const names    = headlineParts(build, 3);
+
+  let partsTxt;
+  if (names.length) {
+    const more = parts.length - names.length;
+    partsTxt = platform + ' build' + (by ? ' by ' + by : '') + ' running ' + names.join(', ') +
+      (more > 0 ? ' + ' + more + ' more part' + (more !== 1 ? 's' : '') : '') +
+      '. Full parts list with photos and live prices.';
+  } else {
+    partsTxt = platform + ' build' + (by ? ' by ' + by : '') +
+      (parts.length ? ' with ' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') : '') + '.';
+  }
+
+  // The builder's own words still lead — they are the one thing no other
+  // build page has — and the generated parts line follows, so the
+  // description always names what is actually on the gun.
+  const own = clamp(build.description, 120);
+  return clamp(own ? own + ' — ' + partsTxt : partsTxt, 260);
 }
 
 // Hero photo, full size — a preview card wants the big image, not the thumb.
@@ -213,7 +293,98 @@ function buildImageAlt(build) {
     : name + suffix + ' on Gunforma';
 }
 
-function metaBlock(build) {
+// ── Linked products ────────────────────────────────────────────────────────
+// parts_snapshot stores refId (the product uuid) but not the slug, and a
+// /parts/ link needs the slug. One lookup for the whole build; a failure is
+// non-fatal — the parts render unlinked, exactly as a pending part does.
+const UUID_ONLY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function fetchLinkedProducts(build) {
+  const ids = [...new Set(
+    (Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [])
+      // The regex is what keeps snapshot content out of the query: refId is
+      // written by our own pages, but it is still a jsonb field an API caller
+      // could have shaped, so only clean uuids reach the URL.
+      .map((p) => p && p.refId)
+      .filter((id) => typeof id === 'string' && UUID_ONLY_RE.test(id)),
+  )];
+  if (!ids.length) return {};
+  try {
+    const res = await fetch(
+      SB_URL + '/rest/v1/products?id=in.(' + ids.join(',') + ')&select=id,slug,category',
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } },
+    );
+    if (!res.ok) throw new Error('PostgREST ' + res.status);
+    const rows = await res.json();
+    const map = {};
+    for (const r of (Array.isArray(rows) ? rows : [])) if (r && r.id) map[r.id] = r;
+    return map;
+  } catch (err) {
+    console.error('[build-og] linked-product lookup failed', err);
+    return {};
+  }
+}
+
+// /parts/<segment>/<slug>, or null when the catalog cannot address it — same
+// null-not-dead-href contract as js/category-map.js's productPath().
+function linkedProductPath(prod) {
+  if (!prod || !prod.slug) return null;
+  const meta = CATEGORY_META[prod.category];
+  return meta ? '/parts/' + meta[0] + '/' + encodeURIComponent(prod.slug) : null;
+}
+
+// ── JSON-LD ────────────────────────────────────────────────────────────────
+// An Article (the build post: headline, author, dates, image) plus an
+// ItemList of its parts, each linked to its /parts/ page when the catalog
+// can address it. product-page.mjs owns the Product/Offer markup; repeating
+// offers here would be a second copy of price data to keep honest.
+function buildJsonLd(build, productsById) {
+  const name     = (build.name || '').trim() || 'Untitled build';
+  const username = build.profiles && build.profiles.username;
+  const image    = buildImage(build);
+  const url      = buildUrl(build.id, build.name);
+  const parts    = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
+
+  const article = {
+    '@context': 'https://schema.org',
+    '@type': 'Article',
+    headline: clamp(name, 110),
+    description: buildDescription(build),
+    image: [image.url],
+    url,
+    mainEntityOfPage: url,
+    ...(username
+      ? { author: { '@type': 'Person', name: username, url: SITE + '/u/' + encodeURIComponent(username) } }
+      : { author: { '@type': 'Organization', name: 'Gunforma', url: SITE } }),
+    ...(build.created_at ? { datePublished: build.created_at } : {}),
+    ...((build.updated_at || build.created_at)
+      ? { dateModified: build.updated_at || build.created_at } : {}),
+    publisher: { '@type': 'Organization', name: 'Gunforma', url: SITE },
+  };
+
+  const items = parts
+    .filter((p) => partDisplayName(p))
+    .map((p, i) => {
+      const path = linkedProductPath(p.refId ? productsById[p.refId] : null);
+      return {
+        '@type': 'ListItem',
+        position: i + 1,
+        name: clamp(partDisplayName(p) + (p.variantLabel ? ' (' + p.variantLabel + ')' : ''), 110),
+        ...(path ? { url: SITE + path } : {}),
+      };
+    });
+
+  if (!items.length) return article;
+  return [article, {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: clamp(name, 90) + ' — parts list',
+    numberOfItems: items.length,
+    itemListElement: items,
+  }];
+}
+
+function metaBlock(build, productsById) {
   const title = buildTitle(build);
   const desc  = buildDescription(build);
   const image = buildImage(build);
@@ -254,7 +425,148 @@ function metaBlock(build) {
     // scripts/check-og-image.mjs now asserts this tag resolves and 200s.
     '<meta name="twitter:image" content="' + esc(image.url) + '"/>',
     '<link rel="canonical" href="' + esc(url) + '"/>',
+    // <, same as product-page.mjs and guide-page.mjs: user text inside
+    // a <script> block must not be able to close it.
+    '<script type="application/ld+json">' +
+      JSON.stringify(buildJsonLd(build, productsById || {})).replace(/</g, '\\u003c') +
+    '</script>',
   ].join('\n');
+}
+
+// ── The server-rendered body ───────────────────────────────────────────────
+// Each placeholder the page ships ("—", "Loading…", the empty containers) is
+// replaced with the build's real content; the page's own renderBuild() then
+// writes the same content over it once its data loads. Replacements are
+// arrow functions (see the file header), and every literal below must occur
+// in gunforma-build-detail.html exactly once — check-canonical-coupling.mjs
+// fails the deploy otherwise, which is what lets this file and that page be
+// edited apart without one silently breaking the other.
+function fmtDate(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+function serverPartsHtml(build, productsById) {
+  const parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
+  if (!parts.length) {
+    return '<div id="parts-container"><div class="no-parts-note">No parts listed for this build yet.</div></div>';
+  }
+  // A flat list under one heading, not the client's grouped sections — the
+  // section taxonomy lives in js/build-categories.js, and a server copy of
+  // it is exactly the drift check-categories.mjs exists to refuse. For a
+  // crawler, the names and the links are the content; the client's grouped
+  // render replaces this the moment its data loads.
+  const cards = parts.map((p) => {
+    if (!p) return '';
+    const prod = p.refId ? productsById[p.refId] : null;
+    const path = linkedProductPath(prod);
+    const meta = prod && CATEGORY_META[prod.category];
+    const nameTxt = (p.name ? String(p.name) : '').replace(/\s+/g, ' ').trim() || 'Unnamed part';
+    const brandTxt = (p.brand ? String(p.brand) : '').replace(/\s+/g, ' ').trim() || 'Unknown brand';
+    const variantTxt = p.variantLabel ? String(p.variantLabel) : (p.variant ? String(p.variant) : '');
+    return '<div class="part-card"><div class="part-card-top"><div class="part-body">' +
+      (meta ? '<div class="part-type">' + esc(meta[2]) + '</div>' : '') +
+      '<div class="part-brand">' + esc(brandTxt) + '</div>' +
+      '<div class="part-model">' +
+        (path
+          ? '<a class="part-model-link" href="' + esc(path) + '">' + esc(nameTxt) + '</a>'
+          : esc(nameTxt)) +
+        (variantTxt ? ' — ' + esc(variantTxt) : '') +
+      '</div>' +
+    '</div></div></div>';
+  }).join('');
+  return '<div id="parts-container">' +
+    '<div class="section-divider"><h2>Parts on this build</h2>' +
+      '<span class="section-count">' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') + '</span></div>' +
+    '<div class="parts-list">' + cards + '</div></div>';
+}
+
+function injectBody(page, build, productsById) {
+  const name       = (build.name || '').trim() || 'Untitled build';
+  const platform   = (build.platforms && build.platforms.name) || '';
+  const username   = build.profiles && build.profiles.username;
+  const activities = Array.isArray(build.activities) ? build.activities.filter(Boolean) : [];
+  const parts      = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
+  const photos     = Array.isArray(build.build_photos) ? build.build_photos : [];
+  const hero       = photos.find((p) => p.is_hero) ||
+                     photos.slice().sort((a, b) => (a.position ?? 0) - (b.position ?? 0))[0];
+  // Same subject string renderBuild() builds for its photo alts.
+  const subject = name + (platform ? ', a ' + platform + ' build' : '');
+
+  let html = page;
+
+  html = html.replace('<span id="breadcrumb-platform">—</span>',
+    () => '<span id="breadcrumb-platform">' + esc(platform || 'Build') + '</span>');
+  html = html.replace('<span id="breadcrumb-name">—</span>',
+    () => '<span id="breadcrumb-name">' + esc(name) + '</span>');
+  html = html.replace('<div class="build-eyebrow" id="build-eyebrow">—</div>',
+    () => '<div class="build-eyebrow" id="build-eyebrow">' + esc(activities.join(' · ') || platform || 'Build') + '</div>');
+  html = html.replace('<h1 class="build-title" id="build-title">—</h1>',
+    () => '<h1 class="build-title" id="build-title">' + esc(name) + '</h1>');
+
+  const posted = fmtDate(build.created_at);
+  if (username || posted) {
+    html = html.replace('<div class="build-author-row" id="build-author-row">—</div>',
+      () => '<div class="build-author-row" id="build-author-row">' +
+        (username ? 'Built by <strong>' + esc(username) + '</strong>' : '') +
+        (username && posted ? ' · ' : '') + (posted ? 'Posted ' + esc(posted) : '') +
+      '</div>');
+  }
+
+  const desc = (build.description ? String(build.description) : '').trim();
+  if (desc) {
+    html = html.replace('<div class="build-desc" id="build-desc" style="display:none;"></div>',
+      () => '<div class="build-desc" id="build-desc">' + esc(desc) + '</div>');
+  }
+
+  if (platform || activities.length) {
+    html = html.replace('<div class="build-tags" id="build-tags"></div>',
+      () => '<div class="build-tags" id="build-tags">' +
+        (platform ? '<span class="build-tag blue">' + esc(platform) + '</span>' : '') +
+        activities.map((a) => '<span class="build-tag">' + esc(a) + '</span>').join('') +
+      '</div>');
+  }
+
+  html = html.replace('<div class="build-total-num" id="build-tier-label">—</div>',
+    () => '<div class="build-total-num" id="build-tier-label">' +
+      (build.tier === 'full' ? 'Full build' : 'Minimum build') + '</div>');
+  html = html.replace('<div class="build-total-sub" id="build-parts-sub">—</div>',
+    () => '<div class="build-total-sub" id="build-parts-sub">' +
+      (parts.length ? parts.length + ' part' + (parts.length !== 1 ? 's' : '') + ' listed' : 'No parts listed yet') +
+    '</div>');
+
+  if (hero && hero.storage_path) {
+    const alt = (photos.length > 1 ? 'photo 1 of ' + photos.length + ' — ' : 'photo of ') + subject;
+    html = html.replace('<div class="build-hero" id="build-hero"><span>Loading…</span></div>',
+      () => '<div class="build-hero" id="build-hero">' +
+        '<img src="' + esc(PHOTO_BASE + hero.storage_path) + '" alt="' + esc(alt) + '" /></div>');
+  }
+
+  if (photos.length > 1) {
+    // Same markup renderBuild() writes — hero first, then the rest by
+    // position — so hydration changes nothing visually. The buttons do
+    // nothing until bindGallery() runs, which is the pre-hydration behaviour
+    // the page already had.
+    const ordered = [hero].concat(photos.filter((p) => p !== hero).sort((a, b) =>
+      (a.position || 0) - (b.position || 0) || String(a.id).localeCompare(String(b.id))));
+    const thumbs = ordered.map((p, i) => {
+      const alt = 'photo ' + (i + 1) + ' of ' + ordered.length + ' — ' + subject;
+      return '<button type="button" class="gallery-thumb" data-i="' + i + '"' +
+        (i === 0 ? ' aria-current="true"' : '') +
+        ' aria-label="' + esc('Show ' + alt) + '">' +
+        '<img src="' + esc(PHOTO_BASE + (p.thumb_path || p.storage_path)) + '" alt="" />' +
+      '</button>';
+    }).join('');
+    html = html.replace('<div class="build-gallery" id="build-gallery" style="display:none;"></div>',
+      () => '<div class="build-gallery" id="build-gallery" style="display:flex;">' + thumbs + '</div>');
+  }
+
+  html = html.replace('<div id="parts-container"></div>',
+    () => serverPartsHtml(build, productsById));
+
+  return html;
 }
 
 function notFound() {
@@ -268,7 +580,7 @@ function notFound() {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Build not found</div>' +
     '<div class="s">This build does not exist, or it has not been published yet.</div>' +
-    '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div></body></html>',
+    '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     {
       status: 404,
       headers: {
@@ -387,10 +699,14 @@ export default async (req) => {
   // embeds are correct. profiles is named anyway because builds has two FKs
   // to it (user_id and reviewed_by) and a bare embed would be PGRST201.
   const select = [
+    // tier, activities and the two dates feed the server-rendered body and
+    // the JSON-LD; build_photos carries id for the gallery's deterministic
+    // tiebreak, same as the page's own query.
     'id', 'name', 'description', 'parts_snapshot',
+    'tier', 'activities', 'created_at', 'updated_at',
     'platforms(name)',
     'profiles!builds_user_id_fkey(username)',
-    'build_photos(storage_path,thumb_path,is_hero,position)',
+    'build_photos(id,storage_path,thumb_path,is_hero,position)',
   ].join(',');
 
   let build = null;
@@ -419,6 +735,10 @@ export default async (req) => {
   // Unknown, unapproved, or deleted.
   if (!build) return diag(notFound());
 
+  // Slugs for the /parts/ links in the body and the JSON-LD. Internally
+  // non-fatal: on any failure it returns {} and the parts render unlinked.
+  const productsById = await fetchLinkedProducts(build);
+
   const page = await loadPage();
   if (!page) {
     console.error('[build-og] gunforma-build-detail.html not bundled — check included_files');
@@ -435,13 +755,13 @@ export default async (req) => {
     // behave — visible, not spinning.
     return diag(new Response(
       '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
-      '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>' + metaBlock(build) +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>' + metaBlock(build, productsById) +
       '<style>body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
       'background:#0e0f11;color:#e8e6e1;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;text-align:center}' +
       'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
       '</head><body><div><div style="font-size:20px;font-weight:700">' + esc(buildTitle(build)) + '</div>' +
       '<div class="s">This build could not be rendered just now.</div>' +
-      '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div></body></html>',
+      '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
       { status: 200, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' } },
     ));
   }
@@ -463,9 +783,21 @@ export default async (req) => {
   // query-string URL. At /b/:id that script finds THIS canonical and writes
   // the same URL over it, so the two must agree byte for byte — metaBlock()
   // builds SITE + '/b/' + encodeURIComponent(id), and so does the page.
-  const html = page
-    .replace('<link rel="canonical" href="https://gunforma.com/gunforma-build-detail.html" />\n', '')
-    .replace('<title>Gunforma build</title>', metaBlock(build));
+  //
+  // The static meta description is stripped for the same reason as the
+  // static canonical: metaBlock() injects a per-build one, and a page with
+  // two description tags leaves a crawler to pick — it picks the generic one
+  // often enough that every build reads identically in the results page.
+  //
+  // Replacement callbacks, not replacement strings: a description containing
+  // "$&" or "$'" (builders type prices) would otherwise be interpolated by
+  // String.replace's substitution rules.
+  const html = injectBody(
+    page
+      .replace('<link rel="canonical" href="https://gunforma.com/gunforma-build-detail.html" />\n', '')
+      .replace('<meta name="description" content="View a complete pistol build — every part, every photo, total cost, and affiliate links to buy." />\n', '')
+      .replace('<title>Gunforma build</title>', () => metaBlock(build, productsById)),
+    build, productsById);
 
   return diag(new Response(html, {
     status: 200,

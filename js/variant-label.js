@@ -103,6 +103,40 @@
     return color || finish || '';
   };
 
+  // variantSpecs — the variant's spec columns, as one quiet line.
+  //
+  // ADDITIVE to variantLabel, never part of it. The label is colour and
+  // finish; these are what tells two variants with the SAME label apart —
+  // the Holosun 407C X3 has three "Black · Anodized" variants that differ
+  // only in dot colour. Category-agnostic on purpose: it shows whichever
+  // columns are populated, so optics come out as "2 MOA · Red dot" and
+  // lights as "CR123A · Swappable keys (1913 + Glock)" with no branch on
+  // category. A part with none of them gets '' and the caller renders
+  // nothing.
+  //
+  // Fixed order: reticle, reticle_color, battery_type, mount_system.
+  // reticle_color is a bare colour in the data ("Red", "Green", "Gold") and
+  // would read as the part's colour beside a colour label, so it says what
+  // it is the colour of. A value that already says "dot" or "reticle" is
+  // left alone rather than doubled.
+  //
+  // Values are shown verbatim otherwise — a typo in the data is a typo on
+  // the page, and the fix belongs in the data.
+  var SPEC_KEYS = ['reticle', 'reticle_color', 'battery_type', 'mount_system'];
+  function specPart(key, value) {
+    if (key === 'reticle_color' && !/\b(dot|reticle)\b/i.test(value)) return value + ' dot';
+    return value;
+  }
+  global.variantSpecs = function (v) {
+    if (!v) return '';
+    var out = [];
+    for (var i = 0; i < SPEC_KEYS.length; i++) {
+      var val = clean(v[SPEC_KEYS[i]]);
+      if (val) out.push(specPart(SPEC_KEYS[i], val));
+    }
+    return out.join(' · ');
+  };
+
   // What a row reads as when variantLabel() returns ''. Separate from the
   // formula so a caller that would rather render nothing can tell the two
   // apart, instead of every caller inventing its own placeholder.

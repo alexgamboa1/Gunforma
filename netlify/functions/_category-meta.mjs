@@ -1,40 +1,44 @@
-// _category-meta — the one source of truth for products.category -> [URL
-// segment, display label] on the server side, shared by every Netlify
-// function that needs it (product-page.mjs, parts-index.mjs).
+// _category-meta — the server's one source for everything a products.category
+// value means on a page: its /parts/ URL segment and its two display names.
+// Shared by every Netlify function that needs it (product-page.mjs,
+// parts-index.mjs, sitemap.mjs). Import it; never redefine it.
 // ─────────────────────────────────────────────────────────────────────────
-// This is NOT the same situation as affiliate.js's variant-axis logic or
-// js/category-map.js's browser-side segment map, both of which are
-// duplicated on purpose because the browser side ships as a plain <script>
-// global with no module loader. product-page.mjs and parts-index.mjs are
-// both plain ESM Netlify functions — there's no bundler boundary between
-// them — so there is no excuse for a second hand-copy here. Import this
-// instead of redefining it.
+// js/category-map.js is the browser's copy, with the same contents: the
+// pages load plain <script> globals with no module loader, so they cannot
+// import this file. scripts/check-categories.mjs compares the two on every
+// deploy and fails if they differ by a single character.
 //
-// js/category-map.js still holds its own browser-side mirror
-// (window.CATEGORY_URL_SEGMENT) for the catalog/armory cards, and that one
-// still has to be kept in sync by hand for the reason explained in its own
-// file header. Add or rename a category in BOTH this file and
-// js/category-map.js — a segment that exists in only one of them ships
-// links that 404.
+// The plural is for headings, tabs and section titles ("Grip Modules"); the
+// singular is for sentences ("Grip Module for the Sig Sauer P365", the
+// JSON-LD category). "Grip Modules for the Sig Sauer P365" must not ship.
 // ─────────────────────────────────────────────────────────────────────────
 
-// category -> [URL segment, display label]. Order matches the
-// products.category enum, and callers that want a fixed display order
-// (parts-index.mjs's category grouping) should iterate this object's own
-// key order rather than re-deriving one.
+// category -> [URL segment, plural name, singular name], in products.category
+// enum order. Callers that want a fixed display order (parts-index.mjs)
+// iterate this object's own key order rather than re-deriving one.
 export const CATEGORY_META = {
-  slide:            ['slides',            'Slide'],
-  barrel:           ['barrels',           'Barrel'],
-  frame:            ['frames',            'Frame'],
-  trigger:          ['triggers',          'Trigger'],
-  compensator:      ['compensators',      'Compensator'],
-  light:            ['lights',            'Light'],
-  optic:            ['optics',            'Optic'],
-  mag_release:      ['mag-releases',      'Mag Release'],
-  magwell:          ['magwells',          'Magwell'],
-  basepad:          ['basepads',          'Basepad'],
-  slide_release:    ['slide-releases',    'Slide Release'],
-  safety_selector:  ['safety-selectors',  'Safety Selector'],
-  takedown_lever:   ['takedown-levers',   'Takedown Lever'],
-  slide_plate:      ['slide-plates',      'Slide Plate'],
+  slide:            ['slides',            'Slides',            'Slide'],
+  barrel:           ['barrels',           'Barrels',           'Barrel'],
+  frame:            ['frames',            'Grip Modules',      'Grip Module'],
+  trigger:          ['triggers',          'Triggers',          'Trigger'],
+  compensator:      ['compensators',      'Compensators',      'Compensator'],
+  light:            ['lights',            'Weapon Lights',     'Weapon Light'],
+  optic:            ['optics',            'Optics',            'Optic'],
+  mag_release:      ['mag-releases',      'Magazine Releases', 'Magazine Release'],
+  magwell:          ['magwells',          'Magwells',          'Magwell'],
+  basepad:          ['basepads',          'Basepads',          'Basepad'],
+  slide_release:    ['slide-releases',    'Slide Releases',    'Slide Release'],
+  safety_selector:  ['safety-selectors',  'Safety Selectors',  'Safety Selector'],
+  takedown_lever:   ['takedown-levers',   'Takedown Levers',   'Takedown Lever'],
+  slide_plate:      ['slide-plates',      'Slide Plates',      'Slide Plate'],
+  recoil_spring:    ['recoil-springs',    'Recoil Springs',    'Recoil Spring'],
+  sight:            ['sights',            'Sights',            'Sight'],
+  // Catalog parts that fit no other category. A product here also carries
+  // products.part_type ("thumb ledge"), which pages prefer in a sentence.
+  other:            ['other-parts',       'Other Parts',       'Other Part'],
 };
+
+// Categories with no <category>_specs table: the product page shows no spec
+// rows for them. check-categories.mjs asserts that product-page.mjs's
+// SPEC_TABLES covers every other category.
+export const CATEGORIES_WITHOUT_SPEC_SHEET = ['slide_plate', 'other'];
