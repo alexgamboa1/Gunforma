@@ -96,6 +96,16 @@ const RETIRED = new Set([
   // Both are discontinued and 301 to ramm-tactical-leverage-trigger-p365.
   '/parts/triggers/ramm-tactical-leverage-c-p365',
   '/parts/triggers/ramm-tactical-leverage-nc-p365',
+  // PR #154 — four lights discontinued in the database on 2026-10-07
+  // (is_discontinued = true; deliberate). The sitemap drops a discontinued
+  // product and the product page still answers 200, by design — see
+  // CLAUDE.md, "Discontinued parts". No 301s: none has a successor in the
+  // catalog yet. The TLR-7 X Sub is logged for add-a-part; whoever adds it
+  // adds the 301 in netlify.toml and the pair in check-routes.mjs then.
+  '/parts/lights/olight-pl-pro-valkyrie',
+  '/parts/lights/olight-pl-turbo-valkyrie',
+  '/parts/lights/olight-pl-mini-3-valkyrie',
+  '/parts/lights/streamlight-tlr-7-sub',
 ]);
 
 const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'))
