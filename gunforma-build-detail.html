@@ -489,6 +489,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- Section order + category labels. Read by the render code below. -->
 <script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
+<!-- Which part a reviewer's correction belongs to: by the part's own id. -->
+<script src="js/part-ids.js"></script>
 <!-- Before the render code: the part rows call window.variantLabel. -->
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
@@ -538,10 +540,12 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
 }
 
-// edit_history entries for a given part_index, in the order they were
-// recorded (append-only, so this is already chronological).
+// The corrections for the part at idx of parts_snapshot, in the order they
+// were recorded (append-only, so this is already chronological). Matched by
+// the part's own id, so a correction stays on its part when the builder
+// removes an earlier one; js/part-ids.js holds the rule.
 function partHistory(build, idx) {
-  return (build.edit_history || []).filter(function(e){ return e.part_index === idx; });
+  return PartIds.entriesFor(build, idx);
 }
 
 function showToast(msg) {
@@ -1519,12 +1523,25 @@ function toggleVerifiedDiff(key) {
 
 // Calls the narrow contest_build_part RPC — it can only flip one matching
 // edit_history entry's status to 'contested' on an already-approved build,
-// nothing else on the row is reachable through it. No sign-in required by
-// design (lightweight flagging, not a full dispute workflow yet).
+// nothing else on the row is reachable through it. It needs a signed-in
+// caller (it records who flagged), so a signed-out visitor is told that
+// here rather than getting "Something went wrong" from the database.
+//
+// Until supabase/part_ids.sql, this never worked for anyone but an admin:
+// the edit_history guard refused every other caller, and the page said
+// "Something went wrong". So success is not taken from the call — the RPC
+// returns nothing either way — but read back: the toast says it was flagged
+// only if this part's correction now reads contested.
 async function flagForReview(buildId, partIdx) {
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (!user) { showToast('Sign in to flag a correction'); return; }
   const { error } = await sb.rpc('contest_build_part', { p_build_id: buildId, p_part_index: partIdx });
-  if (error) { console.error(error); showToast('Something went wrong — try again'); return; }
-  showToast('Sent back for review — thanks for flagging this');
+  if (error) { console.error(error); showToast('Could not flag it — try again'); return; }
+  const { data: after } = await sb.from('builds').select('parts_snapshot,edit_history').eq('id', buildId).maybeSingle();
+  const flagged = !!after && PartIds.entriesFor(after, partIdx).some(function (e) { return e.status === 'contested'; });
+  showToast(flagged ? 'Sent back for review — thanks for flagging this'
+                    : 'Could not flag it — reload the page and try again');
   await loadBuild();
 }
 

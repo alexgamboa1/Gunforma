@@ -61,6 +61,13 @@ const RULES = [
   // TIME (label: name('frame')), and throws if it is missing — so on the
   // pages that load it, a wrong order blanks the page, exactly as above.
   { global: 'categoryPlural', defines: 'js/category-map.js', consumers: ['js/build-categories.js'] },
+  // PartIds is an object read as a member (PartIds.entriesFor), so it needs
+  // a pattern like BuildCategories. Every read is at call time, inside a
+  // render or a save, so a wrong ORDER survives today — a missing tag does
+  // not: the queue and the build page would throw while rendering a part
+  // list, and a builder page would throw on Save.
+  { global: 'PartIds', defines: 'js/part-ids.js', consumers: [],
+    pattern: /\bPartIds\s*\./ },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

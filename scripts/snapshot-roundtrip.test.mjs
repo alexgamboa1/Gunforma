@@ -161,6 +161,17 @@ const RECAT_SPRING = {
 const RECAT_OTHER = Object.assign({}, RECAT_SPRING, { name: 'ProLedge', brand: 'Tactical Development', category: 'other' });
 // A misc part still pending: nothing to re-categorise, and it must render.
 const PENDING_MISC = { category: 'misc', refId: null, brand: 'DMP Springs', name: 'DMP Soft RSA', pending: true };
+// The same parts with their own id (js/part-ids.js), which every saved part
+// carries from 2026-10 on. buildPartsSnapshot() writes it right after
+// imageUrl, so that is where it sits here. A load path that drops partId
+// would give the part a new id on the next save, and every reviewer's
+// correction addressed to it would stop finding it — on a page that renders
+// perfectly.
+const GOLD_BARREL_ID = Object.assign({}, GOLD_BARREL, { partId: '0a1b2c3d4e5f' });
+const PLAIN_ID = Object.assign({}, PLAIN, { partId: 'aaaaaaaaaaaa' });
+const PAINT_ID = { category: 'paintjob', refId: null, brand: 'Shop', name: 'FDE · Dragon scale stipple',
+  pending: false, partId: 'bbbbbbbbbbbb', finish: { shop: 'Shop', color: 'FDE', stipple: 'Dragon scale' } };
+const PENDING_ID = Object.assign({}, PENDING, { partId: 'cccccccccccc' });
 const sameKeysAndValues = (a, b) => {
   const sort = (o) => JSON.stringify(Object.keys(o).sort().map((k) => [k, o[k]]));
   return sort(a) === sort(b);
@@ -191,6 +202,13 @@ for (const [i, site] of SITES.entries()) {
 
   test(`${where}: a part with no variant gains nothing — no nulls, no empty keys`, () => {
     for (const row of [PLAIN, NOTED, PAINT, PENDING]) {
+      const [out] = roundTrip(site, [row]);
+      assert.equal(JSON.stringify(out), JSON.stringify(row), 'changed: ' + row.name);
+    }
+  });
+
+  test(`${where}: a part's own id survives load → save byte for byte`, () => {
+    for (const row of [GOLD_BARREL_ID, PLAIN_ID, PAINT_ID, PENDING_ID]) {
       const [out] = roundTrip(site, [row]);
       assert.equal(JSON.stringify(out), JSON.stringify(row), 'changed: ' + row.name);
     }

@@ -305,6 +305,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
 <script src="js/variant-label.js"></script>
+<!-- Which part a correction belongs to: by the part's own id. -->
+<script src="js/part-ids.js"></script>
 <script>
 // admin nav is intentionally NOT the shared nav (distinct admin-only links +
 // Admin tag) so nav.js is not loaded here. Same for the footer: admin has none.
@@ -339,9 +341,11 @@ let currentDetailName = '';
 
 // edit_history lives on the real build row (builds.edit_history jsonb),
 // fetched fresh with every loadBuilds() call — no separate client-side
-// store anymore.
+// store anymore. A correction names its part by the part's own id
+// (partId), so it stays on that part however the builder reorders the list;
+// js/part-ids.js holds the rule, shared with the build page and the editor.
 function partHistory(build, idx) {
-  return (build.edit_history || []).filter(function(e){ return e.part_index === idx; });
+  return PartIds.entriesFor(build, idx);
 }
 // Resolves the current value of a field: to_value of the most recent edit
 // for that field, falling back to the original parts_snapshot value.
@@ -352,10 +356,11 @@ function currentPartValue(build, idx, field, original) {
   }
   return original || '';
 }
+// Parts that are still on the build and carry a correction. Counting
+// distinct part_index values used to count the 'resubmit' marker too (as
+// "undefined"), and a correction whose part the builder has since removed.
 function buildEditedPartCount(build) {
-  var seen = {};
-  (build.edit_history || []).forEach(function(e){ seen[e.part_index] = true; });
-  return Object.keys(seen).length;
+  return PartIds.correctedPartCount(build);
 }
 function buildHasContestedEdit(build) {
   return (build.edit_history || []).some(function(e){ return e.status === 'contested'; });
@@ -1016,6 +1021,12 @@ async function doSaveEdit(buildId, idx) {
     var curVal = currentPartValue(b, idx, f.key, part[f.key]);
     if (newVal && newVal !== curVal) {
       newEntries.push({
+        // By the part's own id: a builder who later removes an earlier part
+        // moves this one, and the correction must move with it. part_index
+        // stays as a record of where it was, and as the fallback for a part
+        // stored before ids existed (no partId), which is then addressed by
+        // position as every correction used to be.
+        part_id: PartIds.isId(part.partId) ? part.partId : undefined,
         part_index: idx,
         field: f.key,
         from_value: curVal,
@@ -1034,8 +1045,9 @@ async function doSaveEdit(buildId, idx) {
     return;
   }
 
-  // A correction names its part by index, so it is only safe against the
-  // list the reviewer is looking at — see ensureUnchanged(). The inputs were
+  // A correction is written against the part the reviewer is looking at —
+  // see ensureUnchanged(), which refuses if the list changed since. Its
+  // part_id then keeps it on that part through later edits. The inputs were
   // read above, before this can re-render the pane.
   // Closed first: a refusal re-renders the pane, and an edit panel left open
   // over the reloaded list would be pointing at whatever now sits at idx.

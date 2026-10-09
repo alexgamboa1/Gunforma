@@ -685,6 +685,7 @@ Registered today:
 | `scripts/snapshot-roundtrip.test.mjs` | a builder hydration path (edit mode, Armory handoff) dropping a `parts_snapshot` field, so the next save deletes it — runs the page's own code, load → save, and requires byte-identical rows |
 | `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
 | `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
+| `scripts/part-ids.test.mjs` | a reviewer's correction landing on the wrong part — matched by position again, falling back to a neighbour when its part was removed, or a page reading corrections without `js/part-ids.js`; and a builder page saving without `PartIds.ensure()` |
 | `scripts/part-match.test.mjs` | the catalog-match prompt offering noise ("my trigger job" → three triggers), going silent on a real match ("holosun 407k"), claiming a model the catalog does not have, or swapping a catalog part into the wrong position — run against real catalog names |
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
 | `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
@@ -1181,14 +1182,15 @@ material family "Unspecified". Read-only: editing an existing product is
 the next project, and the page says so instead of linking to a dead end.
 Same gate as the add-a-part page, `noindex`, no analytics tag.
 
-Two things noticed here and not fixed:
+Noticed here and not fixed:
 
 - `create_product()`'s own re-link writes no `variantSpecs`, and does not
   refuse a part that has corrections. `relink_build_part()` does both.
-- `prevent_owner_edit_history_change()` lets only `is_admin()` change
-  `builds.edit_history`, so the service role and a direct session are
-  refused — the "service_role bypasses RLS, not triggers" trap above, failing
-  closed.
+
+A second item logged here — `prevent_owner_edit_history_change()` refusing
+the service role and a direct session — is fixed by `supabase/part_ids.sql`,
+which found the same guard refusing every visitor's flag too; see **The
+flag never worked**.
 
 ## Adding an affiliate link (CSV import)
 
@@ -1598,16 +1600,19 @@ Four things about it that are decisions, not accidents:
   completes.** A product with colours goes through the colour step first and
   the builder can back out, so the intent is remembered (`pendingSwap`) and
   applied in `closePickerAfterAdd()` — the one function every add on both
-  pages ends in. It is consumed by the next add whatever that add was, so a
-  stale intent cannot swap something later.
+  pages ends in. It is consumed by the next add whatever that add was, and
+  forgotten by `PartPicker.cancelSwap()` when the builder backs out of the
+  colour step (both pages' `cancelVariantPick()` call it) — otherwise adding
+  that same product by hand later would still replace the typed part.
 - **Typed-only sections get nothing.** Magazines, holsters and knives have no
   catalog parts, and searching for one finds things it is not (a typed "Sig
   17rd magazine" is a close match for a +3 basepad). The test is whether
   `CATALOG` has rows under that section for this pistol.
 
 `PartPicker.init()` takes an optional `canSwap(uid)`. `gunforma-post-build.html`
-passes it so a part pinned under a reviewer's correction is neither offered
-nor swapped — see **Corrections pin parts in place**.
+passes it so a part pinned under an old-style (by-position) correction is
+neither offered nor swapped — see **Corrections follow their part**. Since
+corrections name parts by id, nothing is pinned unless such an entry exists.
 
 **Not measured yet.** On 2026-10-07 the live builds held one typed part
 between them, and it was a paint job. Every build so far was posted by an
@@ -1835,9 +1840,12 @@ Three things about that are easy to undo by accident:
 - **Photos are compared directly, not through `updated_at`.** A photo row
   can be added or removed without touching `builds`, so the stamp alone
   would miss the one change that most needs a second look.
-- **Corrections and links need it more than Approve does.** They address a
-  part by its **index**, so against a list the builder has since shortened
-  they land on a different part, with no error. "Add to catalog" has the
+- **Corrections and links need it more than Approve does.** They are
+  WRITTEN against a part by its **index** — the one the reviewer is looking
+  at — so against a list the builder has since shortened they land on a
+  different part, with no error. (A correction then follows its part by id;
+  see **Corrections follow their part** below. Writing it to the right part
+  in the first place is this check's job.) "Add to catalog" has the
   same exposure across a page load, so `gunforma-admin-part.html` re-reads
   the part at that index just before Save (`buildPartMoved()`) and stops if
   it is not, key for key, the one the page was opened for.
@@ -1848,29 +1856,98 @@ photo swapped inside that gap is not caught, and `relink_build_part()` and
 `create_product()` take no `updated_at` at all. Closing those properly means
 a database-side check, not another client one.
 
-### Corrections pin parts in place
+### Corrections follow their part: every part has its own id
 
-A correction in `builds.edit_history` names its part by **index** in
-`parts_snapshot`, and only an admin may write `edit_history`
-(`prevent_owner_edit_history_change`). So an owner who removes a part at or
-before a corrected one shifts the list under the correction, and the build
-page lays "name corrected to X" over a different part — no error anywhere.
-This was already reachable through reject → resubmit.
+**Every element of `parts_snapshot` carries `partId`** — 12 lowercase hex
+characters, unique within its build, assigned once and never changed. **A
+correction in `builds.edit_history` names its part by that, as `part_id`**,
+beside the `part_index` it was written at. One rule decides which part an
+entry belongs to, and it lives in **`js/part-ids.js`** (`window.PartIds`),
+loaded by the queue, the build page and both builder pages:
 
-The editor pins every loaded part up to the last corrected index
-(`editState.pinnedPartUids`): `removePart()` and `changePlatform()` refuse.
-Adding is always safe, since new parts go on the end. Entries with no
-`part_index` (the `resubmit` marker) pin nothing.
+- an entry with a `part_id` belongs to the part with that `partId`, **and
+  only to it**. If that part was removed, the entry matches nothing — it
+  never falls back to whatever now sits at its old position, because that
+  fallback IS the bug this replaced;
+- an entry with only `part_index` (written before ids) is matched by
+  position, as every entry used to be, and the editor still **pins** parts
+  0..that index (`PartIds.pinnedThrough()`). None existed when ids shipped;
+- anything else (the `resubmit` marker) is not a correction.
 
-**This takes something away, on purpose.** A build that carries a correction
-and is then rejected for a wrong part or the wrong pistol can no longer have
-that part removed by its owner: the way out is delete and re-post, and the
-toast says so. Before, the removal worked and quietly moved the correction.
-So do not correct a part on a build you are about to reject for its parts.
+**What it replaced.** Corrections used to be matched by position. An owner
+who removed an earlier part shifted the list under them, and the build page
+laid "name corrected to X" over a different part — no error anywhere; the
+harness reproduced exactly that, C wearing B's correction. The editor pinned
+every part up to the last corrected one to stop it, which locked a builder
+out of removing the very part a reviewer rejected the build for. Now a
+removed part takes its corrections with it, and nothing is pinned.
 
-**The pin is the page's, not the database's** — a direct API call can still
-reorder `parts_snapshot` under a correction. The real fix for both is
-corrections that address a part by something other than its position.
+**Where ids come from:**
+
+- `PartIds.ensure(state.parts)` before every save on both builder pages
+  (`scripts/part-ids.test.mjs` counts saves against calls). It keeps any
+  valid id, re-ids a duplicate, and mutates the page's state so the id stays
+  put across later saves without a reload.
+- **`trg_assign_part_ids`** (`supabase/part_ids.sql`), BEFORE INSERT OR
+  UPDATE OF `parts_snapshot`, for any writer that sends a part without one —
+  the parked Armory, a script, SQL by hand, a tab opened before the deploy.
+  It only ever adds an id. **A part that arrives without one but is identical
+  to a part already on the row (every other key equal) keeps that part's
+  id**, so a page that drops the key does not re-id the list and orphan
+  every correction. Each old id is claimed once; an id a part brings itself
+  is reserved for it.
+- Both re-link paths keep the id without changing: `relink_build_part()` and
+  `create_product()` merge into the existing part (`v_part || …`).
+
+**Carry it everywhere a part is copied.** `partId` is in all four snapshot
+whitelists (`check-snapshot-fields.mjs`) and both post-build load paths
+(`snapshot-roundtrip.test.mjs` has fixtures carrying one). A load path that
+drops it re-ids the part on the next save — the trigger's identical-part
+rule usually rescues that, but a part that also changed would lose its
+corrections, on a page that renders perfectly.
+
+**The database matches by id too.** `contest_build_part(build, index)`
+keeps its signature: the page sends the position it rendered, and the
+function reads the `partId` there and finds the correction by it.
+`relink_build_part()` counts "this part's corrections" the same way, so a
+correction left with a stale `part_index` neither blocks the wrong part nor
+lets the right one through. `build_part_flags.part_id` records which part
+was flagged.
+
+#### The flag never worked
+
+"This looks wrong — flag for review" on a corrected part calls
+`contest_build_part()`, which is `SECURITY DEFINER` — but the
+`edit_history` guard (`prevent_owner_edit_history_change`) identifies the
+caller with `is_admin()`, and the caller is still the visitor. So every
+non-admin flag was refused with "Only admins can modify edit_history", the
+page said "Something went wrong", and on 2026-10-09 the database held zero
+contested entries and zero flag rows. Found by the dry run of
+`supabase/part_ids.sql` (Claude Code, #152), not by anyone using the site.
+**The definer context changes whose privileges a statement runs with; it
+does not change who `auth.uid()` says the caller is**, so every trigger the
+function's writes fire still sees the visitor.
+
+Fixed in the guard, narrowly: for anyone who is not an admin or a trusted
+backend, the one change allowed to `edit_history` is marking existing
+entries `contested` on a build that is live and stays live — same entries,
+same order, every other key equal. Adding, removing, rewriting, reordering
+and un-contesting are still refused (eleven cases, in the PR). The service
+role and a direct session now pass by name, which closes the item logged
+under **Pending build parts**. The page tells a signed-out visitor to sign
+in, and decides what the toast says by reading the row back — the RPC
+returns nothing either way, and "nothing came back" is what the broken
+version returned too.
+
+Still addressed by **index**, deliberately: the queue's "Link to existing
+part" and add-a-part's re-link. They act on the list the admin is looking
+at and are guarded by `ensureUnchanged()` / `buildPartMoved()` above; an id
+would not make them safer, and changing `create_product()`'s signature
+would.
+
+Not done, logged: `create_product()`'s re-link still does not refuse a part
+that carries corrections (`relink_build_part()` does); with ids, such a
+correction would show over the linked part, as before.
 
 ### Only a reviewer can approve or reject
 

@@ -777,6 +777,12 @@
     parts.splice(at, 1, parts.pop());
   }
 
+  // Forget a swap that is waiting on the colour step. Both pages call this
+  // from cancelVariantPick(): without it, a builder who backed out of the
+  // colour step and later added the same product by hand from the grid
+  // would still have their typed part replaced.
+  function cancelSwap() { pendingSwap = null; }
+
   // Add a catalog part that was offered as a match. With swapUid, it replaces
   // that typed part once the add completes.
   //
@@ -1233,6 +1239,7 @@ button.match-row:hover, button.match-row:focus-visible { border-color: #4a9edd; 
     groupHeadHtml: groupHeadHtml,
     scrollToCategory: scrollToCategory,
     closePickerAfterAdd: closePickerAfterAdd,
+    cancelSwap: cancelSwap,
     noteVariant: noteVariant,
     hasColorChoice: hasColorChoice,
     variantsOf: variantsOf,

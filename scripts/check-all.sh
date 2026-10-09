@@ -62,6 +62,7 @@ check "snapshot round-trips"    scripts/snapshot-roundtrip.test.mjs
 check "affiliate module runs"      scripts/affiliate-render.test.mjs
 check "variant picker runs"        scripts/variant-picker.test.mjs
 check "catalog match judgement"    scripts/part-match.test.mjs
+check "corrections follow parts"    scripts/part-ids.test.mjs
 check "buy links go through /go/"  scripts/check-buy-links.mjs
 check "analytics on public pages" scripts/check-analytics-snippet.mjs
 check "category labels cover keys" scripts/check-category-labels.mjs
