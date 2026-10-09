@@ -315,6 +315,22 @@
   to = "/.netlify/functions/guide-page?splat=:splat"
   status = 200
 
+# Gun hubs — /p365/<gun-slug>, plus /p365/ as the index of declared models.
+# The page a fit guide links up to, and the one static href a browser page
+# can use to link into the cluster. Same note as /fit/* above: distinct
+# prefix, so ordering relative to /parts/* is immaterial — #104 measured
+# that. Both forms are listed because /p365 with no trailing slash would
+# otherwise fall through to the SPA/404 handling rather than the function.
+[[redirects]]
+  from = "/p365"
+  to = "/.netlify/functions/gun-hub?splat="
+  status = 200
+
+[[redirects]]
+  from = "/p365/*"
+  to = "/.netlify/functions/gun-hub?splat=:splat"
+  status = 200
+
 [[redirects]]
   from = "/field-notes/"
   to = "/field-notes.html"

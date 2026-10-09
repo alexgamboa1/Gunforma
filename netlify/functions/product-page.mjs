@@ -31,6 +31,10 @@
 // that js/category-map.js still requires.
 import { CATEGORY_META } from './_category-meta.mjs';
 import { variantLabel } from './_variant-label.mjs';
+// Fit-guide links. An optic that fits a pistol we have a guide for should
+// say so: before this, the /fit/ cluster had no inbound link from anywhere
+// on the site and the sitemap was its only discovery path.
+import { GUIDE_PAGES, GUIDE_FAMILIES, guidePath, hubPath, GUN_META } from './_guide-meta.mjs';
 // Stale-price rule and listing sort. These moved to _listing-rules.mjs when
 // guide-page.mjs arrived needing the same rules — two server renderers, one
 // copy, same reasoning as _variant-label.mjs. The browser copies
@@ -306,6 +310,51 @@ async function fetchSpecs(category, productId) {
     .filter(Boolean);
 }
 
+// Which DECLARED fit pages cover this optic, by walking the same chain
+// guide-page.mjs walks, in reverse: the product's footprint, the cuts that
+// footprint mounts on, the guns carrying those cuts, then the registry.
+//
+// Registry-filtered on purpose. The chain finds every gun whose cut this
+// optic mounts on, and most of those have no page — linking to one would be
+// a 404. Only guns in GUIDE_PAGES are linked, so this can never emit a dead
+// URL even as the registry grows or shrinks.
+//
+// Optics only: a frame or a trigger has no footprint, so there is nothing to
+// resolve and no link to add. Fewer, well-placed links.
+async function fetchFitGuides(category, productId) {
+  if (category !== 'optic') return [];
+  const specs = await pgGet('optic_specs?product_id=eq.' + productId +
+    '&select=footprint_id&limit=1');
+  const fpId = Array.isArray(specs) && specs.length ? specs[0].footprint_id : null;
+  if (!fpId) return [];
+
+  const maps = await pgGet('optic_cut_footprints?footprint_id=eq.' + fpId +
+    '&select=' + encodeURIComponent('optic_cut,fit'));
+  // Direct mounts only. A via-plate fit is a different claim and the guides
+  // are about what mounts on the factory slide without one.
+  const cuts = [...new Set(maps.filter((m) => m.fit === 'direct').map((m) => m.optic_cut))]
+    .filter((c) => c && c !== 'none');
+  if (!cuts.length) return [];
+
+  // gun_optic_cuts has exactly one FK to guns, so this bare embed is correct
+  // — see CLAUDE.md's PGRST201 rule for when it would not be.
+  const rows = await pgGet('gun_optic_cuts?optic_cut=in.(' +
+    cuts.map(encodeURIComponent).join(',') + ')&select=' +
+    encodeURIComponent('guns(slug,name)'));
+  const gunSlugs = new Set(rows.map((r) => (r.guns || {}).slug).filter(Boolean));
+
+  return GUIDE_PAGES
+    .filter((g) => gunSlugs.has(g.gun))
+    .map((g) => ({
+      family: g.family,
+      gun: g.gun,
+      gunName: GUN_META[g.gun] || g.gun,
+      familyLabel: (GUIDE_FAMILIES[g.family] || {}).label || g.family,
+      href: guidePath(g.family, g.gun),
+      hubHref: hubPath(g.gun),
+    }));
+}
+
 // Approved builds that run this product, newest first, with a hero photo for
 // the card. Same fetch-and-filter shape as guide-page.mjs's
 // fetchBuildsUsing(): builds fit in one page today (5 approved), so one query
@@ -337,7 +386,7 @@ async function fetchBuildsUsing(productId) {
   return out;
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -458,6 +507,21 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
       itemCondition: 'https://schema.org/NewCondition',
     })),
   };
+
+  // Fit-guide links. Placed directly under Specs and above Buy: the reader
+  // has just checked whether this optic suits them and has not yet clicked
+  // out, which is the one moment "does it fit my gun?" is the live question.
+  // Nothing renders for a non-optic or for an optic with no declared guide.
+  const fitGuidesHtml = (fitGuides && fitGuides.length)
+    ? '<div class="section-title">Fits these pistols</div>' +
+      '<div class="fitguides">' +
+        fitGuides.map((g) => '<a class="fitguide" href="' + esc(g.href) + '">' +
+          '<span class="fg-gun">' + esc(g.gunName) + '</span>' +
+          '<span class="fg-go">' + esc(g.familyLabel) + ' fit guide &rarr;</span></a>').join('') +
+      '</div>' +
+      '<div class="fitguide-note">Verified against each model&rsquo;s factory optic cut. ' +
+        'Cut varies by SKU &mdash; each guide decodes it.</div>'
+    : '';
 
   const specRowsHtml = (specs || [])
     .map((s) => '<div class="spec-row"><span class="spec-label">' + esc(s.label) + '</span><span class="spec-value">' + esc(s.value) + '</span></div>')
@@ -591,6 +655,12 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.stock.in { color: #1e7d32; margin-left: 6px; } .stock.out { color: #b23; margin-left: 6px; }' +
 '.buy-btn { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; padding: 8px 14px; border-radius: 6px; text-decoration: none; white-space: nowrap; }' +
 '.buy-btn.disabled { background: #ddd; color: #888; }' +
+'.fitguides { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 2px; }' +
+'.fitguide { display: flex; flex-direction: column; gap: 2px; padding: 9px 13px; border: 0.5px solid #e5e5e5; border-radius: 7px; background: #fff; text-decoration: none; }' +
+'.fitguide:hover { border-color: #4a9edd; }' +
+'.fg-gun { font-size: 13px; font-weight: 700; color: #1a1a1a; }' +
+'.fg-go { font-size: 11px; color: #4a9edd; }' +
+'.fitguide-note { font-size: 11.5px; color: #888; margin: 6px 0 2px; }' +
 '.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +
 '.build-card { display: flex; flex-direction: column; gap: 4px; width: 160px; text-decoration: none; color: #1a1a1a; }' +
 '.build-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; border: 0.5px solid #e5e5e5; }' +
@@ -654,6 +724,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     (product.build_warning ? '<div class="desc" style="color:#b23"><strong>Heads up:</strong> ' + esc(product.build_warning) + '</div>' : '') +
     '<div class="section-title">Specs</div>' +
     commonSpecs + specRowsHtml +
+    fitGuidesHtml +
     '<div class="section-title">Buy</div>' +
     variantRowsHtml +
     // Says what is true of the links above it: partner-only, maker-only,
@@ -730,7 +801,16 @@ export default async (req) => {
     console.error('[product-page] builds lookup failed', err);
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds });
+  let fitGuides = [];
+  try {
+    fitGuides = await fetchFitGuides(product.category, product.id);
+  } catch (err) {
+    // Non-fatal: the product page is the product page with or without
+    // these links, and a fit-chain hiccup must not 502 a buy page.
+    console.error('[product-page] fit-guide lookup failed', err);
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides });
   return new Response(html, {
     status: 200,
     headers: {

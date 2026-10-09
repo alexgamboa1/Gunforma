@@ -1,6 +1,7 @@
 -- ============================================================
 -- Gunforma-v2 — link_clicks.product_id: count clicks to a maker's store
--- NOT YET APPLIED. Rollback: link_clicks_product_id_rollback.sql
+-- APPLIED 2026-10-07. See the record at the bottom of this file.
+-- Rollback: link_clicks_product_id_rollback.sql
 --
 -- ORDER MATTERS, the usual way round. Merge and deploy the code first
 -- (netlify/edge-functions/go.js, the /go/part/<product id> shape), confirm
@@ -76,3 +77,25 @@ comment on table public.link_clicks is
 -- Then, from outside: a /go/part/<live product id> request with x-go-debug: 1
 -- must answer x-go-insert-status: 201. That header is the fact; "applied"
 -- is the claim.
+
+-- ============================================================
+-- APPLIED 2026-10-07 as migration link_clicks_product_id (20261007055811)
+-- to project lagjjcpclvzrjlrswojt, from this file as merged in #149 — after
+-- #149 was merged (909a9ee) and its deploy preview had answered
+-- x-go-insert-status: 400 / PGRST204 on /go/part/, i.e. the code was live
+-- and tolerating the column's absence. The house order, and this one
+-- needed it (see ORDER MATTERS above).
+--
+-- Verified live, read back rather than assumed (information_schema,
+-- pg_constraint, pg_indexes, pg_policy, role_table_grants):
+--   link_clicks.product_id ........ uuid, nullable, FK -> products(id)
+--                                   ON DELETE RESTRICT
+--   link_clicks.link_id ........... now nullable
+--   link_clicks_exactly_one_target  CHECK ((link_id IS NULL) <> (product_id IS NULL))
+--   idx_link_clicks_product_ts .... btree (product_id, ts DESC)
+--   grants to anon/authenticated .. none (0 rows)
+--   policies ...................... none; RLS still on
+--   first product click ........... 1 row, ts 2026-10-07 06:00:23 UTC —
+--                                   the live /go/part/ path writing a row,
+--                                   which is the fact the whole change is for
+-- ============================================================

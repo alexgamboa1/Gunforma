@@ -151,6 +151,21 @@ by a Netlify function. Two working precedents to copy from:
 Both are dependency-free (plain `fetch` against PostgREST, no `supabase-js`), use the anon
 key only, and return a real 404 for unknown slugs rather than a soft 404.
 
+`netlify/functions/gun-hub.mjs` is the newest, `/p365/:gun-slug` plus
+`/p365/` as its index — page type #4, the page a fit guide links UP to. It
+follows `guide-page.mjs` exactly: declared-registry only (`GUN_HUBS`), apex
+canonical, JSON-LD, hard 404 for an undeclared gun.
+
+**Its reason for existing is a defect worth remembering.** The nine `/fit/`
+pages shipped in #104 and #119 were **orphaned** — a grep of every `.html`,
+`.js` and `.mjs` for `/fit/` hit only the four files that produce the pages
+themselves. The sitemap was the sole discovery path, so the cluster had no
+internal link equity and no route a reader could follow. Shipping a page type
+without its inbound links is a thing that passes every guard in this repo and
+every check in a browser. The fix is links in both directions, and
+`check-routes.mjs` now asserts the inbound one on the wire: an optic product
+page must link into a fit guide.
+
 `netlify/functions/sitemap.mjs` is a third, `/sitemap.xml`, generated from the
 database. Two things about it are load-bearing:
 
@@ -276,7 +291,18 @@ carries its own hardcoded copy — desktop `.nav-links` *and* the mobile
 - `js/nav.js`, for the pages that mount it rather than hardcoding
 - **`netlify/functions/product-page.mjs`** — server-renders `/parts/:category/:slug`
 - **`netlify/functions/parts-index.mjs`** — server-renders `/parts`
-- **`netlify/functions/guide-page.mjs`** — server-renders `/fit/p365/...`
+- **`netlify/functions/_page-chrome.mjs`** — the nav for `guide-page.mjs`
+  (`/fit/p365/...`) and `gun-hub.mjs` (`/p365/...`), which share one copy
+  rather than holding two
+
+That last one is the direction to keep going. `_page-chrome.mjs` exists
+because `gun-hub.mjs` would otherwise have been the sixteenth copy: it owns
+the nav, the footer, the hamburger script and the chrome CSS for both guide
+pages and gun hubs, so adding a tenth fit page or a twelfth hub costs nothing
+here. **`product-page.mjs` and `parts-index.mjs` have NOT been folded in** —
+that is a separate change with its own blast radius on the two most crawled
+routes on the site, and it should be its own PR with its own served-HTML
+diff.
 
 The functions are the ones that get missed. They are Netlify functions, so they
 do not turn up when you sweep `*.html`, and they cannot be checked with
@@ -659,13 +685,17 @@ Three rules that look like decoration:
 we can stand behind in rich results; `product-page.mjs` filters maker rows
 out of `offers` explicitly.
 
-**`link_clicks` needs `product_id` to store these clicks** —
-`supabase/link_clicks_product_id.sql`, applied after the code is live. Until
-then a maker click's insert fails with PGRST204 and the function treats it
-as every other logging failure: the redirect goes out, the click is not
-counted, `x-go-debug: 1` reports it. The legacy `/go/<link id>` shape is the
-money path and is unchanged by a byte. `scripts/check-routes.mjs` exercises
-both shapes on the wire, always with `x-go-no-log: 1`.
+**`link_clicks.product_id` is what stores these clicks** —
+`supabase/link_clicks_product_id.sql`, applied 2026-10-07 (migration
+`20261007055811`), after #149 was live; the record at the bottom of that
+file is what was read back. A row carries exactly one of `link_id` /
+`product_id`, enforced by a check constraint. The function was written to
+tolerate the column's absence — a failed insert reports as `x-go-debug`'s
+`PGRST204` and the redirect still goes out — and still is, which is the
+shape to keep: logging must never be able to break buying. The legacy
+`/go/<link id>` shape is the money path and is unchanged by a byte.
+`scripts/check-routes.mjs` exercises both shapes on the wire, always with
+`x-go-no-log: 1`.
 
 ## Build-time guards
 

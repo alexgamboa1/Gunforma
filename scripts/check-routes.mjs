@@ -63,6 +63,8 @@ async function get(path, headers) {
     origHeader: res.headers.get('x-build-og-orig'),
     guideOptics: res.headers.get('x-guide-optics'),
     guideFresh: res.headers.get('x-guide-fresh-priced'),
+    hubGun: res.headers.get('x-gun-hub'),
+    hubGuides: res.headers.get('x-gun-hub-guides'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -431,7 +433,7 @@ for (const [label, path] of [
 // fails the build earlier, in scripts/check-guide-content.mjs.
 {
   console.log('\n── /fit/ guide pages');
-  const { GUIDE_PAGES, guidePath } = await import('../netlify/functions/_guide-meta.mjs');
+  const { GUIDE_PAGES, guidePath, hubPath, isLiveGunHub } = await import('../netlify/functions/_guide-meta.mjs');
 
   for (const p of GUIDE_PAGES) {
     const path = guidePath(p.family, p.gun);
@@ -442,6 +444,13 @@ for (const [label, path] of [
        `${path}: canonical is the apex /fit/ form`, r.canon[0]);
     ok(/application\/ld\+json/.test(r.body), `${path}: JSON-LD present`);
     ok(r.body.includes('href="/go/'), `${path}: buy links go through /go/`);
+    // The other direction of "links in both directions": a fit page links UP
+    // to its hub. #120 asserted hub → fit and shipped without this one, so
+    // the hub was reachable from nowhere a fit-page reader could see.
+    if (isLiveGunHub(p.gun)) {
+      ok(r.body.includes('href="' + hubPath(p.gun) + '"'),
+         `${path}: links up to its hub ${hubPath(p.gun)}`);
+    }
     // Recorded, not asserted — live counts are time-dependent facts.
     note('optics on page', r.guideOptics + ' (' + r.guideFresh + ' fresh-priced)');
   }
@@ -455,6 +464,66 @@ for (const [label, path] of [
     const r = await get(path);
     ok(r.status === 404, `${label}: hard 404`, r.status);
   }
+}
+
+// ── /p365/ — the gun hubs ──────────────────────────────────────────────
+// The hubs are what un-orphan the /fit/ pages, so the assertion that
+// matters is not just "the hub renders" but "the hub links DOWN to its
+// declared fit pages and the fit page is reachable from it". A hub that
+// 200s with no links is the same orphan problem one level up.
+{
+  console.log('\n── /p365/ gun hubs');
+  const { GUN_HUBS, GUIDE_PAGES, hubPath, guidePath, HUB_INDEX_PATH } =
+    await import('../netlify/functions/_guide-meta.mjs');
+
+  const idx = await get(HUB_INDEX_PATH);
+  ok(idx.status === 200, `${HUB_INDEX_PATH}: 200`, idx.status);
+  ok(idx.canon.length === 1, `${HUB_INDEX_PATH}: exactly one canonical`, idx.canon.length);
+  ok(idx.canon[0] === 'https://gunforma.com' + HUB_INDEX_PATH,
+     `${HUB_INDEX_PATH}: canonical is the apex form`, idx.canon[0]);
+  for (const h of GUN_HUBS) {
+    ok(idx.body.includes('href="' + hubPath(h.gun) + '"'),
+       `${HUB_INDEX_PATH}: links to ${h.gun}`);
+  }
+
+  for (const h of GUN_HUBS) {
+    const path = hubPath(h.gun);
+    const r = await get(path);
+    ok(r.status === 200, `${path}: 200`, r.status);
+    ok(r.canon.length === 1, `${path}: exactly one canonical`, r.canon.length);
+    ok(r.canon[0] === 'https://gunforma.com' + path,
+       `${path}: canonical is the apex /p365/ form`, r.canon[0]);
+    ok(/application\/ld\+json/.test(r.body), `${path}: JSON-LD present`);
+    // The point of the page: every declared fit page for this gun is linked.
+    for (const g of GUIDE_PAGES.filter((p) => p.gun === h.gun)) {
+      ok(r.body.includes('href="' + guidePath(g.family, g.gun) + '"'),
+         `${path}: links down to ${guidePath(g.family, g.gun)}`);
+    }
+    note('hub guides linked', r.hubGuides);
+  }
+
+  for (const [label, path] of [
+    ['/p365/<undeclared gun>',  '/p365/p365-xmacro-comp'],
+    ['/p365/<unknown slug>',    '/p365/not-a-pistol'],
+    ['/p365/<too deep>',        '/p365/p365-xl/extra'],
+  ]) {
+    const r = await get(path);
+    ok(r.status === 404, `${label}: hard 404`, r.status);
+  }
+}
+
+// ── the /fit/ cluster is no longer orphaned ────────────────────────────
+// The defect this PR fixes, asserted on the wire rather than in review:
+// a product page for an optic must link INTO a fit guide.
+{
+  console.log('\n── inbound links to /fit/');
+  const { GUIDE_PAGES, guidePath } = await import('../netlify/functions/_guide-meta.mjs');
+  const r = await get('/parts/optics/holosun-507k-x2');
+  ok(r.status === 200, '/parts/optics/holosun-507k-x2: 200', r.status);
+  const linked = GUIDE_PAGES.filter((g) => r.body.includes('href="' + guidePath(g.family, g.gun) + '"'));
+  ok(linked.length > 0,
+     'an optic product page links to at least one fit guide', linked.length + ' linked');
+  note('fit guides linked from that product page', linked.map((g) => g.gun).join(', '));
 }
 
 // ── every category that has a product is on every list ───────────────────

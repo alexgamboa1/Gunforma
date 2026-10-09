@@ -15,7 +15,7 @@
 //   - a malformed updated date, an overlong title, or a FAQ that is not a
 //     question.
 // No network: this is tree-dependent, not time-dependent.
-import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES } from '../netlify/functions/_guide-meta.mjs';
+import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS } from '../netlify/functions/_guide-meta.mjs';
 import { GUIDE_CONTENT } from '../netlify/functions/_guide-content.mjs';
 
 let failures = 0;
@@ -84,6 +84,32 @@ for (const family of Object.keys(GUIDE_CONTENT)) {
       fail(family + '/' + gun + ': content block exists but page is not in GUIDE_PAGES — dead prose, or a missing registry row');
   }
 }
+
+// ── gun hubs: the registry's other half ───────────────────────────────────
+// A hub lists a model's facts and links to its fit pages, so the two sets
+// must be the same guns. Either mismatch is silent and leaves a page
+// stranded: a hub with no fit pages lists nothing to click, and a fit page
+// with no hub stays orphaned on the up side — which is the exact defect this
+// whole page type was added to fix.
+const hubGuns  = new Set(GUN_HUBS.map((h) => h.gun));
+const pageGuns = new Set(GUIDE_PAGES.map((p) => p.gun));
+for (const g of hubGuns) {
+  if (!pageGuns.has(g)) fail('hub ' + g + ': declared in GUN_HUBS but has no page in GUIDE_PAGES — the hub would list nothing');
+  if (!GUN_META[g])     fail('hub ' + g + ': gun slug not in GUN_META');
+}
+for (const g of pageGuns) {
+  if (!hubGuns.has(g)) fail('hub ' + g + ': has a fit page but no hub in GUN_HUBS — the fit page is orphaned on the up side');
+}
+for (const h of GUN_HUBS) {
+  if (!ISO_DATE.test(h.updated || '') || Number.isNaN(Date.parse(h.updated)))
+    fail('hub ' + h.gun + ': updated is not a valid YYYY-MM-DD date: ' + h.updated);
+  if (!h.summary || h.summary.length < 40)
+    fail('hub ' + h.gun + ': summary missing or too thin to be worth reading');
+  checkProse('hub ' + h.gun + ' summary', h.summary || '');
+}
+const dupHubs = GUN_HUBS.map((h) => h.gun).filter((g, i, a) => a.indexOf(g) !== i);
+if (dupHubs.length) fail('GUN_HUBS has duplicate entries: ' + dupHubs.join(', '));
+if (!failures) pass(GUN_HUBS.length + ' gun hub(s) match the declared fit pages exactly');
 
 if (failures) {
   console.error('\n' + failures + ' guide-content failure(s).');
