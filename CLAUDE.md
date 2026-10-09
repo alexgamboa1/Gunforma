@@ -1182,14 +1182,15 @@ material family "Unspecified". Read-only: editing an existing product is
 the next project, and the page says so instead of linking to a dead end.
 Same gate as the add-a-part page, `noindex`, no analytics tag.
 
-Two things noticed here and not fixed:
+Noticed here and not fixed:
 
 - `create_product()`'s own re-link writes no `variantSpecs`, and does not
   refuse a part that has corrections. `relink_build_part()` does both.
-- `prevent_owner_edit_history_change()` lets only `is_admin()` change
-  `builds.edit_history`, so the service role and a direct session are
-  refused — the "service_role bypasses RLS, not triggers" trap above, failing
-  closed.
+
+A second item logged here — `prevent_owner_edit_history_change()` refusing
+the service role and a direct session — is fixed by `supabase/part_ids.sql`,
+which found the same guard refusing every visitor's flag too; see **The
+flag never worked**.
 
 ## Adding an affiliate link (CSV import)
 
@@ -1912,6 +1913,31 @@ function reads the `partId` there and finds the correction by it.
 correction left with a stale `part_index` neither blocks the wrong part nor
 lets the right one through. `build_part_flags.part_id` records which part
 was flagged.
+
+#### The flag never worked
+
+"This looks wrong — flag for review" on a corrected part calls
+`contest_build_part()`, which is `SECURITY DEFINER` — but the
+`edit_history` guard (`prevent_owner_edit_history_change`) identifies the
+caller with `is_admin()`, and the caller is still the visitor. So every
+non-admin flag was refused with "Only admins can modify edit_history", the
+page said "Something went wrong", and on 2026-10-09 the database held zero
+contested entries and zero flag rows. Found by the dry run of
+`supabase/part_ids.sql` (Claude Code, #152), not by anyone using the site.
+**The definer context changes whose privileges a statement runs with; it
+does not change who `auth.uid()` says the caller is**, so every trigger the
+function's writes fire still sees the visitor.
+
+Fixed in the guard, narrowly: for anyone who is not an admin or a trusted
+backend, the one change allowed to `edit_history` is marking existing
+entries `contested` on a build that is live and stays live — same entries,
+same order, every other key equal. Adding, removing, rewriting, reordering
+and un-contesting are still refused (eleven cases, in the PR). The service
+role and a direct session now pass by name, which closes the item logged
+under **Pending build parts**. The page tells a signed-out visitor to sign
+in, and decides what the toast says by reading the row back — the RPC
+returns nothing either way, and "nothing came back" is what the broken
+version returned too.
 
 Still addressed by **index**, deliberately: the queue's "Link to existing
 part" and add-a-part's re-link. They act on the list the admin is looking

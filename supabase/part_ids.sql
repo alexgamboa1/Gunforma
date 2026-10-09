@@ -39,6 +39,10 @@
 -- other key and value equal (jsonb equality, so key order does not matter),
 -- and each old id can be claimed once.
 --
+-- AND THE FLAG, which never worked: the edit_history guard refused every
+-- caller but an admin, including the visitor contest_build_part() acts for.
+-- Fixed narrowly below (prevent_owner_edit_history_change).
+--
 -- ORDER. Unlike most migrations here this one is additive and can go either
 -- side of the code: it adds a key to jsonb that every reader ignores, a
 -- trigger that only ever adds that key, a nullable column, and two function
@@ -170,6 +174,63 @@ update public.builds
 
 -- ── flags remember which part, not just where it was ───────────────────────
 alter table public.build_part_flags add column if not exists part_id text;
+
+-- ── the edit_history guard: let a flag through, and the service role ──────
+-- Found by the dry run of this file (Claude Code, #152): the visitor's flag
+-- has NEVER worked. contest_build_part() is SECURITY DEFINER, but this
+-- trigger identifies the caller with is_admin() (auth.uid()), and the caller
+-- is still the visitor — so its final UPDATE was refused with "Only admins
+-- can modify edit_history", the page said "Something went wrong", and the
+-- database holds zero contested entries and zero flag rows. Same shape as
+-- CLAUDE.md's "service_role bypasses RLS. It does not bypass triggers", and
+-- that half was logged too: the service role and a direct session were
+-- refused here as well.
+--
+-- The rule now, for anyone who is not an admin or a trusted backend: the ONE
+-- change allowed to edit_history is marking existing corrections
+-- 'contested' on a build that is live and stays live — same entries, same
+-- order, every key equal except `status`, which may only become
+-- 'contested'. That is exactly what contest_build_part() writes, and all it
+-- can write. Adding, removing, rewriting or un-contesting an entry is still
+-- refused, as before. An owner can do the same thing by a direct UPDATE of
+-- their own live build; that is the same act any signed-in visitor can do
+-- through the function, so it opens nothing.
+create or replace function public.prevent_owner_edit_history_change()
+ returns trigger
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $function$
+begin
+  -- Admins log corrections; the service role and a direct session (the SQL
+  -- editor, a migration) are trusted. See is_trusted_backend().
+  if public.is_admin() or public.is_trusted_backend() then
+    return new;
+  end if;
+  if new.edit_history is not distinct from old.edit_history then
+    return new;
+  end if;
+  -- A flag: only statuses changed, only to 'contested', on a live build.
+  if old.status = 'approved' and new.status = 'approved'
+     and jsonb_typeof(old.edit_history) = 'array' and jsonb_typeof(new.edit_history) = 'array'
+     and jsonb_array_length(old.edit_history) = jsonb_array_length(new.edit_history)
+     and not exists (
+       select 1
+         from jsonb_array_elements(old.edit_history) with ordinality as o(oe, oi)
+         join jsonb_array_elements(new.edit_history) with ordinality as n(ne, ni) on ni = oi
+        where not (
+          ne = oe
+          or (jsonb_typeof(ne) = 'object' and jsonb_typeof(oe) = 'object'
+              and (ne - 'status') = (oe - 'status')
+              and ne ->> 'status' = 'contested')
+        ))
+  then
+    return new;
+  end if;
+  raise exception 'Only admins can modify edit_history'
+    using errcode = '42501';   -- insufficient_privilege
+end;
+$function$;
 
 -- ── contest_build_part: the flagged correction is the PART's ───────────────
 -- Same signature, so the page's call and the grants are unchanged. The page

@@ -2,7 +2,7 @@
 -- Rollback for part_ids.sql.
 --
 -- Puts contest_build_part and relink_build_part back to matching a
--- correction by position, and removes the trigger, its two functions and
+-- correction by position, puts the edit_history guard back to admins only, and removes the trigger, its two functions and
 -- build_part_flags.part_id.
 --
 -- It does NOT strip partId from parts_snapshot or part_id from
@@ -127,6 +127,29 @@ begin
    where b.id = p_build_id;
 
   return jsonb_build_object('build_id', p_build_id, 'part_index', p_part_index, 'entry', v_entry);
+end;
+$function$;
+
+-- prevent_owner_edit_history_change, as it was before part_ids.sql: admins
+-- only. This puts the visitor's flag back to never working.
+create or replace function public.prevent_owner_edit_history_change()
+ returns trigger
+ language plpgsql
+ security definer
+ set search_path to 'public'
+as $function$
+begin
+  -- Admins can freely modify edit_history — that's how corrections get logged.
+  if public.is_admin() then
+    return new;
+  end if;
+  -- Anyone else must leave edit_history unchanged. IS DISTINCT FROM is the
+  -- null-safe comparison — [] vs [{...}] differs even if either side is null.
+  if new.edit_history is distinct from old.edit_history then
+    raise exception 'Only admins can modify edit_history'
+      using errcode = '42501';   -- insufficient_privilege
+  end if;
+  return new;
 end;
 $function$;
 
