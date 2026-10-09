@@ -1,6 +1,7 @@
 -- ============================================================
 -- Gunforma-v2 — every build part has its own id, and corrections use it
--- NOT YET APPLIED. Rollback: part_ids_rollback.sql
+-- APPLIED 2026-10-09 as migration part_ids (20261009053247). See the record
+-- at the bottom of this file. Rollback: part_ids_rollback.sql
 --
 -- WHAT WAS WRONG
 -- A reviewer's correction in builds.edit_history named its part by POSITION
@@ -45,11 +46,12 @@
 --
 -- ORDER. Unlike most migrations here this one is additive and can go either
 -- side of the code: it adds a key to jsonb that every reader ignores, a
--- trigger that only ever adds that key, a nullable column, and two function
--- bodies with unchanged signatures and grants. Run it AFTER the merge anyway
--- (the house order), and the pages work in both states: before it, the
--- pages assign ids themselves and the two functions still match by index;
--- after it, everything matches by id.
+-- trigger that only ever adds that key, a nullable column, and three function
+-- bodies with unchanged signatures and grants (contest_build_part,
+-- relink_build_part, prevent_owner_edit_history_change). Run it AFTER the
+-- merge anyway (the house order), and the pages work in both states: before
+-- it, the pages assign ids themselves and the two functions still match by
+-- index; after it, everything matches by id.
 --
 -- TRIGGER ORDER on builds (BEFORE, by name): builds_updated_at,
 -- trg_assign_part_ids, trg_prevent_build_consent_tampering,
@@ -368,4 +370,64 @@ commit;
 --   select count(*) from (select b.id, p->>'partId' from builds b,
 --     jsonb_array_elements(b.parts_snapshot) p group by 1, 2 having count(*) > 1) d;  -- 0
 --   select tgname from pg_trigger where tgname = 'trg_assign_part_ids';   -- one row
+-- ============================================================
+
+-- ============================================================
+-- APPLIED 2026-10-09 as migration part_ids (20261009053247) to project
+-- lagjjcpclvzrjlrswojt, from this file as merged in #152 (7c599ec) — after
+-- the merge had deployed: https://gunforma.com/js/part-ids.js answered 200
+-- and was byte-identical to origin/main, and the live build page loaded it.
+-- The house order: code first, then the migration.
+--
+-- Read just before applying: 6 builds, 32 parts, 3 of them already carrying
+-- a partId (a build the live page had saved minutes earlier, through
+-- PartIds.ensure()), no edit_history entries, no build_part_flags rows.
+--
+-- Verified live, read back rather than taken from the apply result:
+--   parts with no valid partId ................ 0
+--   duplicate ids within a build .............. 0
+--   trg_assign_part_ids on public.builds ...... present, enabled (O),
+--     BEFORE INSERT OR UPDATE OF parts_snapshot, FOR EACH ROW
+--   build_part_flags.part_id .................. text, nullable
+--   with_part_ids EXECUTE ..................... authenticated, postgres,
+--                                               service_role (anon: none)
+--   assign_part_ids EXECUTE ................... postgres, service_role only
+--   contest_build_part EXECUTE ................ unchanged: authenticated,
+--                                               postgres, service_role
+--   the five function bodies .................. pg_get_functiondef, whitespace
+--     stripped, md5 equal to this file for with_part_ids, assign_part_ids,
+--     contest_build_part, relink_build_part and
+--     prevent_owner_edit_history_change
+--   BEFORE UPDATE triggers on builds, in firing order:
+--     builds_updated_at, trg_assign_part_ids,
+--     trg_prevent_build_consent_tampering,
+--     trg_prevent_owner_edit_history_change, trg_restrict_build_status,
+--     trg_restrict_owner_edits_on_approved, trg_stamp_build_review
+--     — as the header predicted: ids are assigned before
+--     trg_restrict_owner_edits_on_approved compares NEW to OLD.
+--   BEFORE INSERT triggers on builds, in firing order:
+--     trg_assign_part_ids, trg_restrict_build_status, trg_stamp_build_consent
+--
+-- The backfill touched the five long-lived builds (29 parts) in one
+-- statement; all five carry updated_at 2026-10-09 05:32:47.66, the
+-- migration's own timestamp, and every part now has an id. The sixth build
+-- seen before applying was a test build that another session created and
+-- deleted during the same minutes; it is not a migration effect, and the
+-- builds_updated_at bump the header warns about is the only other change.
+--
+-- Proved before applying, in two dry runs against this project (both rolled
+-- back, nothing left behind): the nine T-cases in the PR #152 comments —
+-- backfill adds only the id, a stale save keeps the id, a duplicate is
+-- re-ided, a reserved id stays with the part that brought it, a visitor's
+-- flag lands on the PART through a reorder, an old-style entry still
+-- resolves by position, relink refuses the corrected part and keeps the id
+-- on the other, and the edit_history guard refuses an owner adding,
+-- rewriting or un-contesting while admitting a flag and the service role.
+--
+-- NOT DONE: a flag on the wire. The dry runs set the caller's role and a
+-- real `sub` in request.jwt.claims on a SQL connection; no request has yet
+-- gone through PostgREST from the live build page as a signed-in non-admin.
+-- "This looks wrong — flag for review" on a corrected part, signed in as an
+-- ordinary user, is that test — and the page now reads the row back before
+-- it says "Sent back for review".
 -- ============================================================
