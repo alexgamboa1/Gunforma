@@ -372,6 +372,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/redact.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/part-picker.js"></script>
+<!-- Each part's own id: what a reviewer's correction names it by. -->
+<script src="js/part-ids.js"></script>
 <script>
 var sb = window.sb;
 var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
@@ -801,6 +803,10 @@ function pickVariant(k, itemId, variantId) {
 // Back to the grid. A full re-render rather than restoring saved markup: the
 // available list may have changed while the step was open.
 function cancelVariantPick(k) {
+  // Backing out of the colour step also drops a "Use this" swap waiting on
+  // it, so a later add of the same product by hand does not replace the
+  // typed part after all.
+  PartPicker.cancelSwap();
   renderParts();
   PartPicker.scrollToCategory(k);
 }
@@ -914,6 +920,9 @@ function buildPartsSnapshot() {
     if (p.variantFinish) row.variantFinish = p.variantFinish;
     if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
     if (p.imageUrl)      row.imageUrl      = p.imageUrl;
+    // The part's own id, assigned by PartIds.ensure() before the insert. A
+    // correction names its part by this. See js/part-ids.js.
+    if (p.partId)        row.partId        = p.partId;
     // Only finish-style entries carry this. Build detail, build-og and the
     // armory all render brand + name, so the row stays readable to them.
     if (p.finish) row.finish = p.finish;
@@ -943,6 +952,9 @@ async function submitBuild() {
   // insert policy requires the first path segment to equal auth.uid(), so
   // these files could not have been written anywhere else. Only the rows
   // move.
+  //
+  // Every part gets its own id before it is stored. See js/part-ids.js.
+  PartIds.ensure(state.parts);
   const payload = {
     user_id: null,
     platform_id: state.platform.id,

@@ -1037,6 +1037,7 @@ async function loadBuildById(buildId) {
       variantSpecs:  part.variantSpecs  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
+      partId:        part.partId        || undefined,
       price: live ? live.price : null,
     };
   });
@@ -1562,6 +1563,11 @@ function buildPartsSnapshot() {
     if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
     if (p.variantFinish) row.variantFinish = p.variantFinish;
     if (p.imageUrl)      row.imageUrl      = p.imageUrl;
+    // The part's own id (js/part-ids.js). The Armory never makes one — the
+    // database's trg_assign_part_ids does, for a part saved without — but it
+    // must carry one it loaded, or the next save of that draft would re-id
+    // the part out from under any correction addressed to it.
+    if (p.partId)        row.partId        = p.partId;
     return row;
   });
 }
@@ -1903,6 +1909,7 @@ function remixGuide(guideId) {
       variantSpecs:  part.variantSpecs  || undefined,
       variantFinish: part.variantFinish || undefined,
       imageUrl:      part.imageUrl      || undefined,
+      partId:        part.partId        || undefined,
       price: live ? live.price : null,
     };
   });

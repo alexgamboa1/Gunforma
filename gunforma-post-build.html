@@ -399,6 +399,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/redact.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/part-picker.js"></script>
+<!-- Each part's own id, and which part a reviewer's correction belongs to. -->
+<script src="js/part-ids.js"></script>
 <script>
 var sb = window.sb;
 var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl helper below
@@ -522,8 +524,10 @@ const editState = {
   // instead of silently overwriting it. See submitBuildEdit().
   updatedAt: null,
   // uids of loaded parts that must keep their position in parts_snapshot,
-  // because a reviewer's correction in edit_history is addressed to a part
-  // by its INDEX. Empty unless the build carries corrections. See removePart().
+  // because an OLD-STYLE correction in edit_history is addressed to a part
+  // by its INDEX. Corrections now name the part by its id (js/part-ids.js)
+  // and pin nothing, so this is empty unless the build carries an entry
+  // written before that. See removePart().
   pinnedPartUids: new Set(),
   existingPhotos: [],     // rows from build_photos, sorted by position
   nextPosition: 1,        // for new photo inserts
@@ -661,9 +665,10 @@ async function selectPlatform(id) {
   renderParts();                            // re-render with real cards
 }
 function changePlatform() {
-  // Changing the pistol drops every catalog part, which moves the parts a
-  // reviewer's corrections are addressed to. Refused for the same reason
-  // removePart() refuses a pinned part.
+  // Changing the pistol drops every catalog part, which moves the parts an
+  // old-style (by-index) correction is addressed to. Refused for the same
+  // reason removePart() refuses a pinned part. Corrections by id need no
+  // refusal: a dropped part simply takes its corrections with it.
   if (editState.pinnedPartUids.size) {
     showToast('The pistol can’t be changed — a reviewer corrected parts on this build');
     return;
@@ -900,6 +905,10 @@ function pickVariant(k, itemId, variantId) {
 // Back to the grid. A full re-render rather than restoring saved markup: the
 // available list may have changed while the step was open.
 function cancelVariantPick(k) {
+  // Backing out of the colour step also drops a "Use this" swap waiting on
+  // it, so a later add of the same product by hand does not replace the
+  // typed part after all.
+  PartPicker.cancelSwap();
   renderParts();
   PartPicker.scrollToCategory(k);
 }
@@ -941,13 +950,16 @@ function addCustomPart(k) {
   state.parts.push({ uid:'p'+(uid++), refId:null, category:k, brand, name, pending:true });
   PartPicker.closePickerAfterAdd(k);
 }
-// A reviewer's correction (builds.edit_history) names its part by INDEX in
-// parts_snapshot, and nobody but an admin may rewrite edit_history. Removing
-// a part at or before a corrected one would shift the list under it, and the
-// build page would then lay "name corrected to X" over a different part —
-// with no error anywhere. So those parts are pinned: they stay, in place.
-// Adding is always safe (new parts go on the end), and so is removing a part
-// that sits after the last corrected one.
+// A reviewer's correction (builds.edit_history) names its part by the part's
+// own id (partId, js/part-ids.js), so removing any part is safe: the others
+// keep their ids, and a removed part takes its corrections with it.
+//
+// The pin below is for corrections written before ids existed, which name
+// their part by INDEX in parts_snapshot. Removing a part at or before one of
+// those would shift the list under it, and the build page would then lay
+// "name corrected to X" over a different part — with no error anywhere. So
+// those parts stay, in place. None existed when ids shipped; this is the
+// safe answer if one ever turns up.
 function removePart(partUid) {
   if (editState.pinnedPartUids.has(partUid)) {
     showToast('That part can’t be removed — a reviewer corrected parts on this build. You can add parts; to drop this one, delete the build and post it again.');
@@ -1026,6 +1038,10 @@ function buildPartsSnapshot() {
     if (p.variantFinish) row.variantFinish = p.variantFinish;
     if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
     if (p.imageUrl)      row.imageUrl      = p.imageUrl;
+    // The part's own id: what a reviewer's correction names it by. Assigned
+    // by PartIds.ensure() before every save, never changed once it exists,
+    // and carried by both load paths.
+    if (p.partId)        row.partId        = p.partId;
     // Only finish-style entries (Paint Job & Finish) carry this, and it is an
     // OBJECT, not a string.
     //
@@ -1057,6 +1073,8 @@ async function submitBuild(status) {
   const legalConfirmed   = document.getElementById('legal-confirm').checked;
   const licenseConfirmed = document.getElementById('content-license-confirm').checked;
 
+  // Every part gets its own id before it is stored. See js/part-ids.js.
+  PartIds.ensure(state.parts);
   const payload = {
     user_id: currentUser.id,
     platform_id: state.platform.id,
@@ -1160,6 +1178,9 @@ async function submitBuildEdit(status) {
     return { error: { message: 'A build can have at most 4 photos — delete one before adding more.' } };
   }
 
+  // Every part keeps (or gets) its own id. A part loaded from the row keeps
+  // the one it had, so a correction addressed to it still finds it.
+  PartIds.ensure(state.parts);
   const payload = {
     platform_id: state.platform.id,
     name: state.name.trim(),
@@ -1498,6 +1519,9 @@ async function hydrateFromArmoryHandoff() {
       imageUrl:      part.imageUrl      || undefined,
       // The spec line ("2 MOA · Red dot"), stored alongside the label.
       variantSpecs:  part.variantSpecs  || undefined,
+      // The part's own id. Dropped here, the next save would give it a new
+      // one and every correction addressed to it would stop finding it.
+      partId:        part.partId        || undefined,
     });
   });
   renderParts(); renderSidebar();
@@ -1756,19 +1780,20 @@ async function hydrateFromEditMode() {
       imageUrl:      part.imageUrl      || undefined,
       // The spec line ("2 MOA · Red dot"), stored alongside the label.
       variantSpecs:  part.variantSpecs  || undefined,
+      // The part's own id. Dropped here, the next save would give it a new
+      // one and every correction addressed to it would stop finding it.
+      partId:        part.partId        || undefined,
     });
   });
 
-  // Pin every loaded part up to the last one a reviewer has corrected — see
-  // removePart(). state.parts is exactly the stored list in stored order at
-  // this point, so a part's position here IS its index in parts_snapshot,
-  // which is what edit_history entries carry as part_index. Entries without
-  // one (the 'resubmit' marker) are not corrections and pin nothing.
-  const correctedIndexes = (Array.isArray(build.edit_history) ? build.edit_history : [])
-    .map(function (e) { return e ? e.part_index : null; })
-    .filter(function (i) { return Number.isInteger(i) && i >= 0; });
-  if (correctedIndexes.length) {
-    const lastCorrected = Math.max.apply(null, correctedIndexes);
+  // Pin every loaded part up to the last one an OLD-STYLE correction names —
+  // see removePart(). state.parts is exactly the stored list in stored order
+  // at this point, so a part's position here IS its index in parts_snapshot,
+  // which is what those entries carry as part_index. Corrections that name
+  // their part by id, and entries that are not corrections (the 'resubmit'
+  // marker), pin nothing.
+  const lastCorrected = PartIds.pinnedThrough(build.edit_history);
+  if (lastCorrected >= 0) {
     state.parts.forEach(function (p, i) { if (i <= lastCorrected) editState.pinnedPartUids.add(p.uid); });
     const hint = document.getElementById('parts-hint');
     if (hint && editState.pinnedPartUids.size) hint.textContent = 'A reviewer corrected parts here — you can add parts, but not remove the corrected ones';
@@ -1830,10 +1855,10 @@ function toggleExistingPhotoDelete(photoId) {
     state:    function () { return state; },
     render:   renderParts,
     onChange: renderSidebar,
-    // A typed part pinned under a reviewer's correction keeps its place AND
-    // its contents: the correction is addressed to it by index, so swapping a
-    // catalog part in would put the correction over the wrong part, exactly
-    // as removing it would. See removePart().
+    // A typed part pinned under an old-style (by-index) correction keeps its
+    // place AND its contents: swapping a catalog part in would put the
+    // correction over the wrong part, exactly as removing it would. See
+    // removePart(). Nothing is pinned unless such an entry exists.
     canSwap:  function (partUid) { return !editState.pinnedPartUids.has(partUid); },
   });
   renderParts(); renderSidebar(); renderFirstPostNote();
