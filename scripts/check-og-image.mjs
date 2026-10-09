@@ -75,9 +75,21 @@ function imageSize(b) {
   return null;
 }
 
+// Two LIVE builds, pinned by id: one whose hero is portrait (the common
+// phone case the transform exists for) and one near-square, so both shapes
+// are proved to come out at OG_W x OG_H. Picked by decoding the actual hero
+// bytes, 2026-10-09: 1201x1600 (0.75) and 906x818 (1.11).
+//
+// HOW THIS LIST ROTS. A pinned build can be deleted, and nothing here is
+// told. The first two builds pinned were both gone by 2026-10-02 and the
+// monitor sat red for a week reading "page returns 200 [404]" — which
+// looks like a routing failure and is not one. When a pinned page is not
+// 200, the loop below says so in words and skips the image checks for that
+// build; the fix is to repoint this list at a build in the live sitemap
+// (https://gunforma.com/sitemap.xml lists every approved /b/ URL).
 const BUILDS = [
-  ['portrait hero', '/b/p365-icarus-build-eb15adb8-6505-425c-9081-c264944a4761'],
-  ['near-square hero', '/b/p365-all-day-9b68ab79-aa94-4446-8a25-8b3356b799fb'],
+  ['portrait hero', '/b/p365-complete-build-2e980fc8-3a9f-42c9-af15-efcf99584536'],
+  ['near-square hero', '/b/p365-new-build-a4d60762-ef6a-4b79-8cf3-76435d455176'],
 ];
 
 console.log(`checking share-card images on ${origin}\n`);
@@ -87,6 +99,18 @@ for (const [label, path] of BUILDS) {
   const page = await fetch(origin + path);
   const html = await page.text();
   ok(page.status === 200, '  page returns 200', page.status);
+  if (page.status !== 200) {
+    // Say what happened, in the log, so the next person does not diagnose
+    // a routing failure that is really a stale pin. One FAIL is enough: the
+    // tag and image assertions below would all fail too, for the same
+    // reason, and bury this line under a dozen that say nothing new.
+    console.log(`   !  this pinned build is gone (${page.status}) — it was deleted or never`
+              + ` existed on ${origin}. Repoint BUILDS in scripts/check-og-image.mjs at a`
+              + ` build listed in ${origin}/sitemap.xml. Production's share cards are`
+              + ` not what failed here.`);
+    console.log('');
+    continue;
+  }
 
   const tag = (prop) => (html.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`)) || [])[1];
   // twitter:* are name=, not property=. A property-only reader is exactly how
