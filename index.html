@@ -40,22 +40,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* ── HERO ── */
 /* Centered, no photo. The old hero was a 340px box holding a text placeholder
    for an image that was never added; this one stands on type and numbers. */
-.hero { background: #0e0f11; background-image: radial-gradient(ellipse 70% 90% at 50% 0%, rgba(74,158,221,0.13), transparent 70%); border-bottom: 0.5px solid #2a2b2e; padding: 64px 24px 44px; text-align: center; }
+.hero { background: #0e0f11; background-image: radial-gradient(ellipse 70% 90% at 50% 0%, rgba(74,158,221,0.13), transparent 70%); border-bottom: 0.5px solid #2a2b2e; padding: 34px 24px 26px; text-align: center; }
 .hero-content { max-width: 680px; margin: 0 auto; }
-.hero-title { font-size: clamp(32px, 5.6vw, 50px); font-weight: 700; color: #f2f0eb; line-height: 1.1; margin-bottom: 16px; letter-spacing: -0.025em; }
+.hero-title { font-size: clamp(26px, 4vw, 36px); font-weight: 700; color: #f2f0eb; line-height: 1.1; margin-bottom: 10px; letter-spacing: -0.02em; }
 /* Each sentence stays whole: a narrow screen breaks between them, never inside one. */
 .hero-title span { display: inline-block; white-space: nowrap; }
-.hero-sub { font-size: 15px; color: #b4b2ac; max-width: 540px; line-height: 1.6; margin: 0 auto 26px; text-wrap: balance; }
+.hero-sub { font-size: 14px; color: #b4b2ac; max-width: 600px; line-height: 1.55; margin: 0 auto 18px; text-wrap: balance; }
 .hero-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
-.hero-actions .btn-primary, .hero-actions .btn-ghost { font-size: 13px; padding: 12px 24px; }
 /* STATS — filled by loadHeroStats() from the live database. The row is in the
    HTML with dashes so it holds its height while the counts load. */
-.hero-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; max-width: 600px; margin: 40px auto 0; padding-top: 24px; border-top: 0.5px solid #2a2b2e; list-style: none; }
+.hero-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; max-width: 520px; margin: 22px auto 0; padding-top: 16px; border-top: 0.5px solid #2a2b2e; list-style: none; }
 .hero-stat { padding: 0 10px; }
 .hero-stat + .hero-stat { border-left: 0.5px solid #2a2b2e; }
-.hero-stat-num { display: block; font-size: clamp(24px, 4.4vw, 32px); font-weight: 700; color: #f2f0eb; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
-.hero-stat-label { display: block; font-size: 10px; color: #8f8d86; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 6px; line-height: 1.4; }
-@media (max-width: 600px) { .hero { padding: 44px 20px 32px; } .hero-stats { margin-top: 32px; padding-top: 20px; } }
+.hero-stat-num { display: block; font-size: clamp(20px, 3vw, 24px); font-weight: 700; color: #f2f0eb; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.hero-stat-label { display: block; font-size: 10px; color: #8f8d86; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; line-height: 1.4; }
+@media (max-width: 600px) { .hero { padding: 26px 20px 22px; } .hero-stats { margin-top: 20px; padding-top: 14px; } }
 .btn-primary { font-size: 12px; background: #4a9edd; color: #ffffff; padding: 10px 20px; border-radius: 4px; font-weight: 600; cursor: pointer; letter-spacing: 0.04em; border: none; text-decoration: none; display: inline-block; }
 .btn-primary:hover { background: #2a7bbd; }
 .btn-ghost { font-size: 12px; color: #e8e6e1; border: 0.5px solid #3a3b3e; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: border-color 0.15s; text-decoration: none; display: inline-block; }
