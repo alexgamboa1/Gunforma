@@ -45,7 +45,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .hero-title { font-size: clamp(32px, 5.6vw, 50px); font-weight: 700; color: #f2f0eb; line-height: 1.1; margin-bottom: 16px; letter-spacing: -0.025em; }
 /* Each sentence stays whole: a narrow screen breaks between them, never inside one. */
 .hero-title span { display: inline-block; white-space: nowrap; }
-.hero-sub { font-size: 15px; color: #b4b2ac; max-width: 500px; line-height: 1.6; margin: 0 auto 26px; }
+.hero-sub { font-size: 15px; color: #b4b2ac; max-width: 540px; line-height: 1.6; margin: 0 auto 26px; text-wrap: balance; }
 .hero-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
 .hero-actions .btn-primary, .hero-actions .btn-ghost { font-size: 13px; padding: 12px 24px; }
 /* STATS — filled by loadHeroStats() from the live database. The row is in the
@@ -197,7 +197,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div class="hero">
     <div class="hero-content">
       <h1 class="hero-title"><span>Your pistol.</span> <span>Your loadout.</span></h1>
-      <p class="hero-sub">Real parts, real builds from owners, real performance data. See exactly what other people are running — and what it costs.</p>
+      <p class="hero-sub">Real parts, real builds from owners, real fitment checks. See exactly what other people are running, whether it fits your pistol, and what it costs.</p>
       <div class="hero-actions">
         <a href="gunforma-builds.html" class="btn-primary">Browse builds</a>
         <a href="gunforma-post-build.html" class="btn-ghost">Post your build</a>
