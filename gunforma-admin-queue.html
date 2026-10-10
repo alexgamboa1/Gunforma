@@ -91,11 +91,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* PHOTOS */
 .detail-photos { display: flex; flex-direction: column; gap: 8px; }
-.detail-photo-hero { height: 220px; border-radius: 6px; overflow: hidden; background: #f0f2f5; border: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; }
-.detail-photo-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.detail-photo-thumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.detail-photo-thumb { height: 90px; border-radius: 6px; overflow: hidden; background: #f0f2f5; border: 0.5px solid #e5e5e5; }
-.detail-photo-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* A reviewer is judging the photo, so it is shown WHOLE: object-fit is contain
+   here, never cover. The hero used to be a 220px-tall box at the full width of
+   the panel with cover — against a ~835px-wide panel that is a 3.8:1 slot, and
+   a build photo off a phone is 3:4 or 4:3, so most of every photo was cropped
+   away and the reviewer approved what happened to be in the middle band. The
+   thumbnails had the same problem at 90px. Contain leaves bars at the sides of
+   a portrait photo; that is the honest trade.
+   Every photo is a <button> that opens it full size (see PHOTO LIGHTBOX). */
+.detail-photos { display: flex; flex-direction: column; gap: 8px; }
+.detail-photo-hero { height: min(62vh, 460px); min-height: 240px; border-radius: 6px; overflow: hidden; background: #f0f2f5; border: 0.5px solid #e5e5e5; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 11px; }
+.detail-photo-hero img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.detail-photo-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.detail-photo-thumb { height: 130px; border-radius: 6px; overflow: hidden; background: #f0f2f5; border: 0.5px solid #e5e5e5; }
+.detail-photo-thumb img { width: 100%; height: 100%; object-fit: contain; display: block; }
+button.detail-photo-btn { width: 100%; padding: 0; font: inherit; cursor: zoom-in; transition: border-color 0.15s; }
+button.detail-photo-btn:hover { border-color: #4a9edd; }
+button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; }
+
+/* PHOTO LIGHTBOX — the build's photos at full size, one at a time. Same shape
+   as the part lightbox on gunforma-build-detail.html (static markup, a real
+   dialog, focus handed back to the photo that opened it), plus previous/next
+   because a build has several photos and a reviewer looks at all of them. */
+.photo-lightbox { position: fixed; inset: 0; z-index: 950; background: rgba(14,15,17,0.94); display: flex; align-items: center; justify-content: center; padding: 28px 72px; }
+.photo-lightbox[hidden] { display: none; }
+.photo-lightbox img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; border-radius: 4px; display: block; }
+.photo-lightbox-close, .photo-lightbox-nav { position: absolute; width: 44px; height: 44px; border-radius: 50%; border: 0.5px solid rgba(255,255,255,0.35); background: rgba(0,0,0,0.45); color: #fff; font: inherit; font-size: 24px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0 0 3px; }
+.photo-lightbox-close:hover, .photo-lightbox-nav:hover { background: rgba(0,0,0,0.75); }
+.photo-lightbox-close:focus-visible, .photo-lightbox-nav:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; }
+.photo-lightbox-close { top: 14px; right: 16px; }
+.photo-lightbox-nav { top: 50%; transform: translateY(-50%); }
+.photo-lightbox-nav.prev { left: 14px; }
+.photo-lightbox-nav.next { right: 14px; }
+.photo-lightbox-nav[hidden] { display: none; }
+.photo-lightbox-count { position: absolute; bottom: 12px; left: 0; right: 0; text-align: center; font-size: 11px; letter-spacing: 0.08em; color: rgba(255,255,255,0.7); }
+@media (max-width: 600px) {
+  .photo-lightbox { padding: 60px 8px 44px; }
+  .photo-lightbox-nav { top: auto; bottom: 6px; transform: none; }
+}
 
 /* PARTS (read-only — parts_snapshot has no persisted verification state) */
 .simple-parts-list { border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
@@ -299,6 +332,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <div class="toast" id="toast"><div class="toast-dot green" id="toast-dot"></div><span id="toast-msg">Done</span></div>
+
+<!-- Build photo lightbox. Static markup rather than injected on first use: the
+     detail panel's innerHTML is rewritten on every select and every re-check,
+     and a dialog living outside it survives all of that. -->
+<div class="photo-lightbox" id="photo-lightbox" role="dialog" aria-modal="true" aria-label="Build photo" hidden>
+  <button type="button" class="photo-lightbox-close" id="photo-lightbox-close" aria-label="Close photo">&times;</button>
+  <button type="button" class="photo-lightbox-nav prev" id="photo-lightbox-prev" aria-label="Previous photo">&#8249;</button>
+  <img id="photo-lightbox-img" alt="">
+  <button type="button" class="photo-lightbox-nav next" id="photo-lightbox-next" aria-label="Next photo">&#8250;</button>
+  <div class="photo-lightbox-count" id="photo-lightbox-count" aria-live="polite"></div>
+</div>
 
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
@@ -540,6 +584,84 @@ function selectBuild(id) {
   if (b) { markReviewed(b); renderDetail(b); }
 }
 
+// ── build photo lightbox ──────────────────────────────────────────────────
+// DETAIL_PHOTOS is the selected build's full-size photo URLs, hero first,
+// rewritten by renderDetail. The lightbox keeps its OWN copy from the moment
+// it opens: the panel re-renders under an open lightbox whenever the queue
+// re-checks a build, and the reviewer should go on paging through the photos
+// they opened rather than have the list swapped mid-look.
+var DETAIL_PHOTOS = [];
+var LIGHTBOX_PHOTOS = [];
+var LIGHTBOX_INDEX = 0;
+var LIGHTBOX_RETURN_FOCUS = null;   // the photo button that opened it
+
+function showLightboxPhoto(i) {
+  var n = LIGHTBOX_PHOTOS.length;
+  if (!n) return;
+  LIGHTBOX_INDEX = (i + n) % n;      // previous on the first wraps to the last
+  var img = document.getElementById('photo-lightbox-img');
+  img.src = LIGHTBOX_PHOTOS[LIGHTBOX_INDEX];
+  img.alt = 'Build photo ' + (LIGHTBOX_INDEX + 1) + ' of ' + n;
+  document.getElementById('photo-lightbox-count').textContent = n > 1 ? (LIGHTBOX_INDEX + 1) + ' / ' + n : '';
+  // One photo has nowhere to page to; the arrows would be controls that do nothing.
+  document.getElementById('photo-lightbox-prev').hidden = n < 2;
+  document.getElementById('photo-lightbox-next').hidden = n < 2;
+}
+
+function openPhotoLightbox(index, trigger) {
+  if (!DETAIL_PHOTOS.length) return;
+  LIGHTBOX_PHOTOS = DETAIL_PHOTOS.slice();
+  LIGHTBOX_RETURN_FOCUS = trigger || null;
+  document.getElementById('photo-lightbox').hidden = false;
+  showLightboxPhoto(index);
+  document.getElementById('photo-lightbox-close').focus();
+}
+
+function closePhotoLightbox() {
+  var box = document.getElementById('photo-lightbox');
+  if (box.hidden) return;
+  box.hidden = true;
+  // Dropping the src stops a large photo decoding in the background and means
+  // the next open cannot flash the previous one.
+  document.getElementById('photo-lightbox-img').removeAttribute('src');
+  // The button may be gone — the panel can have re-rendered while the
+  // lightbox was open — so only hand focus back to one still in the page.
+  if (LIGHTBOX_RETURN_FOCUS && document.contains(LIGHTBOX_RETURN_FOCUS)) LIGHTBOX_RETURN_FOCUS.focus();
+  LIGHTBOX_RETURN_FOCUS = null;
+}
+
+// Bound once. The photo buttons are delegated from #detail-panel because its
+// innerHTML is rewritten on every select; the lightbox itself is static.
+(function bindPhotoLightbox() {
+  document.getElementById('detail-panel').addEventListener('click', function (e) {
+    var btn = e.target.closest('.detail-photo-btn');
+    if (!btn) return;
+    openPhotoLightbox(parseInt(btn.getAttribute('data-photo-index'), 10) || 0, btn);
+  });
+  var box = document.getElementById('photo-lightbox');
+  box.addEventListener('click', function (e) {
+    if (e.target.closest('#photo-lightbox-prev')) { showLightboxPhoto(LIGHTBOX_INDEX - 1); return; }
+    if (e.target.closest('#photo-lightbox-next')) { showLightboxPhoto(LIGHTBOX_INDEX + 1); return; }
+    // The dark surround and the close button both close. A click on the
+    // photo itself does not — that is where a reviewer rests the pointer.
+    if (e.target === box || e.target.closest('#photo-lightbox-close')) closePhotoLightbox();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (box.hidden) return;
+    if (e.key === 'Escape') { closePhotoLightbox(); }
+    else if (e.key === 'ArrowLeft')  { showLightboxPhoto(LIGHTBOX_INDEX - 1); }
+    else if (e.key === 'ArrowRight') { showLightboxPhoto(LIGHTBOX_INDEX + 1); }
+    else if (e.key === 'Tab') {
+      // Keep Tab inside the dialog: without this it walks into the queue
+      // behind the overlay, where the focused control cannot be seen.
+      var stops = [].slice.call(box.querySelectorAll('button')).filter(function (b) { return !b.hidden; });
+      var first = stops[0], last = stops[stops.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+  });
+})();
+
 function renderDetail(b) {
   var isPending    = b.status==='pending';
   var platformName = b.platforms ? b.platforms.name : 'Unknown pistol';
@@ -551,12 +673,26 @@ function renderDetail(b) {
   var hero    = photos.find(function(p){ return p.is_hero; }) || photos[0];
   var gallery = photos.filter(function(p){ return p !== hero; });
 
+  // The lightbox's list for this build, hero first and then the rest in
+  // position order — the same order they are drawn in below, so the index on
+  // each button is its place in this array. Always the full-size file
+  // (storage_path), never the thumbnail: the point of opening one is to see
+  // what the builder actually uploaded.
+  DETAIL_PHOTOS = (hero ? [hero] : []).concat(gallery).map(function (p) {
+    return photoUrl(p.storage_path);
+  });
+  function photoBtnAttrs(i) {
+    return ' data-photo-index="'+i+'" aria-label="Photo '+(i+1)+' of '+DETAIL_PHOTOS.length+' — view full size"';
+  }
+
   var heroHtml = hero
-    ? '<div class="detail-photo-hero"><img src="'+photoUrl(hero.storage_path)+'" alt="" /></div>'
+    ? '<button type="button" class="detail-photo-hero detail-photo-btn"'+photoBtnAttrs(0)+'><img src="'+escH(photoUrl(hero.storage_path))+'" alt="" /></button>'
     : '<div class="detail-photo-hero">No hero photo</div>';
   var thumbsHtml = gallery.length
-    ? '<div class="detail-photo-thumbs">'+gallery.map(function(p){
-        return '<div class="detail-photo-thumb"><img src="'+photoUrl(p.thumb_path)+'" alt="" /></div>';
+    ? '<div class="detail-photo-thumbs">'+gallery.map(function(p, i){
+        // thumb_path can be null on a photo whose thumbnail never generated;
+        // the bare column then rendered a broken image at ".../null".
+        return '<button type="button" class="detail-photo-thumb detail-photo-btn"'+photoBtnAttrs(i+1)+'><img src="'+escH(photoUrl(p.thumb_path || p.storage_path))+'" alt="" loading="lazy" /></button>';
       }).join('')+'</div>'
     : '';
 
