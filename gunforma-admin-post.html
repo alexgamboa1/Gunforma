@@ -263,6 +263,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       </div>
       <button class="platform-change" onclick="changePlatform()">Change pistol</button>
     </div>
+    <!-- "Which P365 is it?" — drawn by js/gun-model.js once a pistol is
+         chosen, and empty until builds.gun_id exists. Same mount, same
+         module as gunforma-post-build.html. -->
+    <div id="gun-model-mount"></div>
   </div>
 
   <!-- 2. PHOTOS -->
@@ -372,6 +376,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/redact.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/part-picker.js"></script>
+<!-- Which factory model the build is, and the stock-part notes that follow
+     from it. After supabase-client.js: it reads window.sb at call time. -->
+<script src="js/gun-model.js"></script>
 <!-- Each part's own id: what a reviewer's correction names it by. -->
 <script src="js/part-ids.js"></script>
 <script>
@@ -436,6 +443,9 @@ let catalogLoadedFor  = null;   // platform id most recently loaded
 const state = {
   platform: null, photos: { hero: null, g1: null, g2: null, g3: null }, name: '', activities: [],
   parts: [], openPicker: null, customOpen: null,
+  // Which factory model — or "FCU only", or "not listed". Written only by
+  // js/gun-model.js; read here through GunModel.*.
+  gun: null, gunFcuOnly: false, gunNotListed: false,
 };
 let uid = 1;
 
@@ -565,8 +575,11 @@ async function selectPlatform(id) {
   document.getElementById('platform-selected').classList.add('show');
   document.getElementById('platform-selected-name').textContent = state.platform.name;
   renderParts(); renderSidebar();          // shows "Loading catalog…" state
-  await loadCatalog(state.platform.id);
-  renderParts();                            // re-render with real cards
+  // The model question loads beside the catalog. It renders itself and
+  // calls back through onChange when answered. Same as the builder's page.
+  const pickedId = state.platform.id;
+  await Promise.all([loadCatalog(pickedId), GunModel.loadFor(pickedId)]);
+  renderParts(); renderSidebar();           // re-render with real cards
 }
 function changePlatform() {
   // Catalog picks reference products only guaranteed to fit the current
@@ -574,6 +587,9 @@ function changePlatform() {
   // since they aren't tied to catalog IDs.
   state.parts = state.parts.filter(function(p) { return p.pending; });
   state.platform = null;
+  // The model goes with the pistol: it belongs to one platform, and
+  // builds_gun_fkey refuses a model saved against another.
+  GunModel.reset();
   CATALOG = {};
   catalogLoadedFor = null;
   document.getElementById('platform-picker').style.display = 'block';
@@ -719,6 +735,8 @@ function buildCategoryBlock(cat) {
         (isOpen ? 'Close ✕' : (added.length ? '+ Add another' : '+ Add part')) + '</button>' +
     '</div>' +
     selectedHtml +
+    // The stock-slide line and the factory-part line. See js/gun-model.js.
+    GunModel.sectionNoteHtml(cat, added.length) +
     '<div class="picker-panel' + (isOpen?' open':'') + '">' +
       toolbarHtml +
       modeNote +
@@ -858,13 +876,17 @@ function renderSidebar() {
   // Typed parts that look like catalog parts, offered beside the submit
   // button. js/part-picker.js owns it; this is the one call.
   PartPicker.renderUnlinkedNudge('unlinked-nudge');
-  const hasPistol=!!state.platform, hasPhoto=photoCount()>0, hasName=state.name.trim().length>0;
+  // "Pistol chosen" means the pistol AND which model it is. answered() is
+  // true whenever the question could not be asked (before builds.gun_id
+  // exists, or on a platform with no models), so it never blocks a publish
+  // for a question that is not on the screen.
+  const hasPistol=!!state.platform && GunModel.answered(), hasPhoto=photoCount()>0, hasName=state.name.trim().length>0;
   const hasParts=state.parts.length>0;
   // Admin has no consent gate — the real builder accepts via the claim flow.
   const minimum=hasPistol&&hasPhoto&&hasName, full=minimum&&hasParts;
 
   document.getElementById('summary-name').textContent     = state.name.trim()||'Untitled build';
-  document.getElementById('summary-platform').textContent = state.platform ? state.platform.name : '—';
+  document.getElementById('summary-platform').textContent = GunModel.summary() || '—';
   document.getElementById('summary-count').textContent    = state.parts.length+' added';
   const actEl = document.getElementById('summary-activity');
   actEl.innerHTML = state.activities.length
@@ -873,6 +895,8 @@ function renderSidebar() {
   setDone('step1-dot','1',hasPistol); setDone('step2-dot','2',hasPhoto);
   setDone('step3-dot','3',hasName);   setDone('step4-dot','4',hasParts);
   setCheck('chk1',hasPistol); setCheck('chk2',hasPhoto); setCheck('chk3',hasName);
+  // Names the model as the thing still missing once a pistol is picked.
+  GunModel.syncChecklist('chk1');
 
   const st=document.getElementById('submit-status'), sd=document.getElementById('submit-status-desc');
   if (full)         { st.className='submit-status full';       sd.textContent='Full build — publishes as approved immediately.'; }
@@ -968,6 +992,9 @@ async function submitBuild() {
     content_license_confirmed: true,
     builder_agreement_version: BUILDER_AGREEMENT_VERSION,
   };
+  // { gun_id } once builds.gun_id exists, {} before — so this request never
+  // names a column the database does not have. See js/gun-model.js.
+  Object.assign(payload, GunModel.payload());
 
   const { data, error } = await sb.from('builds').insert(payload).select('id').single();
   if (error) return { error: error };
@@ -1183,6 +1210,9 @@ async function publishBuild() {
 // reload. Fresh draftId so photos land in a new storage folder.
 function postAnother() {
   state.platform = null;
+  // The next build is a different gun. Without this the model picked for the
+  // last one would ride along in state and be saved against the next.
+  GunModel.reset();
   // PhotoUploader.reset() empties the slots IN PLACE — it revokes the
   // object URLs first (the old code replaced state.photos and leaked
   // them) and leaves the same object in place, which is what photoCount()
@@ -1254,6 +1284,12 @@ async function requireAdmin() {
     state:    function () { return state; },
     render:   renderParts,
     onChange: renderSidebar,
+  });
+  // Before the first renderParts()/renderSidebar(): both call into it.
+  GunModel.init({
+    state:    function () { return state; },
+    mount:    '#gun-model-mount',
+    onChange: function () { renderParts(); renderSidebar(); },
   });
   renderParts(); renderSidebar();
   const ok = await requireAdmin();
