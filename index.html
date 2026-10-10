@@ -38,15 +38,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nav-btn.cta:hover { background: #2a7bbd; border-color: #2a7bbd; }
 
 /* ── HERO ── */
-.hero { position: relative; height: 340px; background: #141518; border-bottom: 0.5px solid #e5e5e5; display: flex; align-items: flex-end; overflow: hidden; }
-.hero-bg { position: absolute; inset: 0; background: #1a1b1f; display: flex; align-items: center; justify-content: center; }
-.hero-img-placeholder { width: 100%; height: 100%; background: #141518; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 6px; }
-.hero-img-placeholder span { font-size: 11px; color: #333; letter-spacing: 0.08em; text-transform: uppercase; }
-.hero-overlay { position: absolute; inset: 0; background: linear-gradient(to top, rgba(14,15,17,0.95) 0%, rgba(14,15,17,0.4) 50%, transparent 100%); }
-.hero-content { position: absolute; bottom: 0; left: 0; right: 0; padding: 28px 28px 32px; }
-.hero-title { font-size: 28px; font-weight: 600; color: #e8e6e1; line-height: 1.2; margin-bottom: 10px; letter-spacing: -0.01em; }
-.hero-sub { font-size: 13px; color: #c8c6c0; max-width: 440px; line-height: 1.6; margin-bottom: 18px; }
-.hero-actions { display: flex; gap: 10px; align-items: center; }
+/* Centered, no photo. The old hero was a 340px box holding a text placeholder
+   for an image that was never added; this one stands on type and numbers. */
+.hero { background: #0e0f11; background-image: radial-gradient(ellipse 70% 90% at 50% 0%, rgba(74,158,221,0.13), transparent 70%); border-bottom: 0.5px solid #2a2b2e; padding: 34px 24px 26px; text-align: center; }
+.hero-content { max-width: 680px; margin: 0 auto; }
+.hero-title { font-size: clamp(26px, 4vw, 36px); font-weight: 700; color: #f2f0eb; line-height: 1.1; margin-bottom: 10px; letter-spacing: -0.02em; }
+/* Each sentence stays whole: a narrow screen breaks between them, never inside one. */
+.hero-title span { display: inline-block; white-space: nowrap; }
+.hero-sub { font-size: 14px; color: #b4b2ac; max-width: 600px; line-height: 1.55; margin: 0 auto 18px; text-wrap: balance; }
+.hero-actions { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; }
+/* STATS — filled by loadHeroStats() from the live database. The row is in the
+   HTML with dashes so it holds its height while the counts load. */
+.hero-stats { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; max-width: 520px; margin: 22px auto 0; padding-top: 16px; border-top: 0.5px solid #2a2b2e; list-style: none; }
+.hero-stat { padding: 0 10px; }
+.hero-stat + .hero-stat { border-left: 0.5px solid #2a2b2e; }
+.hero-stat-num { display: block; font-size: clamp(20px, 3vw, 24px); font-weight: 700; color: #f2f0eb; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.hero-stat-label { display: block; font-size: 10px; color: #8f8d86; letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; line-height: 1.4; }
+@media (max-width: 600px) { .hero { padding: 26px 20px 22px; } .hero-stats { margin-top: 20px; padding-top: 14px; } }
 .btn-primary { font-size: 12px; background: #4a9edd; color: #ffffff; padding: 10px 20px; border-radius: 4px; font-weight: 600; cursor: pointer; letter-spacing: 0.04em; border: none; text-decoration: none; display: inline-block; }
 .btn-primary:hover { background: #2a7bbd; }
 .btn-ghost { font-size: 12px; color: #e8e6e1; border: 0.5px solid #3a3b3e; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: border-color 0.15s; text-decoration: none; display: inline-block; }
@@ -183,23 +191,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
   <!-- ══════════════════════════════════════════
        SECTION 1 — HERO
-       Simplified: headline, one line, two actions.
+       Centered: headline, one line, two actions, then three live counts.
        ══════════════════════════════════════════ -->
   <div class="hero">
-    <div class="hero-bg">
-      <div class="hero-img-placeholder">
-        <span>[ Hero image — full-width cinematic pistol photo ]</span>
-        <span style="color:#1e1f22">dark studio lighting, muzzle detail, high contrast</span>
-      </div>
-    </div>
-    <div class="hero-overlay"></div>
     <div class="hero-content">
-      <h1 class="hero-title">Your pistol.<br>Your loadout.</h1>
-      <p class="hero-sub">Real parts, real builds from owners, real performance data. See exactly what other people are running — and what it costs.</p>
+      <h1 class="hero-title"><span>Your pistol.</span> <span>Your loadout.</span></h1>
+      <p class="hero-sub">Real parts, real builds from owners, real fitment checks. See exactly what other people are running, whether it fits your pistol, and what it costs.</p>
       <div class="hero-actions">
         <a href="gunforma-builds.html" class="btn-primary">Browse builds</a>
         <a href="gunforma-post-build.html" class="btn-ghost">Post your build</a>
       </div>
+      <ul class="hero-stats" id="hero-stats">
+        <li class="hero-stat"><span class="hero-stat-num" id="stat-parts">—</span><span class="hero-stat-label">Parts in the catalog</span></li>
+        <li class="hero-stat"><span class="hero-stat-num" id="stat-brands">—</span><span class="hero-stat-label">Brands</span></li>
+        <li class="hero-stat"><span class="hero-stat-num" id="stat-listings">—</span><span class="hero-stat-label">Retailer listings</span></li>
+      </ul>
     </div>
   </div>
 
@@ -394,6 +400,59 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     }).join('');
   }
   loadFeatured();
+
+  // Hero stats — counted live on every load, never typed into the HTML, so
+  // the numbers cannot go stale. A count that fails to load takes its own
+  // stat out of the row (the grid rebalances); a dash is never left standing
+  // and no fallback number is shown. If all three fail the row goes.
+  //
+  //   parts    products where is_discontinued = false — the same filter the
+  //            catalog uses, so this number matches what /parts lists.
+  //   brands   distinct brand_id across those same rows.
+  //   listings affiliate_links where retired_at is null — live buy links.
+  //            Deliberately NOT called "prices": a stated price has a
+  //            three-part freshness rule (isStalePrice in js/affiliate.js and
+  //            its two copies) and this page does not carry a fourth copy.
+  async function loadHeroStats() {
+    var row = document.getElementById('hero-stats');
+    if (!row) return;
+    function put(id, n) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      if (typeof n === 'number' && n > 0) el.textContent = n.toLocaleString('en-US');
+      else el.parentNode.remove();
+    }
+    var partsQ = sb.from('products')
+      .select('brand_id', { count: 'exact' })
+      .eq('is_discontinued', false);
+    var linksQ = sb.from('affiliate_links')
+      .select('id', { count: 'exact', head: true })
+      .is('retired_at', null);
+    var res;
+    try { res = await Promise.all([partsQ, linksQ]); }
+    catch (e) { row.remove(); return; }
+    var parts = res[0], links = res[1];
+
+    var partCount = parts.error ? null : parts.count;
+    put('stat-parts', partCount);
+
+    // Brands are counted from the rows, and PostgREST caps rows per request
+    // while `count` is the true total. If the catalog ever outgrows the cap
+    // the rows are a partial list — drop the stat rather than undercount.
+    var rows = parts.error ? null : parts.data;
+    var brandCount = null;
+    if (rows && rows.length === partCount) {
+      var seen = {};
+      rows.forEach(function (r) { if (r.brand_id) seen[r.brand_id] = 1; });
+      brandCount = Object.keys(seen).length;
+    }
+    put('stat-brands', brandCount);
+
+    put('stat-listings', links.error ? null : links.count);
+
+    if (!row.children.length) row.remove();
+  }
+  loadHeroStats();
 })();
 </script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
