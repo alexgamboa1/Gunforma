@@ -15,9 +15,10 @@
 //   auth-signup — logo + "Sign in instead →"      (used on sign-up page)
 //
 // The full variant is session-aware: when a user is signed in, the "Sign in"
-// button is replaced with their username and a "Sign out" button is inserted
-// beside it. Refreshes on every auth-state change so multi-tab sign-outs
-// propagate.
+// button is replaced with their username, a mail icon with the unread count
+// is inserted beside it, and the three-line menu — shown at every width once
+// signed in — gains My Builds, Saved Builds and Sign out. Refreshes on every
+// auth-state change so multi-tab sign-outs propagate.
 //
 // It is also ROLE-aware. An admin gets Queue (/admin) and Post build
 // (/admin-post) added to the bar and to the hamburger menu, because nothing
@@ -71,7 +72,19 @@ var NAV_MENU =
 // to /admin. Measured on index.html with a username, Inbox, Sign out and the
 // Post CTA all present: 1024px still wraps a button label onto two lines,
 // 1100px does not.
+//
+// That measurement predates the mail icon: the bar it was taken on carried
+// the word "Inbox" and a Sign out button, and today's is narrower (Sign out
+// gone, an icon for the word, the three-line button added). So 1099 is
+// conservative for today's bar, not tight. It has not been re-measured and
+// lowered — do that against a real admin session, not by subtraction.
 var ADMIN_COLLAPSE_AT = 1099;
+
+// The account entries in the three-line menu, in order, ahead of Sign out.
+var ACCOUNT_LINKS = [
+  { href: 'gunforma-profile.html?tab=my-builds', label: 'My Builds' },
+  { href: 'gunforma-profile.html?tab=saved',     label: 'Saved Builds' },
+];
 
 var ADMIN_LINKS = [
   { id: 'nav-admin-queue', href: '/admin',
@@ -129,6 +142,72 @@ function ensureAdminNavStyles() {
     '  letter-spacing: 0.14em; text-transform: uppercase; color: #f9b860;' +
     '  border-top: 0.5px solid #2a2b2e; }' +
     '.nav-menu a.admin { color: #f9b860; }';
+  document.head.appendChild(style);
+}
+
+// The signed-in bar: a mail icon with the unread count where the word
+// "Inbox" was, no Sign out button, and the three-line button shown at every
+// width. Above the collapse width that button opens a small dropdown holding
+// only the account entries (My Builds, Saved Builds, Sign out); below it the
+// panel is the page's own full-width list, which carries those same entries
+// after the site links.
+//
+// Injected for the same reason as the admin styles above: the nav's CSS is
+// copied into every page that loads this file, and this is one copy.
+//
+// Only a nav marked .nav-authed gets any of it. Signed out there is nothing
+// to put in a dropdown at full width — Builds and Parts Catalog are already
+// on the bar — so the button stays hidden there exactly as before.
+var INBOX_ICON =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"' +
+  ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3" y="5" width="18" height="14" rx="2"/>' +
+    '<path d="M3.5 7.5l8.5 6 8.5-6"/>' +
+  '</svg>';
+
+function ensureAccountNavStyles() {
+  if (document.getElementById('nav-account-styles')) return;
+
+  // The dropdown rules, for one nav selector at one minimum width. Written
+  // once and emitted twice because an admin nav collapses earlier: between
+  // 821px and ADMIN_COLLAPSE_AT it is still the full-width list and still
+  // the only route to the site links and the admin pages, so the dropdown —
+  // which hides both — must not apply there.
+  function dropdown(nav, minWidth) {
+    return '@media (min-width: ' + minWidth + 'px) {' +
+      nav + ' .nav-toggle { display: block; }' +
+      nav + ' .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px;' +
+      '  background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0;' +
+      '  border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99;' +
+      '  box-shadow: 0 10px 24px rgba(0,0,0,0.35); }' +
+      nav + ' .nav-menu.open { display: flex; }' +
+      nav + ' .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em;' +
+      '  text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }' +
+      nav + ' .nav-menu a:hover { background: #17181b; color: #4a9edd; }' +
+      // Everything that is not an account entry is already on the bar at
+      // this width: the site links, and for an admin the two admin links.
+      nav + ' .nav-menu > :not(.acct) { display: none; }' +
+    '}';
+  }
+
+  var style = document.createElement('style');
+  style.id = 'nav-account-styles';
+  style.textContent =
+    '.nav-inbox { display: inline-flex; align-items: center; gap: 6px; color: #ffffff;' +
+    '  text-decoration: none; font-size: 12px; font-weight: 600; line-height: 1;' +
+    '  padding: 6px 2px; white-space: nowrap; }' +
+    '.nav-inbox svg { width: 20px; height: 20px; display: block; flex-shrink: 0; }' +
+    '.nav-inbox:hover, .nav-inbox.has-unread { color: #4a9edd; }' +
+    '.nav-inbox-count { font-variant-numeric: tabular-nums; }' +
+    // The icon is one more thing on the phone bar, and at 320px it was the
+    // one that wrapped "+ Post your build" onto two lines (measured: fits at
+    // 360px, wraps at 320px). The account icon is what gives way there — it
+    // goes to the profile, and so do My Builds and Saved Builds in the menu.
+    // .nav-right is in the selector to out-specify the admin block's own
+    // `nav.nav-admin-on .nav-profile { display: flex }`.
+    '@media (max-width: 350px) { nav.nav-authed .nav-right .nav-profile { display: none; } }' +
+    dropdown('nav.nav-authed:not(.nav-admin-on)', 821) +
+    dropdown('nav.nav-authed.nav-admin-on', ADMIN_COLLAPSE_AT + 1);
   document.head.appendChild(style);
 }
 
@@ -242,21 +321,44 @@ function wireNavToggle() {
   });
 
   // Close on link tap. Delegated, because updateNavAuth adds and removes the
-  // Sign out item as the session changes — a listener bound per link now would
-  // miss it.
+  // account items as the session changes — a listener bound per link now
+  // would miss them.
   menu.addEventListener('click', function (e) {
     if (e.target.closest('a')) close();
   });
 
-  // Coming back above the breakpoint leaves .open set on a panel that desktop
-  // CSS no longer displays; the next drop below 820px would then show it
-  // already open. Clearing it here keeps the two widths consistent.
-  window.addEventListener('resize', function () {
-    // An admin nav collapses to this menu from 1023px down, not 820px, so
-    // the width at which the panel stops being the route in — and an open
-    // one should therefore be closed — moves with it.
+  // Signed in, the same panel is a small dropdown at full width (see
+  // ensureAccountNavStyles), and a dropdown that only its own button can
+  // close reads as stuck. A click anywhere else and Escape both close it;
+  // Escape hands focus back to the button it came from.
+  document.addEventListener('click', function (e) {
+    if (!menu.classList.contains('open')) return;
+    if (e.target.closest('.nav-toggle') || e.target.closest('.nav-menu')) return;
+    close();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !menu.classList.contains('open')) return;
+    close();
+    toggle.focus();
+  });
+
+  // The panel is laid out two ways — the full-width list below the collapse
+  // width, the dropdown above it — and an open one carried across that line
+  // would reappear in the other layout. Closing it on the crossing, rather
+  // than on every resize above the line, is what lets the dropdown survive a
+  // window being nudged wider.
+  function layout() {
+    // An admin nav collapses from ADMIN_COLLAPSE_AT down, not 820px, so the
+    // line moves with it.
     var collapseAt = document.querySelector('nav.nav-admin-on') ? ADMIN_COLLAPSE_AT : 820;
-    if (window.innerWidth > collapseAt) close();
+    return window.innerWidth > collapseAt ? 'wide' : 'narrow';
+  }
+  var lastLayout = layout();
+  window.addEventListener('resize', function () {
+    var now = layout();
+    if (now === lastLayout) return;
+    lastLayout = now;
+    close();
   });
 }
 
@@ -286,18 +388,20 @@ async function updateNavAuth() {
   var sess = await window.sb.auth.getSession();
   var user = sess && sess.data && sess.data.session && sess.data.session.user;
 
-  // Anon branch — clear any stale Sign out (querySelectorAll, not
-  // getElementById, because concurrent invocations can duplicate the id
-  // and getElementById only ever returns the first match).
+  // Anon branch — clear anything a signed-in paint left behind
+  // (querySelectorAll, not getElementById, because concurrent invocations can
+  // duplicate the id and getElementById only ever returns the first match).
   if (!user) {
-    document.querySelectorAll('#nav-signout, #nav-inbox, #nav-admin-queue, #nav-admin-post')
+    document.querySelectorAll('#nav-inbox, #nav-admin-queue, #nav-admin-post')
       .forEach(function (el) { el.remove(); });
     // .admin rather than a.admin: the group's label is a div, and it has to
     // go with the links it labels.
-    document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox, .nav-menu .admin')
+    document.querySelectorAll('.nav-menu .acct, .nav-menu .admin')
       .forEach(function (el) { el.remove(); });
-    document.querySelectorAll('nav.nav-admin-on')
-      .forEach(function (el) { el.classList.remove('nav-admin-on'); });
+    // .nav-authed is what shows the three-line button at full width. Signed
+    // out it must go, or the button would open a dropdown with nothing in it.
+    document.querySelectorAll('nav.nav-admin-on, nav.nav-authed')
+      .forEach(function (el) { el.classList.remove('nav-admin-on', 'nav-authed'); });
     signInEl.textContent = 'Sign in';
     signInEl.setAttribute('href', 'gunforma-signin.html');
     signInEl.style.cursor = '';
@@ -306,7 +410,8 @@ async function updateNavAuth() {
     return;
   }
 
-  // Signed-in state: show username in place of Sign in, insert Sign out next to it.
+  // Signed-in state: username in place of Sign in, the inbox icon beside it,
+  // and the account entries in the three-line menu.
   //
   // One RPC, not the old `from('profiles').select('username')` plus a second
   // read for the role. get_my_profile() already returns both, it is what
@@ -332,7 +437,7 @@ async function updateNavAuth() {
   if (profileEl) profileEl.setAttribute('href', 'gunforma-profile.html');
 
   // Inbox — unread count from notifications (RLS scopes it to this user).
-  // Fetched before the sweep for the same race reason as Sign out below.
+  // Fetched before the sweep, for the race the sweep's own comment describes.
   var unread = 0;
   try {
     var nres = await window.sb.from('notifications').select('id', { count: 'exact', head: true }).is('read_at', null);
@@ -343,16 +448,22 @@ async function updateNavAuth() {
   // concurrently on page load (the mount script calls it, and
   // onAuthStateChange fires INITIAL_SESSION which calls it again). If we
   // checked before the awaits, every concurrent caller would see an empty
-  // DOM and each insert its own Sign out — you end up with a stack of
+  // DOM and each insert its own entries — you end up with a stack of
   // them. Sweeping right before insertion, with querySelectorAll (not
   // getElementById, which stops at the first match), is what keeps this
   // idempotent under the race.
-  document.querySelectorAll('#nav-signout, #nav-inbox, #nav-admin-queue, #nav-admin-post')
+  document.querySelectorAll('#nav-inbox, #nav-admin-queue, #nav-admin-post')
     .forEach(function (el) { el.remove(); });
-  document.querySelectorAll('.nav-menu a.signout, .nav-menu a.inbox, .nav-menu .admin')
+  document.querySelectorAll('.nav-menu .acct, .nav-menu .admin')
     .forEach(function (el) { el.remove(); });
   document.querySelectorAll('nav.nav-admin-on')
     .forEach(function (el) { el.classList.remove('nav-admin-on'); });
+
+  // From here the bar is the signed-in one. The class is what the injected
+  // styles key on; it is taken off again in the anon branch above.
+  ensureAccountNavStyles();
+  var authedNav = signInEl.closest('nav');
+  if (authedNav) authedNav.classList.add('nav-authed');
 
   async function doSignOut(e) {
     e.preventDefault();
@@ -360,8 +471,8 @@ async function updateNavAuth() {
     location.reload();
   }
 
-  // Admin entries, inline. Inserted before Inbox so the bar reads
-  //   ADMIN  Queue  Post build  Inbox  Sign out  <username>
+  // Admin entries, inline. Inserted before the inbox icon so the bar reads
+  //   Queue  Post build  [mail] n  <username>  + Post your build  [menu]
   // and the two privileged links sit together behind one label rather than
   // being mistaken for ordinary nav. They take signInEl's className so they
   // hide below 820px along with everything else in .nav-signin-inline; the
@@ -396,30 +507,32 @@ async function updateNavAuth() {
     });
   }
 
-  // Inbox, inline. Takes signInEl's className so it hides below 820px with
-  // the username — the menu item further down is the mobile route in.
+  // Inbox, inline: a mail icon and the unread count, always showing a
+  // number so the zero reads as "nothing waiting" rather than as a missing
+  // badge. It deliberately does NOT take signInEl's className — that carries
+  // .nav-signin-inline, which hides below 820px, and this stays on the bar
+  // at every width. So the menu has no Inbox entry any more.
+  //
+  // The icon carries no words, so the name is on aria-label and title.
+  // `unread` is a count from PostgREST, never user text, which is why it can
+  // sit in innerHTML beside the icon's markup.
   var inbox = document.createElement('a');
   inbox.id = 'nav-inbox';
   inbox.href = 'gunforma-notifications.html';
-  inbox.className = signInEl.className;
-  inbox.textContent = unread ? 'Inbox (' + unread + ')' : 'Inbox';
-  if (unread) inbox.style.color = '#4a9edd';
+  inbox.className = 'nav-inbox' + (unread ? ' has-unread' : '');
+  var inboxLabel = unread ? 'Inbox, ' + unread + ' unread' : 'Inbox, nothing unread';
+  inbox.title = inboxLabel;
+  inbox.setAttribute('aria-label', inboxLabel);
+  inbox.innerHTML = INBOX_ICON + '<span class="nav-inbox-count">' + Number(unread) + '</span>';
   signInEl.parentNode.insertBefore(inbox, signInEl);
 
-  var signOut = document.createElement('a');
-  signOut.id = 'nav-signout';
-  signOut.href = '#';
-  // Matches whichever nav-btn styling the page has. That className now also
-  // carries nav-signin-inline, so this button hides below 820px along with the
-  // username — on mobile the menu item below is the way out.
-  signOut.className = signInEl.className;
-  signOut.textContent = 'Sign out';
-  signOut.onclick = doSignOut;
-  signInEl.parentNode.insertBefore(signOut, signInEl);
-
-  // Mobile: Sign out is the one menu item that depends on the session, so it
-  // is appended here rather than shipped in the static markup. Swept just
-  // above, in the same idempotent pass as #nav-signout.
+  // There is no Sign out on the bar. It lives in the three-line menu with
+  // the other account entries, at every width.
+  //
+  // The account entries depend on the session, so they are appended here
+  // rather than shipped in the static markup, and swept just above in the
+  // same idempotent pass as the rest. Every one carries .acct: above the
+  // collapse width the dropdown shows .acct entries and nothing else.
   if (menuEl) {
     // Admin group first, under its own label: below 820px the inline entries
     // are hidden with .nav-signin-inline, so this is the only way in. Swept
@@ -441,17 +554,22 @@ async function updateNavAuth() {
       });
     }
 
-    // Then Inbox, so the menu reads
-    // Builds / Parts / Armory / [Admin: Queue, Post build] / Inbox / Sign out.
-    var menuInbox = document.createElement('a');
-    menuInbox.className = 'inbox';
-    menuInbox.href = 'gunforma-notifications.html';
-    menuInbox.textContent = unread ? 'Inbox (' + unread + ')' : 'Inbox';
-    if (unread) menuInbox.style.color = '#4a9edd';
-    menuEl.appendChild(menuInbox);
+    // Then the account entries, so below the collapse width the menu reads
+    // Builds / Parts Catalog / [Admin: Queue, Post build] /
+    // My Builds / Saved Builds / Sign out
+    // and above it, where the rest is on the bar, just the last three.
+    // Both links open a tab of the signed-in user's own profile; ?tab= is
+    // matched against a fixed list in gunforma-profile.html.
+    ACCOUNT_LINKS.forEach(function (link) {
+      var a = document.createElement('a');
+      a.className = 'acct';
+      a.href = link.href;
+      a.textContent = link.label;
+      menuEl.appendChild(a);
+    });
 
     var menuSignOut = document.createElement('a');
-    menuSignOut.className = 'signout';
+    menuSignOut.className = 'acct signout';
     menuSignOut.href = '#';
     menuSignOut.textContent = 'Sign out';
     menuSignOut.onclick = doSignOut;
