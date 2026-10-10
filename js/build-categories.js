@@ -84,6 +84,16 @@ const CATEGORY_GROUPS = [
 //
 // New sections (recoil_spring, sight) are keyed by the products.category value
 // itself, as the five controls are, so a saved part carries its real category.
+// `stockDefault: true` marks a section where the factory part is the usual
+// answer and is worth nothing listed: the trigger, slide catch, takedown
+// lever and safety on most builds are the ones the gun shipped with. On the
+// two builder pages js/gun-model.js prints "Still the factory part? Leave
+// this empty." under such a section while it has nothing in it, so an empty
+// section reads as an answer rather than a gap — builders had been typing
+// "OEM Slide Catch" in by hand to fill it. It changes nothing about what a
+// section accepts: an aftermarket trigger, or Sig's own flat trigger bought
+// as an upgrade, is added exactly as before. The Slides section has a note
+// of its own that names the model's stock slide; see sectionNoteHtml().
 const CATEGORIES = [
   // ── Core build ──────────────────────────────────────────────────────────
   { key:'grips',         group:'core', label:name('frame'),             dbCategory:['frame'] },
@@ -93,13 +103,13 @@ const CATEGORIES = [
   { key:'optics',        group:'core', label:name('optic'),             dbCategory:['optic'] },
   { key:'sight',         group:'core', label:name('sight'),             dbCategory:['sight'] },
   { key:'lights',        group:'core', label:name('light'),             dbCategory:['light'] },
-  { key:'triggers',      group:'core', label:name('trigger'),           dbCategory:['trigger'] },
+  { key:'triggers',      group:'core', label:name('trigger'),           dbCategory:['trigger'], stockDefault:true },
 
   // ── Controls ────────────────────────────────────────────────────────────
   { key:'mag_release',     group:'controls', label:name('mag_release'),     dbCategory:['mag_release'] },
-  { key:'slide_release',   group:'controls', label:name('slide_release'),   dbCategory:['slide_release'] },
-  { key:'takedown_lever',  group:'controls', label:name('takedown_lever'),  dbCategory:['takedown_lever'] },
-  { key:'safety_selector', group:'controls', label:name('safety_selector'), dbCategory:['safety_selector'] },
+  { key:'slide_release',   group:'controls', label:name('slide_release'),   dbCategory:['slide_release'],   stockDefault:true },
+  { key:'takedown_lever',  group:'controls', label:name('takedown_lever'),  dbCategory:['takedown_lever'],  stockDefault:true },
+  { key:'safety_selector', group:'controls', label:name('safety_selector'), dbCategory:['safety_selector'], stockDefault:true },
   { key:'slide_plate',     group:'controls', label:name('slide_plate'),     dbCategory:['slide_plate'] },
 
   // ── Magazine ────────────────────────────────────────────────────────────

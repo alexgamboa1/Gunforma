@@ -1668,6 +1668,114 @@ and it should not: the module's injected CSS would land on those shared
 selectors and restyle the armory grid. Extracting the armory card is a
 separate question from extracting the picker.
 
+### Nor is the model question — and it is dark until its column exists
+
+`js/gun-model.js` asks **"Which P365 is it?"** on the two builder pages and
+stores the answer in `builds.gun_id` (a `guns.id`) and `builds.fcu_only`. It
+owns the buttons, the
+submit gate (`answered()`), the payload (`payload()`), the edit-mode read
+(`hydrate()`), the summary name, and the **stock notes**: with a model chosen
+the Slides section says "Stock P365 XL slide (3.7") — leave this empty unless
+you swapped it", and the sections flagged `stockDefault` in
+`js/build-categories.js` (trigger, slide release, takedown lever, safety) say
+the factory part needs no entry.
+
+That last part is the reason it exists. A build named its platform and nothing
+narrower, so the only way to say XL or XMacro Comp was to type the factory
+slide in as a part — and thorough builders typed the factory slide catch and
+takedown lever in with it. Rows with no buy link, on the builds posted by the
+people most worth having.
+
+```js
+GunModel.init({
+  state:    () => state,          // reads state.platform; owns state.gun,
+                                  //   state.gunFcuOnly, state.gunNotListed
+  mount:    '#gun-model-mount',   // inside #card-platform, so the live-build
+                                  //   lock makes it inert with the pistol
+  onChange: () => { renderParts(); renderSidebar(); },
+  locked:   () => editState.approvedLock,   // post-build only
+});
+```
+
+Mount it **before the first `renderParts()`** — both builder pages call
+`GunModel.sectionNoteHtml()` and `GunModel.answered()` from their first
+render, and `check-script-order` holds the tag in place.
+
+**A stock slide is not a part.** It is implied by the model plus the absence
+of a slide in `parts_snapshot`. Nothing new is written to the snapshot, so the
+whitelists, the Armory, the review queue and `part_ids` have nothing to learn.
+Do not "fix" that by writing a `{stock:true}` row.
+
+**Three answers, two columns:**
+
+| the builder picked | `gun_id` | `fcu_only` |
+|---|---|---|
+| a factory model | `guns.id` | false |
+| **P365 FCU only** | NULL | **true** |
+| Not listed | NULL | false |
+
+"Not listed" is the same row as "nobody asked" (every build before this). The
+form tells those apart only while it is open (`state.gunNotListed`); a build
+reopened that way is asked again. `payload()` always sends both columns
+together — the check `builds_fcu_xor_gun` refuses `fcu_only` beside a model,
+and sending one alone would leave the other's old value in place.
+
+**FCU only is not a model, and must not become a row in `guns`.** It means the
+build started from a bare fire control unit — the serialised internals — and
+everything around it was chosen. `guns` is "factory models" to the catalog's
+model picker, the optic-cut table, `platform_skus` and the gun hubs; a row
+with no slide length, no barrel and no grip class would have to be
+special-cased in every one of them. Two things follow, and the second is for
+whoever builds the fit filter:
+
+- The Slides section says the **opposite** of what it says for a model: "An
+  FCU build has no stock slide — add the slide you used." The trigger, slide
+  catch, takedown lever and safety keep the factory-part line, because those
+  *are* the fire control unit.
+- **An FCU build has no slide length until a slide is in its parts list.**
+  That is by design. Anything that fits barrels or compensators by length
+  must take the length from the slide PART when there is one, fall back to
+  the model's stock slide when there is not, and for an FCU build with no
+  slide yet filter **nothing** — not guess. The same order applies to a
+  factory model whose owner swapped the slide: the part wins over the model.
+
+**The model travels with the platform.** `builds_gun_fkey` is composite,
+`(gun_id, platform_id) → guns`, so a model must belong to the build's
+platform and the two columns cannot disagree. Any writer that changes
+`platform_id` must clear or replace `gun_id` in the same statement — the
+editor's "Change pistol" calls `GunModel.reset()`, and both columns go in one
+UPDATE. On a **live** build `gun_id` is on
+`restrict_owner_edits_on_approved_build`'s blocked list, beside the platform.
+
+**It is dark until `supabase/builds_gun_id.sql` is applied**, because the
+house order is code first:
+
+- `probe()` asks PostgREST for `builds.gun_id` once per page load. Any error
+  means "not there": the question is never drawn, `answered()` never blocks,
+  `payload()` is `{}`, `hydrate()` does nothing. The pages behave exactly as
+  they did before the file existed.
+- `hydrate()` reads `gun_id` in a query **of its own**. Named in the editor's
+  select list, a missing column would fail the whole load.
+- `gunforma-admin-queue.html` does the same with `loadGunModels()` — a side
+  read whose failure shows nothing. So the model is **not in
+  `reviewSignature()` yet**: `ensureUnchanged()` re-reads with `BUILD_FIELDS`,
+  and a signature naming a field the re-read lacks would refuse every
+  approval. Until that moves, a builder who changes only the model under a
+  reviewer is not caught by the re-check.
+
+**Once the migration is applied**, the first change after it should: put
+`gun_id` in `BUILD_FIELDS` and `gun` in `reviewSignature()`, delete
+`loadGunModels()`, and — in the same commit — either delete the probe or
+leave every tolerant read alone. Naming the column in one select while the
+probe still guards the rest is the half-state that breaks.
+
+**Not done yet, on purpose:** the public build page and `build-og.mjs` still
+say "SIG P365". They read through a select that would fail before the column
+exists, and the server copy and the page are held byte-for-byte by
+`check-canonical-coupling`, so that change waits for the migration and goes in
+as its own PR. Nor does the model filter the picker yet — a 3.1" gun is still
+offered 3.7" barrels.
+
 ### Nor is the category list — and that one has three pages, not two
 
 `js/build-categories.js` owns the parts taxonomy: which sections exist, what

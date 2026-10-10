@@ -501,6 +501,63 @@ function reviewSignature(b) {
   });
 }
 
+// Which factory model each build is ("P365 XL") or that it is an FCU build,
+// by build id.
+//
+// A SIDE READ, and non-fatal, for one reason: builds.gun_id and
+// builds.fcu_only arrive with supabase/builds_gun_id.sql, and this page
+// ships before that runs. Named in
+// BUILD_FIELDS, a column that does not exist yet would fail the queue's one
+// essential query and the page would show "Couldn't load the queue" until
+// the migration. Here a failure just means GUN_MODELS_READ stays false and
+// the detail panel says nothing about the model.
+//
+// So the model is NOT in reviewSignature() yet either: ensureUnchanged()
+// re-reads with BUILD_FIELDS, and a signature that named a field the re-read
+// does not carry would mismatch on every build and refuse every approval.
+// The cost, until gun_id moves into BUILD_FIELDS: a builder who changes ONLY
+// the model after the reviewer opened the build is not caught by the
+// re-check. Move both — the column into BUILD_FIELDS, `gun` into the
+// signature — in the first change made after the migration is applied, and
+// delete this function.
+var GUN_BY_BUILD = {};
+var GUN_MODELS_READ = false;
+async function loadGunModels() {
+  try {
+    const { data, error } = await sb.from('builds')
+      .select('id,gun_id,fcu_only,guns(name,barrel_length_in,integrated_comp)');
+    if (error) { GUN_MODELS_READ = false; GUN_BY_BUILD = {}; return; }
+    GUN_MODELS_READ = true;
+    GUN_BY_BUILD = {};
+    (data || []).forEach(function (r) {
+      if (r.fcu_only) GUN_BY_BUILD[r.id] = { fcuOnly: true };
+      else if (r.gun_id && r.guns) GUN_BY_BUILD[r.id] = r.guns;
+    });
+  } catch (e) {
+    GUN_MODELS_READ = false; GUN_BY_BUILD = {};
+  }
+}
+
+// The model as the detail panel shows it: 'P365 XL · 3.7" barrel', with
+// "built-in comp" on the Comp models — the same two facts, in the same
+// order, as the buttons on the builder pages (js/gun-model.js, modelSub).
+// '' when the read failed, so the panel adds nothing rather than claiming
+// "no model" about a column it could not see.
+function gunModelHtml(buildId) {
+  if (!GUN_MODELS_READ) return '';
+  var g = GUN_BY_BUILD[buildId];
+  if (!g) return '<span class="detail-submeta-item" style="color:#b0762a;">Model not set</span>';
+  // An FCU build has no factory slide or barrel, so there is no length to
+  // print — and a reviewer should expect to find a slide in the parts list.
+  if (g.fcuOnly) return '<span class="detail-submeta-item">Model: <strong>FCU only</strong> · no stock slide</span>';
+  var bits = [];
+  var barrel = Number(g.barrel_length_in);
+  if (isFinite(barrel) && barrel > 0) bits.push(barrel.toFixed(1) + '" barrel');
+  if (g.integrated_comp) bits.push('built-in comp');
+  return '<span class="detail-submeta-item">Model: <strong>'+escH(g.name)+'</strong>'+
+    (bits.length ? ' · '+escH(bits.join(' · ')) : '')+'</span>';
+}
+
 async function loadBuilds() {
   const { data, error } = await sb
     .from('builds')
@@ -519,6 +576,7 @@ async function loadBuilds() {
   });
 
   await loadProductImages();
+  await loadGunModels();
   renderQueue();
   if (selectedId) {
     var b = BUILDS.find(function(x){ return x.id===selectedId; });
@@ -811,6 +869,7 @@ function renderDetail(b) {
       '<div class="detail-title">'+escH(b.name)+'</div>'+
       '<div class="detail-submeta">'+
         '<span class="detail-submeta-item"><strong>'+escH(platformName)+'</strong></span>'+
+        gunModelHtml(b.id)+
         '<span class="detail-submeta-item">'+(b.activities||[]).map(escH).join(', ')+'</span>'+
         '<span class="tier-badge '+b.tier+'">'+b.tier+' build</span>'+
       '</div>'+

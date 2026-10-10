@@ -68,6 +68,12 @@ const RULES = [
   // list, and a builder page would throw on Save.
   { global: 'PartIds', defines: 'js/part-ids.js', consumers: [],
     pattern: /\bPartIds\s*\./ },
+  // GunModel is an object read as a member, so it needs a pattern too. The
+  // two builder pages call it from renderParts() and renderSidebar(), which
+  // run at the top of init() — so unlike PartIds a MISSING tag does not wait
+  // for a save: the page throws on its first render and stays blank.
+  { global: 'GunModel', defines: 'js/gun-model.js', consumers: [],
+    pattern: /\bGunModel\s*\./ },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

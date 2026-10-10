@@ -278,6 +278,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       </div>
       <button class="platform-change" onclick="changePlatform()">Change pistol</button>
     </div>
+    <!-- "Which P365 is it?" — drawn by js/gun-model.js once a pistol is
+         chosen, and empty until builds.gun_id exists. Inside this card on
+         purpose: lockSectionsForApprovedBuild() makes the whole card inert,
+         and the model is part of what is locked on a live build. -->
+    <div id="gun-model-mount"></div>
   </div>
 
   <!-- 2. PHOTOS -->
@@ -399,6 +404,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/redact.js"></script>
 <script src="js/photos.js"></script>
 <script src="js/part-picker.js"></script>
+<!-- Which factory model the build is, and the stock-part notes that follow
+     from it. After supabase-client.js: it reads window.sb at call time. -->
+<script src="js/gun-model.js"></script>
 <!-- Each part's own id, and which part a reviewer's correction belongs to. -->
 <script src="js/part-ids.js"></script>
 <script>
@@ -491,6 +499,9 @@ let catalogLoadedFor  = null;   // platform id most recently loaded
 const state = {
   platform: null, photos: { hero: null, g1: null, g2: null, g3: null }, name: '', activities: [],
   parts: [], openPicker: null, customOpen: null,
+  // Which factory model — or "FCU only", or "not listed". Written only by
+  // js/gun-model.js; read here through GunModel.*.
+  gun: null, gunFcuOnly: false, gunNotListed: false,
 };
 let uid = 1;
 
@@ -661,8 +672,12 @@ async function selectPlatform(id) {
   document.getElementById('platform-selected').classList.add('show');
   document.getElementById('platform-selected-name').textContent = state.platform.name;
   renderParts(); renderSidebar();          // shows "Loading catalog…" state
-  await loadCatalog(state.platform.id);
-  renderParts();                            // re-render with real cards
+  // The model question loads beside the catalog, not after it: they are two
+  // independent reads and the question is the next thing the builder needs.
+  // It renders itself and calls back through onChange when answered.
+  const pickedId = state.platform.id;
+  await Promise.all([loadCatalog(pickedId), GunModel.loadFor(pickedId)]);
+  renderParts(); renderSidebar();           // re-render with real cards
 }
 function changePlatform() {
   // Changing the pistol drops every catalog part, which moves the parts an
@@ -678,6 +693,9 @@ function changePlatform() {
   // since they aren't tied to catalog IDs.
   state.parts = state.parts.filter(function(p) { return p.pending; });
   state.platform = null;
+  // The model goes with the pistol: it belongs to one platform, and
+  // builds_gun_fkey refuses a model saved against another.
+  GunModel.reset();
   CATALOG = {};
   catalogLoadedFor = null;
   document.getElementById('platform-picker').style.display = 'block';
@@ -820,6 +838,10 @@ function buildCategoryBlock(cat) {
         (isOpen ? 'Close ✕' : (added.length ? '+ Add another' : '+ Add part')) + '</button>' +
     '</div>' +
     selectedHtml +
+    // "Stock P365 XL slide — leave this empty unless you swapped it", and the
+    // factory-part line on the sections flagged stockDefault. Empty string
+    // once the section has a part in it, and before builds.gun_id exists.
+    GunModel.sectionNoteHtml(cat, added.length) +
     '<div class="picker-panel' + (isOpen?' open':'') + '">' +
       toolbarHtml +
       modeNote +
@@ -974,7 +996,11 @@ function renderSidebar() {
   // Typed parts that look like catalog parts, offered beside the submit
   // button. js/part-picker.js owns it; this is the one call.
   PartPicker.renderUnlinkedNudge('unlinked-nudge');
-  const hasPistol=!!state.platform, hasPhoto=photoCount()>0, hasName=state.name.trim().length>0;
+  // "Pistol chosen" now means the pistol AND which model it is. answered()
+  // is true whenever the question could not be asked — before builds.gun_id
+  // exists, on a platform with no models, on a live build's locked card — so
+  // it can only ever hold a build back for a question that is on the screen.
+  const hasPistol=!!state.platform && GunModel.answered(), hasPhoto=photoCount()>0, hasName=state.name.trim().length>0;
   const hasParts=state.parts.length>0;
   const legalChecked=document.getElementById('legal-confirm').checked;
   const licenseChecked=document.getElementById('content-license-confirm').checked;
@@ -982,7 +1008,7 @@ function renderSidebar() {
   const minimum=hasPistol&&hasPhoto&&hasName, full=minimum&&hasParts;
 
   document.getElementById('summary-name').textContent     = state.name.trim()||'Untitled build';
-  document.getElementById('summary-platform').textContent = state.platform ? state.platform.name : '—';
+  document.getElementById('summary-platform').textContent = GunModel.summary() || '—';
   document.getElementById('summary-count').textContent    = state.parts.length+' added';
   const actEl = document.getElementById('summary-activity');
   actEl.innerHTML = state.activities.length
@@ -991,6 +1017,10 @@ function renderSidebar() {
   setDone('step1-dot','1',hasPistol); setDone('step2-dot','2',hasPhoto);
   setDone('step3-dot','3',hasName);   setDone('step4-dot','4',hasParts);
   setCheck('chk1',hasPistol); setCheck('chk2',hasPhoto); setCheck('chk3',hasName);
+  // With a pistol picked and the model not, the unticked line has to say
+  // what is still missing — "Choose a pistol" over a chosen pistol reads as
+  // a bug.
+  GunModel.syncChecklist('chk1');
 
   const st=document.getElementById('submit-status'), sd=document.getElementById('submit-status-desc');
   if (full)         { st.className='submit-status full';       sd.textContent='Full build — goes into review and can go live once approved.'; }
@@ -1089,6 +1119,9 @@ async function submitBuild(status) {
     // confirmed_at is stamped server-side by a trigger — not sent here.
     builder_agreement_version: licenseConfirmed ? BUILDER_AGREEMENT_VERSION : null,
   };
+  // { gun_id } once builds.gun_id exists, {} before — so this request never
+  // names a column the database does not have. See js/gun-model.js.
+  Object.assign(payload, GunModel.payload());
 
   const { data, error } = await sb.from('builds').insert(payload).select('id').single();
   if (error) return { error: error };
@@ -1189,6 +1222,11 @@ async function submitBuildEdit(status) {
     description: document.getElementById('build-description').value || null,
     parts_snapshot: buildPartsSnapshot(),
   };
+  // The model travels with platform_id, in the same UPDATE: the two are one
+  // foreign key (builds_gun_fkey), so a changed pistol with the old model
+  // would be refused. Not sent on the live-build path above — gun_id is on
+  // the trigger's blocked list there, like the platform.
+  Object.assign(payload, GunModel.payload());
   // An admin edit never sends a status: the build keeps the one it has, so
   // fixing a part on a live admin-posted build does not unpublish it, and
   // fixing one in the queue does not approve it. An owner's save sends the
@@ -1498,7 +1536,9 @@ async function hydrateFromArmoryHandoff() {
   document.getElementById('platform-selected').classList.add('show');
   document.getElementById('platform-selected-name').textContent = p.name;
   renderParts(); renderSidebar();
-  await loadCatalog(p.id);
+  // The Armory hands over a platform and parts, never a model, so the
+  // question is asked fresh here.
+  await Promise.all([loadCatalog(p.id), GunModel.loadFor(p.id)]);
 
   (payload.parts_snapshot || []).forEach(function (part) {
     state.parts.push({
@@ -1745,7 +1785,10 @@ async function hydrateFromEditMode() {
     document.getElementById('platform-picker').style.display = 'none';
     document.getElementById('platform-selected').classList.add('show');
     document.getElementById('platform-selected-name').textContent = p.name;
-    await loadCatalog(p.id);
+    await Promise.all([loadCatalog(p.id), GunModel.loadFor(p.id)]);
+    // The stored model, read in a query of its own (not added to the select
+    // above — that would fail the whole load before builds.gun_id exists).
+    await GunModel.hydrate(build.id);
   }
 
   state.name = build.name || '';
@@ -1860,6 +1903,15 @@ function toggleExistingPhotoDelete(photoId) {
     // correction over the wrong part, exactly as removing it would. See
     // removePart(). Nothing is pinned unless such an entry exists.
     canSwap:  function (partUid) { return !editState.pinnedPartUids.has(partUid); },
+  });
+  // Before the first renderParts()/renderSidebar(): both call into it.
+  GunModel.init({
+    state:    function () { return state; },
+    mount:    '#gun-model-mount',
+    onChange: function () { renderParts(); renderSidebar(); },
+    // A live build's owner cannot change the model (the card is inert and
+    // the trigger refuses it), so it must not gate their save either.
+    locked:   function () { return editState.approvedLock; },
   });
   renderParts(); renderSidebar(); renderFirstPostNote();
   const ok = await requireAuthAndLoadUser();
