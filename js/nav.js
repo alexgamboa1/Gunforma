@@ -58,6 +58,7 @@ var NAV_TOGGLE =
 var NAV_MENU =
   '<div class="nav-menu" id="nav-menu">' +
     '<a href="gunforma-builds.html">Builds</a>' +
+    '<a href="/p365/">Your P365</a>' +
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '</div>';
 
@@ -238,6 +239,16 @@ function ensureAccountNavStyles() {
     var linkFile = (href.split('/').pop() || '').toLowerCase();
     return currentFile === linkFile ? ' active' : '';
   }
+  // "Your P365" is a cluster of routes, not a file: /p365/ (the model
+  // index), /p365/<gun> (a hub) and /fit/p365/... (a fit guide). Those pages
+  // are server-rendered and carry their own nav (_page-chrome.mjs), so this
+  // only matters if nav.js is ever mounted on one — but the file test above
+  // would read /p365/ as index.html and light up Home, so the route test
+  // exists so that cannot happen.
+  function activeIfPath(prefix) {
+    var p = window.location.pathname;
+    return (p === prefix || p.indexOf(prefix) === 0 || p.indexOf('/fit/') === 0) ? ' active' : '';
+  }
 
   var html;
   if (variant === 'auth-signin') {
@@ -264,6 +275,7 @@ function ensureAccountNavStyles() {
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
+          '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
         '</div>' +
         '<div class="nav-right">' +
@@ -281,6 +293,7 @@ function ensureAccountNavStyles() {
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
+          '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
         '</div>' +
         '<div class="nav-right">' +

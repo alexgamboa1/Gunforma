@@ -452,7 +452,7 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
 '.disclosure { font-size: 11px; color: #999; margin-top: 10px; font-style: italic; }' +
 '</style>' +
 '</head><body>' +
-  navHtml() +
+  navHtml({ active: 'p365' }) +
 // The link UP to the gun's hub — the other half of "links in both
 // directions". The hub links down to every fit page it declares; without
 // this, a reader who lands here from search has no route to the rest of

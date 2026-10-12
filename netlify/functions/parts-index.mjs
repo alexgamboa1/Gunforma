@@ -229,6 +229,7 @@ function renderPage(products) {
   '<div class="nav-links">' +
     '<a class="nav-link" href="index.html">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
+    '<a class="nav-link" href="/p365/">Your P365</a>' +
     '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '</div>' +
   '<div class="nav-right">' +
@@ -239,6 +240,7 @@ function renderPage(products) {
   '</div>' +
 '<div class="nav-menu" id="nav-menu">' +
   '<a href="gunforma-builds.html">Builds</a>' +
+  '<a href="/p365/">Your P365</a>' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
 '</div>' +
 '</nav>' +

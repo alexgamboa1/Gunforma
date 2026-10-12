@@ -282,9 +282,9 @@ twice. The guard fails on all of these. No host check is needed for deploy
 previews: Cloudflare only accepts beacons from hostnames ending in the
 registered site's.
 
-### The nav exists in 15 places, three of which are functions
+### The nav exists in 16 places, three of which are functions
 
-**Changing the site nav means changing fifteen files.** Every root HTML page
+**Changing the site nav means changing sixteen files.** Every root HTML page
 carries its own hardcoded copy — desktop `.nav-links` *and* the mobile
 `.nav-menu`, so two links per page — and on top of those:
 
@@ -317,6 +317,18 @@ copy. The sweep that found it was `grep -rn` across `*.html`, `*.js` AND
 
 Verify a nav change by fetching the *served* HTML of a `/parts/...` URL on a
 deploy preview, not by reading the page sources.
+
+Second worked example: adding "Your P365" (`/p365/`, between Builds and
+Parts Catalog). Sixteen files, two insertions per static page — twelve
+pages, `js/nav.js` (its shared mobile menu plus both link-bearing
+variants), `_page-chrome.mjs`, `parts-index.mjs`, `product-page.mjs` — and
+the insertion was scripted so each file reported its own count. The server
+copies now say which item is active: `navHtml({ active: 'p365' })` on the
+hubs and guides. Before that argument existed `_page-chrome.mjs` hardcoded
+Parts Catalog as active, so every hub and guide page lit the wrong item,
+and nothing failed. `scripts/check-routes.mjs` ("front door to /p365/")
+asserts the link on the wire on a static page, a hub, a guide, a product
+page and `/parts`, in both the desktop nav and the mobile menu.
 
 ## Deploy previews and auth
 
@@ -725,6 +737,7 @@ Registered today:
 | `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
 | `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose |
+| `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation

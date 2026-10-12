@@ -70,6 +70,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .section-link:hover { text-decoration: underline; }
 .section-link.muted { color: #888; }
 
+/* ── MODEL PICKER ──
+   The front door to the /p365/ cluster. Same card language as the build
+   cards below and the hub index's .guide-card (white, hairline border,
+   blue on hover), so the button a reader taps here and the card it lands
+   on read as one thing. 44px minimum height is the tap-target floor. */
+.fit-section { padding-bottom: 8px; }
+.fit-section .section-title { display: block; margin: 0; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.model-btn { display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 14px; background: #ffffff; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; font-weight: 600; color: #1a1a1a; text-decoration: none; text-align: center; line-height: 1.3; transition: border-color 0.15s, color 0.15s; }
+.model-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
+.model-btn.more { color: #2a7bbd; background: #eaf4fc; border-color: #a7cdec; }
+.model-btn.more:hover { border-color: #4a9edd; }
+@media (max-width: 600px) {
+  .fit-section { padding-left: 16px; padding-right: 16px; }
+  .model-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
 /* ── BUILD CARDS ── */
 .builds-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .build-card { background: #ffffff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
@@ -96,6 +113,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-meta { display: flex; justify-content: space-between; align-items: center; }
 .build-price { font-size: 11px; color: #2a7bbd; font-weight: 700; }
 .build-author { font-size: 10px; color: #999; }
+
+/* The "post yours" tile that stands in for a missing card in the featured
+   row: the pre-JS state, the zero-build state, and the next cell when there
+   are one or two builds. A card-shaped link, never a dead box. */
+.build-cta { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 180px; padding: 24px 20px; background: #fafaf8; border: 0.5px dashed #c9c6bb; border-radius: 6px; text-decoration: none; text-align: center; transition: border-color 0.15s; }
+.build-cta:hover { border-color: #4a9edd; }
+.build-cta-title { font-size: 13px; font-weight: 700; color: #2a7bbd; }
+.build-cta-sub { font-size: 11.5px; color: #777; line-height: 1.45; max-width: 240px; }
 
 /* ── CTA STRIP ── */
 .cta-strip { margin: 36px 28px; background: #0e0f11; border: 0.5px solid #2a2b2e; border-radius: 6px; padding: 24px 28px; display: flex; align-items: center; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
@@ -175,6 +200,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <div class="nav-links">
       <a class="nav-link active" href="index.html">Home</a>
       <a class="nav-link" href="gunforma-builds.html">Builds</a>
+      <a class="nav-link" href="/p365/">Your P365</a>
       <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
     </div>
     <div class="nav-right">
@@ -185,6 +211,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     </div>
     <div class="nav-menu" id="nav-menu">
       <a href="gunforma-builds.html">Builds</a>
+      <a href="/p365/">Your P365</a>
       <a href="gunforma-parts-catalog.html">Parts Catalog</a>
     </div>
   </nav>
@@ -210,9 +237,44 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 
   <!-- ══════════════════════════════════════════
+       SECTION 1b — WHAT FITS YOUR P365?
+       The front door to /p365/ (the model index), /p365/<gun> (the hubs)
+       and the /fit/ guides under them. STATIC ON PURPOSE: this page ships
+       as a file, so a list of real <a href> links is the only way a crawler
+       or a no-JS visitor gets them. The list is a copy of GUN_HUBS in
+       netlify/functions/_guide-meta.mjs — the registry /p365/ renders from
+       — and scripts/check-home-picker.mjs holds it there on every deploy:
+       same hubs, same order, same names, plus the index link last. Add a
+       hub to the registry and the build fails until its button is here;
+       drop one and the build fails until the button goes. No counts in
+       the copy: a typed "9 models" goes stale the day it is written.
+       ══════════════════════════════════════════ -->
+  <div class="section fit-section">
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">What fits your P365?</h2>
+        <div class="section-sub">Pick your model to see the parts verified to fit it.</div>
+      </div>
+    </div>
+    <div class="model-grid" id="model-picker">
+      <a class="model-btn" href="/p365/p365">P365</a>
+      <a class="model-btn" href="/p365/p365-x">P365 X</a>
+      <a class="model-btn" href="/p365/p365-xl">P365 XL</a>
+      <a class="model-btn" href="/p365/p365-xmacro">P365 XMacro</a>
+      <a class="model-btn" href="/p365/p365-axg">P365 AXG Legion</a>
+      <a class="model-btn" href="/p365/p365-xf-dh3">P365 XF DH3</a>
+      <a class="model-btn" href="/p365/p365-xf-dh3-axg">P365 XF DH3 AXG</a>
+      <a class="model-btn" href="/p365/p365-fuse">P365 FUSE</a>
+      <a class="model-btn" href="/p365/p365-fuse-comp">P365 FUSE Comp</a>
+      <a class="model-btn more" href="/p365/">Not sure which model? →</a>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════
        SECTION 2 — FEATURED BUILDS
-       Pulled live from Supabase — top 3 newest approved builds.
-       Empty state shown if none exist yet.
+       Pulled live from Supabase — top 3 newest approved builds. Fewer
+       than three: the builds that exist, then the "Post your build" tile
+       in the next cell. No placeholder cards. Zero: the tile alone.
        ══════════════════════════════════════════ -->
   <div class="section">
     <div class="section-header">
@@ -226,7 +288,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       </div>
     </div>
     <div class="builds-row" id="featured-builds">
-      <div style="grid-column:1/-1;text-align:center;padding:40px 20px;font-size:12px;color:#888;">Loading featured builds…</div>
+      <!-- Pre-JS and no-JS state. Not "Loading…": a crawler, or a reader
+           with scripts off, gets the call to action, and loadFeatured()
+           replaces this cell the moment it has builds. -->
+      <a class="build-cta" href="gunforma-post-build.html">
+        <span class="build-cta-title">Post your build</span>
+        <span class="build-cta-sub">Your parts, your photos — on the record.</span>
+      </a>
     </div>
   </div>
 
@@ -338,15 +406,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;font-size:12px;color:#c25d3a;">Could not load featured builds.</div>';
       return;
     }
-    if (!builds || !builds.length) {
-      container.innerHTML =
-        '<div style="grid-column:1/-1;text-align:center;padding:32px 20px;background:#fafaf8;border:0.5px dashed #d5d3ca;border-radius:6px;">'+
-          '<div style="font-size:14px;font-weight:600;color:#1a1a1a;margin-bottom:6px;">No community builds yet</div>'+
-          '<div style="font-size:12px;color:#666;margin-bottom:14px;">Be the first to post one — your build shows up right here.</div>'+
-          '<a href="gunforma-post-build.html" style="display:inline-block;font-size:12px;font-weight:700;padding:8px 14px;color:#fff;background:#2a7bbd;border-radius:4px;text-decoration:none;">+ Post your build</a>'+
-        '</div>';
-      return;
-    }
+    // Zero builds: the static "Post your build" tile is already in the
+    // row, and it is the whole answer. Leave it.
+    if (!builds || !builds.length) return;
 
     // One batched query for every referenced product's default-variant msrp,
     // so we can compute a per-build MSRP total without an N+1.
@@ -397,8 +459,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
           '</div>'+
         '</div>'+
       '</div></a>';
-    }).join('');
+    }).join('') +
+    // One or two builds: the builds that exist, then the call to action in
+    // the next cell — never a blank column, never a placeholder card.
+    (builds.length < 3 ? CTA_TILE : '');
   }
+  const CTA_TILE =
+    '<a class="build-cta" href="gunforma-post-build.html">'+
+      '<span class="build-cta-title">Post your build</span>'+
+      '<span class="build-cta-sub">Your parts, your photos — on the record.</span>'+
+    '</a>';
   loadFeatured();
 
   // Hero stats — counted live on every load, never typed into the HTML, so
