@@ -35,7 +35,8 @@
 //      browser. Verified against the live API before this was written.
 //   2. An explicit status=eq.approved filter below. Redundant with RLS on
 //      purpose — if a policy is ever loosened, the leak does not start here.
-// An unapproved or unknown id gets a genuine 404, never a soft one.
+// An unapproved, unknown or deleted id gets a genuine 410, and a request
+// with no id in it at all a 404 — never a soft one.
 //
 // Deliberately dependency-free — a plain fetch against PostgREST rather than
 // @supabase/supabase-js, so there is no package.json, no install step, and
@@ -569,7 +570,17 @@ function injectBody(page, build, productsById) {
   return html;
 }
 
-function notFound() {
+// 404 when the request carries nothing that could be a build (no uuid in
+// the path or query); 410 when it names a uuid that resolves to no
+// approved build. Search Console reported deleted builds' URLs as plain
+// 404s (2026-10-12), which Google keeps re-crawling for a while; 410 says
+// "gone, drop it" and it drops faster. The function cannot tell a deleted
+// build from one still pending review (anon key, status=eq.approved), so
+// a pending build's share URL also answers 410 until it is approved — the
+// same moment it stopped answering 404 before, and the 60s cache below is
+// what lets it flip. Google never holds a pending URL: it is in no sitemap
+// and on no public page.
+function notFound(status = 404) {
   return new Response(
     '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
     '<meta name="viewport" content="width=device-width, initial-scale=1.0"/>' +
@@ -580,9 +591,11 @@ function notFound() {
     'a{color:#4a9edd;text-decoration:none}.s{font-size:13px;color:#888780;margin:10px 0 22px}</style>' +
     '</head><body><div><div style="font-size:20px;font-weight:700">Build not found</div>' +
     '<div class="s">This build does not exist, or it has not been published yet.</div>' +
-    '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
+    '<a href="' + SITE + '/gunforma-builds.html">Browse builds &rarr;</a>' +
+    '<span class="s" style="margin:0 10px">&middot;</span>' +
+    '<a href="' + SITE + '/gunforma-post-build.html">Post your build &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
     {
-      status: 404,
+      status,
       headers: {
         'Content-Type':  'text/html; charset=utf-8',
         // Short — a build approved a minute from now shouldn't stay 404. This
@@ -656,7 +669,8 @@ function extractId(req) {
   return { id: null, source: 'none' };
 }
 
-// Both routes 404 on an id that cannot be resolved.
+// Both routes refuse an id that cannot be resolved: 410 for a uuid that is
+// not an approved build, 404 when there is no uuid to look up.
 //
 // There used to be a split here: /b/… hard-404, and the legacy
 // gunforma-build-detail.html?id=… soft-serving the page so the client could
@@ -692,8 +706,9 @@ export default async (req) => {
   const diag = (res) => withDiag(res, source, req);
 
   // No uuid anywhere in the request — 404 without a DB round trip, which is
-  // also what keeps path input out of the PostgREST query below.
-  if (!requested) return diag(notFound());
+  // also what keeps path input out of the PostgREST query below. Not 410:
+  // nothing was ever here, so there is nothing to have gone.
+  if (!requested) return diag(notFound(404));
 
   // platforms and profiles each have exactly one FK to builds, so those bare
   // embeds are correct. profiles is named anyway because builds has two FKs
@@ -732,8 +747,8 @@ export default async (req) => {
     }));
   }
 
-  // Unknown, unapproved, or deleted.
-  if (!build) return diag(notFound());
+  // Unknown, unapproved, or deleted — 410 Gone, see notFound().
+  if (!build) return diag(notFound(410));
 
   // Slugs for the /parts/ links in the body and the JSON-LD. Internally
   // non-fatal: on any failure it returns {} and the parts render unlinked.

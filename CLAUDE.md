@@ -188,7 +188,17 @@ a `/u/` page with nothing on it is a thin page.
 Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
 `/gunforma-build-detail.html?id=<uuid>`, the legacy one, routed here so both
 emit the same canonical instead of one declaring the id-less one until its
-fetch lands. **An id that cannot be resolved gets a real 404 on both.**
+fetch lands. **A uuid that resolves to no approved build gets a real 410 on
+both; a request with no uuid in it gets a 404.** 410 because Search Console
+kept re-crawling two deleted builds it listed as 404s (2026-10-12), and 410
+is what tells it to stop. The function cannot tell deleted from pending
+(anon key, `status=eq.approved`), so a pending build's share URL also says
+410 until approval — the same moment it stopped saying 404 before, and a
+URL Google never holds. **The id-less legacy path itself is a 301 to the
+gallery** (`netlify.toml`, the rule under the `?id=` rewrite): served as a
+file it was a 200 whose JS painted "Build not found", and Search Console
+called it a soft 404. The `?id=` rule must stay ABOVE that 301, because a
+rule with no query condition matches any query string.
 
 It server-renders the build's **body**, not just its meta: the H1, the
 builder's description, the photos, and a flat parts list whose entries link
@@ -776,8 +786,9 @@ that introduced the runner.
 
 `scripts/check-routes.mjs` asserts routing behaviour against a **real deployed
 origin**: status codes, one canonical, the two build URL shapes agreeing, the
-bare legacy path still served as a file, and a hard 404 on every unresolvable
-id. It is listed under `NOT_BUILD_CHECKS` because the site is not serving
+bare legacy path 301ing to the gallery, a hard 410 on every unresolvable
+uuid and a 404 on a request with none. It is listed under `NOT_BUILD_CHECKS`
+because the site is not serving
 during its own build, and fetching the previous deploy would grade the wrong
 artifact. `.github/workflows/check-routes.yml` runs it on a schedule against
 production and on demand against a deploy-preview URL.
