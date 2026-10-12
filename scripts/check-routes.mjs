@@ -512,6 +512,46 @@ for (const [label, path] of [
   }
 }
 
+// ── the front door: "Your P365" in the served nav, the picker on / ──────
+// The cluster above was reachable by crawlers (sitemap) and by nobody
+// else: no nav item, no homepage link. This asserts the way in on the
+// wire — the nav link on a static page, a hub, a guide AND a function-
+// rendered product page (the function copies are the ones a sweep of
+// *.html misses), and every hub button of the homepage picker. The build
+// holds the picker to GUN_HUBS (scripts/check-home-picker.mjs); this is
+// the live half, so the front door cannot quietly disappear from what a
+// reader is actually served.
+{
+  console.log('\n── front door to /p365/');
+  const { GUN_HUBS, GUIDE_PAGES, hubPath, guidePath, HUB_INDEX_PATH } =
+    await import('../netlify/functions/_guide-meta.mjs');
+  const NAV_LINK = 'href="/p365/">Your P365</a>';
+  const g0 = GUIDE_PAGES[0];
+  for (const [label, path] of [
+    ['static page',   '/gunforma-builds.html'],
+    ['gun hub',       hubPath(GUN_HUBS[0].gun)],
+    ['fit guide',     guidePath(g0.family, g0.gun)],
+    ['product page',  '/parts/optics/holosun-507k-x2'],
+    ['parts index',   '/parts'],
+  ]) {
+    const r = await get(path);
+    const n = r.body.split(NAV_LINK).length - 1;
+    ok(r.status === 200 && n >= 2, `${label} ${path}: "Your P365" in desktop nav and mobile menu`, `${r.status}, ${n} link(s)`);
+  }
+  const home = await get('/');
+  ok(home.status === 200, '/: 200', home.status);
+  ok(home.body.includes('What fits your P365?'), '/: picker heading in served HTML');
+  for (const h of GUN_HUBS) {
+    ok(home.body.includes('class="model-btn" href="' + hubPath(h.gun) + '"'), `/: picker links to ${hubPath(h.gun)}`);
+  }
+  ok(home.body.includes('class="model-btn more" href="' + HUB_INDEX_PATH + '"'), `/: picker links to ${HUB_INDEX_PATH}`);
+  // A no-JS user agent sees the same bytes; the point is that nothing here
+  // is injected after load.
+  const bot = await get('/', { 'User-Agent': 'GPTBot' });
+  ok(bot.status === 200 && bot.body.includes('class="model-btn" href="' + hubPath(GUN_HUBS[0].gun) + '"'),
+     '/: picker present for a non-browser user agent', bot.status);
+}
+
 // ── the /fit/ cluster is no longer orphaned ────────────────────────────
 // The defect this PR fixes, asserted on the wire rather than in review:
 // a product page for an optic must link INTO a fit guide.

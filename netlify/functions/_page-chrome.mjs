@@ -15,14 +15,23 @@
 // What is NOT here: page-specific CSS. Each page keeps its own rules for
 // its own components; only the shared chrome moved.
 
-export function navHtml() {
+// `active` names the item that carries the underline: 'p365' on the hub and
+// guide pages (the whole /p365/ and /fit/ cluster is one nav item, "Your
+// P365"), 'parts' on a catalog page, anything else for none. It is passed
+// rather than derived from the request because the function copies render
+// with no request-aware helper — nav.js's activeIf() is the browser's
+// version. Before this took an argument it hardcoded Parts Catalog as
+// active, which lit the wrong item on every hub and guide page.
+export function navHtml({ active } = {}) {
+  const on = (key) => (active === key ? ' active' : '');
   return (
 '<nav class="nav">' +
   '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
-    '<a class="nav-link" href="index.html">Home</a>' +
-    '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
-    '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+    '<a class="nav-link' + on('home') + '" href="index.html">Home</a>' +
+    '<a class="nav-link' + on('builds') + '" href="gunforma-builds.html">Builds</a>' +
+    '<a class="nav-link' + on('p365') + '" href="/p365/">Your P365</a>' +
+    '<a class="nav-link' + on('parts') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '</div>' +
   '<div class="nav-right">' +
     '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html">Sign in</a>' +
@@ -32,6 +41,7 @@ export function navHtml() {
   '</div>' +
 '<div class="nav-menu" id="nav-menu">' +
   '<a href="gunforma-builds.html">Builds</a>' +
+  '<a href="/p365/">Your P365</a>' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
 '</div>' +
 '</nav>'

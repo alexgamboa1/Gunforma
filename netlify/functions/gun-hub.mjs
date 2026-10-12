@@ -188,7 +188,7 @@ function renderHub({ hub, gun, cuts, vocab, guides }) {
                ogImage: SITE + '/og-default.png' }) +
     '<style>' + chromeCss() + layoutCss() + hubCss() + '</style>' +
     '</head><body>' +
-    navHtml() +
+    navHtml({ active: 'p365' }) +
     '<div class="breadcrumb"><a href="/">Home</a> / <a href="' + esc(HUB_INDEX_PATH) + '">P365 models</a> / ' + esc(name) + '</div>' +
     '<div class="page">' +
       '<div class="eyebrow">Sig Sauer &middot; P365 family</div>' +
@@ -257,7 +257,7 @@ function renderIndex({ hubs }) {
                ogImage: SITE + '/og-default.png' }) +
     '<style>' + chromeCss() + layoutCss() + hubCss() + '</style>' +
     '</head><body>' +
-    navHtml() +
+    navHtml({ active: 'p365' }) +
     '<div class="breadcrumb"><a href="/">Home</a> / P365 models</div>' +
     '<div class="page">' +
       '<div class="eyebrow">Sig Sauer &middot; P365 family</div>' +

@@ -83,13 +83,20 @@ export function guidePath(family, gun) {
 // to nothing, so GUN_HUBS must be exactly the set of guns appearing in
 // GUIDE_PAGES. scripts/check-guide-content.mjs asserts that both ways
 // rather than leaving it to whoever edits one list and not the other.
+//
+// ORDER IS MEANINGFUL: most-owned model first — P365, P365 X, P365 XL,
+// P365 XMacro, then the rest. /p365/ lists its cards in this order, and so
+// does the homepage's "What fits your P365?" picker, which
+// scripts/check-home-picker.mjs holds to this list on every deploy: same
+// hubs, same order, same names. `guns` has no display-order column; this
+// list is the order.
 export const GUN_HUBS = [
-  { gun: 'p365-xl',         updated: '2026-10-02',
-    summary: 'The original optic-ready P365 at full length: one RMSc-pattern cut across every current SKU, and no compensator to shorten the barrel under it.' },
   { gun: 'p365',            updated: '2026-10-02',
     summary: 'The gun the family is named after, and the only one still in circulation with non-optic-ready slides — so the first question is whether yours is cut at all.' },
   { gun: 'p365-x',          updated: '2026-10-02',
     summary: 'The base P365 slide under an X-series grip module: the shortest slide that is optic-ready across the current line.' },
+  { gun: 'p365-xl',         updated: '2026-10-02',
+    summary: 'The original optic-ready P365 at full length: one RMSc-pattern cut across every current SKU, and no compensator to shorten the barrel under it.' },
   { gun: 'p365-xmacro',     updated: '2026-10-02',
     summary: 'The 17-round carry gun, sharing its magazine with the FUSE, and the one model where our cut data for the -RXSL SKUs is marked likely rather than verified.' },
   { gun: 'p365-axg',        updated: '2026-10-02',

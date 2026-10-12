@@ -71,6 +71,7 @@ check "build-og page literals"     scripts/check-canonical-coupling.mjs
 check "listing rules pinned"       scripts/listing-rules.test.mjs
 check "maker-link copies agree"    scripts/maker-link.test.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
+check "homepage picker = hubs"     scripts/check-home-picker.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
