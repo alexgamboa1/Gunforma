@@ -26,7 +26,7 @@
 // WHAT IT ASSERTS, AND WHAT IT ONLY RECORDS
 // Asserted: the behaviour readers and crawlers actually get — status codes,
 // one canonical, the two build URL shapes agreeing, the bare legacy path
-// still serving the static file.
+// 301ing to the gallery, 410 on a uuid that is no build and 404 on no id.
 //
 // Recorded, not asserted: which source build-og resolved the id from, read
 // off the x-build-og-id-source response header. That is a fact about
@@ -115,15 +115,27 @@ const escHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
 
 console.log(`checking routes on ${origin}\n`);
 
-// ── the legacy bare path must stay the static file ─────────────────────
+// ── the legacy bare path is a 301 to the gallery ────────────────────────
+// A build page with no build served the static file at 200, and Search
+// Console called it a soft 404 (2026-10-12). netlify.toml now 301s it to the
+// gallery, at the gallery's own canonical URL so the redirect lands on a page
+// that does not point elsewhere. The redirect rule — not build-og — answers
+// it, so no function header may be present; and the ?id= rule above it in
+// netlify.toml must still win when an id IS present, which the "legacy ?id=:
+// 200" assertion below is what proves. Both halves, because a rule with no
+// query condition matches any query string: this 301 ordered first would
+// swallow every ?id= link and the second assertion is the one that would
+// catch it.
 {
   const r = await get('/gunforma-build-detail.html');
-  ok(r.status === 200, 'bare /gunforma-build-detail.html: 200', r.status);
+  ok(r.status === 301, 'bare /gunforma-build-detail.html: 301, not a 200 empty page', r.status);
+  ok(r.location === '/gunforma-builds.html' || r.location === origin + '/gunforma-builds.html',
+     'Location is the gallery at its canonical URL', r.location);
   ok(r.idSource === null,
-     'bare path is served as a FILE, not through build-og',
+     'answered by the redirect rule, not through build-og',
      r.idSource === null ? 'no function headers' : 'id-source=' + r.idSource);
-  ok(!r.hasOg, 'and carries no injected og meta');
-  ok(r.canon.length === 1, 'exactly one canonical', r.canon.length);
+  const t = await get('/gunforma-builds.html');
+  ok(t.status === 200, 'and the gallery answers 200', t.status);
 }
 
 // ── a build that actually exists ───────────────────────────────────────
@@ -181,19 +193,25 @@ if (!live) {
   note('id source, legacy ?id=', `${b.idSource}   (x-nf-original-path ${b.origHeader})`);
 }
 
-// ── an id that resolves to nothing: BOTH routes 404 ────────────────────
+// ── an id that resolves to nothing: BOTH routes refuse it ──────────────
 // This is the assertion the previous release got wrong. A 200 carrying
 // "Build not found" is a soft 404 and Google penalises it.
+//
+// A uuid that is not an approved build is 410 Gone — Search Console listed
+// two deleted builds as 404s it kept re-crawling (2026-10-12), and 410 is
+// what tells it to stop. A request with no uuid in it at all stays 404:
+// nothing was ever there. The split is build-og.mjs's notFound(); this
+// asserts it on the wire, where the status is what a crawler actually gets.
 const GONE = '00000000-0000-4000-8000-000000000000';
-for (const [label, path] of [
-  ['/b/<unknown uuid>',        '/b/' + GONE],
-  ['/b/<slug>-<unknown uuid>', '/b/some-build-' + GONE],
-  ['/b/not-a-uuid',            '/b/not-a-uuid'],
-  ['legacy ?id=<unknown uuid>', '/gunforma-build-detail.html?id=' + GONE],
-  ['legacy ?id=garbage',        '/gunforma-build-detail.html?id=not-a-uuid'],
+for (const [label, path, want] of [
+  ['/b/<unknown uuid>',        '/b/' + GONE,                                    410],
+  ['/b/<slug>-<unknown uuid>', '/b/some-build-' + GONE,                         410],
+  ['/b/not-a-uuid',            '/b/not-a-uuid',                                 404],
+  ['legacy ?id=<unknown uuid>', '/gunforma-build-detail.html?id=' + GONE,       410],
+  ['legacy ?id=garbage',        '/gunforma-build-detail.html?id=not-a-uuid',    404],
 ]) {
   const r = await get(path);
-  ok(r.status === 404, `${label}: hard 404, not a soft one`, r.status +
+  ok(r.status === want, `${label}: hard ${want}, not a soft one`, r.status +
      (r.status === 200 && /Build not found/i.test(r.body) ? ' — SOFT 404' : ''));
 }
 

@@ -206,9 +206,11 @@
 # force = true is REQUIRED: a real file sits at this path, and without force a
 # rule only applies when nothing does.
 #
-# query = { id = ":id" } is what keeps force safe. The rule matches only when
-# an id is present, so a bare /gunforma-build-detail.html still serves the
-# file — no function, no behaviour change, nothing to get wrong.
+# query = { id = ":id" } is what keeps force safe for the function: the rule
+# matches only when an id is present. A bare /gunforma-build-detail.html falls
+# through to the rule BELOW this one, a 301 to the gallery. The order of the
+# two is load-bearing — a rule with no query condition matches ANY query
+# string, so the 301 placed first would swallow every ?id= link.
 #
 # The target carries NO placeholder on purpose. Named :placeholder values are
 # not substituted into a rewrite target's query string in production, though
@@ -226,6 +228,20 @@
   query = { id = ":id" }
   to = "/.netlify/functions/build-og"
   status = 200
+  force = true
+
+# The same path with NO id is a build page with no build. It used to serve the
+# static file at 200, whose JS then painted "Build not found" — a soft 404,
+# and Search Console reported it as one (2026-10-12). Nothing links to the
+# id-less path (every build link carries an id or is a /b/ URL), so there is
+# no reader to keep, only a crawler to send somewhere real: the gallery, at
+# the URL the gallery declares as its own canonical, so the 301 lands on a
+# page that does not then point elsewhere. force = true because the file
+# exists. Query rule above, this one below — see the note above.
+[[redirects]]
+  from = "/gunforma-build-detail.html"
+  to = "/gunforma-builds.html"
+  status = 301
   force = true
 
 # /sitemap.xml is generated now — see netlify/functions/sitemap.mjs. It was a

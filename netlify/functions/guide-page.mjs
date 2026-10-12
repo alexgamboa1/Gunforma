@@ -32,9 +32,9 @@ import { isStalePrice, compareListingRows, displayPartnerName } from './_listing
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { pgRows as pgGet, unavailable } from './_pg.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 const SITE = 'https://gunforma.com';
 const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
 
@@ -51,13 +51,11 @@ const APPLIES_TO_LABEL = {
 
 // esc, the nav, the footer and the chrome CSS come from _page-chrome.mjs.
 
-async function pgGet(path) {
-  const res = await fetch(SB_URL + '/rest/v1/' + path, {
-    headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON },
-  });
-  if (!res.ok) throw new Error('PostgREST ' + res.status + ' for ' + path);
-  return res.json();
-}
+// pgGet is _pg.mjs's pgRows: one retry, a per-attempt timeout, and a body
+// that is guaranteed to be the array PostgREST returns — so `rows.length`
+// below is a fact about the table, never about the connection. On any
+// failure it throws, and the handler answers unavailable(): 503 with
+// Retry-After, never a 404. See _pg.mjs.
 
 // /fit/p365/<family>/<gun> — validate the WHOLE path, unlike product-page's
 // last-segment extraction: /fit/anything/red-dots/p365-xl must 404, not
@@ -516,6 +514,8 @@ export default async (req) => {
   let gun, cutsRes, fitRes, builds;
   try {
     gun = await fetchGun(gunSlug);
+    // Zero rows from PostgREST — a real not-found. A failed read never gets
+    // here: fetchGun throws and the catch below answers 503.
     if (!gun) return notFound('Unknown pistol model.');
     cutsRes = await fetchCuts(gun.id);
     if (!cutsRes.cuts.length) {
@@ -531,10 +531,7 @@ export default async (req) => {
     builds = await fetchBuildsUsing(fitRes.optics.map((o) => o.productId));
   } catch (err) {
     console.error('[guide-page] lookup failed', err);
-    return new Response('Temporarily unavailable — try again shortly.', {
-      status: 502,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
-    });
+    return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
   }
 
   const html = renderPage({

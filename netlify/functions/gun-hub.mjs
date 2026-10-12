@@ -32,9 +32,8 @@ import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } f
 // to the thing that counts it. scripts/check-analytics-snippet.mjs discovers
 // HTML-emitting functions and refuses the build without this import.
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { pgRows as pgGet, unavailable as upstreamUnavailable } from './_pg.mjs';
 
-const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 const SITE = 'https://gunforma.com';
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
@@ -48,13 +47,11 @@ const APPLIES_TO_LABEL = {
   'legacy-non-optic-ready': 'Older non-optic-ready SKUs',
 };
 
-async function pgGet(path) {
-  const res = await fetch(SB_URL + '/rest/v1/' + path, {
-    headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON },
-  });
-  if (!res.ok) throw new Error('PostgREST ' + res.status + ' for ' + path);
-  return res.json();
-}
+// pgGet is _pg.mjs's pgRows: one retry, a per-attempt timeout, and a body
+// that is guaranteed to be the array PostgREST returns — so `rows.length`
+// below is a fact about the table, never about the connection. On any
+// failure it throws, and the handler answers unavailable(): 503 with
+// Retry-After, never a 404. See _pg.mjs.
 
 // /p365/<gun> or /p365/. Validates the WHOLE path, same reasoning as
 // guide-page.mjs: /p365/anything/else must 404 rather than answer 200 under
@@ -87,6 +84,8 @@ function notFound(detail) {
   );
 }
 
+// A declared hub whose gun has no cut data: a data regression, not a
+// transient — 502 and no Retry-After, unlike upstreamUnavailable().
 function unavailable() {
   return new Response('Temporarily unavailable — try again shortly.', {
     status: 502,
@@ -323,6 +322,8 @@ export default async (req) => {
   let gun, cutsRes;
   try {
     gun = await fetchGun(route.gun);
+    // Zero rows from PostgREST — a real not-found. A failed read never gets
+    // here: fetchGun throws and the catch below answers 503.
     if (!gun) return notFound('Unknown pistol model.');
     cutsRes = await fetchCuts(gun.id);
     if (!cutsRes.cuts.length) {
@@ -333,7 +334,7 @@ export default async (req) => {
     }
   } catch (err) {
     console.error('[gun-hub] lookup failed', err);
-    return unavailable();
+    return upstreamUnavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
   }
 
   const guides = guidePagesForGun(route.gun);

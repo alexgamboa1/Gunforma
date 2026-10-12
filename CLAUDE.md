@@ -188,7 +188,17 @@ a `/u/` page with nothing on it is a thin page.
 Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
 `/gunforma-build-detail.html?id=<uuid>`, the legacy one, routed here so both
 emit the same canonical instead of one declaring the id-less one until its
-fetch lands. **An id that cannot be resolved gets a real 404 on both.**
+fetch lands. **A uuid that resolves to no approved build gets a real 410 on
+both; a request with no uuid in it gets a 404.** 410 because Search Console
+kept re-crawling two deleted builds it listed as 404s (2026-10-12), and 410
+is what tells it to stop. The function cannot tell deleted from pending
+(anon key, `status=eq.approved`), so a pending build's share URL also says
+410 until approval — the same moment it stopped saying 404 before, and a
+URL Google never holds. **The id-less legacy path itself is a 301 to the
+gallery** (`netlify.toml`, the rule under the `?id=` rewrite): served as a
+file it was a 200 whose JS painted "Build not found", and Search Console
+called it a soft 404. The `?id=` rule must stay ABOVE that 301, because a
+rule with no query condition matches any query string.
 
 It server-renders the build's **body**, not just its meta: the H1, the
 builder's description, the photos, and a flat parts list whose entries link
@@ -264,6 +274,38 @@ ways.
 That is twice now that a rewrite behaved differently in production than
 locally, and twice that a green local test covered it. A rewrite's behaviour
 is not verified until it has been observed on a deploy.
+
+### Not found means PostgREST said zero rows
+
+**A server-rendered page answers 404 — or 410, for a build — only when
+PostgREST positively returned an empty array.** A timeout, a network error,
+a non-2xx, or a 2xx whose body is not the array PostgREST always sends is a
+failure to read, not an answer about the row, and the function answers
+**503 with `Retry-After`** (text/plain, `no-store`, the shape `sitemap.mjs`
+already used) after **one retry**. A crawler keeps what it has on a 5xx and
+comes back; on a 404 it starts forgetting, and on a 410 it forgets fast —
+which is why #161, in making deleted builds 410, made this rule urgent.
+
+The reader is **`netlify/functions/_pg.mjs`**: `pgRows(path)` resolves only
+to an array (possibly empty — the one real not-found) and throws
+`UpstreamError` on everything else, with a per-attempt timeout so a hung
+connection cannot eat the retry's turn; `unavailable()` is the one 503.
+`build-og.mjs`, `product-page.mjs`, `guide-page.mjs` and `gun-hub.mjs` read
+through it. Do not add a local `pgGet` back to any of them, and do not write
+`Array.isArray(rows) && rows.length ? rows[0] : null` as a way of surviving
+a bad body: that line is exactly how a 2xx proxy page used to become a 404.
+(`parts-index.mjs` and `profile-og.mjs` still carry their own copies, logged
+for the next pass; `profile-og` has the same bad-body-to-404 shape.)
+
+Two deliberate exceptions, both on a positive answer: a declared guide or hub
+whose gun has **zero** `gun_optic_cuts` rows answers 502 without
+`Retry-After` — a data regression to be fixed, not a blip to be retried —
+and a request with no key in it at all (no uuid, a slug that fails the
+pattern) is 404 before any read.
+
+`scripts/upstream-failure.test.mjs` runs all four handlers against a stubbed
+`fetch` that fails each of those ways and requires the 503, the header, the
+retry count, and that an empty array alone yields the 404/410.
 
 ### The analytics tag: one module, sixteen literals, four deliberate absences
 
@@ -738,6 +780,7 @@ Registered today:
 | `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
+| `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -776,8 +819,9 @@ that introduced the runner.
 
 `scripts/check-routes.mjs` asserts routing behaviour against a **real deployed
 origin**: status codes, one canonical, the two build URL shapes agreeing, the
-bare legacy path still served as a file, and a hard 404 on every unresolvable
-id. It is listed under `NOT_BUILD_CHECKS` because the site is not serving
+bare legacy path 301ing to the gallery, a hard 410 on every unresolvable
+uuid and a 404 on a request with none. It is listed under `NOT_BUILD_CHECKS`
+because the site is not serving
 during its own build, and fetching the previous deploy would grade the wrong
 artifact. `.github/workflows/check-routes.yml` runs it on a schedule against
 production and on demand against a deploy-preview URL.

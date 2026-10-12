@@ -51,9 +51,9 @@ import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 // places, on purpose".
 import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { pgRows as pgGet, unavailable } from './_pg.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
 const SITE = 'https://gunforma.com';
 const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
@@ -213,13 +213,11 @@ function esc(s) {
 // isStalePrice, compareListingRows and displayPartnerName come from
 // _listing-rules.mjs — see the import at the top and that file's header.
 
-async function pgGet(path) {
-  const res = await fetch(SB_URL + '/rest/v1/' + path, {
-    headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON },
-  });
-  if (!res.ok) throw new Error('PostgREST ' + res.status + ' for ' + path);
-  return res.json();
-}
+// pgGet is _pg.mjs's pgRows: one retry, a per-attempt timeout, and a body
+// that is guaranteed to be the array PostgREST returns — so `rows.length`
+// below is a fact about the table, never about the connection. On any
+// failure it throws, and the handler answers unavailable(): 503 with
+// Retry-After, never a 404. See _pg.mjs.
 
 // Reads slug the same defensive way profile-og reads username: query param
 // first (works under netlify dev), then the rewritten pathname, then
@@ -769,12 +767,12 @@ export default async (req) => {
   try {
     product = await fetchProduct(slug);
   } catch (err) {
+    // Not a 404: PostgREST did not say the part is absent, it failed to say
+    // anything. 503 + Retry-After keeps the page in the index (_pg.mjs).
     console.error('[product-page] product lookup failed', err);
-    return new Response('Temporarily unavailable — try again shortly.', {
-      status: 502,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
-    });
+    return unavailable();
   }
+  // PostgREST answered, with zero rows — the one real not-found.
   if (!product) return notFound(slug);
 
   const meta = CATEGORY_META[product.category] || [product.category, product.category, product.category];
