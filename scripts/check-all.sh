@@ -72,6 +72,7 @@ check "listing rules pinned"       scripts/listing-rules.test.mjs
 check "maker-link copies agree"    scripts/maker-link.test.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
 check "homepage picker = hubs"     scripts/check-home-picker.mjs
+check "DB failure is 503, not 404"  scripts/upstream-failure.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

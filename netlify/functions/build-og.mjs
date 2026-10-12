@@ -53,9 +53,9 @@ import { buildUrl, buildIdFromPath } from './_build-url.mjs';
 // its own category map.
 import { CATEGORY_META } from './_category-meta.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { pgRows, unavailable } from './_pg.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
-const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
 const SITE       = 'https://gunforma.com';
 const OG_DEFAULT = SITE + '/og-default.png';
@@ -311,14 +311,9 @@ async function fetchLinkedProducts(build) {
   )];
   if (!ids.length) return {};
   try {
-    const res = await fetch(
-      SB_URL + '/rest/v1/products?id=in.(' + ids.join(',') + ')&select=id,slug,category',
-      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } },
-    );
-    if (!res.ok) throw new Error('PostgREST ' + res.status);
-    const rows = await res.json();
+    const rows = await pgRows('products?id=in.(' + ids.join(',') + ')&select=id,slug,category');
     const map = {};
-    for (const r of (Array.isArray(rows) ? rows : [])) if (r && r.id) map[r.id] = r;
+    for (const r of rows) if (r && r.id) map[r.id] = r;
     return map;
   } catch (err) {
     console.error('[build-og] linked-product lookup failed', err);
@@ -726,28 +721,27 @@ export default async (req) => {
 
   let build = null;
   try {
-    const res = await fetch(
-      SB_URL + '/rest/v1/builds?select=' + encodeURIComponent(select) +
-      '&limit=1&status=eq.approved&id=eq.' + encodeURIComponent(requested),
-      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } },
-    );
-    if (!res.ok) throw new Error('PostgREST ' + res.status);
-    const rows = await res.json();
-    build = Array.isArray(rows) && rows.length ? rows[0] : null;
+    // pgRows: one retry, a per-attempt timeout, and a body guaranteed to be
+    // PostgREST's array — so `rows.length === 0` below is PostgREST saying
+    // "no such approved build", never a proxy page or a dropped connection
+    // being mistaken for one. See _pg.mjs.
+    const rows = await pgRows('builds?select=' + encodeURIComponent(select) +
+      '&limit=1&status=eq.approved&id=eq.' + encodeURIComponent(requested));
+    build = rows.length ? rows[0] : null;
   } catch (err) {
     console.error('[build-og] build lookup failed', err);
-    // An upstream hiccup is not proof the build is absent — don't cache a 404
-    // over it. Hand back the page unadorned and let the client render, which
-    // re-runs the same RLS-protected query from the browser.
-    const page = await loadPage();
-    if (!page) return diag(notFound());
-    return diag(new Response(page, {
-      status: 200,
-      headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
-    }));
+    // An upstream failure is not proof the build is absent, and since this
+    // function answers 410 for an absent build the stakes are a live share
+    // URL being dropped from the index. 503 + Retry-After: the crawler keeps
+    // what it has and comes back. This used to hand back the static page at
+    // 200 for the client to hydrate — kinder to a reader mid-blip, but to a
+    // crawler a 200 full of "Loading…" placeholders is a thin page, and the
+    // client's own query was failing against the same PostgREST anyway.
+    return diag(unavailable());
   }
 
-  // Unknown, unapproved, or deleted — 410 Gone, see notFound().
+  // PostgREST answered, with zero rows: unknown, unapproved, or deleted —
+  // 410 Gone, see notFound().
   if (!build) return diag(notFound(410));
 
   // Slugs for the /parts/ links in the body and the JSON-LD. Internally

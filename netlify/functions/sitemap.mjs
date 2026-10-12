@@ -187,7 +187,7 @@ export default async () => {
     // Deliberately not a partial sitemap — see the header.
     return new Response('sitemap temporarily unavailable\n', {
       status: 503,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'Retry-After': '60' },
     });
   }
 
