@@ -647,6 +647,14 @@ sitemap had), and add the pair to the redirect block in
 `scripts/check-routes.mjs`. Worked example: RAMM's comp and non-comp P365
 Leverage kits, merged into `ramm-tactical-leverage-trigger-p365`.
 
+**A part that moves category takes the same three steps** — the 301 above
+the rewrite, the old path in `RETIRED`, the pair in `check-routes.mjs` — and
+nothing else: the product is live, only its address changed. The sitemap
+lists the new address on its own, since it is built from `products.category`.
+Worked example: `tti-xmacro-completed-mag-w-basepad`, filed as a basepad
+before the magazine category existed and moved by
+`supabase/magazine_category.sql`.
+
 Nothing in the repo or the database sets `is_discontinued` back to false
 (`add_variants()` only reads it to refuse), and no seed or import script
 inserts products — `create_product()` is the one writer.
@@ -1222,6 +1230,72 @@ Logged for later, not built:
   "a other has no spec sheet" — the generic "a %" sentence; the page never
   sends one.
 
+### Magazines, and restricted states
+
+The fourth category added after the catalog's first sixteen
+(`supabase/magazine_category_enum.sql`, then `supabase/magazine_category.sql`,
+same two-file shape as the three above and for the same reason). `magazine`,
+ordered right after `magwell` in the enum and in both category lists;
+segment `magazines`; "Magazines" / "Magazine"; spec sheet `magazine_specs`.
+It backs the builder's existing **Magazines** section, whose key stays
+`mags` because every magazine ever typed into a build was saved under it —
+the section simply gained a `dbCategory`, so the catalog picker, the review
+queue's "Link to existing part" and add-a-part now reach it. Before this a
+magazine had nowhere to go and TTI's X-Macro completed magazine was filed as
+a basepad; that one product moves with the migration (see **Discontinued
+parts** for the three steps a move takes).
+
+- **Rules:** capacity (rounds, whole number), caliber (free text, as the
+  maker writes it), style (`Flush` / `Finger Extension` / `Extended`) and
+  fits_models (the maker's own words) are required; not_compatible_with,
+  body_material, witness_holes and included_extras are optional. **The style
+  list lives in three places** — the `magazine_specs` CHECK,
+  `create_product()` (refuses in words) and `MAG_CHOICES` in
+  `gunforma-admin-part.html` — change all three together, as with sights.
+  A capacity that is not a whole number is refused in words too.
+- **A different capacity is a different product**, not a variant: capacity is
+  not an option column, so `variant_identity()` would call two capacities
+  identical.
+- **`body_material` is deliberately not tied to `products.material`.** A
+  completed magazine's product material can describe the basepad as well
+  ("Aluminum Basepad, Steel Magazine Body"), so "material is one fact" does
+  not hold here; the sheet's body material is its own fact.
+- **A magazine may send `p_fits: {"frames": [...]}`**, exactly as a magwell
+  does, written to **`magazine_frame_requirements`** (the same shape as
+  `magwell_frame_requirements`, its own table because the columns are named
+  for the part). Zero rows means no claim. Nothing reads it yet; it is what
+  a "which mag fits my P365" question will be built on.
+
+**`products.restricted_states`** is a product field, not a magazine one: the
+two-letter codes of the states a part cannot be shipped to, `text[]`, NULL
+for "no restriction". The table's CHECK holds it to the 50 states and DC,
+refuses an empty list and a NULL element, and is case-sensitive;
+`create_product()` accepts `restricted_states` as a product key, upper-cases,
+trims and de-duplicates it, refuses anything that is not a code **by name**,
+and reports the stored list in its result (so a dry run shows it). The part
+page prints **"Not available in: CA, NY"** directly above the buy rows,
+reading the column in a query of its own (`fetchRestrictedStates()`), never
+in the product select — a column named there that does not exist yet fails
+every product page, and the house order is code first. Until the migration
+is applied that side read answers 400, is logged, and renders nothing. The
+catalog's detail panel and the build page do **not** print it yet; that is
+logged, not done. It is not in the JSON-LD either.
+
+**Without `capacity` a magazine saves unapproved and says so** (`missing:
+["spec.capacity"]`), the same as every other category's required field — the
+function never refuses an unfinished spec sheet; see **Saving and approval
+are separate on purpose**. Only `fitment_confidence` other than `unverified`
+turns that into a refusal. The add-a-part page's own gate still waits for a
+blank required number field before offering Save.
+
+**The TTI move leaves its `basepad_specs` row in place** (nothing in the
+migration deletes) and creates an **empty** `magazine_specs` row, so
+`product_data_status()` reports capacity, caliber, style and fits_models as
+missing for Alex to fill. None of the old values map cleanly: `completed-mag`
+is what the category now says, `17rd-xmacro` is a magazine family rather
+than the maker's model list, and `capacity_change 3` is a delta, not a
+capacity.
+
 ### Pending build parts → the catalog, and the needs-data page
 
 A builder's hand-typed part is stored as a **pending custom part**
@@ -1469,7 +1543,10 @@ so it is not asserted.
 **Adding a category** is therefore: the enum value (its own migration — see
 **Adding a product**), one line in each copy, its build section, and — if it
 has a spec sheet — its `SPEC_TABLES` entry and rules. The guard names whatever
-is missing.
+is missing. `supabase/magazine_category.sql` is the latest worked example;
+note that the guard's "no hand-written copies" rule counts `<category>: '…'`
+pairs, so a word that becomes a category (`magazine`) can turn an unrelated
+map in a page into a false positive — quote its keys.
 
 The axis columns they read (`reticle`, `reticle_color`, `color`, `optic_cut`,
 `bundle`, `clamp`, `manual_safety_variant`) feed **labels only**. Nothing filters

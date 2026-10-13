@@ -307,6 +307,17 @@
   status = 301
   force = true
 
+# A part that MOVED category, not a discontinued one: TTI's X-Macro completed
+# magazine was filed as a basepad before the magazine category existed
+# (supabase/magazine_category.sql moves it). Same placement rule — an exact
+# path above the /parts/* rewrite — and the old path is in RETIRED in
+# scripts/check-sitemap.mjs, the pair in scripts/check-routes.mjs.
+[[redirects]]
+  from = "/parts/basepads/tti-xmacro-completed-mag-w-basepad"
+  to = "/parts/magazines/tti-xmacro-completed-mag-w-basepad"
+  status = 301
+  force = true
+
 # Per-product pages, server-rendered so crawlers see real content instead of
 # the "Loading parts…" shell the client-side catalog shows before Supabase
 # resolves. :splat carries "category/slug" (or just "slug" — the function

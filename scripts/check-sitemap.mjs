@@ -106,6 +106,11 @@ const RETIRED = new Set([
   '/parts/lights/olight-pl-turbo-valkyrie',
   '/parts/lights/olight-pl-mini-3-valkyrie',
   '/parts/lights/streamlight-tlr-7-sub',
+  // Moved, not discontinued: filed as a basepad before the magazine category
+  // existed (supabase/magazine_category.sql). The sitemap lists it under
+  // /parts/magazines/ now, and the old path 301s there (netlify.toml; the
+  // pair is asserted in check-routes.mjs).
+  '/parts/basepads/tti-xmacro-completed-mag-w-basepad',
 ]);
 
 const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'))

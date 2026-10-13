@@ -31,6 +31,7 @@
     optic:            ['optics',            'Optics',            'Optic'],
     mag_release:      ['mag-releases',      'Magazine Releases', 'Magazine Release'],
     magwell:          ['magwells',          'Magwells',          'Magwell'],
+    magazine:         ['magazines',         'Magazines',         'Magazine'],
     basepad:          ['basepads',          'Basepads',          'Basepad'],
     slide_release:    ['slide-releases',    'Slide Releases',    'Slide Release'],
     safety_selector:  ['safety-selectors',  'Safety Selectors',  'Safety Selector'],
