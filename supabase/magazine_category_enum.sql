@@ -1,7 +1,8 @@
 -- magazine_category_enum.sql
--- NOT YET APPLIED. Apply on its own, BEFORE magazine_category.sql, and after
--- the PR that adds this file is merged and live (the house order: code that
--- tolerates both shapes first, then the migration).
+-- APPLIED 2026-10-13 as migration magazine_category_enum (20261013223126),
+-- on its own, after #167 was merged and live (the old TTI path already
+-- answered 301 on gunforma.com). Read back: eighteen values, magazine at
+-- enumsortorder 9.5 — between magwell (9) and basepad (10).
 --
 -- One new products.category value: magazine. A value only — nothing here
 -- touches a row, and no page reads it until a product has it. Ordered right

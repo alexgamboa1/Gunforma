@@ -1,8 +1,10 @@
 -- magazine_category.sql
--- NOT YET APPLIED. Apply after magazine_category_enum.sql, in one
--- transaction, after the PR that adds this file is merged and live. Dry-run
--- it first in a rolled-back transaction; the record of the pre-merge checks
--- is at the foot of this file.
+-- APPLIED 2026-10-13 as migration magazine_category (20261013223718), after
+-- magazine_category_enum (20261013223126) and after #167 was live, WITH ONE
+-- ADDITION in the same transaction: the TTI part's magazine sheet was filled
+-- (values from Taran Tactical's page, supplied by Alex), and a guard refused
+-- the transaction unless product_data_status() read approved afterwards. See
+-- the record at the foot of this file; the pre-merge record is above it.
 --
 -- WHAT.
 --   magazine_specs                  the magazine spec sheet
@@ -609,9 +611,60 @@ select id, category from public.products where slug = 'tti-xmacro-completed-mag-
 --    CHECK accepts {CA,NY} and NULL and refuses {XX}, {}, {CA,NULL} and
 --    lowercase {ca}; anon reads both tables and cannot insert into either.
 --
--- NOT YET VERIFIED, because it needs the enum value: the spec_field_rules
--- rows, the magazine-specific refusals in words, a magazine dry run reaching
--- P0DRY, and the TTI move. Dry-run this whole file in a rolled-back
--- transaction after magazine_category_enum.sql is applied, then apply it,
--- and append what was read back here.
+-- Not verifiable then, because it needed the enum value: the
+-- spec_field_rules rows, the magazine-specific refusals in words, a magazine
+-- dry run reaching P0DRY, and the TTI move. Verified at apply time, below.
+-- ============================================================
+
+-- ============================================================
+-- APPLIED 2026-10-13 as migration magazine_category (20261013223718) to
+-- lagjjcpclvzrjlrswojt, after magazine_category_enum (20261013223126).
+--
+-- First the whole file was dry-run in a rolled-back transaction with the
+-- enum value in place; every case as expected, and production read back
+-- unchanged afterwards (create_product md5 still d63d25cc…, no new tables,
+-- TTI still basepad):
+--   rules: 8 rows, capacity/caliber/mag_style/fits_models required, the
+--     other four optional
+--   magazine with all four required specs + restricted_states ["CA","NY"]
+--     -> P0DRY approved=true, missing [], restricted_states ["CA","NY"]
+--   the same without capacity -> P0DRY approved=false, missing
+--     ["spec.capacity"] (saves unapproved and says so; with
+--     fitment_confidence "verified" it is refused: "needs an approved part.
+--     Still missing: spec.capacity")
+--   mag_style "Drum" -> refused in words naming the three allowed
+--   capacity "17 rounds" -> refused in words
+--   an unknown spec key (spring_weight) -> refused, naming the eight fields
+--   p_fits {"frames": [...]} -> P0DRY; {"magwells": [...]} -> refused
+--   TTI after the move, empty sheet: category magazine, approved=false,
+--     missing capacity, caliber, mag_style, fits_models; after the fill
+--     below: approved=true, optional_blank [not_compatible_with, weight_oz]
+--   basepad_specs row still present; 2 live links; 0 other products touched
+--
+-- Then applied, with this appended in the same transaction:
+--
+--   update public.magazine_specs
+--      set capacity = 20, caliber = '9mm', mag_style = 'Extended',
+--          fits_models = 'P365-XMACRO, also fits all P365 9mm models',
+--          body_material = 'Steel', witness_holes = 'Rear witness holes',
+--          included_extras = 'TTI Versatile Basepad installed (factory 17rd mag, +3)'
+--    where product_id = (select id from public.products
+--                         where slug = 'tti-xmacro-completed-mag-w-basepad');
+--   -- and a DO block raising unless product_data_status() said approved
+--
+-- Read back live after the commit:
+--   enum: … magwell → magazine → basepad …
+--   create_product md5 efc507a7e683690d859eb9dd28a77d82 (the tested text)
+--   TTI: category magazine, fitment_confidence verified, restricted_states
+--     NULL, approved=true, missing []; the sheet exactly as above; both
+--     OpticsPlanet links live, tracked, $71.99, in stock, checked
+--     2026-10-13; its basepad_specs row left in place (nothing deleted)
+--   products: 1 magazine, 10 basepads, 268 total; 0 with restricted_states
+--   anon: SELECT only on magazine_specs and magazine_frame_requirements
+--   products_needing_data does not list the TTI part
+--   gunforma.com: /parts/basepads/tti-… 301 -> /parts/magazines/tti-…;
+--     the new page serves canonical /parts/magazines/…, breadcrumb
+--     "Parts Catalog / Magazines / …", eyebrow "Magazine · Sig Sauer P365",
+--     the eight spec rows, no restricted-states notice, and two
+--     "Buy at OpticsPlanet" buttons whose /go/ links 302 to Awin.
 -- ============================================================
