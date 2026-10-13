@@ -77,6 +77,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .notif-kind.comment { color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; }
 .notif-kind.reply   { color: #166534; background: #e8f5ee; border: 0.5px solid #86cfad; }
 .notif-kind.approved{ color: #8a6116; background: #fdf3e0; border: 0.5px solid #e9cf9a; }
+.notif-kind.changes { color: #166534; background: #e8f5ee; border: 0.5px solid #86cfad; }
 .empty { text-align: center; color: #999; padding: 48px 20px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; font-size: 13px; line-height: 1.6; margin-top: 16px; }
 .empty a { color: #2a7bbd; text-decoration: none; }
 .load-more { display: block; margin: 20px auto 0; font: inherit; font-size: 11px; font-weight: 600; color: #666; background: #fff; border: 0.5px solid #e5e5e5; padding: 8px 14px; border-radius: 4px; cursor: pointer; }
@@ -205,6 +206,24 @@ function rowHtml(n) {
         '<div class="notif-line"><span class="notif-kind approved">approved</span>' +
           '<strong>' + escH(bname) + '</strong> is live on Gunforma</div>' +
         '<div class="notif-preview">Anyone can see it now — the link is yours to share.</div>' +
+      '</div>' +
+      '<div class="notif-time">' + relTime(n.created_at) + '</div>' +
+    '</a>';
+  }
+  // 'changes' is from Gunforma too: a reviewer corrected, added or removed
+  // parts on a live build of yours (supabase/admin_part_changes.sql). The
+  // preview is the list, written by the database; the link opens the
+  // build's "What Gunforma changed" panel, which only the builder sees.
+  if (n.kind === 'changes') {
+    var cname = n.builds ? n.builds.name : 'your build';
+    return '<a class="notif' + (n.read_at ? '' : ' unread') + '" href="' +
+        escH(buildPath(n.build_id, n.builds && n.builds.name) + '#changes') + '">' +
+      '<div class="notif-avatar">\u270E</div>' +
+      '<div>' +
+        '<div class="notif-line"><span class="notif-kind changes">updated</span>' +
+          'Gunforma updated the parts on <strong>' + escH(cname) + '</strong></div>' +
+        (n.preview ? '<div class="notif-preview">' + escH(n.preview) + '</div>' : '') +
+        '<div class="notif-preview">Only you can see what changed.</div>' +
       '</div>' +
       '<div class="notif-time">' + relTime(n.created_at) + '</div>' +
     '</a>';

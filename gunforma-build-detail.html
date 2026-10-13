@@ -255,22 +255,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .not-found-sub { font-size: 13px; line-height: 1.6; }
 .not-found a { display: inline-block; margin-top: 16px; color: #2a7bbd; font-size: 13px; text-decoration: none; }
 
-/* VERIFIED & CORRECTED — real data, from builds.edit_history */
-.part-verified-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding-top: 8px; margin-top: 2px; }
-.verified-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; color: #166534; background: #e8f5ee; border: 0.5px solid #86cfad; padding: 5px 10px; border-radius: 20px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
-.verified-badge:hover { background: #d9f0e3; }
-.contest-link { font-size: 11px; color: #999; text-decoration: none; }
+/* WHAT GUNFORMA CHANGED — builds.edit_history, shown to the builder and
+   admins only (renderChangesPanel). The public page shows the parts. */
+.build-changes { background: #f6faf7; border: 0.5px solid #b9dcc7; border-radius: 8px; padding: 16px 18px; margin: 4px 0 20px; }
+.build-changes-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #166534; }
+.build-changes-sub { font-size: 12px; color: #4b6355; margin: 4px 0 12px; line-height: 1.5; }
+.build-changes-row { font-size: 13px; color: #1a1a1a; line-height: 1.5; padding: 8px 0; border-top: 0.5px dashed #cfe3d6; }
+.build-changes-meta { font-size: 11px; color: #777; margin-top: 2px; }
+.build-changes-foot { font-size: 11.5px; color: #4b6355; margin-top: 10px; padding-top: 10px; border-top: 0.5px solid #cfe3d6; }
+.build-changes-foot a { color: #2a7bbd; text-decoration: none; }
+.contest-link { font-size: 11px; color: #888; text-decoration: none; margin-left: 8px; }
 .contest-link:hover { color: #c25d3a; text-decoration: underline; }
 .contest-link.flagged { color: #b45309; font-weight: 600; cursor: default; }
-.verified-diff-panel { display: none; margin-top: 8px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 12px 14px; }
-.verified-diff-panel.open { display: block; animation: fadeIn 0.15s ease; }
-@keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
-.verified-diff-row { font-size: 12px; color: #444; line-height: 1.6; }
-.verified-diff-row + .verified-diff-row { margin-top: 8px; padding-top: 8px; border-top: 0.5px dashed #e5e2d8; }
-.verified-diff-field { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #888; display: block; margin-bottom: 2px; }
-.verified-diff-from { color: #9b1c1c; text-decoration: line-through; }
-.verified-diff-to { color: #166534; font-weight: 700; }
-.verified-diff-meta { font-size: 10px; color: #aaa; margin-top: 2px; }
 
 /* TOAST */
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: #1a1a1a; color: #fff; padding: 12px 22px; border-radius: 30px; font-size: 12px; font-weight: 600; display: flex; align-items: center; gap: 8px; opacity: 0; transition: all 0.25s ease; pointer-events: none; z-index: 999; white-space: nowrap; }
@@ -451,6 +447,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     </div>
   </div>
 
+  <!-- What Gunforma changed: the builder's own view (and admins'). Filled by
+       renderChangesPanel() once the page knows who is looking; hidden for
+       everyone else, so there is nothing here for a crawler either. -->
+  <div id="build-changes" class="build-changes" hidden></div>
+
   <div id="parts-container"></div>
 
   <!-- COMMENTS — hydrated by loadComments() once the build resolves. Hidden
@@ -542,13 +543,6 @@ function formatDate(iso) {
   return new Date(iso).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
 }
 
-// The corrections for the part at idx of parts_snapshot, in the order they
-// were recorded (append-only, so this is already chronological). Matched by
-// the part's own id, so a correction stays on its part when the builder
-// removes an earlier one; js/part-ids.js holds the rule.
-function partHistory(build, idx) {
-  return PartIds.entriesFor(build, idx);
-}
 
 function showToast(msg) {
   const t = document.getElementById('toast');
@@ -650,7 +644,7 @@ async function loadBuild() {
   // approved, so a not-yet-approved build correctly 404s instead of leaking.
   const { data, error } = await sb
     .from('builds')
-    .select('id,user_id,name,tier,activities,description,created_at,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    .select('id,user_id,status,name,tier,activities,description,created_at,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
     .eq('id', id)
     .maybeSingle();
 
@@ -660,6 +654,8 @@ async function loadBuild() {
   renderBuild(data);
   BUILD_ID = data.id;
   BUILD_OWNER_ID = data.user_id;
+  CURRENT_BUILD = data;
+  renderChangesPanel();          // hidden until loadComments() learns who is looking
   loadComments();
   loadLikes();
 }
@@ -1144,7 +1140,6 @@ function renderParts(b) {
 }
 
 function renderPartCard(build, part, idx) {
-  var history = partHistory(build, idx);
   var pendingTag = part.pending ? '<span class="part-tag" style="color:#b45309;background:#fef3e2;border-color:#f9b860;">Pending catalog review</span>' : '';
   // The builder's own note for a colour/variant the catalog does not carry —
   // free text, so escaped like any other user string. Shares .part-tags with
@@ -1161,7 +1156,6 @@ function renderPartCard(build, part, idx) {
   // variant is gone still gets a label here, off the snapshot.
   var chosenTag = vr.label
     ? '<span class="part-tag part-tag-chosen'+(vr.live ? '' : ' part-tag-archived')+'">'+escH(vr.label)+'</span>' : '';
-  var verifiedHtml = history.length ? buildVerifiedHtml(build.id, idx, history) : '';
   var affiliateHtml = renderAffiliateRow(part, vr);
 
   // Thumbnail, in strict preference order:
@@ -1219,7 +1213,6 @@ function renderPartCard(build, part, idx) {
         // "2 MOA · Red dot" under the chosen-variant tag — the label alone
         // does not say which of three "Black · Anodized" optics this is.
         (vr.specs ? '<div class="part-variant-specs">'+escH(vr.specs)+'</div>' : '')+
-        verifiedHtml+
       '</div>'+
     '</div>'+
     affiliateHtml+
@@ -1496,54 +1489,90 @@ function renderAffiliateRow(part, vr) {
 }
 
 // ============================================================
-// VERIFIED & CORRECTED — real data from builds.edit_history.
+// WHAT GUNFORMA CHANGED — builds.edit_history, for the builder and admins.
+//
+// A reviewer's corrections, and the parts they added or removed, are
+// written into parts_snapshot itself, so every visitor already sees the
+// corrected parts list — the cards above, and the server-rendered page.
+// The LIST of what changed is the builder's business: it shows here only
+// when the signed-in viewer owns the build (or is an admin), and the
+// builder's notification links to it (#changes). Nobody else sees a
+// "corrected" badge or a before/after; there used to be one on every
+// corrected part, for everyone.
+//
+// Hidden is not secret: edit_history is a column of a public row and is
+// readable through the API. What this changes is what the page shows.
 // ============================================================
-function buildVerifiedHtml(buildId, partIdx, history) {
-  var key = buildId+'-'+partIdx;
-  var contested = history.some(function(h){ return h.status === 'contested'; });
-  var diffRows = history.map(function(h) {
-    return '<div class="verified-diff-row">'+
-        '<span class="verified-diff-field">'+escH(h.field)+'</span>'+
-        '<span class="verified-diff-from">"'+escH(h.from_value)+'"</span> → <span class="verified-diff-to">"'+escH(h.to_value)+'"</span>'+
-        '<div class="verified-diff-meta">Corrected by '+escH(h.edited_by)+' · '+relTime(h.edited_at)+'</div>'+
-      '</div>';
+var CURRENT_BUILD = null;
+var SCROLLED_TO_CHANGES = false;
+
+function renderChangesPanel() {
+  var el = document.getElementById('build-changes');
+  if (!el) return;
+  var b = CURRENT_BUILD;
+  var isOwner = !!(ME && b && b.user_id && ME.id === b.user_id);
+  var isAdmin = !!(ME && ME.role === 'admin');
+  var list = b ? PartIds.changes(b).slice().reverse() : [];   // newest first
+  if (!b || !list.length || !(isOwner || isAdmin)) { el.hidden = true; el.innerHTML = ''; return; }
+
+  var parts = b.parts_snapshot || [];
+  // A part still on a live build that was corrected can be sent back for
+  // review. contest_build_part() flags the part's NEWEST correction, so the
+  // link sits on that one line only, and the part reads as sent back once
+  // any of its corrections is contested.
+  var flagLine = new Map();   // newest correction entry -> part index
+  if (isOwner && b.status === 'approved') {
+    parts.forEach(function (p, i) {
+      var mine = PartIds.entriesFor(b, i);
+      if (mine.length) flagLine.set(mine[mine.length - 1], { idx: i, sent: mine.some(function (x) { return x.status === 'contested'; }) });
+    });
+  }
+  var rows = list.map(function (e) {
+    var flag = '';
+    var f = flagLine.get(e);
+    if (f) {
+      flag = f.sent
+        ? '<span class="contest-link flagged">Sent back for review ✓</span>'
+        : '<a href="#" class="contest-link" onclick="flagForReview(\''+b.id+'\','+f.idx+');return false;">This is wrong — send it back</a>';
+    }
+    return '<div class="build-changes-row">'+escH(PartIds.changeText(e, b))+
+      '<div class="build-changes-meta">'+escH(formatDate(e.edited_at))+(e.reason ? ' · '+escH(e.reason) : '')+flag+'</div></div>';
   }).join('');
 
-  return '<div class="part-verified-row">'+
-      '<button class="verified-badge" onclick="toggleVerifiedDiff(\''+key+'\')">✓ Verified &amp; corrected by Gunforma</button>'+
-      (contested
-        ? '<span class="contest-link flagged">Flagged for review ✓</span>'
-        : '<a href="#" class="contest-link" onclick="flagForReview(\''+buildId+'\','+partIdx+');return false;">This looks wrong — flag for review</a>')+
-    '</div>'+
-    '<div class="verified-diff-panel" id="diff-'+key+'">'+diffRows+'</div>';
-}
+  el.innerHTML =
+    '<div class="build-changes-title" id="changes">What Gunforma changed</div>'+
+    '<div class="build-changes-sub">'+(isOwner
+      ? 'We corrected your parts list so it matches what is on the gun. Only you can see this list — everyone else just sees the parts.'
+      : 'Visible to the builder and to admins. Everyone else sees only the parts.')+'</div>'+
+    rows+
+    '<div class="build-changes-foot">Something not right? <a href="mailto:build@gunforma.com?subject='+encodeURIComponent('Change to my build: ' + (b.name || ''))+'">Email build@gunforma.com</a> and we will look again.</div>';
+  el.hidden = false;
 
-function toggleVerifiedDiff(key) {
-  var panel = document.getElementById('diff-'+key);
-  if (panel) panel.classList.toggle('open');
+  // The notification links to /b/<id>#changes; the anchor only exists now.
+  if (!SCROLLED_TO_CHANGES && location.hash === '#changes') {
+    SCROLLED_TO_CHANGES = true;
+    el.scrollIntoView({ block: 'start' });
+  }
 }
 
 // Calls the narrow contest_build_part RPC — it can only flip one matching
 // edit_history entry's status to 'contested' on an already-approved build,
-// nothing else on the row is reachable through it. It needs a signed-in
-// caller (it records who flagged), so a signed-out visitor is told that
-// here rather than getting "Something went wrong" from the database.
+// nothing else on the row is reachable through it. Offered only in the
+// builder's own panel above.
 //
-// Until supabase/part_ids.sql, this never worked for anyone but an admin:
-// the edit_history guard refused every other caller, and the page said
-// "Something went wrong". So success is not taken from the call — the RPC
-// returns nothing either way — but read back: the toast says it was flagged
-// only if this part's correction now reads contested.
+// Success is not taken from the call — the RPC returns nothing either way —
+// but read back: the toast says it was sent only if this part's correction
+// now reads contested.
 async function flagForReview(buildId, partIdx) {
   var sess = await sb.auth.getSession();
   var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
-  if (!user) { showToast('Sign in to flag a correction'); return; }
+  if (!user) { showToast('Sign in first'); return; }
   const { error } = await sb.rpc('contest_build_part', { p_build_id: buildId, p_part_index: partIdx });
-  if (error) { console.error(error); showToast('Could not flag it — try again'); return; }
+  if (error) { console.error(error); showToast('Could not send it — try again'); return; }
   const { data: after } = await sb.from('builds').select('parts_snapshot,edit_history').eq('id', buildId).maybeSingle();
   const flagged = !!after && PartIds.entriesFor(after, partIdx).some(function (e) { return e.status === 'contested'; });
-  showToast(flagged ? 'Sent back for review — thanks for flagging this'
-                    : 'Could not flag it — reload the page and try again');
+  showToast(flagged ? 'Sent back for review — thanks'
+                    : 'Could not send it — reload the page and try again');
   await loadBuild();
 }
 
@@ -1582,6 +1611,7 @@ sb.auth.onAuthStateChange(function (event) {
 async function loadComments() {
   if (!BUILD_ID) return;
   await loadMe();
+  renderChangesPanel();          // needs ME: owner and admins only
   var res = await sb
     .from('build_comments_public')
     .select('id,build_id,parent_id,user_id,body,created_at,edited_at,is_deleted,username,avatar_url,author_build_count,score,my_vote')

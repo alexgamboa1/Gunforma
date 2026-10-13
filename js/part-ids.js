@@ -30,6 +30,13 @@
 // position — that is all they know — and the editor still pins the parts
 // they cover. None existed when this shipped (2026-10-08), so that path is
 // for safety, not for data.
+//
+// Since 2026-10 a correction is also WRITTEN INTO parts_snapshot (the
+// queue changes the part, then logs the change), so the log is a record,
+// not a patch: no page lays to_value over the stored row any more. The
+// log also holds parts a reviewer added or removed (kind 'part_added' /
+// 'part_removed', the part under `part`), which are not corrections. The
+// builder sees the whole log on their build page; nobody else does.
 (function (global) {
   'use strict';
 
@@ -99,6 +106,64 @@
     return history.filter(function (e) { return belongsTo(e, part, idx); });
   }
 
+  // A part a reviewer ADDED to or REMOVED from the build. Not a correction:
+  // it carries the part under `part`, not a top-level part_id, so nothing
+  // that matches corrections to parts — here, contest_build_part(),
+  // relink_build_part(), the editor's pin — ever mistakes it for one. An
+  // added part that later gets a correction is matched by its own partId
+  // like any other part.
+  function isPartChange(e) {
+    return !!e && (e.kind === 'part_added' || e.kind === 'part_removed');
+  }
+
+  // Everything a reviewer changed on the build, oldest first: corrections
+  // and added/removed parts. Not the 'resubmit' marker, which the database
+  // writes when a builder resubmits. What the builder's "What Gunforma
+  // changed" panel lists, and what the queue shows above the parts.
+  // supabase/admin_part_changes.sql classifies entries the same way when it
+  // writes the builder's notification — change both together.
+  function changes(build) {
+    var history = (build && Array.isArray(build.edit_history)) ? build.edit_history : [];
+    return history.filter(function (e) {
+      return isPartChange(e) || (isCorrection(e) && typeof e.field === 'string');
+    });
+  }
+
+  // One change as a sentence, for the queue's log and the builder's
+  // "What Gunforma changed" panel, so the two say the same thing. Plain
+  // text: the caller escapes it. `build` is optional and only adds which
+  // part a correction was made on.
+  var FIELD_WORDS = { category: 'section', brand: 'brand', name: 'name', variant: 'variant note' };
+  function partText(p) {
+    if (!p) return 'a part';
+    var s = [p.brand, p.name].filter(function (x) { return x; }).join(' ') || 'a part';
+    if (p.variantLabel) s += ' — ' + p.variantLabel;
+    if (p.variant) s += ' (' + p.variant + ')';
+    return s;
+  }
+  function changeText(e, build) {
+    if (!e) return '';
+    if (e.kind === 'part_added') return 'Added ' + partText(e.part);
+    if (e.kind === 'part_removed') return 'Removed ' + partText(e.part);
+    var label = global.BuildCategories && typeof global.BuildCategories.categoryLabel === 'function'
+      ? global.BuildCategories.categoryLabel : null;
+    function show(v) {
+      v = v == null ? '' : String(v);
+      return e.field === 'category' && label && v ? label(v) : v;
+    }
+    var field = FIELD_WORDS[e.field] || String(e.field || 'part');
+    var on = '';
+    if (build && isId(e.part_id)) {
+      var parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
+      var p = parts.filter(function (x) { return x && x.partId === e.part_id; })[0];
+      if (p) on = ' on ' + [p.brand, p.name].filter(function (x) { return x; }).join(' ');
+    }
+    var from = show(e.from_value), to = show(e.to_value);
+    if (!from) return 'Set the ' + field + on + ' to “' + to + '”';
+    if (!to) return 'Cleared the ' + field + on + ' (was “' + from + '”)';
+    return 'Corrected the ' + field + on + ': “' + from + '” → “' + to + '”';
+  }
+
   // How many of the build's current parts carry at least one correction.
   function correctedPartCount(build) {
     var parts = (build && Array.isArray(build.parts_snapshot)) ? build.parts_snapshot : [];
@@ -123,6 +188,9 @@
     ensure: ensure,
     isId: isId,
     isCorrection: isCorrection,
+    isPartChange: isPartChange,
+    changes: changes,
+    changeText: changeText,
     belongsTo: belongsTo,
     entriesFor: entriesFor,
     correctedPartCount: correctedPartCount,

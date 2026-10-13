@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// check-snapshot-fields — the four parts_snapshot whitelists must name the
+// check-snapshot-fields — the five parts_snapshot whitelists must name the
 // same optional fields.
 //
 // WHY THIS EXISTS
@@ -11,6 +11,7 @@
 //   gunforma-armory.html       buildPartsSnapshot()   writes
 //   gunforma-armory.html       loadBuildById()        reads  (rebuilds STATE.parts)
 //   gunforma-armory.html       remixGuide()           reads  (clones a guide)
+//   gunforma-admin-queue.html  snapshotRow()          writes (a reviewer's "+ Add a part")
 //
 // A field missing from any of them is not "left alone" — it is DELETED, on
 // the next armory save of any draft that carried it, with no error. That has
@@ -20,7 +21,7 @@
 //
 // It cannot be caught by a unit test (the functions are inline in HTML) or by
 // looking at a page (it renders perfectly either way). It is a property of
-// four field lists agreeing, so that is what is checked.
+// five field lists agreeing, so that is what is checked.
 //
 // The five required fields (category, refId, brand, name, pending) are in a
 // base object literal in each writer and are not the risk. The OPTIONAL ones
@@ -42,6 +43,7 @@ const SOURCES = [
   { file: 'gunforma-post-build.html', kind: 'write', label: 'post-build buildPartsSnapshot()' },
   { file: 'gunforma-admin-post.html', kind: 'write', label: 'admin-post buildPartsSnapshot()' },
   { file: 'gunforma-armory.html',     kind: 'write', label: 'armory buildPartsSnapshot()' },
+  { file: 'gunforma-admin-queue.html', kind: 'write', label: 'admin-queue snapshotRow() (+ Add a part)' },
   { file: 'gunforma-armory.html',     kind: 'read',  label: 'armory readers (loadBuildById + remixGuide)' },
 ];
 
