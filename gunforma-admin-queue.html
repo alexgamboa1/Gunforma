@@ -563,24 +563,20 @@ async function loadGunModels() {
   }
 }
 
-// The model as the detail panel shows it: 'P365 XL · 3.7" barrel', with
-// "built-in comp" on the Comp models — the same two facts, in the same
-// order, as the buttons on the builder pages (js/gun-model.js, modelSub).
+// The model as the detail panel shows it: the name, and nothing derived
+// from it. gun_id is what box the build came in, not what is on the gun
+// now — see CLAUDE.md, "gun_id is provenance, never fitment" — so the
+// barrel length and "built-in comp" the buttons show on the builder pages
+// are not repeated here, where a reviewer would read them beside the parts
+// list as a statement about this build.
 // '' when the read failed, so the panel adds nothing rather than claiming
 // "no model" about a column it could not see.
 function gunModelHtml(buildId) {
   if (!GUN_MODELS_READ) return '';
   var g = GUN_BY_BUILD[buildId];
   if (!g) return '<span class="detail-submeta-item" style="color:#b0762a;">Model not set</span>';
-  // An FCU build has no factory slide or barrel, so there is no length to
-  // print — and a reviewer should expect to find a slide in the parts list.
-  if (g.fcuOnly) return '<span class="detail-submeta-item">Model: <strong>FCU only</strong> · no stock slide</span>';
-  var bits = [];
-  var barrel = Number(g.barrel_length_in);
-  if (isFinite(barrel) && barrel > 0) bits.push(barrel.toFixed(1) + '" barrel');
-  if (g.integrated_comp) bits.push('built-in comp');
-  return '<span class="detail-submeta-item">Model: <strong>'+escH(g.name)+'</strong>'+
-    (bits.length ? ' · '+escH(bits.join(' · ')) : '')+'</span>';
+  if (g.fcuOnly) return '<span class="detail-submeta-item">Model: <strong>FCU only</strong></span>';
+  return '<span class="detail-submeta-item">Model: <strong>'+escH(g.name)+'</strong></span>';
 }
 
 async function loadBuilds() {

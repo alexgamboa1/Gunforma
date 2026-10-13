@@ -215,7 +215,7 @@
       '<div class="gun-model">' +
         '<div class="gun-model-head">' +
           '<span class="gun-model-title">Which ' + esc(shortPlatform(platform)) + ' is it?</span>' +
-          '<span class="gun-model-hint">What it started as — sets the stock slide and barrel</span>' +
+          '<span class="gun-model-hint">What it started as</span>' +
         '</div>' +
         '<div class="gun-model-grid" role="group" aria-label="Pistol model">' + buttons + '</div>' +
       '</div>';
