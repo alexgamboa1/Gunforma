@@ -1,0 +1,75 @@
+name: Find orphan storage
+
+# Runs scripts/find-orphan-storage.mjs — objects in build-photos that no
+# build_photos row references — where the service key lives. The key is a
+# GitHub Actions secret and a Netlify env var, deliberately not on anyone's
+# laptop, so this is the only place the script can run at all.
+#
+# ON DEMAND ONLY. It is not scheduled, because the script's --delete mode
+# removes files from the one copy of irreplaceable photos, and that should be
+# a person's decision each time, not a cron's. The script's own guards still
+# apply on every run: anything under 24h old is skipped (an upload in
+# progress is referenced by nothing until the build is submitted), a run that
+# would clear the bucket or more than 90% of it refuses, and the full list is
+# printed before anything is removed.
+#
+# THREE PASSES, SO THE LOG IS THE RECORD. Report first, so the count before
+# is on the page; delete only if asked; then report again, so the count after
+# is measured rather than inferred from "deleted N" — the delete endpoint
+# reports on itself, and a listing is the fact. See CLAUDE.md, "A green
+# result is not evidence the work happened".
+#
+# SHARES THE BACKUP'S CONCURRENCY GROUP on purpose. backup-storage.yml lists
+# the bucket and compares the count with its last manifest to catch a mass
+# deletion. Removing orphans while that listing is in flight is exactly the
+# drop it is built to flag, so the two serialise rather than race.
+
+on:
+  workflow_dispatch:
+    inputs:
+      delete:
+        description: 'Delete the orphans the report finds (default: report only)'
+        type: boolean
+        default: false
+
+concurrency:
+  group: backup-storage
+  cancel-in-progress: false
+
+jobs:
+  orphans:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # No `npm ci`: the script imports only Node built-ins.
+      #
+      # The script is the FIRST command of each pipeline on purpose. The
+      # default shell runs with pipefail, so its non-zero exit fails the
+      # step; wrapped in a { group } it would not — bash ignores errexit
+      # inside a non-final pipeline element, and a failed run would read as
+      # green. The summary is written from the captured file afterwards.
+
+      - name: Report (before)
+        run: |
+          node scripts/find-orphan-storage.mjs | tee before.txt
+          { echo '## Before'; echo '```'; cat before.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Delete
+        if: ${{ inputs.delete }}
+        run: |
+          node scripts/find-orphan-storage.mjs --delete | tee delete.txt
+          { echo '## Delete'; echo '```'; cat delete.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Report (after)
+        if: ${{ inputs.delete }}
+        run: |
+          node scripts/find-orphan-storage.mjs | tee after.txt
+          { echo '## After'; echo '```'; cat after.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
