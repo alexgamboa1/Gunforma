@@ -246,6 +246,7 @@ const NUMBER_FIELDS = {
   optic: { dot_size_moa: false },
   slide: { port_count: true },
   basepad: { capacity_change: true },
+  magazine: { capacity: true },
   trigger: { pull_weight_lb: false },
   compensator: { length_in: false, barrel_length_in: false },
   mag_release: { length_added_in: false },
@@ -260,6 +261,7 @@ const LOOKUP_FIELDS = {
   'slide.slide_length_in': 'len:slide', 'slide.barrel_length_in': 'len:barrel', 'barrel.barrel_length_in': 'len:barrel',
   'recoil_spring.slide_length_in': 'len:slide',
   'sight.sight_position': 'sight_position', 'sight.height': 'sight_height', 'sight.sight_type': 'sight_type',
+  'magazine.mag_style': 'mag_style',
 };
 // Filled by the function, not by the admin.
 const DERIVED_FIELDS = {
@@ -273,6 +275,11 @@ const SIGHT_CHOICES = {
   sight_position: [['front', 'Front'], ['rear', 'Rear'], ['set', 'Set (front and rear)']],
   sight_height:   [['standard', 'Standard'], ['suppressor', 'Suppressor / co-witness']],
   sight_type:     [['night', 'Night (tritium)'], ['fiber', 'Fiber optic'], ['night-fiber', 'Night + fiber'], ['plain', 'Plain']],
+};
+// magazine_specs' CHECK (supabase/magazine_category.sql); create_product()
+// refuses a value outside it in words. Change all three together.
+const MAG_CHOICES = {
+  mag_style: [['Flush', 'Flush'], ['Finger Extension', 'Finger extension'], ['Extended', 'Extended']],
 };
 
 // THE ONE PLACE a variant option column is named. A column can read
@@ -307,6 +314,7 @@ const FITS = {
   frame: { key: 'magwells', title: 'Does this frame take these magwells?', other: 'magwell', from: 'whitelist' },
   barrel: { key: 'slides', title: 'Fits only these slides (optional)', other: 'slide', from: 'platform' },
   magwell: { key: 'frames', title: 'Fits only these frames (optional)', other: 'frame', from: 'platform' },
+  magazine: { key: 'frames', title: 'Fits only these frames (optional)', other: 'frame', from: 'platform' },
 };
 const LIGHT_FITMENT = ['direct', 'adapter-included', 'adapter-required', 'adapter-separate', 'no-fit'];  // enum light_fitment_type
 
@@ -329,7 +337,7 @@ const S = {
   platforms: new Set(),       // platform ids
   category: '',
   product: { brand: '', name: '', slug: '', slugTouched: false, url: '', description: '', material: '', material_family: '', part_type: '',
-             weight_oz: '', fitment_notes: '', build_warning: '', build_notes: '', internal_notes: '' },
+             weight_oz: '', fitment_notes: '', build_warning: '', build_notes: '', internal_notes: '', restricted_states: '' },
   specs: {},                  // rule field -> raw string ('' blank; 'true'/'false' for yes/no)
   fitsChecked: new Set(),     // product slugs ticked in the fits checklist
   lightRows: [],              // { rail_type, fitment_type, key_or_adapter, gun }
@@ -810,9 +818,11 @@ function renderProduct() {
       '<div class="field"><div class="field-label">Material family<span class="req">*</span></div><select class="field-select" data-p="material_family"><option value="">Choose…</option>' + mats + '</select>' +
         '<div class="field-note">"Unspecified" is a valid answer when the maker does not say.</div></div>' +
     '</div>' +
-    '<details class="optional"' + (['weight_oz', 'fitment_notes', 'build_warning', 'build_notes', 'internal_notes'].some(function (k) { return !blank(p[k]); }) ? ' open' : '') + '>' +
-      '<summary>Optional: weight · fitment notes · build warning · build notes · staff note</summary>' +
+    '<details class="optional"' + (['weight_oz', 'restricted_states', 'fitment_notes', 'build_warning', 'build_notes', 'internal_notes'].some(function (k) { return !blank(p[k]); }) ? ' open' : '') + '>' +
+      '<summary>Optional: weight · restricted states · fitment notes · build warning · build notes · staff note</summary>' +
       '<div class="field"><div class="field-label">Weight (oz)</div>' + input('data-p="weight_oz" type="number" step="any" min="0"', p.weight_oz) + '</div>' +
+      '<div class="field"><div class="field-label">Not available in (states)</div>' + input('data-p="restricted_states" placeholder="e.g. CA, NY" autocomplete="off"', p.restricted_states) +
+        '<div class="field-note">Two-letter state codes, comma-separated, for a part the maker will not ship to some states (a 20-round magazine, say). The part page prints them above the buy button. Anything but a real code is refused by Check.</div></div>' +
       '<div class="field"><div class="field-label">Fitment notes</div><textarea class="field-textarea" data-p="fitment_notes">' + esc(p.fitment_notes) + '</textarea></div>' +
       '<div class="field"><div class="field-label">Build warning</div><textarea class="field-textarea" data-p="build_warning">' + esc(p.build_warning) + '</textarea></div>' +
       '<div class="field"><div class="field-label">Build notes</div><textarea class="field-textarea" data-p="build_notes">' + esc(p.build_notes) + '</textarea></div>' +
@@ -841,7 +851,9 @@ function renderProductSuggest() {
 // The ruled filler, plus the plain connectives ("and", "all", "of", "a",
 // "an") that carry nothing in an address.
 const SLUG_FILLER = { for: 1, sig: 1, sauer: 1, the: 1, with: 1, and: 1, all: 1, of: 1, a: 1, an: 1 };
-const SLUG_WORD = { magazine: 'mag', magazines: 'mag', mags: 'mag' };
+// words, not categories (check-categories.mjs counts `category: '…'` pairs,
+// and `magazine` is one now): quoted so the slug map does not read as a list
+const SLUG_WORD = { 'magazine': 'mag', 'magazines': 'mag', 'mags': 'mag' };
 const SLUG_NO_MODEL = { optic: 1, light: 1 };   // parts that are not cut for one pistol
 const SLUG_TARGET = 50, SLUG_WARN = 60;
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -987,6 +999,7 @@ function lookupOptions(lookup) {
   }
   if (lookup === 'barrel_type') return BARREL_TYPES.map(function (t) { return [t, t]; });
   if (SIGHT_CHOICES[lookup]) return SIGHT_CHOICES[lookup];
+  if (MAG_CHOICES[lookup]) return MAG_CHOICES[lookup];
   if (lookup.indexOf('len:') === 0) return lengthsFor(lookup.slice(4)).map(function (n) { return [String(n), n + ' in']; });
   const KEY = { grip_rail_types: 'grip_rail_type', port_styles: 'port_style', calibers: 'caliber', basepad_types: 'basepad_type', mag_types: 'mag_type', rail_types: 'rail_type' }[lookup];
   return (L[lookup] || []).map(function (r) { return [r[KEY], r.display_name ? r.display_name + ' (' + r[KEY] + ')' : r[KEY]]; });
@@ -1390,6 +1403,8 @@ function payload() {
     if (!blank(p[k])) prod[k] = p[k].trim();
   });
   if (!blank(p.weight_oz)) prod.weight_oz = Number(p.weight_oz);
+  // sent as a list of upper-cased codes; the function checks them against the 50 states and DC
+  if (!blank(p.restricted_states)) prod.restricted_states = p.restricted_states.split(/[\s,;]+/).filter(Boolean).map(function (s) { return s.toUpperCase(); });
   if (S.category === 'other' && !blank(p.part_type)) prod.part_type = p.part_type.trim();
   // p_specs / p_fits are left OUT when empty, never sent as null: a JSON
   // null that reaches the function as the jsonb value 'null' (not SQL NULL)
@@ -1567,6 +1582,7 @@ function checkOutcomeHtml(checked, stale) {
     '</div>' +
     (d.warnings || []).map(function (w) { return '<div class="outcome warning"><span class="outcome-tag">Warning</span>' + esc(w) + '</div>'; }).join('') +
     (untracked ? '<div class="outcome warning"><span class="outcome-tag">Retailer</span>' + untracked + ' link' + (untracked > 1 ? 's' : '') + ' untracked: no commission.</div>' : '') +
+    (Array.isArray(d.restricted_states) && d.restricted_states.length ? '<div class="outcome warning"><span class="outcome-tag">States</span>Not available in: ' + esc(d.restricted_states.join(', ')) + '. The part page says so above the buy button.</div>' : '') +
     '<a class="outcome-more" href="#sec-result">Full result below ↓</a>';
 }
 
@@ -1594,12 +1610,16 @@ async function runCheck() {
     try { detail = JSON.parse(error.details); } catch (e) { /* handled below */ }
     if (detail) S.check = { sig: sig, ok: true, detail: detail };
     else S.check = { sig: sig, ok: false, error: 'The dry run answered, but its result could not be read: ' + (error.details || '(empty)') };
-  } else if (error && ['recoil_spring', 'sight', 'other'].indexOf(S.category) !== -1 &&
-             /unknown product field\(s\): part_type|a (recoil_spring|sight) has no spec sheet/.test(error.message || '')) {
-    // the function from before supabase/add_categories.sql: it knows the
-    // category (the enum has it) but not its spec sheet or part type yet
+  } else if (error && /invalid input value for enum product_category|unknown product field\(s\): (part_type|restricted_states)|a \w+ has no spec sheet/.test(error.message || '')) {
+    // the function from before a migration this page expects: the enum
+    // does not have the category yet, or the function knows the category
+    // but not its spec sheet or a product key this page sends (part_type:
+    // supabase/add_categories.sql; magazines and restricted_states:
+    // supabase/magazine_category_enum.sql, then magazine_category.sql).
+    // No list of categories here: the message is about the database
+    // being behind the page, whichever category it is.
     S.check = { sig: sig, ok: false, code: error.code,
-      error: CATEGORY_LABEL[S.category] + ' are not available yet: supabase/add_categories.sql has not been applied to the database. (' + error.message + ')' };
+      error: 'Not available yet: the database is behind this page — a pending migration has not been applied — so this Check cannot run. (' + error.message + ')' };
   } else if (error && S.target && error.code === 'PGRST202') {
     S.check = { sig: sig, ok: false, error: 'Adding variants is not available yet: add_variants() has not been applied to the database.', code: error.code };
   } else if (error) {

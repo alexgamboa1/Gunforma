@@ -616,15 +616,18 @@ for (const [label, path, want] of [
   note('categories with products', [...firstByCat.keys()].length + ' of ' + Object.keys(CATEGORY_META).length);
 }
 
-// ── discontinued parts redirect to their successor ──────────────────────
+// ── discontinued parts redirect to their successor; moved parts to their ──
+// ── new address ─────────────────────────────────────────────────────────
 // The rules are exact paths in netlify.toml, above the /parts/* rewrite. If
 // one slips below it, product-page.mjs answers instead and the old page
-// renders at 200 — so assert the 301 and its target on the wire.
+// renders at 200 — so assert the 301 and its target on the wire. The TTI
+// pair is a category move (basepad -> magazine), not a discontinuation.
 {
-  console.log('\n── discontinued parts');
+  console.log('\n── discontinued and moved parts');
   for (const [from, to] of [
     ['/parts/triggers/ramm-tactical-leverage-c-p365',  '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
     ['/parts/triggers/ramm-tactical-leverage-nc-p365', '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
+    ['/parts/basepads/tti-xmacro-completed-mag-w-basepad', '/parts/magazines/tti-xmacro-completed-mag-w-basepad'],
   ]) {
     const r = await get(from);
     const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');

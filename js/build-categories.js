@@ -25,9 +25,9 @@
 // holds exactly one products.category takes that category's plural name
 // ("Grip Modules", "Basepads"), so the builder, the catalog and add-a-part
 // cannot name the same thing differently. Only sections that are not one
-// category name themselves: "Barrels & Compensators" (two), and the five
-// with no catalog backing (Magazines, Holsters, Paint Job & Finish, Tactical
-// Knife). scripts/check-script-order.mjs fails a page that loads this file
+// category name themselves: "Barrels & Compensators" (two), and the three
+// with no catalog backing (Holsters, Paint Job & Finish, Tactical Knife).
+// scripts/check-script-order.mjs fails a page that loads this file
 // without category-map.js before it.
 //
 // EVERYTHING IS DERIVED FROM `CATEGORIES`. Labels, the db-category reverse
@@ -114,7 +114,10 @@ const CATEGORIES = [
 
   // ── Magazine ────────────────────────────────────────────────────────────
   { key:'magwells', group:'magazine', label:name('magwell'), dbCategory:['magwell'] },
-  { key:'mags',     group:'magazine', label:'Magazines',     dbCategory:null },
+  // `mags` is the key every magazine ever typed into a build was saved
+  // under, so it stays; the section has been backed by the `magazine`
+  // catalog category since supabase/magazine_category.sql.
+  { key:'mags',     group:'magazine', label:name('magazine'), dbCategory:['magazine'] },
   { key:'basepad',  group:'magazine', label:name('basepad'), dbCategory:['basepad'] },
 
   // ── Carry and finish ────────────────────────────────────────────────────

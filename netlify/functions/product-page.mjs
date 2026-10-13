@@ -163,6 +163,16 @@ const SPEC_TABLES = {
     ['is_combo', 'Combo (Magwell + Basepad)', YESNO],
     ['includes_hardware', 'Includes Hardware', YESNO],
   ]],
+  magazine: ['magazine_specs', [
+    ['capacity', 'Capacity', (v) => v + ' rounds'],
+    ['caliber', 'Caliber'],
+    ['mag_style', 'Style'],
+    ['fits_models', 'Fits'],
+    ['not_compatible_with', 'Not Compatible With'],
+    ['body_material', 'Body Material'],
+    ['witness_holes', 'Witness Holes'],
+    ['included_extras', 'Included'],
+  ]],
   basepad: ['basepad_specs', [
     ['basepad_type', 'Basepad Type'],
     ['fits_mag_type', 'Fits Magazine Type'],
@@ -308,6 +318,18 @@ async function fetchSpecs(category, productId) {
     .filter(Boolean);
 }
 
+// Capacity-restricted states: products.restricted_states, the two-letter
+// codes a part cannot ship to (supabase/magazine_category.sql; a product
+// field, not a magazine one). Read in a query of its own, never in
+// fetchProduct's select, for the same reason as part_type above: a column
+// named there that the database does not have yet fails every product
+// page, and the house order is code first, migration after.
+async function fetchRestrictedStates(productId) {
+  const rows = await pgGet('products?id=eq.' + productId + '&select=restricted_states&limit=1');
+  const v = rows.length ? rows[0].restricted_states : null;
+  return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
+}
+
 // Which DECLARED fit pages cover this optic, by walking the same chain
 // guide-page.mjs walks, in reverse: the product's footprint, the cuts that
 // footprint mounts on, the guns carrying those cuts, then the registry.
@@ -384,7 +406,7 @@ async function fetchBuildsUsing(productId) {
   return out;
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -653,6 +675,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.stock.in { color: #1e7d32; margin-left: 6px; } .stock.out { color: #b23; margin-left: 6px; }' +
 '.buy-btn { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; padding: 8px 14px; border-radius: 6px; text-decoration: none; white-space: nowrap; }' +
 '.buy-btn.disabled { background: #ddd; color: #888; }' +
+'.restricted { font-size: 13px; font-weight: 600; line-height: 1.45; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 6px; padding: 9px 12px; margin-bottom: 10px; }' +
 '.fitguides { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 2px; }' +
 '.fitguide { display: flex; flex-direction: column; gap: 2px; padding: 9px 13px; border: 0.5px solid #e5e5e5; border-radius: 7px; background: #fff; text-decoration: none; }' +
 '.fitguide:hover { border-color: #4a9edd; }' +
@@ -726,6 +749,11 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     commonSpecs + specRowsHtml +
     fitGuidesHtml +
     '<div class="section-title">Buy</div>' +
+    // Capacity-restricted states, directly above the buttons they are
+    // about. One line that wraps on a phone; the codes are the maker's.
+    (restrictedStates && restrictedStates.length
+      ? '<div class="restricted">Not available in: ' + esc(restrictedStates.join(', ')) + '</div>'
+      : '') +
     variantRowsHtml +
     // Says what is true of the links above it: partner-only, maker-only,
     // both — or nothing at all when there is no link to disclose.
@@ -810,7 +838,17 @@ export default async (req) => {
     console.error('[product-page] fit-guide lookup failed', err);
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides });
+  let restrictedStates = [];
+  try {
+    restrictedStates = await fetchRestrictedStates(product.id);
+  } catch (err) {
+    // Non-fatal, like the two above — and expected for the minutes between
+    // this deploy and supabase/magazine_category.sql being applied, when the
+    // column does not exist and PostgREST answers 400 here.
+    console.error('[product-page] restricted-states lookup failed', err);
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates });
   return new Response(html, {
     status: 200,
     headers: {
