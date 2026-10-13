@@ -1758,10 +1758,15 @@ Mount it **before the first `renderParts()`** — both builder pages call
 `GunModel.sectionNoteHtml()` and `GunModel.answered()` from their first
 render, and `check-script-order` holds the tag in place.
 
-**A stock slide is not a part.** It is implied by the model plus the absence
-of a slide in `parts_snapshot`. Nothing new is written to the snapshot, so the
-whitelists, the Armory, the review queue and `part_ids` have nothing to learn.
-Do not "fix" that by writing a `{stock:true}` row.
+**A stock slide is not a part, and an absent slide is not a stock slide.**
+Nothing is written to `parts_snapshot` for a factory slide, so the
+whitelists, the Armory, the review queue and `part_ids` have nothing to
+learn — do not "fix" that by writing a `{stock:true}` row. But to every
+READER a build with no slide entry has an **unknown** slide, not the
+model's. The builder pages' stock note is the one place that still reads
+the absence as "still the factory one"; it is a description inferred from
+`gun_id`, it is the hole named under **gun_id is provenance, never
+fitment** below, and nothing else may copy it.
 
 **Three answers, two columns:**
 
@@ -1783,18 +1788,24 @@ everything around it was chosen. `guns` is "factory models" to the catalog's
 model picker, the optic-cut table, `platform_skus` and the gun hubs; a row
 with no slide length, no barrel and no grip class would have to be
 special-cased in every one of them. Two things follow, and the second is for
-whoever builds the fit filter:
+whoever builds a fit question over builds:
 
 - The Slides section says the **opposite** of what it says for a model: "An
   FCU build has no stock slide — add the slide you used." The trigger, slide
   catch, takedown lever and safety keep the factory-part line, because those
   *are* the fire control unit.
-- **An FCU build has no slide length until a slide is in its parts list.**
-  That is by design. Anything that fits barrels or compensators by length
-  must take the length from the slide PART when there is one, fall back to
-  the model's stock slide when there is not, and for an FCU build with no
-  slide yet filter **nothing** — not guess. The same order applies to a
-  factory model whose owner swapped the slide: the part wins over the model.
+- **A build with no slide part has an UNKNOWN slide.** Not the model's
+  stock slide: FCU build or factory model, the rule is the same. Anything
+  that fits barrels, compensators or optics by slide length, thread or cut
+  takes the answer from the slide PART when there is one, and when there is
+  not it has **no answer** — filter nothing, show nothing, never substitute
+  the model's slide. Two reasons that are not caution: the owner of a
+  factory model may have swapped the slide, and most models carry two
+  optic cuts by SKU, so even a confirmed-factory slide has no single cut
+  until the form asks which SKU. The form does not ask yet; until it does,
+  a length-, thread- or cut-dependent question about a slide-less build is
+  unanswerable, and must read that way. See **gun_id is provenance, never
+  fitment** below.
 
 **The model travels with the platform.** `builds_gun_fkey` is composite,
 `(gun_id, platform_id) → guns`, so a model must belong to the build's
@@ -1830,8 +1841,9 @@ probe still guards the rest is the half-state that breaks.
 say "SIG P365". They read through a select that would fail before the column
 exists, and the server copy and the page are held byte-for-byte by
 `check-canonical-coupling`, so that change waits for the migration and goes in
-as its own PR. Nor does the model filter the picker yet — a 3.1" gun is still
-offered 3.7" barrels.
+as its own PR. The model will **never** filter the picker: a 3.1" gun is
+offered 3.7" barrels today, and the fact that could narrow that is the slide
+PART in the build, which nothing reads for fit yet either.
 
 ### gun_id is provenance, never fitment
 
