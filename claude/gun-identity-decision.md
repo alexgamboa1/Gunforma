@@ -94,7 +94,7 @@ Decision taken:
 | `358d8bf0` All Black P365 1911 | set **P365 XL** | builder's own words: "P365XL slide on the Mischief G2 XXL grip" |
 | `76761d51` ECM R11 Burnt Orange | set **P365 XMacro** | builder typed "3.7 inch Macro Slide", factory XRAY3 sights |
 | `2e980fc8`, `a4d60762`, `45d27452` | **leave NULL** | approved; inference only. NULL permanently unless the owner says otherwise — not "guess later" |
-| `84d09757`, `792a8808` | **leave NULL, candidates for `fcu_only = true`** | all-aftermarket slide, barrel and grip: no meaningful provenance. The builder answers |
+| `84d09757`, `792a8808` | **`fcu_only = true`, gun_id NULL** — set 2026-10-13 05:58 UTC | **the builder's answer, via AG: bare P365 FCU builds.** Not inference — the contrast with `76761d51` below, which was set from a listed factory slide. All-aftermarket slide, barrel and grip, so the parts alone could not have said |
 | `22c80428` test2 | **delete** | AG's own test build; hero photo byte-identical to another build |
 
 `fcu_only = true` already existed in the schema. That flag *is* the provenance-unknown case, and whoever added it was already circling this problem.
@@ -209,7 +209,7 @@ Nothing here is date-driven except phase 1. Each later phase has a **trigger**, 
 | Strike the contradicting "fall back to the model's stock slide" instruction in the existing FCU section | PR 162, second commit |
 | Set `gun_id` on the three high-confidence builds (`9d1f3cdc`, `358d8bf0`, `76761d51`) | done 2026-10-12 |
 | Leave `2e980fc8`, `a4d60762`, `45d27452` NULL permanently unless the owner says | standing |
-| Leave `84d09757`, `792a8808` NULL; the builder answers, `fcu_only` likely | standing |
+| Set `fcu_only = true` on `84d09757`, `792a8808`, gun_id NULL — the builder's answer, not inference | done 2026-10-13 05:58 UTC |
 | Delete `22c80428` test2 | already gone when the pass ran on 2026-10-12: no builds row, no photo rows, its storage folder empty |
 
 **Why now:** the rule is insurance. Three guide families (comps, lights, grip modules) are queued and each would inherit the flaw. Writing it costs ten minutes; a wrong fit claim on a fitment site costs trust that doesn't come back.
