@@ -99,6 +99,8 @@ Decision taken:
 
 `fcu_only = true` already existed in the schema. That flag *is* the provenance-unknown case, and whoever added it was already circling this problem.
 
+**`76761d51` was set by inference from a listed factory slide, not by the owner** (2026-10-13). The builder's answer had settled the other two R11 builds as bare-FCU; for this one the listed "3.7 inch Macro Slide" by SIG with factory XRAY3 sights was taken as the answer, on the reasoning that nobody buys a bare factory slide. The **signal hierarchy** that ruling rests on, for the next time a row has no owner answer: a **listed factory slide is a strong provenance signal** (not sold bare, so it came with a gun); a **factory barrel is moderate** (sold separately, but rarely bought without the slide it fits); a **factory grip module is weak** (sold separately and the most-swapped part, so it says nothing about the model — which is why `45d27452` stays NULL with `fcu_only = false`: a factory grip rules out an FCU build and rules in nothing).
+
 ---
 
 ## 4b. Build titles are never a data source
