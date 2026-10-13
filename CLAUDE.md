@@ -2170,8 +2170,8 @@ Corrections used to live *only* in the log: the queue laid each `to_value`
 over the part, the public page never did, so a corrected build went on
 showing the wrong name to every visitor and to Google. Nothing lays anything
 over a part now — the stored row is the part, and the log is a record.
-`supabase/admin_part_changes.sql` wrote the one correction that existed then
-into its build.
+`supabase/admin_part_changes.sql` (applied 2026-10-13 as `20261013033628`)
+wrote the one correction that existed then into its build.
 
 **Added and removed parts carry their part under `part`, never a top-level
 `part_id`.** They are not corrections. Everything that matches corrections
@@ -2216,7 +2216,8 @@ plus a function the owner reads it through), logged.
 
 **The builder is told once, by the database.** `trg_zz_notify_build_changes`
 (BEFORE UPDATE, named to run after every guard and after
-`stamp_build_review`) keeps `builds.changes_notified_count` — how many log
+`stamp_build_review`; `supabase/admin_part_changes.sql`, applied 2026-10-13
+as `20261013033628`, after #163 was live) keeps `builds.changes_notified_count` — how many log
 entries the builder has been told about, a **position** because `edited_at`
 is the reviewer's browser clock. On a live build with entries past it, it
 writes ONE `kind = 'changes'` notification listing them and moves the

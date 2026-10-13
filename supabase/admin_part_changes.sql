@@ -1,12 +1,14 @@
 -- ============================================================
 -- Gunforma-v2 — a reviewer's part changes: written into the build, logged,
 -- and announced to the builder once.
--- NOT YET APPLIED. Apply right AFTER the PR that ships the page changes is
--- merged and deployed (CLAUDE.md, "Branches and PRs"): the pages work with
--- and without this file; this file is what makes the builder's
--- notification. Do not correct, add or remove parts on LIVE builds in the
--- window between the two: step 4 counts everything logged on a live build
--- as already told, so a change made in that window is never announced.
+-- APPLIED 2026-10-13 as migration admin_part_changes (20261013033628). See
+-- the record at the bottom of this file. It went in right AFTER the PR that
+-- ships the page changes (#163) was merged and deployed, the house order
+-- (CLAUDE.md, "Branches and PRs"): the pages work with and without this
+-- file; this file is what makes the builder's notification. Nothing was
+-- corrected, added or removed on a LIVE build in the window between the
+-- two — step 4 counts everything logged on a live build as already told,
+-- so a change made in that window would never have been announced.
 -- Rollback: supabase/admin_part_changes_rollback.sql
 --
 -- WHAT THE PAGES NOW DO (gunforma-admin-queue.html)
@@ -284,6 +286,57 @@ commit;
 -- the pending one at 0; trg_zz_notify_build_changes sorts last; anon and
 -- authenticated cannot execute the function.
 --
--- Not yet done: the same dry run against the real database in a
--- transaction that is rolled back. Do that before applying.
+-- Then the same body was run against the real database (this project) in a
+-- transaction that was rolled back, after proving the SQL tool runs a
+-- multi-statement query as ONE transaction (a temp table created before
+-- `rollback` was gone after it). Inside the transaction: step 3 changed 1
+-- build and part 675009d76e27 on 84d09757… read variant "Custom Black Grip
+-- Insert (Special Order)"; the one build with history was the pending,
+-- owned one at logged 1 / notified 0; the BEFORE triggers in name order
+-- ended with trg_zz_notify_build_changes; anon and authenticated could not
+-- execute the function; zero 'changes' rows were written. After the
+-- rollback: no column, four kinds in the constraint, no function, no
+-- trigger, the part's variant null again.
+-- ============================================================
+
+-- ============================================================
+-- APPLIED 2026-10-13 as migration admin_part_changes (20261013033628) to
+-- project lagjjcpclvzrjlrswojt, from this file as merged in #163 (a4c1020),
+-- after production was read back serving the merged queue, build page,
+-- inbox and js/part-ids.js — the live /b/ page carried "What Gunforma
+-- changed" and none of the old badge. The body between begin; and commit;
+-- was applied as written.
+--
+-- Checked just before applying: the database matched the dry run's
+-- starting state — no column, four kinds, no function, one build with
+-- history (pending, owned, 1 entry), the part's variant null.
+--
+-- Verified live, read back rather than assumed:
+--   step 3 .................. part 675009d76e27 on 84d09757… reads variant
+--                             "Custom Black Grip Insert (Special Order)";
+--                             that build's updated_at is the migration's own
+--                             timestamp (2026-10-13 03:36:28)
+--   builds with history ..... the pending, owned one: logged 1, notified 0
+--                             (step 4 touched no row: no live or unowned
+--                             build had a log; 8 builds, all counters 0)
+--   notifications_kind_check  comment, reply, like, approved, changes
+--   notifications_actor_required  approved or changes, else actor_id
+--   builds.changes_notified_count  present
+--   the function ............ SECURITY DEFINER, search_path=public
+--   EXECUTE on it ........... anon no, authenticated no, service_role yes
+--   trg_zz_notify_build_changes  present, enabled ('O')
+--   triggers on builds, name order: builds_updated_at, trg_assign_part_ids,
+--     trg_cascade_builder_agreement, trg_notify_build_approved,
+--     trg_prevent_build_consent_tampering,
+--     trg_prevent_owner_edit_history_change, trg_restrict_build_status,
+--     trg_restrict_owner_edits_on_approved, trg_stamp_build_consent,
+--     trg_stamp_build_review, trg_zz_notify_build_changes — last
+--   'changes' notifications . 0, as expected: nothing live had a log
+--
+-- NOT DONE: a change on the wire. No reviewer has yet corrected, added or
+-- removed a part through the deployed queue, so no 'changes' notification
+-- has been written by a real request; the fourteen cases above ran on a
+-- local Postgres and the rolled-back dry run wrote none. The first live
+-- edit on an approved, owned build is that test, and the builder's inbox
+-- is where it shows.
 -- ============================================================
