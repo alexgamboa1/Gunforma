@@ -180,6 +180,23 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 .part-edit-history { width: 100%; margin-top: 8px; padding-top: 8px; border-top: 0.5px dashed #e5e2d8; font-size: 11px; color: #888; line-height: 1.7; }
 .part-edit-history strong { color: #555; }
 .contested-tag { font-size: 9px; color: #9b1c1c; background: #fde8e2; border: 0.5px solid #f9c4b6; padding: 2px 6px; border-radius: 20px; font-weight: 700; margin-left: 6px; }
+/* Remove a part / add a part / the build's change log (admin changes). */
+.simple-part-actions { display: flex; gap: 6px; }
+.btn-remove-inline { font-size: 10px; font-weight: 700; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px solid #f0b8a8; background: #fff; color: #b03a2e; }
+.btn-remove-inline:hover { background: #fdf0ec; }
+.part-remove-panel { width: 100%; margin-top: 10px; background: #fdf6f3; border: 0.5px solid #f0d2c8; border-radius: 6px; padding: 12px 14px; }
+.btn-remove-confirm { font-size: 11px; color: #fff; background: #b03a2e; border: none; padding: 7px 14px; border-radius: 4px; cursor: pointer; font-weight: 700; font-family: inherit; }
+.btn-remove-confirm:disabled, .btn-edit-save:disabled { opacity: 0.45; cursor: default; }
+.part-edit-note { font-size: 11px; color: #777; line-height: 1.5; margin: 2px 0 8px; }
+.part-edit-input[readonly] { background: #f3f2ee; color: #777; }
+.add-part-row { margin-top: 10px; }
+.add-part-panel { border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px; margin-top: 10px; background: #fafaf8; }
+.add-part-panel .link-results { max-height: 240px; }
+.add-part-or { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #aaa; margin: 12px 0 8px; }
+.changes-log { font-size: 11.5px; color: #555; line-height: 1.6; }
+.changes-log-row + .changes-log-row { margin-top: 6px; padding-top: 6px; border-top: 0.5px dashed #e5e2d8; }
+.changes-log-what { font-weight: 700; color: #1a1a1a; }
+.changes-log-meta { font-size: 10.5px; color: #999; }
 .qi-contested-note { font-size: 10px; color: #9b1c1c; font-weight: 700; margin-top: 3px; }
 
 /* CONSENT */
@@ -379,6 +396,16 @@ let editOpenKey = null; // buildId+'-'+partIndex of the currently open edit pane
 // The index is the part's ORIGINAL index in parts_snapshot — parts render in
 // stored order here, so the map index IS it.
 let LINK = { key: null, q: '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
+// "Remove": one confirm panel open at a time, keyed like the edit panel.
+let removeOpenKey = null;
+// "+ Add part": one panel, for the selected build. section is a
+// BuildCategories key — the same sections, in the same order, as the
+// builder's own page (js/build-categories.js).
+let ADD = { buildId: null, section: '', q: '', productId: null, variantId: null, busy: false, msg: '', msgBad: false, reason: '', typed: {} };
+// Catalog parts that fit a pistol, by platform id: the builder's own query
+// (gunforma-post-build.html loadCatalog), so an admin is offered exactly
+// what the builder would have been.
+let FITS = {};
 let CATALOG = null;   // { products: [...], brands: {id: name} } — loaded on first use
 let currentDetailUser = '';
 let currentDetailName = '';
@@ -391,20 +418,18 @@ let currentDetailName = '';
 function partHistory(build, idx) {
   return PartIds.entriesFor(build, idx);
 }
-// Resolves the current value of a field: to_value of the most recent edit
-// for that field, falling back to the original parts_snapshot value.
-function currentPartValue(build, idx, field, original) {
-  var history = partHistory(build, idx);
-  for (var i = history.length - 1; i >= 0; i--) {
-    if (history[i].field === field) return history[i].to_value;
-  }
-  return original || '';
-}
-// Parts that are still on the build and carry a correction. Counting
-// distinct part_index values used to count the 'resubmit' marker too (as
-// "undefined"), and a correction whose part the builder has since removed.
-function buildEditedPartCount(build) {
-  return PartIds.correctedPartCount(build);
+// A correction is written INTO parts_snapshot (see doSaveEdit) and logged
+// here, so the stored row is what the part is. Nothing is laid over it.
+// It used to be the other way round — the correction lived only in
+// edit_history and this page laid its to_value over the row — and the
+// public build page, which never did that, went on showing the wrong name.
+
+// Was this part put on the build by a reviewer? By its id, from the log.
+function addedByReviewer(build, part) {
+  if (!part || !PartIds.isId(part.partId)) return false;
+  return (build.edit_history || []).some(function (e) {
+    return e && e.kind === 'part_added' && e.part && e.part.partId === part.partId;
+  });
 }
 function buildHasContestedEdit(build) {
   return (build.edit_history || []).some(function(e){ return e.status === 'contested'; });
@@ -636,6 +661,7 @@ function renderQueue() {
 // DETAIL
 // ============================================================
 function selectBuild(id) {
+  if (ADD.buildId && ADD.buildId !== id) resetAdd(null);
   selectedId = id;
   renderQueue();
   var b = BUILDS.find(function(x){ return x.id===id; });
@@ -755,45 +781,78 @@ function renderDetail(b) {
     : '';
 
   var parts = b.parts_snapshot || [];
+  // Pending and live builds, whoever owns them. A reviewer's change is
+  // written into parts_snapshot itself and logged in edit_history; the
+  // builder sees the log on their build page ("What Gunforma changed") and
+  // gets one notification once the build is live
+  // (supabase/admin_part_changes.sql). A rejected build is the builder's
+  // to fix and resubmit, so it is left alone here.
+  var canChange = b.status === 'pending' || b.status === 'approved';
   var partsHtml;
   if (!parts.length) {
-    partsHtml = '<div class="no-parts-note">No parts listed — minimum build. You can still approve or reject based on photos and description.</div>';
+    partsHtml = '<div class="no-parts-note">No parts listed — minimum build.'+(canChange ? ' Add one below, or approve or reject based on photos and description.' : '')+'</div>';
   } else {
     partsHtml = '<div class="simple-parts-list">'+parts.map(function(p, i) {
       var history = partHistory(b, i);
-      var dCat   = currentPartValue(b, i, 'category', p.category);
-      var dBrand = currentPartValue(b, i, 'brand', p.brand);
-      var dName  = currentPartValue(b, i, 'name', p.name);
-      // The builder's free-text variant/colour note. Resolved through
-      // currentPartValue() like the other three, which works because
-      // partHistory/currentPartValue/doSaveEdit are all data-driven on the
-      // field NAME — nothing is hard-coded to the original three.
-      var dVar   = currentPartValue(b, i, 'variant', p.variant);
-      var isEditOpen = editOpenKey === (b.id+'-'+i);
+      // What the part IS: the stored row. Corrections are written into it,
+      // so there is nothing to lay over it — the history below is a record,
+      // not a patch. (Corrections used to live only in edit_history, and the
+      // public page went on showing the uncorrected name.)
+      var dCat   = p.category;
+      var dBrand = p.brand;
+      var dName  = p.name;
+      // The builder's free-text variant/colour note.
+      var dVar   = p.variant;
+      var key = b.id+'-'+i;
+      var isEditOpen = editOpenKey === key;
+      var isRemoveOpen = removeOpenKey === key;
 
-      var editBtnHtml = isPending
-        ? '<button class="btn-edit-inline" onclick="doToggleEdit(\''+b.id+'\','+i+')">'+(isEditOpen?'Close':'Edit')+'</button>'
+      var actionsHtml = canChange
+        ? '<button class="btn-edit-inline" onclick="doToggleEdit(\''+b.id+'\','+i+')">'+(isEditOpen?'Close':'Edit')+'</button>'+
+          '<button class="btn-remove-inline" onclick="doToggleRemove(\''+b.id+'\','+i+')">'+(isRemoveOpen?'Keep':'Remove')+'</button>'
         : '';
 
       var historyHtml = history.length
         ? '<div class="part-edit-history">'+history.map(function(h) {
-            var contestedTag = h.status==='contested' ? '<span class="contested-tag">⚠ Contested by visitor</span>' : '';
-            return '<div><strong>'+escH(h.field)+'</strong> corrected: "'+escH(h.from_value)+'" → "'+escH(h.to_value)+'" — '+escH(h.edited_by)+', '+relTime(h.edited_at)+contestedTag+'</div>';
+            var contestedTag = h.status==='contested' ? '<span class="contested-tag">⚠ Contested</span>' : '';
+            return '<div><strong>'+escH(h.field)+'</strong> corrected: "'+escH(h.from_value)+'" → "'+escH(h.to_value)+'" — '+escH(h.edited_by)+', '+relTime(h.edited_at)+
+              (h.reason ? ' · <em>'+escH(h.reason)+'</em>' : '')+contestedTag+'</div>';
           }).join('')+'</div>'
         : '';
 
+      // A catalog part's brand and name ARE the product it links to. Typing
+      // a different name over it would leave a row that says one part and
+      // links to another, so those two are read-only here: the fix for a
+      // wrong catalog part is Remove + Add.
+      var isCatalog = !!p.refId;
+      var ro = isCatalog ? ' readonly' : '';
       var editPanelHtml = isEditOpen
         ? '<div class="part-edit-panel open">'+
             '<div class="part-edit-grid">'+
-              '<div><label class="part-edit-label">Category</label><input class="part-edit-input" type="text" id="pe-cat-'+b.id+'-'+i+'" value="'+escH(dCat)+'" /></div>'+
-              '<div><label class="part-edit-label">Brand</label><input class="part-edit-input" type="text" id="pe-brand-'+b.id+'-'+i+'" value="'+escH(dBrand)+'" /></div>'+
+              '<div><label class="part-edit-label" for="pe-cat-'+key+'">Section</label>'+sectionSelectHtml('pe-cat-'+key, dCat, false)+'</div>'+
+              '<div><label class="part-edit-label" for="pe-brand-'+key+'">Brand</label><input class="part-edit-input" type="text" id="pe-brand-'+key+'" value="'+escH(dBrand)+'"'+ro+' /></div>'+
             '</div>'+
-            '<div><label class="part-edit-label">Part name</label><input class="part-edit-input" type="text" id="pe-name-'+b.id+'-'+i+'" value="'+escH(dName)+'" /></div>'+
-            '<div style="margin-top:8px;"><label class="part-edit-label">Variant / colour</label><input class="part-edit-input" type="text" maxlength="60" id="pe-variant-'+b.id+'-'+i+'" value="'+escH(dVar)+'" /></div>'+
+            '<div><label class="part-edit-label" for="pe-name-'+key+'">Part name</label><input class="part-edit-input" type="text" id="pe-name-'+key+'" value="'+escH(dName)+'"'+ro+' /></div>'+
+            (isCatalog ? '<div class="part-edit-note">Catalog part: brand and name come from the catalog. If it is the wrong part, remove it and add the right one.</div>' : '')+
+            '<div style="margin-top:8px;"><label class="part-edit-label" for="pe-variant-'+key+'">Variant / colour note</label><input class="part-edit-input" type="text" maxlength="60" id="pe-variant-'+key+'" value="'+escH(dVar)+'" /></div>'+
+            '<div style="margin-top:8px;"><label class="part-edit-label" for="pe-reason-'+key+'">Note for the builder (optional)</label><input class="part-edit-input" type="text" maxlength="140" id="pe-reason-'+key+'" placeholder="e.g. Model name corrected, per the comments" /></div>'+
             '<div class="part-edit-actions">'+
               '<button class="btn-edit-save" onclick="doSaveEdit(\''+b.id+'\','+i+')">Save correction →</button>'+
               '<button class="btn-edit-close" onclick="doToggleEdit(\''+b.id+'\','+i+')">Cancel</button>'+
             '</div>'+
+            changeAudienceHtml(b)+
+          '</div>'
+        : '';
+
+      var removePanelHtml = isRemoveOpen
+        ? '<div class="part-remove-panel">'+
+            '<label class="part-edit-label" for="pe-rm-'+key+'">Why is it coming off? (shown to the builder)</label>'+
+            '<input class="part-edit-input" type="text" maxlength="140" id="pe-rm-'+key+'" placeholder="e.g. Listed twice · Not on this gun · Wrong part" oninput="refreshRemoveBtn(\''+key+'\')" />'+
+            '<div class="part-edit-actions">'+
+              '<button class="btn-remove-confirm" id="pe-rm-btn-'+key+'" disabled onclick="doRemovePart(\''+b.id+'\','+i+')">Remove part</button>'+
+              '<button class="btn-edit-close" onclick="doToggleRemove(\''+b.id+'\','+i+')">Cancel</button>'+
+            '</div>'+
+            changeAudienceHtml(b)+
           '</div>'
         : '';
 
@@ -809,28 +868,30 @@ function renderDetail(b) {
       return '<div class="simple-part-row">'+
         '<div class="simple-part-main">'+
           thumbHtml +
-          '<div class="simple-part-cat">'+escH(dCat||'—')+'</div>'+
-          '<div><div class="simple-part-name">'+escH(dName||'Unnamed part')+(p.pending?'<span class="simple-part-pending-tag">Pending catalog review</span>':'')+(history.length?'<span class="edited-flag">Edited</span>':'')+'</div>'+
+          '<div class="simple-part-cat">'+escH(window.BuildCategories.categoryLabel(dCat)||'—')+'</div>'+
+          '<div><div class="simple-part-name">'+escH(dName||'Unnamed part')+(p.pending?'<span class="simple-part-pending-tag">Pending catalog review</span>':'')+(history.length?'<span class="edited-flag">Edited</span>':'')+(addedByReviewer(b, p)?'<span class="edited-flag">Added by Gunforma</span>':'')+'</div>'+
           '<div class="simple-part-brand">'+escH(dBrand||'')+
             (dVar ? '<span class="simple-part-variant">'+escH(dVar)+'</span>' : '')+'</div></div>'+
         '</div>'+
-        '<div class="simple-part-actions">'+editBtnHtml+'</div>'+
+        '<div class="simple-part-actions">'+actionsHtml+'</div>'+
         catalogActionsHtml(b, p, i, history)+
         editPanelHtml+
+        removePanelHtml+
         historyHtml+
       '</div>';
     }).join('')+'</div>';
   }
-
+  if (canChange) partsHtml += addPartHtml(b);
+  var changesHtml = changesLogHtml(b);
   var consentHtml = '<div class="consent-row">'+
     '<span class="consent-item">Legal confirmed: <strong>'+(b.legal_confirmed?'Yes':'No')+'</strong></span>'+
     '<span class="consent-item">Content license confirmed: <strong>'+(b.content_license_confirmed?'Yes':'No')+'</strong></span>'+
     (b.builder_agreement_version ? '<span class="consent-item">Agreement version: <strong>'+escH(b.builder_agreement_version)+'</strong></span>' : '')+
   '</div>';
 
-  var editedPartCount = buildEditedPartCount(b);
   var approveNotif = 'Hi <strong>'+escH(username)+'</strong>, your build <strong>"'+escH(b.name)+'"</strong> has been approved and is now live on Gunforma. Thanks for contributing.'+
-    (editedPartCount ? ' We corrected '+editedPartCount+' part'+(editedPartCount!==1?'s':'')+' on your build for accuracy — view what changed.' : '');
+    (PartIds.changes(b).length && b.user_id && !(currentAdmin && currentAdmin.id === b.user_id)
+      ? ' <em>If parts were changed here since they were last told, a second notification lists those changes; only they can see it.</em>' : '');
 
   var reviewedBanner = '';
   if (b.status==='approved') reviewedBanner='<div class="reviewed-banner approved"><div><div class="rb-text">Approved — Build is live</div><div class="rb-sub">Reviewed '+relTime(b.reviewed_at)+' · <a href="'+buildPath(b.id, b.name)+'" target="_blank" style="color:inherit;">View public page →</a></div></div><button class="btn-undo" onclick="doUndo(\''+b.id+'\')">Undo</button></div>';
@@ -844,12 +905,13 @@ function renderDetail(b) {
   //               offered here. (It was offered nowhere: the per-part "Edit"
   //               below writes a correction, it cannot add a part or a
   //               photo, and Undo only moved the build back to pending.)
-  //   an owner  — theirs to edit, not ours. While it is pending they can
-  //               still change it; every write here re-checks for that
-  //               (ensureUnchanged).
-  //               Once it is live they are limited to name, description and
-  //               activity, so "Undo" is how a builder gets their parts list
-  //               back: pending again, they fix it, it is approved again.
+  //   an owner  — theirs to edit, not ours, except the parts list: a
+  //               reviewer can correct, add and remove parts below, on a
+  //               pending or a live build, and every one of those is logged
+  //               and shown to the builder. While it is pending they can
+  //               still change it themselves; every write here re-checks
+  //               for that (ensureUnchanged). Once it is live they are
+  //               limited to name, description and activity.
   var unowned = !b.user_id;
   var editBuildHtml = unowned
     ? '<div class="detail-edit">'+
@@ -857,9 +919,9 @@ function renderDetail(b) {
         '<div class="catalog-reason">Posted from the admin page and not claimed, so only an admin can edit it. Parts, photos and details; the status stays '+escH(b.status)+'.</div>'+
       '</div>'
     : (isPending
-      ? '<div class="detail-edit"><div class="catalog-reason">'+escH(username)+' can still edit this build while it is in review. Approve, reject, corrections and links all re-check it first — if it changed, the queue reloads and asks you to look again.</div></div>'
+      ? '<div class="detail-edit"><div class="catalog-reason">'+escH(username)+' can still edit this build while it is in review. Every action here re-checks it first — if it changed, the queue reloads and asks you to look again. Part changes you make are shown to '+escH(username)+' once the build is live.</div></div>'
       : (b.status==='approved'
-        ? '<div class="detail-edit"><div class="catalog-reason">Live: '+escH(username)+' can change the name, description and activity. To let them change parts or photos, use Undo — it goes back to pending, they edit it, you approve it again.</div></div>'
+        ? '<div class="detail-edit"><div class="catalog-reason">Live: '+escH(username)+' can change the name, description and activity. You can correct, add or remove parts below — sparingly: '+escH(username)+' is notified and sees every change. For photos, use Undo.</div></div>'
         : ''));
 
   var html =
@@ -878,7 +940,8 @@ function renderDetail(b) {
     '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Description</div><div class="detail-desc">'+(b.description?escH(b.description):'<span style="color:#bbb">No description provided.</span>')+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Consent</div>'+consentHtml+'</div>'+
-    '<div class="detail-section"><div class="detail-section-title">Parts ('+parts.length+')</div>'+partsHtml+'</div>';
+    '<div class="detail-section"><div class="detail-section-title">Parts ('+parts.length+')</div>'+partsHtml+'</div>'+
+    changesHtml;
 
   if (isPending) {
     html +=
@@ -1186,89 +1249,466 @@ async function doDelete(id) {
 
   showToast('green', 'Build deleted' + (paths.length ? ' — ' + paths.length + ' file(s) removed' : ''));
 }
-function doToggleEdit(buildId, idx) {
-  var key = buildId+'-'+idx;
-  editOpenKey = (editOpenKey === key) ? null : key;
+// ============================================================
+// PART CHANGES — correct, remove, add. Pending and live builds.
+//
+// Every one is written INTO parts_snapshot, so the build page, the
+// server-rendered /b/ page and the builder's own editor all show the
+// corrected list with nothing laid over it, and is logged in edit_history
+// (append-only) so the builder can see what changed:
+//   a correction   { part_id, part_index, field, from_value, to_value, … }
+//   a removal      { kind: 'part_removed', part: {partId, brand, name, …}, reason, … }
+//   an addition    { kind: 'part_added',   part: {…}, reason, … }
+// Additions and removals carry their part under `part`, never a top-level
+// part_id: they are not corrections, and nothing that matches corrections
+// to parts (js/part-ids.js, contest_build_part, relink_build_part) may
+// treat them as one.
+//
+// Who sees the log: the builder (their build page, "What Gunforma
+// changed") and admins. Nobody else — the public page shows the parts.
+// The builder is notified once the build is live, by the database
+// (supabase/admin_part_changes.sql), so a change made through SQL is
+// announced the same way as one made here.
+//
+// RLS lets an admin write any build ("Admins can review and edit any
+// build"), and the live-build guard (restrict_owner_edits_on_approved_build)
+// admits admins, so there is no database function for this: the same
+// conditional UPDATE the rest of this page uses, through writeParts().
+// ============================================================
+function rerenderBuild(buildId) {
   var b = BUILDS.find(function(x){ return x.id===buildId; });
   if (b) renderDetail(b);
 }
-// Appends diff entries to the real builds.edit_history column (admin-only
-// write, covered by the existing "Admins can review and edit any build"
-// RLS policy) — parts_snapshot itself is never touched.
+function doToggleEdit(buildId, idx) {
+  var key = buildId+'-'+idx;
+  editOpenKey = (editOpenKey === key) ? null : key;
+  removeOpenKey = null;
+  rerenderBuild(buildId);
+}
+function doToggleRemove(buildId, idx) {
+  var key = buildId+'-'+idx;
+  removeOpenKey = (removeOpenKey === key) ? null : key;
+  editOpenKey = null;
+  rerenderBuild(buildId);
+  var el = removeOpenKey ? document.getElementById('pe-rm-'+key) : null;
+  if (el) el.focus();
+}
+function refreshRemoveBtn(key) {
+  var i = document.getElementById('pe-rm-'+key);
+  var btn = document.getElementById('pe-rm-btn-'+key);
+  if (i && btn) btn.disabled = !i.value.trim();
+}
+
+// The builder's sections, grouped and ordered exactly as on their own page
+// (js/build-categories.js). A stored key that is not a section (very old
+// rows) stays selectable as itself, so opening the editor never rewrites it.
+function sectionSelectHtml(id, current, withBlank, onchange) {
+  var BC = window.BuildCategories;
+  var curKey = BC.sectionKeyFor(current);
+  var opts = withBlank ? '<option value="">Choose a section…</option>' : '';
+  if (current && !curKey) opts += '<option value="'+escH(current)+'" selected>'+escH(BC.categoryLabel(current))+' (as stored)</option>';
+  BC.GROUPED_CATEGORIES.forEach(function (g) {
+    opts += '<optgroup label="'+escH(g.group.label)+'">'+g.categories.map(function (c) {
+      return '<option value="'+escH(c.key)+'"'+(c.key===curKey?' selected':'')+'>'+escH(c.label)+'</option>';
+    }).join('')+'</optgroup>';
+  });
+  return '<select class="part-edit-select" id="'+id+'"'+(onchange?' onchange="'+onchange+'"':'')+'>'+opts+'</select>';
+}
+
+// Who will see a change, said where the reviewer makes it.
+function changeAudienceHtml(b) {
+  var who = b.profiles && b.profiles.username ? b.profiles.username : 'the builder';
+  var text;
+  if (!b.user_id) text = 'Nobody is told: this build is not claimed.';
+  else if (currentAdmin && currentAdmin.id === b.user_id) text = 'Your own build, so no notification.';
+  else if (b.status === 'approved') text = escH(who)+' gets a notification and sees this change on their build page. Nobody else sees the list of changes.';
+  else text = escH(who)+' sees this change on their build page, and is notified when the build goes live. Nobody else sees the list of changes.';
+  return '<div class="part-edit-note" style="margin-top:8px;">'+text+'</div>';
+}
+
+// The part as the log records it: enough to say "Removed Holosun 507C"
+// after the part itself is gone.
+function partSummary(p) {
+  var s = { partId: p.partId, category: p.category, brand: p.brand || '', name: p.name || '' };
+  if (p.refId) s.refId = p.refId;
+  if (p.variantLabel) s.variantLabel = p.variantLabel;
+  if (p.variant) s.variant = p.variant;
+  return s;
+}
+
+// A new parts_snapshot row, field by field the way the builder pages write
+// one (gunforma-post-build.html buildPartsSnapshot). It is on the list
+// scripts/check-snapshot-fields.mjs compares, so a field added there and
+// not here fails the build rather than silently going missing.
+function snapshotRow(p) {
+  const row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
+  if (p.variantId)     row.variantId     = p.variantId;
+  if (p.variantLabel)  row.variantLabel  = p.variantLabel;
+  if (p.variantColor)  row.variantColor  = p.variantColor;
+  if (p.variantFinish) row.variantFinish = p.variantFinish;
+  if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
+  if (p.imageUrl)      row.imageUrl      = p.imageUrl;
+  if (p.partId)        row.partId        = p.partId;
+  if (p.finish) row.finish = p.finish;
+  if (p.variant) row.variant = p.variant;
+  return row;
+}
+
+// Every part change goes through here. `change(parts)` edits a copy of the
+// list as just re-read and returns { entries } to log, or a sentence saying
+// why it could not.
+//
+// Same two steps as Approve: ensureUnchanged() first (the reviewer is
+// acting on the list they were shown — an index in particular), then an
+// UPDATE conditional on status and updated_at, counted. tier follows the
+// part count, as the builder pages set it.
+async function writeParts(buildId, verb, change) {
+  // Every other open panel is keyed by POSITION (edit, remove, and "Link to
+  // existing part", whose chosen product would otherwise sit under whatever
+  // part moved into that place). After any part change, refused or not,
+  // they are closed rather than left pointing at a different part.
+  editOpenKey = null;
+  removeOpenKey = null;
+  LINK = { key: null, q: '', productId: null, variantId: null, variants: {}, busy: false, msg: '', msgBad: false };
+  const fresh = await ensureUnchanged(buildId, verb);
+  if (!fresh) return false;
+  var parts = JSON.parse(JSON.stringify(fresh.parts_snapshot || []));
+  // Ids first, so the change below can log the id of the part it touches
+  // even on a row stored without one (none since part_ids.sql; trg_assign_
+  // part_ids would add it anyway, but after this page had logged by position).
+  PartIds.ensure(parts);
+  var made = change(parts);
+  if (typeof made === 'string') { showToast('red', made); return false; }
+  PartIds.ensure(parts);
+  const { data: written, error } = await sb.from('builds')
+    .update({
+      parts_snapshot: parts,
+      edit_history: (fresh.edit_history || []).concat(made.entries),
+      tier: parts.length ? 'full' : 'minimum',
+    })
+    .eq('id', buildId)
+    .eq('status', fresh.status)
+    .eq('updated_at', fresh.updated_at)
+    .select(BUILD_FIELDS);
+  if (error) { console.error(error); showToast('red', 'Not saved — ' + (error.message || 'see console')); return false; }
+  if (!Array.isArray(written) || written.length !== 1) {
+    showToast('red', 'This build changed while you were saving — reloaded. Nothing was saved.');
+    await loadBuilds();
+    return false;
+  }
+  await loadBuilds();
+  // The parts changed because of this write, and the pane now shows it.
+  // Marked from the row the write RETURNED, not from the reload: a builder
+  // edit that landed in between must still trip the next re-check.
+  markReviewed(written[0]);
+  return true;
+}
+
+function logEntryBase(reason) {
+  var e = { edited_by: currentAdminUsername, edited_at: new Date().toISOString(), status: 'active' };
+  if (reason) e.reason = reason;
+  return e;
+}
+
 async function doSaveEdit(buildId, idx) {
   var b = BUILDS.find(function(x){ return x.id===buildId; });
   if (!b) return;
   var part = (b.parts_snapshot||[])[idx];
   if (!part) return;
+  var key = buildId+'-'+idx;
+  function val(prefix) { var el = document.getElementById(prefix+key); return el ? el.value.trim() : null; }
+  var next = { category: val('pe-cat-'), brand: val('pe-brand-'), name: val('pe-name-'), variant: val('pe-variant-') };
+  var reason = val('pe-reason-') || '';
+  if (!part.refId && (!next.brand || !next.name)) { showToast('red', 'A part needs a brand and a name'); return; }
 
-  var fields = [
-    { key: 'category', inputId: 'pe-cat-'+buildId+'-'+idx },
-    { key: 'brand',     inputId: 'pe-brand-'+buildId+'-'+idx },
-    { key: 'name',      inputId: 'pe-name-'+buildId+'-'+idx },
-    { key: 'variant',   inputId: 'pe-variant-'+buildId+'-'+idx },
-  ];
-
-  var newEntries = [];
-  fields.forEach(function(f) {
-    var input = document.getElementById(f.inputId);
-    if (!input) return;
-    var newVal = input.value.trim();
-    var curVal = currentPartValue(b, idx, f.key, part[f.key]);
-    if (newVal && newVal !== curVal) {
-      newEntries.push({
-        // By the part's own id: a builder who later removes an earlier part
-        // moves this one, and the correction must move with it. part_index
-        // stays as a record of where it was, and as the fallback for a part
-        // stored before ids existed (no partId), which is then addressed by
-        // position as every correction used to be.
-        part_id: PartIds.isId(part.partId) ? part.partId : undefined,
-        part_index: idx,
-        field: f.key,
-        from_value: curVal,
-        to_value: newVal,
-        edited_by: currentAdminUsername,
-        edited_at: new Date().toISOString(),
-        status: 'active',
-      });
-    }
+  var BC = window.BuildCategories;
+  var changes = [];
+  ['category', 'brand', 'name', 'variant'].forEach(function (f) {
+    if (part.refId && (f === 'brand' || f === 'name')) return;   // read-only: the catalog's
+    var from = part[f] == null ? '' : String(part[f]);
+    var to = next[f] == null ? from : next[f];
+    // An old key and its section are the same section: no change.
+    if (f === 'category' && (BC.sectionKeyFor(to) || to) === (BC.sectionKeyFor(from) || from)) return;
+    if (to !== from) changes.push({ field: f, from: from, to: to });
   });
-
-  if (!newEntries.length) {
+  if (!changes.length) {
     editOpenKey = null;
     renderDetail(b);
     showToast('blue', 'No changes to save');
     return;
   }
 
-  // A correction is written against the part the reviewer is looking at —
-  // see ensureUnchanged(), which refuses if the list changed since. Its
-  // part_id then keeps it on that part through later edits. The inputs were
-  // read above, before this can re-render the pane.
   // Closed first: a refusal re-renders the pane, and an edit panel left open
   // over the reloaded list would be pointing at whatever now sits at idx.
   editOpenKey = null;
-  const fresh = await ensureUnchanged(buildId, 'save the correction');
-  if (!fresh) return;
+  var ok = await writeParts(buildId, 'save the correction', function (parts) {
+    var at = PartIds.isId(part.partId)
+      ? parts.findIndex(function (p) { return p && p.partId === part.partId; })
+      : idx;
+    var target = parts[at];
+    if (!target) return 'That part is no longer on the build — nothing was saved.';
+    changes.forEach(function (c) {
+      if (c.field === 'variant' && !c.to) delete target.variant;
+      else target[c.field] = c.to;
+    });
+    return { entries: changes.map(function (c) {
+      return Object.assign({
+        // By the part's own id, so the record stays with the part however the
+        // list is reordered later. part_index is where it was.
+        part_id: target.partId,
+        part_index: at,
+        field: c.field,
+        from_value: c.from,
+        to_value: c.to,
+      }, logEntryBase(reason));
+    }) };
+  });
+  if (ok) showToast('blue', 'Correction saved — '+changes.length+' field'+(changes.length!==1?'s':'')+' updated');
+}
 
-  // Appended to the history just re-read, not the copy in memory, and
-  // written only if the row is still that one.
-  var updatedHistory = (fresh.edit_history || []).concat(newEntries);
-  const { data: written, error } = await sb.from('builds')
-    .update({ edit_history: updatedHistory })
-    .eq('id', buildId)
-    .eq('updated_at', fresh.updated_at)
-    .select('id');
-  if (error) { console.error(error); showToast('red', 'Something went wrong'); return; }
-  if (!Array.isArray(written) || written.length !== 1) {
-    editOpenKey = null;
-    showToast('red', 'This build changed while you were saving — reloaded. The correction was not saved.');
-    await loadBuilds();
+async function doRemovePart(buildId, idx) {
+  var b = BUILDS.find(function(x){ return x.id===buildId; });
+  if (!b) return;
+  var part = (b.parts_snapshot||[])[idx];
+  if (!part) return;
+  var input = document.getElementById('pe-rm-'+buildId+'-'+idx);
+  var reason = input ? input.value.trim() : '';
+  if (!reason) { showToast('red', 'Say why it is coming off — the builder will read it'); return; }
+  // A correction written before parts had ids names its part by POSITION.
+  // Taking out a part at or before one would move it onto another part.
+  // None existed when ids shipped; refused rather than risked.
+  if (PartIds.pinnedThrough(b.edit_history) >= idx) {
+    showToast('red', 'This build has an old position-based correction — this part cannot be removed here');
     return;
   }
+  removeOpenKey = null;
+  var ok = await writeParts(buildId, 'remove the part', function (parts) {
+    var at = PartIds.isId(part.partId)
+      ? parts.findIndex(function (p) { return p && p.partId === part.partId; })
+      : idx;
+    if (at < 0 || !parts[at]) return 'That part is no longer on the build — nothing was removed.';
+    var gone = parts.splice(at, 1)[0];
+    return { entries: [Object.assign({ kind: 'part_removed', part: partSummary(gone) }, logEntryBase(reason))] };
+  });
+  if (ok) showToast('blue', 'Removed ' + [part.brand, part.name].filter(Boolean).join(' '));
+}
 
-  editOpenKey = null;
-  showToast('blue', 'Correction saved — '+newEntries.length+' field'+(newEntries.length!==1?'s':'')+' updated');
-  await loadBuilds();
+// ── + Add a part ──────────────────────────────────────────────────────────
+function resetAdd(buildId) {
+  ADD = { buildId: buildId || null, section: '', q: '', productId: null, variantId: null,
+          busy: false, msg: '', msgBad: false, reason: '', typed: {} };
+}
+async function doToggleAdd(buildId) {
+  if (ADD.buildId === buildId) { resetAdd(null); rerenderBuild(buildId); return; }
+  resetAdd(buildId);
+  rerenderBuild(buildId);
+  var b = BUILDS.find(function(x){ return x.id===buildId; });
+  if (b && b.platform_id && !FITS[b.platform_id]) {
+    try { await loadFits(b.platform_id); }
+    catch (e) { ADD.msg = 'Could not load the catalog: ' + e.message + ' — you can still type the part.'; ADD.msgBad = true; }
+    if (ADD.buildId === buildId) rerenderBuild(buildId);
+  }
+}
+// Live, not-discontinued catalog parts that fit this pistol, with their live
+// variants: the builder page's own query.
+async function loadFits(platformId) {
+  if (FITS[platformId]) return FITS[platformId];
+  const { data, error } = await sb
+    .from('products')
+    .select(
+      'id, category, name, manufacturers(name), product_platforms!inner(platform_id), '+
+      'product_variants!product_variants_product_id_fkey(id, is_default, primary_image_url, color, finish, variant_label, '+
+      'reticle, reticle_color, battery_type, mount_system)'
+    )
+    .is('product_variants.retired_at', null)
+    .eq('is_discontinued', false)
+    .eq('product_platforms.platform_id', platformId)
+    .order('name');
+  if (error) throw new Error(error.message);
+  FITS[platformId] = (data || []).map(function (r) {
+    return {
+      id: r.id, category: r.category, name: r.name,
+      brand: r.manufacturers ? r.manufacturers.name : 'Unknown brand',
+      // Default variant first, as the builder's colour step offers them.
+      variants: (r.product_variants || []).slice().sort(function (a, c) { return (c.is_default ? 1 : 0) - (a.is_default ? 1 : 0); }),
+    };
+  });
+  return FITS[platformId];
+}
+function addSection(v) {
+  ADD.section = v; ADD.q = ''; ADD.productId = null; ADD.variantId = null; ADD.msg = ''; ADD.typed = {};
+  rerenderBuild(ADD.buildId);
+}
+function addCandidates(b, sec) {
+  var rows = FITS[b.platform_id] || [];
+  var words = ADD.q.toLowerCase().split(/\s+/).filter(Boolean);
+  return rows.filter(function (r) {
+    if ((sec.dbCategory || []).indexOf(r.category) === -1) return false;
+    var hay = (r.brand + ' ' + r.name).toLowerCase();
+    return words.every(function (w) { return hay.indexOf(w) !== -1; });
+  });
+}
+function addResultsHtml(b, sec) {
+  if (!b.platform_id) return '<div class="catalog-reason">This build has no pistol set, so there is no catalog to search.</div>';
+  if (!FITS[b.platform_id]) return ADD.msgBad ? '' : '<div class="catalog-reason">Loading the catalog…</div>';
+  var list = addCandidates(b, sec);
+  if (!list.length) return '<div class="catalog-reason">Nothing in '+escH(sec.label)+' that fits this pistol matches. Type it below instead.</div>';
+  return list.slice(0, 30).map(function (r) {
+    var on = ADD.productId === r.id;
+    var v0 = r.variants[0];
+    var img = v0 && v0.primary_image_url;
+    return '<label class="link-result' + (on ? ' on' : '') + '"><input type="radio" name="add-product"' + (on ? ' checked' : '') + ' onchange="addPick(\'' + r.id + '\')" />' +
+      (img ? '<img src="' + escH(img) + '" alt="" />' : '') +
+      '<span><strong>' + escH(r.brand) + '</strong> — ' + escH(r.name) + '</span></label>';
+  }).join('') + (list.length > 30 ? '<div class="catalog-reason">' + (list.length - 30) + ' more: narrow the search.</div>' : '');
+}
+function addSearch(q) {
+  ADD.q = q;
+  var b = BUILDS.find(function(x){ return x.id===ADD.buildId; });
+  var sec = b && window.BuildCategories.categoryByKey(ADD.section);
+  var el = document.getElementById('add-results');
+  if (b && sec && el) el.innerHTML = addResultsHtml(b, sec);
+}
+function addPick(productId) {
+  var b = BUILDS.find(function(x){ return x.id===ADD.buildId; });
+  var row = b && (FITS[b.platform_id] || []).find(function (r) { return r.id === productId; });
+  ADD.productId = productId;
+  ADD.variantId = row && row.variants.length ? row.variants[0].id : null;
+  rerenderBuild(ADD.buildId);
+}
+function addVariant(id) { ADD.variantId = id; }
+function addChoiceHtml(b) {
+  if (!ADD.productId) return '';
+  var row = (FITS[b.platform_id] || []).find(function (r) { return r.id === ADD.productId; });
+  if (!row) return '';
+  var vs = row.variants;
+  var picker = vs.length > 1
+    ? 'Variant <select class="part-edit-select" style="width:auto;" onchange="addVariant(this.value)">' +
+        vs.map(function (v) { return '<option value="' + v.id + '"' + (v.id === ADD.variantId ? ' selected' : '') + '>' + escH(window.variantLabelOr(v, 'Unlabelled')) + (v.is_default ? ' (default)' : '') + '</option>'; }).join('') +
+      '</select>'
+    : (vs.length ? 'Variant: ' + escH(window.variantLabelOr(vs[0], 'Unlabelled')) : 'No live variant');
+  return '<div class="link-choice">' + picker + '</div>' +
+    '<div class="part-edit-actions"><button class="btn-edit-save" onclick="doAddCatalog(\'' + b.id + '\')"' + (ADD.busy ? ' disabled' : '') + '>' +
+      (ADD.busy ? 'Adding…' : 'Add ' + escH(row.brand + ' ' + row.name) + ' →') + '</button></div>';
+}
+// The typed form: the section's own fields when it has them (Paint Job &
+// Finish: shop, colour, stipple), otherwise brand, name and a variant note
+// — what the builder's custom-part form asks for.
+function typedFieldsHtml(sec) {
+  var t = ADD.typed;
+  function input(id, label, ph) {
+    return '<div><label class="part-edit-label" for="add-t-' + id + '">' + escH(label) + '</label>' +
+      '<input class="part-edit-input" type="text" maxlength="80" id="add-t-' + id + '" placeholder="' + escH(ph || '') + '" value="' + escH(t[id] || '') + '" oninput="ADD.typed[\'' + id + '\']=this.value" /></div>';
+  }
+  if (sec.custom && sec.custom.fields) {
+    return '<div style="display:flex;flex-direction:column;gap:8px;">' + sec.custom.fields.map(function (f) {
+      return input(f.id, f.id === 'shop' ? 'Done by' : f.id.charAt(0).toUpperCase() + f.id.slice(1), f.placeholder);
+    }).join('') + '</div>';
+  }
+  return '<div class="part-edit-grid">' + input('brand', 'Brand', 'e.g. Springer Precision') + input('name', 'Part name', 'e.g. +3 base plate') + '</div>' +
+    input('variant', 'Variant / colour note (optional)', 'e.g. Black');
+}
+function addPartHtml(b) {
+  if (ADD.buildId !== b.id) {
+    return '<div class="add-part-row"><button class="btn-catalog" onclick="doToggleAdd(\'' + b.id + '\')">+ Add a part</button></div>';
+  }
+  var BC = window.BuildCategories;
+  var sec = ADD.section ? BC.categoryByKey(ADD.section) : null;
+  var platformName = b.platforms ? b.platforms.name : 'this pistol';
+  var html = '<div class="add-part-panel">' +
+    '<label class="part-edit-label" for="add-sec">Section</label>' + sectionSelectHtml('add-sec', ADD.section, true, 'addSection(this.value)') +
+    '<div style="margin-top:8px;"><label class="part-edit-label" for="add-reason">Note for the builder (optional)</label>' +
+      '<input class="part-edit-input" type="text" maxlength="140" id="add-reason" placeholder="e.g. Spotted in your photos" value="' + escH(ADD.reason || '') + '" oninput="ADD.reason=this.value" /></div>';
+  if (sec) {
+    if (sec.dbCategory && sec.dbCategory.length) {
+      html += '<div class="add-part-or">From the catalog — fits ' + escH(platformName) + '</div>' +
+        '<input class="part-edit-input" type="text" id="add-q" placeholder="Search brand and name" value="' + escH(ADD.q) + '" oninput="addSearch(this.value)" />' +
+        '<div class="link-results" id="add-results">' + addResultsHtml(b, sec) + '</div>' +
+        addChoiceHtml(b) +
+        '<div class="add-part-or">Not in the catalog? Type it</div>';
+    } else {
+      html += '<div class="add-part-or">' + escH(sec.label) + ' has no catalog section — type it</div>';
+    }
+    html += typedFieldsHtml(sec) +
+      '<div class="part-edit-actions"><button class="btn-edit-save" onclick="doAddTyped(\'' + b.id + '\')"' + (ADD.busy ? ' disabled' : '') + '>Add as typed →</button></div>';
+  }
+  html += (ADD.msg ? '<div class="link-msg' + (ADD.msgBad ? ' bad' : '') + '">' + escH(ADD.msg) + '</div>' : '') +
+    changeAudienceHtml(b) +
+    '<div class="part-edit-actions"><button class="btn-edit-close" onclick="doToggleAdd(\'' + b.id + '\')">Close</button></div>' +
+  '</div>';
+  return '<div class="add-part-row">' + html + '</div>';
+}
+async function doAddCatalog(buildId) {
+  var b = BUILDS.find(function(x){ return x.id===buildId; });
+  var row = b && (FITS[b.platform_id] || []).find(function (r) { return r.id === ADD.productId; });
+  if (!row || ADD.busy) return;
+  var v = row.variants.find(function (x) { return x.id === ADD.variantId; }) || row.variants[0] || null;
+  // Field for field what the builder page stores for a catalog pick
+  // (gunforma-post-build.html addPartWithVariant).
+  await addPart(buildId, snapshotRow({
+    category: ADD.section, refId: row.id, brand: row.brand, name: row.name, pending: false,
+    variantId:     v ? v.id : null,
+    variantLabel:  v ? window.variantLabel(v) : '',
+    variantColor:  v ? (v.color  || null) : null,
+    variantFinish: v ? (v.finish || null) : null,
+    variantSpecs:  v ? window.variantSpecs(v) : '',
+    imageUrl:      v ? (v.primary_image_url || null) : null,
+  }));
+}
+async function doAddTyped(buildId) {
+  if (ADD.busy) return;
+  var sec = window.BuildCategories.categoryByKey(ADD.section);
+  if (!sec) return;
+  var t = {};
+  Object.keys(ADD.typed).forEach(function (k) { t[k] = String(ADD.typed[k] || '').trim(); });
+  var row;
+  if (sec.custom && sec.custom.fields) {
+    // As the builder's form does it (gunforma-post-build.html addCustomPart).
+    var missing = sec.custom.fields.some(function (f) { return f.required && !t[f.id]; });
+    if (missing || (!t.color && !t.stipple)) { showToast('red', 'Fill in who did it, and the colour or the stipple'); return; }
+    row = snapshotRow({
+      category: sec.key, refId: null, brand: t.shop,
+      name: [t.color, t.stipple ? t.stipple + ' stipple' : ''].filter(Boolean).join(' · '),
+      pending: !!sec.custom.pending,
+      finish: { shop: t.shop, color: t.color || '', stipple: t.stipple || '' },
+    });
+  } else {
+    if (!t.brand || !t.name) { showToast('red', 'A typed part needs a brand and a name'); return; }
+    // Pending, like a part a builder types: it can still be linked to the
+    // catalog or added to it from this page.
+    row = snapshotRow({ category: sec.key, refId: null, brand: t.brand, name: t.name, pending: true, variant: t.variant || '' });
+  }
+  await addPart(buildId, row);
+}
+async function addPart(buildId, row) {
+  ADD.busy = true; ADD.msg = '';
+  rerenderBuild(buildId);
+  var reason = (ADD.reason || '').trim();
+  var ok = await writeParts(buildId, 'add the part', function (parts) {
+    parts.push(row);
+    PartIds.ensure(parts);          // gives the new row its id, keeps the rest
+    return { entries: [Object.assign({ kind: 'part_added', part: partSummary(row) }, logEntryBase(reason))] };
+  });
+  ADD.busy = false;
+  if (ok) {
+    resetAdd(null);
+    showToast('green', 'Added ' + [row.brand, row.name].filter(Boolean).join(' '));
+  }
+  rerenderBuild(buildId);
+}
+
+// Everything a reviewer changed on this build, newest first. The builder
+// sees the same list (gunforma-build-detail.html); nobody else does.
+function changesLogHtml(b) {
+  var list = PartIds.changes(b).slice().reverse();
+  if (!list.length) return '';
+  return '<div class="detail-section"><div class="detail-section-title">Changes by Gunforma ('+list.length+')</div>'+
+    '<div class="changes-log">'+list.map(function (e) {
+      return '<div class="changes-log-row"><div class="changes-log-what">'+escH(PartIds.changeText(e, b))+
+          (e.status === 'contested' ? '<span class="contested-tag">⚠ Contested</span>' : '')+'</div>'+
+        '<div class="changes-log-meta">'+escH(e.edited_by || '')+' · '+relTime(e.edited_at)+(e.reason ? ' · '+escH(e.reason) : '')+'</div></div>';
+    }).join('')+'</div>'+
+    '<div class="catalog-reason">Only '+(b.user_id ? 'the builder' : 'admins')+' can see this list'+(b.user_id ? ', on their build page' : '')+'.</div></div>';
 }
 
 function openRejectForm()  { var f=document.getElementById('reject-form'); if(f) f.classList.add('open'); }
@@ -1311,7 +1751,7 @@ function catalogActionsHtml(b, p, i, history) {
   var key = b.id + '-' + i;
   var open = LINK.key === key;
   var blocked = history.length
-    ? '<span class="catalog-note">' + history.length + ' correction' + (history.length > 1 ? 's' : '') + ' on this part: linking is refused while they stand.</span>'
+    ? '<span class="catalog-note">' + history.length + ' correction' + (history.length > 1 ? 's' : '') + ' on this part, so linking is refused. To swap it for a catalog part: Remove it, then + Add a part.</span>'
     : '';
   return '<div class="catalog-actions">' +
       '<a class="btn-catalog" href="gunforma-admin-part.html?build=' + b.id + '&part=' + i + '">Add to catalog</a>' +

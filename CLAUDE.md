@@ -769,7 +769,7 @@ Registered today:
 | `scripts/snapshot-roundtrip.test.mjs` | a builder hydration path (edit mode, Armory handoff) dropping a `parts_snapshot` field, so the next save deletes it — runs the page's own code, load → save, and requires byte-identical rows |
 | `scripts/affiliate-render.test.mjs` | `js/affiliate.js` throwing on a render |
 | `scripts/variant-picker.test.mjs` | the picker's colour step throwing on a render |
-| `scripts/part-ids.test.mjs` | a reviewer's correction landing on the wrong part — matched by position again, falling back to a neighbour when its part was removed, or a page reading corrections without `js/part-ids.js`; and a builder page saving without `PartIds.ensure()` |
+| `scripts/part-ids.test.mjs` | a reviewer's correction landing on the wrong part — matched by position again, falling back to a neighbour when its part was removed, or a page reading corrections without `js/part-ids.js`; a builder page saving without `PartIds.ensure()`; an added or removed part being read as a correction; a page laying corrections over the stored part again |
 | `scripts/part-match.test.mjs` | the catalog-match prompt offering noise ("my trigger job" → three triggers), going silent on a real match ("holosun 407k"), claiming a model the catalog does not have, or swapping a catalog part into the wrong position — run against real catalog names |
 | `scripts/check-buy-links.mjs` | a buy link that skips the `/go/` click layer |
 | `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
@@ -1975,12 +1975,12 @@ received"; the only way this surfaces is someone asking why you never replied.
 **One editor: `gunforma-post-build.html?id=<uuid>&mode=edit`.** Who it lets
 in, and what they may change, by status:
 
-| status | its owner | an admin |
-|---|---|---|
-| draft | everything | only if the build has no owner |
-| **pending** | **everything; it stays pending** | only if the build has no owner |
-| rejected | everything; saving resubmits it | only if the build has no owner |
-| approved | name, description, activity | only if the build has no owner — then everything, and it stays live |
+| status | its owner | an admin, in this editor | an admin, from the review queue |
+|---|---|---|---|
+| draft | everything | only if the build has no owner | — |
+| **pending** | **everything; it stays pending** | only if the build has no owner | correct, add and remove parts |
+| rejected | everything; saving resubmits it | only if the build has no owner | — |
+| approved | name, description, activity | only if the build has no owner — then everything, and it stays live | correct, add and remove parts |
 
 **Pending was closed until 2026-10, and only by the page.** The profile card
 was a dead `<div>` and the editor refused the build, so the one build a
@@ -1996,11 +1996,13 @@ only moves a build back to pending. The queue links to the editor for them
 ("Edit build →"). The save sends **no `status`**, so a live build stays live
 and a pending one stays pending, and it filters on `user_id is null`.
 
-**An admin is deliberately not let into a build that has an owner.** The
-tool for that is the correction, which is logged in `edit_history` and shown
-to the builder. A rewrite from the editor would leave no record. To let a
-builder change the parts or photos of a build that is already live: **Undo**
-(back to pending), they edit it, approve it again.
+**An admin is deliberately not let into the editor for a build that has an
+owner.** A rewrite from the editor would leave no record. The tool for an
+owned build is the review queue's per-part **Edit / Remove / + Add a part**
+(see **A reviewer's part changes** below): parts only, each change logged in
+`edit_history` and shown to the builder. Photos, name and description stay
+the builder's: to let them change photos on a live build, **Undo** (back to
+pending), they edit it, approve it again.
 
 ### A build in review has two writers
 
@@ -2094,7 +2096,7 @@ removed part takes its corrections with it, and nothing is pinned.
 - Both re-link paths keep the id without changing: `relink_build_part()` and
   `create_product()` merge into the existing part (`v_part || …`).
 
-**Carry it everywhere a part is copied.** `partId` is in all four snapshot
+**Carry it everywhere a part is copied.** `partId` is in all five snapshot
 whitelists (`check-snapshot-fields.mjs`) and both post-build load paths
 (`snapshot-roundtrip.test.mjs` has fixtures carrying one). A load path that
 drops it re-ids the part on the next save — the trigger's identical-part
@@ -2123,6 +2125,9 @@ contested entries and zero flag rows. Found by the dry run of
 does not change who `auth.uid()` says the caller is**, so every trigger the
 function's writes fire still sees the visitor.
 
+(Since 2026-10 the link is offered only in the builder's own "What Gunforma
+changed" list; visitors no longer see corrections at all.)
+
 Fixed in the guard, narrowly: for anyone who is not an admin or a trusted
 backend, the one change allowed to `edit_history` is marking existing
 entries `contested` on a build that is live and stays live — same entries,
@@ -2143,6 +2148,83 @@ would.
 Not done, logged: `create_product()`'s re-link still does not refuse a part
 that carries corrections (`relink_build_part()` does); with ids, such a
 correction would show over the linked part, as before.
+
+### A reviewer's part changes, and who sees them
+
+Since 2026-10 the review queue can **correct, add and remove parts on a
+pending or a live build, whoever owns it** — for the builder who could not
+enter a part properly, and for the live build where a commenter points out
+the wrong model. It is meant to be occasional; the queue says so beside
+every action ("the builder is notified and sees every change").
+
+**Every change is written INTO `parts_snapshot`, and logged.** The log is
+`builds.edit_history`, append-only:
+
+| change | entry |
+|---|---|
+| correction | `{ part_id, part_index, field, from_value, to_value, edited_by, edited_at, status, reason? }` |
+| added part | `{ kind: 'part_added', part: {partId, category, brand, name, …}, edited_by, edited_at, status, reason? }` |
+| removed part | `{ kind: 'part_removed', part: {…}, … }` |
+
+Corrections used to live *only* in the log: the queue laid each `to_value`
+over the part, the public page never did, so a corrected build went on
+showing the wrong name to every visitor and to Google. Nothing lays anything
+over a part now — the stored row is the part, and the log is a record.
+`supabase/admin_part_changes.sql` wrote the one correction that existed then
+into its build.
+
+**Added and removed parts carry their part under `part`, never a top-level
+`part_id`.** They are not corrections. Everything that matches corrections
+to parts — `PartIds.isCorrection()`, `contest_build_part()`,
+`relink_build_part()`'s "this part has corrections" refusal, the editor's
+pin — would otherwise read "added by a reviewer" as "corrected", and refuse
+to link the very part a reviewer just added. `PartIds.changes()` is the list
+of a reviewer's changes (both kinds), `PartIds.changeText()` the sentence
+for one; the queue and the build page both use them.
+
+**Catalog parts:** brand and name are read-only in the queue's Edit — they
+are the product the row links to. The fix for a wrong catalog part is
+Remove, then + Add a part. A part with corrections still cannot be linked
+("Link to existing part"; `relink_build_part()` refuses it); Remove + Add is
+the way round that too.
+
+**+ Add a part** offers the builder's own sections, grouped and ordered
+(`js/build-categories.js`), and the builder's own catalog query: live,
+not discontinued, fits the build's pistol. A section with no catalog
+(Magazines, Holsters, Tactical Knife) or a part the catalog lacks is typed —
+pending, like a part a builder types, so Add to catalog / Link still apply.
+The row is built by `snapshotRow()`, which is on
+`check-snapshot-fields.mjs`'s list.
+
+All three go through `writeParts()`: `ensureUnchanged()` first, then one
+UPDATE of `parts_snapshot`, `edit_history` and `tier`, conditional on status
+and `updated_at`, counted, then `markReviewed()` from the row the UPDATE
+returned (not from the reload — a builder edit landing in between must still
+trip the next check). There is no database function: RLS already lets an
+admin update any build, and `restrict_owner_edits_on_approved_build()`
+admits admins.
+
+**Who sees the log: the builder and admins.** The public build page shows
+the parts and nothing else — no "corrected" badge, no before/after (there
+used to be one on every corrected part, for everyone). The owner, signed in,
+sees **"What Gunforma changed"** above the parts, newest first, with the
+reviewer's note, a send-back link on corrections (`contest_build_part()`,
+live builds only) and an email address. **This is what the page shows, not
+access control:** `edit_history` is a column of a public row and readable
+through the API. Hiding the column is a separate change (a column revoke
+plus a function the owner reads it through), logged.
+
+**The builder is told once, by the database.** `trg_zz_notify_build_changes`
+(BEFORE UPDATE, named to run after every guard and after
+`stamp_build_review`) keeps `builds.changes_notified_count` — how many log
+entries the builder has been told about, a **position** because `edited_at`
+is the reviewer's browser clock. On a live build with entries past it, it
+writes ONE `kind = 'changes'` notification listing them and moves the
+counter. While the build is in review it holds them, so they arrive with the
+approval. Nobody owns the build, or the reviewer owns it: the counter moves,
+nobody is told. Only an admin or a trusted backend moves the counter. No
+email yet — the row is stamped `email_sent_at` at insert so a sender added
+later starts from new rows; see the file's header.
 
 ### Only a reviewer can approve or reject
 

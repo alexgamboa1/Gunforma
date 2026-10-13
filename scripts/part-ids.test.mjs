@@ -1,9 +1,9 @@
 // js/part-ids.js — which part a reviewer's correction belongs to.
 //
 // WHY THIS IS A BUILD CHECK
-// A correction that lands on the wrong part renders perfectly: the build
-// page lays "name corrected to X" over whatever part matched, with a green
-// "Verified & corrected" badge on it. That is the bug js/part-ids.js exists
+// A correction that lands on the wrong part renders perfectly: the
+// builder's "What Gunforma changed" list says "name corrected to X" about
+// whatever part matched, and a send-back flags the wrong one. That is the bug js/part-ids.js exists
 // to end — corrections used to be matched by position, and a removed part
 // shifted every later correction onto its neighbour. Nothing would report it
 // coming back. So the rule is pinned here, against the real module.
@@ -139,5 +139,53 @@ test('both builder pages give parts ids before every save', async () => {
     const writes = (src.match(/parts_snapshot:\s*buildPartsSnapshot\(\)/g) || []).length;
     assert.equal(writes, saves, f + ': expected ' + saves + ' payload(s) carrying parts_snapshot');
     assert.equal(ensures, writes, f + ': ' + writes + ' save(s) but ' + ensures + ' PartIds.ensure() call(s)');
+  }
+});
+
+test('an added or removed part is not a correction, and matches no part', () => {
+  // They carry their part under `part`. If one were read as a correction,
+  // contest_build_part() would flag it and relink_build_part() would refuse
+  // to link the part a reviewer just added.
+  const added = { kind: 'part_added', part: { partId: 'aaaaaaaaaaaa', brand: 'Springer', name: '+3' }, edited_by: 'x', status: 'active' };
+  const removed = { kind: 'part_removed', part: { partId: 'bbbbbbbbbbbb', brand: 'X', name: 'Y' }, edited_by: 'x', status: 'active' };
+  const b = { parts_snapshot: [{ name: '+3', partId: 'aaaaaaaaaaaa' }], edit_history: [added, removed] };
+  assert.equal(P.isCorrection(added), false);
+  assert.equal(P.isCorrection(removed), false);
+  assert.equal(P.isPartChange(added) && P.isPartChange(removed), true);
+  assert.deepEqual(P.entriesFor(b, 0), []);
+  assert.equal(P.pinnedThrough(b.edit_history), -1);
+});
+
+test('changes() lists corrections and added/removed parts, in order, and not the resubmit marker', () => {
+  const b = {
+    parts_snapshot: [{ name: 'A', partId: 'aaaaaaaaaaaa' }],
+    edit_history: [
+      fix({ part_id: 'aaaaaaaaaaaa', part_index: 0, to_value: '1' }),
+      { kind: 'resubmit', resubmit: true, at: 'x' },
+      { kind: 'part_added', part: { brand: 'S', name: 'P' } },
+      fix({ part_id: 'cccccccccccc', part_index: 3, to_value: '2' }),   // its part was removed since: still a change made
+    ],
+  };
+  const list = P.changes(b);
+  assert.deepEqual(list.map((e) => e.to_value || e.kind), ['1', 'part_added', '2']);
+});
+
+test('changeText() says what changed, on which part', () => {
+  const b = { parts_snapshot: [{ brand: 'Holosun', name: '507 Comp', partId: 'aaaaaaaaaaaa' }] };
+  assert.equal(P.changeText(fix({ part_id: 'aaaaaaaaaaaa', from_value: '507C', to_value: '507 Comp' }), b),
+    'Corrected the name on Holosun 507 Comp: “507C” → “507 Comp”');
+  assert.equal(P.changeText({ field: 'variant', part_index: 0, from_value: '', to_value: 'Black' }), 'Set the variant note to “Black”');
+  assert.equal(P.changeText({ field: 'variant', part_index: 0, from_value: 'Black', to_value: '' }), 'Cleared the variant note (was “Black”)');
+  assert.equal(P.changeText({ kind: 'part_added', part: { brand: 'Springer Precision', name: '+3 base plate' } }), 'Added Springer Precision +3 base plate');
+  assert.equal(P.changeText({ kind: 'part_removed', part: { brand: 'Streamlight', name: 'TLR-7', variantLabel: 'Black' } }), 'Removed Streamlight TLR-7 — Black');
+});
+
+test('no page lays a correction over the stored part any more', async () => {
+  // Corrections are written into parts_snapshot. A page that still resolves
+  // "the latest to_value for this field" would show a stale value after a
+  // later edit or a catalog link replaced the part.
+  for (const f of ['gunforma-admin-queue.html', 'gunforma-build-detail.html']) {
+    const src = await readFile(join(ROOT, f), 'utf8');
+    assert.doesNotMatch(src, /function currentPartValue/, f + ' still overlays corrections');
   }
 });

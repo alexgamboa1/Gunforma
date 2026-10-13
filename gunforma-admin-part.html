@@ -1618,8 +1618,10 @@ async function runCheck() {
 // Null when the build's part at S.build.index is still, key for key, the one
 // this page was opened for; otherwise the sentence to show. Both sides come
 // back from jsonb, so the key order is Postgres's own both times and a
-// string comparison is exact. A correction does not disturb it: corrections
-// live in edit_history and never touch parts_snapshot.
+// string comparison is exact. A reviewer's correction made after this page
+// opened DOES stop it: corrections are written into parts_snapshot since
+// 2026-10 (gunforma-admin-queue.html), so the part is no longer the one
+// this page was filled from — which is the point of the check.
 async function buildPartMoved() {
   const { data, error } = await sb.from('builds').select('parts_snapshot').eq('id', S.build.id).maybeSingle();
   if (error || !data) {
