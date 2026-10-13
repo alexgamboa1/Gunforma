@@ -1847,6 +1847,12 @@ PART in the build, which nothing reads for fit yet either.
 
 ### gun_id is provenance, never fitment
 
+**`claude/gun-identity-decision.md` is the decision record** — the
+reasoning, the per-family join table for builds-as-proof, the confirmed-
+default chip that replaces the silent stock slide, and the phased plan with
+its triggers. This section is the rule; read that file before building a
+guide family or anything that renders the model.
+
 `builds.gun_id` records what box a build came in. It never answers a
 fitment question. On the P365 the FCU is the firearm; slide, barrel and grip
 are swappable, so the factory model name is history, not a description.
