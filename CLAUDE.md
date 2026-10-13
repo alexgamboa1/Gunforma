@@ -1833,6 +1833,36 @@ exists, and the server copy and the page are held byte-for-byte by
 as its own PR. Nor does the model filter the picker yet — a 3.1" gun is still
 offered 3.7" barrels.
 
+### gun_id is provenance, never fitment
+
+`builds.gun_id` records what box a build came in. It never answers a
+fitment question. On the P365 the FCU is the firearm; slide, barrel and grip
+are swappable, so the factory model name is history, not a description.
+
+- `gun_id` is for browse/filter and a **"Started as: <model>"** line. NULL
+  renders nothing — never a fallback to "SIG P365".
+- A guide's builds-as-proof section joins on **the attribute the guide is
+  about, from the build's parts**: slide optic cut for red dots, grip
+  housing class and magazine family for grip modules, barrel length + thread
+  pitch + comes_with_barrel for comps, grip light rail type for lights.
+- **Never route a build onto a guide by `gun_id`.** A build labeled
+  "P365 XL" running an aftermarket RMR-cut slide must not appear under "red
+  dots that fit the P365 XL".
+- A factory slide is not in the snapshot and therefore has no recorded cut.
+  **Do not infer it from the model** — most models have two cuts by SKU. The
+  build form must ask the SKU when the model is ambiguous. Until it does,
+  factory-slide builds cannot be red-dot proof.
+- `fcu_only = true` renders **"FCU build — no factory slide, barrel or
+  grip"**.
+
+Two strings used to treat the model as a description and were cut back to
+the name: the form hint in `js/gun-model.js` ("What it started as", nothing
+after the dash) and the review queue's model line (`gunModelHtml()`, no
+derived barrel length, "built-in comp" or "no stock slide"). The stock-slide
+note in `sectionNoteHtml()` is the remaining instance, left in place on
+purpose: it is the architectural hole above, and it needs the SKU question,
+not a string edit.
+
 ### Nor is the category list — and that one has three pages, not two
 
 `js/build-categories.js` owns the parts taxonomy: which sections exist, what
