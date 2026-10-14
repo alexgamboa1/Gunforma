@@ -1,0 +1,94 @@
+name: Check migrations
+
+# Builds a database from nothing — supabase/migrations/ then supabase/seed.sql —
+# on a fresh local Supabase stack, and fails if any file refuses to apply or
+# the result is missing what the site needs (create_product(), the rule
+# tables, the storage buckets).
+#
+# This is the check MIGRATIONS.md promises: a schema change reaches
+# production only as a migration file that has already applied cleanly to an
+# empty database. Before this workflow the folder could not replay at all
+# (a Supabase branch stopped at migration 9 of 223), so every change was
+# tested in rolled-back transactions on production.
+#
+# It needs Docker, which GitHub's ubuntu runners have and this project's
+# Netlify build does not — so it lives here, not in scripts/check-all.sh.
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+      - 'supabase/config.toml'
+      - '.github/workflows/check-migrations.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/seed.sql'
+      - 'supabase/config.toml'
+      - '.github/workflows/check-migrations.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: check-migrations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apply-from-zero:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.120.0
+
+      # `db start` brings up only the Postgres container (no API, auth,
+      # studio) and applies supabase/migrations/ and then supabase/seed.sql.
+      # `db reset` then does the same from a clean database and is what fails
+      # the job if a file refuses to apply — it is the command a developer
+      # runs locally, so a red run here reproduces with one command.
+      - name: Start a fresh local database and apply every migration
+        run: supabase db start
+
+      - name: Reset and re-apply from zero (fails on any migration error)
+        run: supabase db reset --local
+
+      # Claims are not facts (CLAUDE.md, "A green result is not evidence the
+      # work happened"). Ask the database what it holds.
+      - name: Verify the result holds what the site needs
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: |
+          set -euo pipefail
+          q() { psql "$PGURL" -X -A -t -v ON_ERROR_STOP=1 -c "$1"; }
+
+          tables=$(q "select count(*) from pg_tables where schemaname='public'")
+          functions=$(q "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public'")
+          policies=$(q "select count(*) from pg_policies where schemaname='public'")
+          rules=$(q "select count(*) from public.spec_field_rules")
+          buckets=$(q "select count(*) from storage.buckets where id in ('avatars','build-photos','product-images')")
+          has_create_product=$(q "select count(*) from pg_proc where proname='create_product'")
+          mag_pos=$(q "select array_position(enum_range(null::public.product_category)::text[], 'magazine') - array_position(enum_range(null::public.product_category)::text[], 'magwell')")
+
+          echo "public tables:    $tables"
+          echo "public functions: $functions"
+          echo "public policies:  $policies"
+          echo "spec_field_rules: $rules"
+          echo "storage buckets:  $buckets / 3"
+          echo "create_product(): $has_create_product"
+          echo "'magazine' sits this far after 'magwell' in product_category: $mag_pos"
+
+          fail=0
+          [ "$tables" -ge 60 ]           || { echo "::error::expected at least 60 public tables"; fail=1; }
+          [ "$has_create_product" = 1 ]  || { echo "::error::create_product() is missing"; fail=1; }
+          [ "$rules" -ge 100 ]           || { echo "::error::spec_field_rules is not seeded"; fail=1; }
+          [ "$buckets" = 3 ]             || { echo "::error::a storage bucket is missing"; fail=1; }
+          [ "$mag_pos" = 1 ]             || { echo "::error::product_category enum order is wrong: 'magazine' must come right after 'magwell'"; fail=1; }
+          exit $fail
+
+      - name: Stop the local stack
+        if: always()
+        run: supabase stop --no-backup || true

@@ -309,7 +309,7 @@
 
 # A part that MOVED category, not a discontinued one: TTI's X-Macro completed
 # magazine was filed as a basepad before the magazine category existed
-# (supabase/magazine_category.sql moves it). Same placement rule — an exact
+# (supabase/migrations_archive/magazine_category.sql moves it). Same placement rule — an exact
 # path above the /parts/* rewrite — and the old path is in RETIRED in
 # scripts/check-sitemap.mjs, the pair in scripts/check-routes.mjs.
 [[redirects]]

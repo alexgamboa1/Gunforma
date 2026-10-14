@@ -530,7 +530,7 @@ function reviewSignature(b) {
 // by build id.
 //
 // A SIDE READ, and non-fatal, for one reason: builds.gun_id and
-// builds.fcu_only arrive with supabase/builds_gun_id.sql, and this page
+// builds.fcu_only arrive with supabase/migrations_archive/builds_gun_id.sql, and this page
 // ships before that runs. Named in
 // BUILD_FIELDS, a column that does not exist yet would fail the queue's one
 // essential query and the page would show "Couldn't load the queue" until
@@ -781,7 +781,7 @@ function renderDetail(b) {
   // written into parts_snapshot itself and logged in edit_history; the
   // builder sees the log on their build page ("What Gunforma changed") and
   // gets one notification once the build is live
-  // (supabase/admin_part_changes.sql). A rejected build is the builder's
+  // (supabase/migrations_archive/admin_part_changes.sql). A rejected build is the builder's
   // to fix and resubmit, so it is left alone here.
   var canChange = b.status === 'pending' || b.status === 'approved';
   var partsHtml;
@@ -1263,7 +1263,7 @@ async function doDelete(id) {
 // Who sees the log: the builder (their build page, "What Gunforma
 // changed") and admins. Nobody else — the public page shows the parts.
 // The builder is notified once the build is live, by the database
-// (supabase/admin_part_changes.sql), so a change made through SQL is
+// (supabase/migrations_archive/admin_part_changes.sql), so a change made through SQL is
 // announced the same way as one made here.
 //
 // RLS lets an admin write any build ("Admins can review and edit any

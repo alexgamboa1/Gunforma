@@ -1150,7 +1150,7 @@ before believing any claim that something landed.**
 3. **The `supabase_admin` default-privilege entry is unchanged and still open.** It cannot
    be altered from the SQL editor, so any table created by Supabase's own tooling still
    arrives with write grants for `anon`. Sweep query is in CLAUDE.md and
-   `supabase/revoke_anon_write_grants.sql`. Re-run after any Supabase-tooling schema change.
+   `supabase/migrations_archive/revoke_anon_write_grants.sql`. Re-run after any Supabase-tooling schema change.
 
 ### Manifest
 
