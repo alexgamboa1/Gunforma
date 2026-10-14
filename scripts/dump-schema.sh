@@ -6,7 +6,11 @@
 # pkg/migration/scripts/dump_schema.sh). This machine has no Docker, so this
 # script is that recipe, copied from CLI v2.115.0, run against a local
 # pg_dump (brew install libpq). Flags and sed substitutions are the CLI's,
-# byte for byte, with EXTRA_FLAGS fixed to --schema=public.
+# byte for byte, with EXTRA_FLAGS fixed to --schema=public. The final
+# sed ("/^--/d", drop comment lines) is in the script the CLI binary
+# actually runs (seen with `supabase db dump --dry-run`) but not in the
+# template published at that tag; without it a dump made here differs
+# from one made by the CLI by every comment line pg_dump writes.
 #
 # Usage:
 #   scripts/dump-schema.sh "$DB_URL" > out.sql
@@ -50,4 +54,5 @@ EXCLUDED_SCHEMAS=""
 | sed -E 's/^COMMENT ON EXTENSION (.+)/-- &/' \
 | sed -E 's/^CREATE POLICY "cron_job_/-- &/' \
 | sed -E 's/^ALTER TABLE "cron"/-- &/' \
-| sed -E 's/^SET transaction_timeout = 0;/-- &/'
+| sed -E 's/^SET transaction_timeout = 0;/-- &/' \
+| sed -E "/^--/d"
