@@ -134,7 +134,6 @@ export const HUB_MAGAZINE_COPY = {
   noFit:     'Doesn\u2019t fit the {model}:',
   restricted:'Not available in:',
   capacity:  'Capacity',
-  style:     'Style',
   prices:    'Prices update from retailer feeds; a listing we could not verify in the last 7 days shows \u201cCheck price\u201d.',
 };
 
