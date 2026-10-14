@@ -10,7 +10,8 @@
 -- (pkg/migration/scripts/dump_schema.sh at v2.115.0: pg_dump --schema-only
 -- --quote-all-identifier --role postgres --schema=public, then the CLI's sed
 -- substitutions), executed with a local pg_dump 18.6 because this machine has
--- no Docker. Nothing in the dump itself was edited.
+-- no Docker. Nothing in the dump itself was edited; a short preamble before it
+-- clears auto-expose default privileges (explained there).
 --
 -- The section after the dump, "Outside the public schema", carries the three
 -- things Gunforma owns that a public-only dump cannot reach: the storage
@@ -25,6 +26,31 @@
 
 
 
+
+--
+-- Before the dump: neutralise auto-expose default privileges.
+--
+-- pg_dump describes privileges from zero: every GRANT below assumes a table
+-- starts with no privileges for anon, authenticated or service_role, and the
+-- ALTER DEFAULT PRIVILEGES lines at the end are GRANTs on top of Postgres's
+-- built-in defaults. An older Supabase project (and the CLI's local stack
+-- with auto_expose_new_tables = true) starts the other way round, with
+-- default privileges that hand those roles ALL on every new table, so the
+-- CREATE TABLEs below would come out broader than production and the GRANTs
+-- could not narrow them. Clearing the defaults first makes the dump mean the
+-- same thing wherever it runs; where the defaults are already empty (new
+-- projects, and the local stack by default) this is a no-op. The dump's own
+-- ALTER DEFAULT PRIVILEGES lines then restore exactly what production has.
+-- See CLAUDE.md, "A revoke is not permanent".
+--
+
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE ALL ON TABLES FROM "anon", "authenticated", "service_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE ALL ON SEQUENCES FROM "anon", "authenticated", "service_role";
+ALTER DEFAULT PRIVILEGES FOR ROLE "postgres" IN SCHEMA "public" REVOKE ALL ON FUNCTIONS FROM "anon", "authenticated", "service_role";
+
+--
+-- The dump (unedited from here to "Outside the public schema")
+--
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
