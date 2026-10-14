@@ -22,9 +22,16 @@
 // registry. _guide-meta.mjs's "do not create a browser mirror" note still
 // holds, and this is what keeps it true.
 import {
-  GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH,
+  GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH, HUB_MAGAZINE_COPY,
   hubPath, isLiveGunHub, guidePagesForGun, guidePath,
 } from './_guide-meta.mjs';
+// The magazine rows' buy buttons: the same hero-listing rules and the same
+// unpaid "Buy from <maker>" fallback the fit guides and product pages use,
+// so one listing reads the same on every page (CLAUDE.md, "Duplicated
+// logic to keep in sync").
+import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
+import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+import { CATEGORY_META } from './_category-meta.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 // The Cloudflare Web Analytics tag, at the end of every document this
 // function emits — the same rule as every other HTML-emitting function, and the one this
@@ -114,8 +121,138 @@ async function fetchCuts(gunId) {
 
 const IN = (v) => (v == null ? null : String(v) + '"');
 
+// ── magazines that fit this model ─────────────────────────────────────────
+// One row per magazine_housing_fit row for the gun's housing class — the
+// maker's own claim, structured (supabase/migrations/20261014202159_magazine_housing_fit.sql).
+// A combination the maker never mentioned has no row and renders nothing;
+// a model with no rows at all renders no section. Read in a query of its
+// own and tolerated when it fails: the hub is the hub with or without this
+// section, and for the minutes between this deploy and the migration being
+// applied the table does not exist and PostgREST answers 404 here.
+//
+// Embeds: magazine_housing_fit has one FK to products, magazine_specs has
+// one, manufacturers has one from products — bare is fine for those (the
+// FK is still named where it is cheap to). products → product_variants is
+// the two-FK pair and MUST name the FK: CLAUDE.md, PGRST201.
+async function fetchMagazineFit(housingClass) {
+  if (!housingClass) return [];
+  const cols =
+    'fit,note,source,' +
+    'products!magazine_housing_fit_magazine_product_id_fkey(id,slug,name,url,is_discontinued,restricted_states,' +
+      'manufacturers!products_brand_id_fkey(name,website_url),' +
+      'magazine_specs(capacity,mag_style),' +
+      'product_variants!product_variants_product_id_fkey(id,msrp,is_default,' +
+        'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))))';
+  const rows = await pgGet('magazine_housing_fit?housing_class=eq.' + encodeURIComponent(housingClass) +
+    '&select=' + encodeURIComponent(cols) +
+    '&products.product_variants.retired_at=is.null' +
+    '&products.product_variants.affiliate_links.retired_at=is.null');
+  const mags = [];
+  for (const r of rows) {
+    const p = r.products;
+    if (!p || !p.slug || p.is_discontinued) continue;
+    // magazine_specs is one-to-one on the product's id, so PostgREST hands
+    // it back as an object; tolerate an array in case that ever changes.
+    const spec = Array.isArray(p.magazine_specs) ? (p.magazine_specs[0] || {}) : (p.magazine_specs || {});
+    const listings = [];
+    for (const v of (p.product_variants || [])) {
+      for (const l of (v.affiliate_links || [])) {
+        listings.push({
+          price: l.street_price != null ? Number(l.street_price) : null,
+          stale: isStalePrice(l),
+          url: l.affiliate_url || l.url,
+          goUrl: '/go/' + l.id,
+          in_stock: l.in_stock,
+          partnerName: displayPartnerName(l.partners ? l.partners.name : null),
+        });
+      }
+    }
+    listings.sort(compareListingRows);
+    const dv = (p.product_variants || []).find((v) => v.is_default) || (p.product_variants || [])[0];
+    mags.push({
+      fit: r.fit, note: r.note || '', source: r.source,
+      productId: p.id, slug: p.slug, name: p.name,
+      href: '/parts/' + CATEGORY_META.magazine[0] + '/' + p.slug,
+      capacity: spec.capacity != null ? Number(spec.capacity) : null,
+      style: spec.mag_style || null,
+      restricted: Array.isArray(p.restricted_states) ? p.restricted_states.map(String).filter(Boolean) : [],
+      hero: listings[0] || null,
+      msrp: dv && dv.msrp != null ? Number(dv.msrp) : null,
+      maker: makerLink(p.url, p.manufacturers ? p.manufacturers.name : null,
+                       p.manufacturers ? p.manufacturers.website_url : null),
+    });
+  }
+  // Capacity ascending, then name — the brief's order, and the one a reader
+  // scanning "what fits" expects. The "doesn't fit" line keeps the same order.
+  mags.sort((a, b) => ((a.capacity ?? 999) - (b.capacity ?? 999)) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return mags;
+}
+
+const fitsIt = (m) => m.fit !== 'not_compatible';
+const hasPartnerLink = (m) => !!(m.hero && m.hero.url);
+const hasMakerLink   = (m) => !hasPartnerLink(m) && !!m.maker;
+
+// Price text follows the product page's rule: a fresh partner price, else
+// "Check price" when a listing exists but is stale, else MSRP when there is
+// no listing at all. Never typed, always from the row.
+function magPriceText(m) {
+  if (m.hero && m.hero.price != null && !m.hero.stale) return '$' + m.hero.price.toFixed(2);
+  if (m.hero) return 'Check price';
+  return m.msrp != null ? 'MSRP $' + m.msrp.toFixed(2) : '';
+}
+
+function magBuyHtml(m) {
+  if (hasPartnerLink(m)) {
+    const label = m.hero.partnerName ? 'Buy at ' + esc(m.hero.partnerName) : 'View listing';
+    return '<a class="buy-btn" href="' + esc(m.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' + label + ' ↗</a>';
+  }
+  if (hasMakerLink(m)) {
+    return '<a class="buy-btn" href="/go/part/' + esc(m.productId) + '" target="_blank" rel="' + MAKER_REL + '">' + esc(m.maker.label) + ' ↗</a>';
+  }
+  return '';
+}
+
+function magazineSectionHtml(name, mags) {
+  const fits = mags.filter(fitsIt);
+  if (!fits.length) return '';
+  const C = HUB_MAGAZINE_COPY;
+  const rows = fits.map((m) =>
+    '<div class="mag-row">' +
+      '<div class="mag-main">' +
+        '<a class="mag-name" href="' + esc(m.href) + '">' + esc(m.name) + '</a>' +
+        '<div class="mag-meta">' +
+          (m.capacity != null ? '<span><span class="mag-k">' + esc(C.capacity) + '</span> ' + esc(String(m.capacity)) + ' rounds</span>' : '') +
+          (m.style ? '<span><span class="mag-k">' + esc(C.style) + '</span> ' + esc(m.style) + '</span>' : '') +
+        '</div>' +
+        '<div class="mag-verdict"><strong>' + esc(C.verdict[m.fit] || m.fit) + '</strong>' +
+          (m.note ? ' — ' + esc(m.note) : '') + '</div>' +
+        (m.restricted.length
+          ? '<div class="mag-restricted">' + esc(C.restricted) + ' ' + esc(m.restricted.join(', ')) + '</div>'
+          : '') +
+      '</div>' +
+      '<div class="mag-buy">' +
+        (magPriceText(m) ? '<span class="mag-price">' + esc(magPriceText(m)) + '</span>' : '') +
+        magBuyHtml(m) +
+      '</div>' +
+    '</div>').join('');
+  const noFit = mags.filter((m) => !fitsIt(m));
+  const noFitHtml = noFit.length
+    ? '<p class="mag-nofit"><strong>' + esc(C.noFit.replace('{model}', name)) + '</strong> ' +
+      noFit.map((m) => '<a href="' + esc(m.href) + '">' + esc(m.name) + '</a>').join(', ') + '</p>'
+    : '';
+  const second = buyDisclosure(fits.some(hasPartnerLink), fits.some(hasMakerLink));
+  return '<h2 id="magazines">' + esc(C.heading.replace('{model}', name)) + '</h2>' +
+    '<p class="desc">' + esc(C.intro) + '</p>' +
+    '<div class="mag-list">' + rows + '</div>' +
+    noFitHtml +
+    '<p class="mag-disclosure">' + esc(C.prices) + (second ? ' ' + esc(second) : '') + '</p>';
+}
+
+
 // ── the model hub ─────────────────────────────────────────────────────────
-function renderHub({ hub, gun, cuts, vocab, guides }) {
+function renderHub({ hub, gun, cuts, vocab, guides, mags }) {
+  mags = mags || [];
+  const fittingMags = mags.filter(fitsIt);
   const name = gun.name;
   const canonical = SITE + hubPath(gun.slug);
   const title = 'Sig ' + name + ': Specs, Optic Cut and Red Dot Fit (2026)';
@@ -180,6 +317,17 @@ function renderHub({ hub, gun, cuts, vocab, guides }) {
         item: SITE + guidePath(g.family, g.gun),
       })),
     }] : []),
+    // Same shape as the fit-guide list above: an ItemList of the magazines
+    // the maker says fit, each pointing at its product page.
+    ...(fittingMags.length ? [{
+      '@context': 'https://schema.org', '@type': 'ItemList',
+      name: HUB_MAGAZINE_COPY.heading.replace('{model}', 'Sig ' + name),
+      itemListElement: fittingMags.map((m, i) => ({
+        '@type': 'ListItem', position: i + 1,
+        name: m.name,
+        item: SITE + m.href,
+      })),
+    }] : []),
   ];
 
   return '<!DOCTYPE html><html lang="en"><head>' +
@@ -208,6 +356,10 @@ function renderHub({ hub, gun, cuts, vocab, guides }) {
             'factory cut, with prices checked against retailer feeds.</p>' +
           '<div class="guide-grid">' + guideCards + '</div>'
         : '') +
+
+      // Below the fit guides, above the links out: the magazine question,
+      // answered only from maker-stated rows. Empty when the model has none.
+      magazineSectionHtml(name, mags) +
 
       '<h2>Browse parts</h2>' +
       '<div class="links">' +
@@ -296,7 +448,29 @@ function hubCss() {
     '.gc-go { font-size: 12px; color: #4a9edd; }' +
     '.links { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 12px 0; }' +
     '.links a { font-size: 13px; color: #4a9edd; text-decoration: none; }' +
-    '.author { margin-top: 26px; padding-top: 14px; border-top: 0.5px solid #e5e5e5; font-size: 12px; color: #888; }'
+    '.author { margin-top: 26px; padding-top: 14px; border-top: 0.5px solid #e5e5e5; font-size: 12px; color: #888; }' +
+    // Magazine rows: one card per magazine, two columns on a desktop, one
+    // column on a phone (no fixed widths anywhere, so nothing can overflow
+    // the 16px gutter at 390px).
+    '.mag-list { display: flex; flex-direction: column; gap: 10px; margin: 12px 0; }' +
+    '.mag-row { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px 16px; padding: 12px 16px; border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; }' +
+    '.mag-main { flex: 1 1 260px; min-width: 0; }' +
+    '.mag-name { font-size: 14.5px; font-weight: 700; color: #1a1a1a; text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; }' +
+    '.mag-name:hover { color: #4a9edd; }' +
+    '.mag-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: #333; margin-top: 4px; }' +
+    '.mag-k { color: #777; }' +
+    '.mag-verdict { font-size: 13px; line-height: 1.5; color: #1a1a1a; margin-top: 6px; }' +
+    '.mag-verdict strong { color: #1f6f3f; }' +
+    '.mag-restricted { font-size: 12.5px; font-weight: 600; line-height: 1.45; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 6px; padding: 7px 10px; margin-top: 8px; }' +
+    '.mag-buy { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex: 0 0 auto; }' +
+    '.mag-price { font-size: 13.5px; font-weight: 700; color: #1a1a1a; }' +
+    '.buy-btn { display: inline-block; padding: 8px 14px; border-radius: 7px; background: #1a1a1a; color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap; }' +
+    '.buy-btn:hover { background: #4a9edd; }' +
+    '.mag-nofit { font-size: 13px; line-height: 1.6; color: #333; margin: 10px 0; }' +
+    '.mag-nofit strong { color: #8a3b12; }' +
+    '.mag-nofit a { color: #4a9edd; text-decoration: none; }' +
+    '.mag-disclosure { font-size: 11.5px; color: #888; margin: 8px 0 0; line-height: 1.5; }' +
+    '@media (max-width: 480px) { .mag-row { flex-direction: column; } .mag-main { flex: 0 0 auto; } .mag-buy { flex-direction: row; align-items: center; gap: 12px; } }'
   );
 }
 
@@ -338,7 +512,17 @@ export default async (req) => {
   }
 
   const guides = guidePagesForGun(route.gun);
-  const html = renderHub({ hub, gun, cuts: cutsRes.cuts, vocab: cutsRes.vocab, guides });
+
+  let mags = [];
+  try {
+    mags = await fetchMagazineFit(gun.housing_class);
+  } catch (err) {
+    // Non-fatal: the hub is the hub without this section, and until the
+    // magazine_housing_fit migration is applied the table does not exist.
+    console.error('[gun-hub] magazine-fit lookup failed', err);
+  }
+
+  const html = renderHub({ hub, gun, cuts: cutsRes.cuts, vocab: cutsRes.vocab, guides, mags });
   return new Response(html, {
     status: 200,
     headers: {
@@ -348,6 +532,10 @@ export default async (req) => {
       'x-gun-hub': route.gun,
       'x-gun-hub-guides': String(guides.length),
       'x-gun-hub-cuts': String(cutsRes.cuts.length),
+      // Magazine rows served: fitting / not-compatible. check-routes.mjs
+      // asserts the section against this so an empty section cannot pass
+      // as "nothing to show".
+      'x-gun-hub-mags': String(mags.filter(fitsIt).length) + '/' + String(mags.length - mags.filter(fitsIt).length),
     },
   });
 };

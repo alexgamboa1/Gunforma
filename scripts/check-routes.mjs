@@ -65,6 +65,7 @@ async function get(path, headers) {
     guideFresh: res.headers.get('x-guide-fresh-priced'),
     hubGun: res.headers.get('x-gun-hub'),
     hubGuides: res.headers.get('x-gun-hub-guides'),
+    hubMags: res.headers.get('x-gun-hub-mags'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -518,6 +519,26 @@ for (const [label, path, want] of [
          `${path}: links down to ${guidePath(g.family, g.gun)}`);
     }
     note('hub guides linked', r.hubGuides);
+
+    // Magazines that fit: when the function served fit rows (the header
+    // counts them), the section must be in the HTML with at least one
+    // product link that answers 200 — a header that says "3/2" over a page
+    // with no section is the exact silent failure this file exists for.
+    // Zero rows (the table not applied yet, or a model with none) is noted,
+    // not failed: the rule is "render nothing", and nothing is what it is.
+    const magCounts = (r.hubMags || '0/0').split('/').map(Number);
+    note('magazine rows served (fit/doesn\'t fit)', r.hubMags || 'header absent');
+    if (magCounts[0] > 0) {
+      ok(r.body.includes('id="magazines"'), `${path}: magazine section served`);
+      const magLinks = [...new Set([...r.body.matchAll(/href="(\/parts\/magazines\/[^"#?]+)"/g)].map((m) => m[1]))];
+      ok(magLinks.length >= 1, `${path}: magazine section links to a product page`, magLinks.length + ' linked');
+      ok(magLinks.length >= magCounts[0], `${path}: every served fit row is linked`, magLinks.length + ' of ' + magCounts[0]);
+      if (magLinks.length) {
+        const pr = await get(magLinks[0]);
+        ok(pr.status === 200, `${path}: first magazine link ${magLinks[0]} answers 200`, pr.status);
+      }
+      if (magCounts[1] > 0) ok(/Doesn.{0,8}t fit the /.test(r.body), `${path}: "doesn't fit" line served for the not-compatible rows`);
+    }
   }
 
   for (const [label, path] of [
@@ -582,6 +603,31 @@ for (const [label, path, want] of [
   ok(linked.length > 0,
      'an optic product page links to at least one fit guide', linked.length + ' linked');
   note('fit guides linked from that product page', linked.map((g) => g.gun).join(', '));
+}
+
+// ── magazines link back up to the hubs ─────────────────────────────────
+// The mirror of the hub section: a magazine product page with fit rows
+// must serve its "Fits" links, each to a live hub that answers 200. Asked
+// of PostgREST first with the public key, so the assertion is conditional
+// on rows existing (the table may not be applied yet) and never on a guess.
+{
+  console.log('\n── magazines → hubs');
+  const slug = 'sig-sauer-p365-17rd-mag';
+  const pres = await fetch(`${SB_URL}/rest/v1/magazine_housing_fit?select=housing_class,fit,products!magazine_housing_fit_magazine_product_id_fkey(slug)&products.slug=eq.${slug}`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const fitRows = pres.ok ? (await pres.json()).filter((x) => x.products && x.fit !== 'not_compatible') : [];
+  note('fit rows for ' + slug + ' (PostgREST ' + pres.status + ')', fitRows.length);
+  const r = await get('/parts/magazines/' + slug);
+  ok(r.status === 200, `/parts/magazines/${slug}: 200`, r.status);
+  if (fitRows.length) {
+    ok(r.body.includes('class="fitguides mag-fits"'), `/parts/magazines/${slug}: "Fits" section served`);
+    const hubLinks = [...new Set([...r.body.matchAll(/class="fitguides mag-fits"[\s\S]*?<\/div>/g)].flatMap((m) => [...m[0].matchAll(/href="(\/p365\/[^"]+)"/g)].map((x) => x[1])))];
+    ok(hubLinks.length >= 1, `/parts/magazines/${slug}: links up to at least one hub`, hubLinks.length + ' linked');
+    for (const h of hubLinks) {
+      const hr = await get(h);
+      ok(hr.status === 200, `/parts/magazines/${slug}: hub ${h} answers 200`, hr.status);
+    }
+  }
 }
 
 // ── every category that has a product is on every list ───────────────────
