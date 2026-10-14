@@ -591,3 +591,30 @@ begin
   raise notice 'magazine_housing_fit: % row(s) inserted (% before, % after); 32 expected where all nine magazines exist',
     n_after - n_before, n_before, n_after;
 end $$;
+
+-- ── magazine_housing_fit: the 21rd magazine ─────────────────────────────────
+-- Same statement as supabase/migrations/20261014234727_magazine_housing_fit_21rd.sql
+-- (four rows for sig-sauer-p365-21rd-mag); the same guard as the block above,
+-- so it inserts nothing on a database with no products. Keep identical.
+
+do $$
+declare
+  n_before integer; n_after integer;
+begin
+  select count(*) into n_before from public.magazine_housing_fit;
+
+  insert into public.magazine_housing_fit (magazine_product_id, housing_class, fit, note, source)
+  select p.id, r.housing_class, r.fit, r.note, 'https://www.sigsauer.com/p365-9mm-21rd-magazine.html'
+  from (values
+    ('sig-sauer-p365-21rd-mag', 'xmacro', 'extended', 'Extends below the grip; the baseplate meets the grip with no gap'),
+    ('sig-sauer-p365-21rd-mag', 'fuse',   'extended', 'The FUSE''s factory extended mag; the baseplate meets the grip with no gap'),
+    ('sig-sauer-p365-21rd-mag', 'p365',   'extended', 'Works, but leaves a gap between the baseplate and the shorter grip (per SIG)'),
+    ('sig-sauer-p365-21rd-mag', 'p365xl', 'extended', 'Works, but leaves a gap between the baseplate and the shorter grip (per SIG)')
+  ) as r (slug, housing_class, fit, note)
+  join public.products p on p.slug = r.slug and p.category::text = 'magazine'
+  on conflict (magazine_product_id, housing_class) do nothing;
+
+  select count(*) into n_after from public.magazine_housing_fit;
+  raise notice 'magazine_housing_fit (21rd): % row(s) inserted (% before, % after); 4 expected where the magazine exists',
+    n_after - n_before, n_before, n_after;
+end $$;
