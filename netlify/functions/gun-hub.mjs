@@ -470,7 +470,7 @@ function hubCss() {
     '.mag-nofit strong { color: #8a3b12; }' +
     '.mag-nofit a { color: #4a9edd; text-decoration: none; }' +
     '.mag-disclosure { font-size: 11.5px; color: #888; margin: 8px 0 0; line-height: 1.5; }' +
-    '@media (max-width: 480px) { .mag-row { flex-direction: column; } .mag-buy { align-items: flex-start; flex-direction: row; align-items: center; gap: 12px; } }'
+    '@media (max-width: 480px) { .mag-row { flex-direction: column; } .mag-main { flex: 0 0 auto; } .mag-buy { flex-direction: row; align-items: center; gap: 12px; } }'
   );
 }
 
