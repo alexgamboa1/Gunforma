@@ -21,7 +21,7 @@
 // Where ids come from:
 //   ensure(parts)  — the two builder pages, just before every save
 //   trg_assign_part_ids — the database, for anything that writes a part
-//                    without one (supabase/part_ids.sql)
+//                    without one (supabase/migrations_archive/part_ids.sql)
 // Both only ever ADD an id to a part that has none (or a duplicate). An id
 // is never changed, and a re-link keeps it: relink_build_part() and
 // create_product() both merge into the existing part (`v_part || …`).
@@ -120,7 +120,7 @@
   // and added/removed parts. Not the 'resubmit' marker, which the database
   // writes when a builder resubmits. What the builder's "What Gunforma
   // changed" panel lists, and what the queue shows above the parts.
-  // supabase/admin_part_changes.sql classifies entries the same way when it
+  // supabase/migrations_archive/admin_part_changes.sql classifies entries the same way when it
   // writes the builder's notification — change both together.
   function changes(build) {
     var history = (build && Array.isArray(build.edit_history)) ? build.edit_history : [];

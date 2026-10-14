@@ -270,13 +270,13 @@ const DERIVED_FIELDS = {
   'recoil_spring.guide_rod_material': 'material',
 };
 const BARREL_TYPES = ['standard', 'threaded', 'ported', 'threaded-and-ported'];   // enum barrel_type
-// sight_specs CHECKs (supabase/add_categories.sql): value -> what the admin reads
+// sight_specs CHECKs (supabase/migrations_archive/add_categories.sql): value -> what the admin reads
 const SIGHT_CHOICES = {
   sight_position: [['front', 'Front'], ['rear', 'Rear'], ['set', 'Set (front and rear)']],
   sight_height:   [['standard', 'Standard'], ['suppressor', 'Suppressor / co-witness']],
   sight_type:     [['night', 'Night (tritium)'], ['fiber', 'Fiber optic'], ['night-fiber', 'Night + fiber'], ['plain', 'Plain']],
 };
-// magazine_specs' CHECK (supabase/magazine_category.sql); create_product()
+// magazine_specs' CHECK (supabase/migrations_archive/magazine_category.sql); create_product()
 // refuses a value outside it in words. Change all three together.
 const MAG_CHOICES = {
   mag_style: [['Flush', 'Flush'], ['Finger Extension', 'Finger extension'], ['Extended', 'Extended']],
@@ -304,7 +304,7 @@ const OPTION_COLS = {
   frame: [{ key: 'manual_safety_variant', label: 'Manual safety', bool: true }, { key: 'handedness', label: 'Handedness' }],
   mag_release: [{ key: 'handedness', label: 'Handedness' }],   // left / right versions exist; ambidextrous = leave blank
 };
-// The columns variant_identity() compares, in its order (supabase/add_variants.sql).
+// The columns variant_identity() compares, in its order (supabase/migrations_archive/add_variants.sql).
 const IDENTITY_COLS = ['color', 'finish', 'optic_cut', 'handedness', 'manual_safety_variant', 'reticle', 'reticle_color',
   'battery_type', 'mount_system', 'bundle', 'clamp', 'clamp_style', 'clamp_rail_type'];
 
@@ -508,7 +508,7 @@ async function loadSuggestions(cat) {
   }
   // Other Parts: every part type already entered in this category (not the
   // "two or more products" rule — there are few, and each is a phrasing to
-  // reuse). Read only for this category: before supabase/add_categories.sql
+  // reuse). Read only for this category: before supabase/migrations_archive/add_categories.sql
   // the column does not exist, the read fails, and the list stays empty.
   if (cat === 'other') {
     jobs.push(sb.from('products').select('part_type').eq('category', 'other').then(function (res) {
@@ -1614,8 +1614,8 @@ async function runCheck() {
     // the function from before a migration this page expects: the enum
     // does not have the category yet, or the function knows the category
     // but not its spec sheet or a product key this page sends (part_type:
-    // supabase/add_categories.sql; magazines and restricted_states:
-    // supabase/magazine_category_enum.sql, then magazine_category.sql).
+    // supabase/migrations_archive/add_categories.sql; magazines and restricted_states:
+    // supabase/migrations_archive/magazine_category_enum.sql, then magazine_category.sql).
     // No list of categories here: the message is about the database
     // being behind the page, whichever category it is.
     S.check = { sig: sig, ok: false, code: error.code,
@@ -1822,7 +1822,7 @@ function annotateLinks() {
 
 // ============================================================
 // ADD A COLOUR — needs the admin INSERT policy on colors
-// (supabase/colors_admin_insert.sql). Until it is applied the database
+// (supabase/migrations_archive/colors_admin_insert.sql). Until it is applied the database
 // refuses, and the page says so.
 // ============================================================
 async function addColour() {
@@ -1850,7 +1850,7 @@ async function addColour() {
     if (error || !data || !data.length) {
       note.className = 'field-note bad';
       note.textContent = 'The database refused to add "' + name + '"' + (error ? ': ' + error.message : '') +
-        '. Adding colours from this page needs the admin insert policy on colors (supabase/colors_admin_insert.sql).';
+        '. Adding colours from this page needs the admin insert policy on colors (supabase/migrations_archive/colors_admin_insert.sql).';
       return;
     }
     L.colors.push(data[0]);

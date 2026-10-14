@@ -1578,7 +1578,7 @@ async function flagForReview(buildId, partIdx) {
 
 // ============================================================
 // COMMENTS — reads build_comments_public, writes build_comments and
-// build_comment_votes. See supabase/build_comments.sql for the rules the
+// build_comment_votes. See supabase/migrations_archive/build_comments.sql for the rules the
 // database enforces (approved builds only, one reply level, no self-votes,
 // rate limit, who may edit what). The page never re-implements those; it
 // just shows the DB's error message when one fires.

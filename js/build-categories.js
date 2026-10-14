@@ -116,7 +116,7 @@ const CATEGORIES = [
   { key:'magwells', group:'magazine', label:name('magwell'), dbCategory:['magwell'] },
   // `mags` is the key every magazine ever typed into a build was saved
   // under, so it stays; the section has been backed by the `magazine`
-  // catalog category since supabase/magazine_category.sql.
+  // catalog category since supabase/migrations_archive/magazine_category.sql.
   { key:'mags',     group:'magazine', label:name('magazine'), dbCategory:['magazine'] },
   { key:'basepad',  group:'magazine', label:name('basepad'), dbCategory:['basepad'] },
 
@@ -147,7 +147,7 @@ const CATEGORIES = [
   // not carry. `anyCategory`: it is the catch-all, so the review queue's link
   // picker and add-a-part offer EVERY category for a pending part from here,
   // and linking one rewrites its category to the product's own
-  // (create_product() and relink_build_part(), supabase/add_categories.sql).
+  // (create_product() and relink_build_part(), supabase/migrations_archive/add_categories.sql).
   { key:'misc',  group:'carry', label:name('other'), dbCategory:['other'], anyCategory:true },
 ];
 

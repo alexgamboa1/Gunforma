@@ -7,7 +7,7 @@ name: Smoke test
 # This exists because photo upload broke on 2026-09-22 and was not found until
 # 2026-09-25. Every upload returned 400, the only symptom was a generic
 # "Upload failed" toast, and nothing was watching. See
-# supabase/fix_product_image_policies.sql for the incident and CLAUDE.md for
+# supabase/migrations_archive/fix_product_image_policies.sql for the incident and CLAUDE.md for
 # the invariant.
 #
 # It signs in with a dedicated non-admin account, NOT the service-role key.

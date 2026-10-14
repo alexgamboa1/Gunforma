@@ -29,7 +29,7 @@
 // Functions, not values, for the reason js/photos.js documents.
 //
 // ── IT IS DARK UNTIL THE COLUMN EXISTS ────────────────────────────────────
-// builds.gun_id arrives with supabase/builds_gun_id.sql, and the house order
+// builds.gun_id arrives with supabase/migrations_archive/builds_gun_id.sql, and the house order
 // is code first, migration second. So nothing here assumes the column:
 //
 //   probe()     asks PostgREST for builds.gun_id and builds.fcu_only, in one

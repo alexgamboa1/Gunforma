@@ -82,6 +82,17 @@ Both halves of that have already cost something:
 Both are the same shape as the failures the rest of this file is about: the
 work was correct, the browser looked normal, and nothing reported a problem.
 
+## Schema changes go through `supabase/migrations/`
+
+**`MIGRATIONS.md` is the rule.** A database change is a file in
+`supabase/migrations/`, tested on an empty database (`supabase db reset`
+locally, or the `check-migrations` workflow on the PR, or a Supabase branch)
+and applied to production with `supabase db push --linked` after merge.
+Never the dashboard SQL editor, never the MCP's `apply_migration` — both are
+how production came to hold 223 history rows the repo could not replay.
+The loose files that used to live under `supabase/` are in
+`supabase/migrations_archive/`; the baseline dump replaced them.
+
 ## PostgREST embeds: the PGRST201 rule
 
 `products` and `product_variants` reference **each other** — one foreign key in
@@ -436,7 +447,7 @@ uploads, avatar uploads and photo deletion** — none of which touch the
 `product-images` bucket — from 2026-09-22 to 2026-09-25. Three days, and
 silently: the only symptom was a generic "Upload failed" toast, with nothing
 surfacing the `42501` or naming `profiles`. See
-`supabase/fix_product_image_policies.sql`.
+`supabase/migrations_archive/fix_product_image_policies.sql`.
 
 Sweep for the shape whenever a `SELECT` grant is revoked. Check **both**
 `polqual` and `polwithcheck` — the insert policy that caused the outage above
@@ -488,7 +499,7 @@ Zero rows is correct. Anything returned is a table carrying grants it should
 not have — revoke them, then check whether its RLS policies were ever written,
 because a table that slipped past this probably slipped past that too.
 
-Worked example: `supabase/revoke_anon_write_grants.sql`. RLS was doing the
+Worked example: `supabase/migrations_archive/revoke_anon_write_grants.sql`. RLS was doing the
 real work the whole time — no policy admitted `anon` for a write — but the
 grants are what turn one missing or mis-scoped policy into a writable table.
 `builds` carried a DELETE grant for `anon` with no anon-facing DELETE policy
@@ -541,7 +552,7 @@ Edge Function reported the failure as `{ success: true, warning: ... }` and
 `scripts/launch-invites.js` printed a green tick and "0 failed" — so a
 half-finished invite, which cannot be retried because the function refuses any
 build that already has a `user_id`, looked like a clean launch. See
-`supabase/fix_build_photo_tampering_guard.sql`.
+`supabase/migrations_archive/fix_build_photo_tampering_guard.sql`.
 
 Widening a guard for service_role must not widen it for anyone else, and that
 is the half worth proving. As with the guards above, simulate both callers in
@@ -653,7 +664,7 @@ nothing else: the product is live, only its address changed. The sitemap
 lists the new address on its own, since it is built from `products.category`.
 Worked example: `tti-xmacro-completed-mag-w-basepad`, filed as a basepad
 before the magazine category existed and moved by
-`supabase/magazine_category.sql`.
+`supabase/migrations_archive/magazine_category.sql`.
 
 Nothing in the repo or the database sets `is_discontinued` back to false
 (`add_variants()` only reads it to refuse), and no seed or import script
@@ -703,7 +714,7 @@ listings swap places between requests — and the hero with them.
 
 `affiliate_links.is_primary` **no longer exists**. It was a hand-set flag with no
 writer in this repo, it caused the mismatch above, and the sort has a
-deterministic tiebreak now instead. See `supabase/retire_is_primary.sql`; the
+deterministic tiebreak now instead. See `supabase/migrations_archive/retire_is_primary.sql`; the
 values are archived in `affiliate_links_is_primary_archive`.
 
 ## Unpaid links to a part's own store
@@ -748,7 +759,7 @@ we can stand behind in rich results; `product-page.mjs` filters maker rows
 out of `offers` explicitly.
 
 **`link_clicks.product_id` is what stores these clicks** —
-`supabase/link_clicks_product_id.sql`, applied 2026-10-07 (migration
+`supabase/migrations_archive/link_clicks_product_id.sql`, applied 2026-10-07 (migration
 `20261007055811`), after #149 was live; the record at the bottom of that
 file is what was read back. A row carries exactly one of `link_id` /
 `product_id`, enforced by a check constraint. The function was written to
@@ -886,7 +897,7 @@ cache for days after you have fixed something.
 ## Adding a product
 
 **One product is added with one call: `create_product()`**
-(`supabase/create_product.sql`). It writes the brand (found or created), the
+(`supabase/migrations_archive/create_product.sql`). It writes the brand (found or created), the
 product, its platforms, its spec sheet, every variant with its photos and
 retailer links, and its fits-with rules in one transaction. It can also swap a
 build's pending custom part for the new product. It is `SECURITY DEFINER`, and
@@ -897,7 +908,7 @@ part go through `add_variants()`** — see **Adding a variant to an existing
 part** below. Both share one copy of the variant logic.
 
 **What a category needs lives in a table, not in code:
-`spec_field_rules`** (`supabase/spec_field_rules.sql`).
+`spec_field_rules`** (`supabase/migrations_archive/spec_field_rules.sql`).
 
 - It holds one row per (category, field), and each row is `required` or
   `optional`.
@@ -951,7 +962,7 @@ part** below. Both share one copy of the variant logic.
   data came from.
   - A product without one is not approved: `product_data_status()` reports a
     blank `url` in `missing`, not `optional_blank`
-    (`supabase/fix_product_data_status_url.sql`).
+    (`supabase/migrations_archive/fix_product_data_status_url.sql`).
   - No public page renders it: the catalog and the Armory map it to a
     `buy_url` that nothing reads.
   - Do not start rendering it, and do not drop it.
@@ -967,7 +978,7 @@ part** below. Both share one copy of the variant logic.
     filled from `products.material`.
   - A spec value that disagrees with it is refused.
 - **Material family is required for approval; the material's wording is
-  not** (`supabase/material_optional.sql`).
+  not** (`supabase/migrations_archive/material_optional.sql`).
   - `'Unspecified'` is a valid family. It approves, and `optional_blank`
     carries "material family unspecified" so those parts can be found later.
   - A blank `material` sits in `optional_blank`, not `missing`.
@@ -1045,7 +1056,7 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
 - **`p_specs` and `p_fits` are omitted when empty, never sent as `null`.** A
   JSON null that reaches the function as the jsonb value `'null'` made
   `jsonb_strip_blank()` throw "cannot call jsonb_each on a non-object".
-  `supabase/fix_strip_blank_and_link_result.sql` makes it read any
+  `supabase/migrations_archive/fix_strip_blank_and_link_result.sql` makes it read any
   non-object as empty; the page keeps omitting them anyway.
 - **The page suggests a short slug and always sends it.** `create_product()`
   falls back to brand + full name, which produced a 70-character address
@@ -1088,7 +1099,7 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   that one coalesce, and every Check compares it with the labels the server
   returns.
 - **Adding a colour** inserts into `colors` and needs
-  `supabase/colors_admin_insert.sql`. Without it the database refuses and
+  `supabase/migrations_archive/colors_admin_insert.sql`. Without it the database refuses and
   the page says so.
 - **`?build=<uuid>&part=<index>`** prefills brand, name, category and the
   build's platform from a pending custom part and passes both through, so
@@ -1099,7 +1110,7 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
 
 `gunforma-admin-part.html?product=<slug>` is the add-a-part page in
 **add-a-variant mode**, over `add_variants(p_product_slug, p_variants,
-p_dry_run)` (`supabase/add_variants.sql`). Every part listed under "Already
+p_dry_run)` (`supabase/migrations_archive/add_variants.sql`). Every part listed under "Already
 in the catalog?" links to it.
 
 - **The part is read-only:** name, brand, category, platforms, and every
@@ -1164,8 +1175,8 @@ Logged for later, not built:
 
 ### Recoil Springs, Sights and Other Parts
 
-Three categories added together (`supabase/add_categories_enum.sql`, then
-`supabase/add_categories.sql`), on every surface: catalog tab, `/parts/`
+Three categories added together (`supabase/migrations_archive/add_categories_enum.sql`, then
+`supabase/migrations_archive/add_categories.sql`), on every surface: catalog tab, `/parts/`
 address and index, build section, add-a-part with its rules, Needs data and
 the sitemap.
 
@@ -1197,7 +1208,7 @@ whole query (every product page, the whole catalog).
   fiber / night + fiber / plain — all required, strict dropdowns, and CHECKs on
   `sight_specs`. **The three lists live in three places** — those CHECKs,
   `create_product()` (which refuses a value outside them in words naming the
-  allowed ones, `supabase/sight_values_in_words.sql`, instead of the raw
+  allowed ones, `supabase/migrations_archive/sight_values_in_words.sql`, instead of the raw
   constraint error) and `SIGHT_CHOICES` in `gunforma-admin-part.html`.
   Change all three together. Dovetail and rear notch optional: a required free-text field
   an admin cannot answer gets filled with guesses. **The front dot colour is a
@@ -1233,7 +1244,7 @@ Logged for later, not built:
 ### Magazines, and restricted states
 
 The fourth category added after the catalog's first sixteen
-(`supabase/magazine_category_enum.sql`, then `supabase/magazine_category.sql`,
+(`supabase/migrations_archive/magazine_category_enum.sql`, then `supabase/migrations_archive/magazine_category.sql`,
 same two-file shape as the three above and for the same reason). `magazine`,
 ordered right after `magwell` in the enum and in both category lists;
 segment `magazines`; "Magazines" / "Magazine"; spec sheet `magazine_specs`.
@@ -1307,7 +1318,7 @@ A builder's hand-typed part is stored as a **pending custom part**
 - **Link to existing part** → pick a product (only those in the part's
   section, by `js/build-categories.js`) and a variant; the page calls
   `relink_build_part(build, index, product, variant, variant_specs)`
-  (`supabase/relink_build_part.sql`).
+  (`supabase/migrations_archive/relink_build_part.sql`).
 - A part whose section has **no catalog category** (mags, holsters, paintjob,
   knife) gets a reason line and neither action.
 - **Other Parts (`misc`) is the catch-all.** Add to catalog pre-selects no
@@ -1316,7 +1327,7 @@ A builder's hand-typed part is stored as a **pending custom part**
   `relink_build_part()` — **rewrites its `category` to the product's own**, so
   the DMP recoil spring typed under Other Parts renders under Recoil Springs.
   Only `misc`: a part in any other section keeps the category it was saved
-  under (`supabase/add_categories.sql`; the dry run in that PR shows both).
+  under (`supabase/migrations_archive/add_categories.sql`; the dry run in that PR shows both).
 
 **The index is the part's ORIGINAL index in `parts_snapshot`.** The queue
 renders parts in stored order, so its row index is that index.
@@ -1349,7 +1360,7 @@ Noticed here and not fixed:
   refuse a part that has corrections. `relink_build_part()` does both.
 
 A second item logged here — `prevent_owner_edit_history_change()` refusing
-the service role and a direct session — is fixed by `supabase/part_ids.sql`,
+the service role and a direct session — is fixed by `supabase/migrations_archive/part_ids.sql`,
 which found the same guard refusing every visitor's flag too; see **The
 flag never worked**.
 
@@ -1392,7 +1403,7 @@ identifier and let the next run refill it.
 
 **Never in the template:** `id`, `created_at`, `updated_at` (defaulted),
 `retired_at` (retirement is deliberate, not an import), and `is_primary`, which
-**no longer exists** — see `supabase/retire_is_primary.sql`. An import carrying
+**no longer exists** — see `supabase/migrations_archive/retire_is_primary.sql`. An import carrying
 an `is_primary` column now fails.
 
 A new row therefore looks like: a variant, a partner, a URL, its tracked URL,
@@ -1543,7 +1554,7 @@ so it is not asserted.
 **Adding a category** is therefore: the enum value (its own migration — see
 **Adding a product**), one line in each copy, its build section, and — if it
 has a spec sheet — its `SPEC_TABLES` entry and rules. The guard names whatever
-is missing. `supabase/magazine_category.sql` is the latest worked example;
+is missing. `supabase/migrations_archive/magazine_category.sql` is the latest worked example;
 note that the guard's "no hand-written copies" rule counts `<category>: '…'`
 pairs, so a word that becomes a category (`magazine`) can turn an unrelated
 map in a page into a false positive — quote its keys.
@@ -1892,7 +1903,7 @@ editor's "Change pistol" calls `GunModel.reset()`, and both columns go in one
 UPDATE. On a **live** build `gun_id` is on
 `restrict_owner_edits_on_approved_build`'s blocked list, beside the platform.
 
-**It is dark until `supabase/builds_gun_id.sql` is applied**, because the
+**It is dark until `supabase/migrations_archive/builds_gun_id.sql` is applied**, because the
 house order is code first:
 
 - `probe()` asks PostgREST for `builds.gun_id` once per page load. Any error
@@ -2210,7 +2221,7 @@ removed part takes its corrections with it, and nothing is pinned.
   (`scripts/part-ids.test.mjs` counts saves against calls). It keeps any
   valid id, re-ids a duplicate, and mutates the page's state so the id stays
   put across later saves without a reload.
-- **`trg_assign_part_ids`** (`supabase/part_ids.sql`), BEFORE INSERT OR
+- **`trg_assign_part_ids`** (`supabase/migrations_archive/part_ids.sql`), BEFORE INSERT OR
   UPDATE OF `parts_snapshot`, for any writer that sends a part without one —
   the parked Armory, a script, SQL by hand, a tab opened before the deploy.
   It only ever adds an id. **A part that arrives without one but is identical
@@ -2245,7 +2256,7 @@ caller with `is_admin()`, and the caller is still the visitor. So every
 non-admin flag was refused with "Only admins can modify edit_history", the
 page said "Something went wrong", and on 2026-10-09 the database held zero
 contested entries and zero flag rows. Found by the dry run of
-`supabase/part_ids.sql` (Claude Code, #152), not by anyone using the site.
+`supabase/migrations_archive/part_ids.sql` (Claude Code, #152), not by anyone using the site.
 **The definer context changes whose privileges a statement runs with; it
 does not change who `auth.uid()` says the caller is**, so every trigger the
 function's writes fire still sees the visitor.
@@ -2295,7 +2306,7 @@ Corrections used to live *only* in the log: the queue laid each `to_value`
 over the part, the public page never did, so a corrected build went on
 showing the wrong name to every visitor and to Google. Nothing lays anything
 over a part now — the stored row is the part, and the log is a record.
-`supabase/admin_part_changes.sql` (applied 2026-10-13 as `20261013033628`)
+`supabase/migrations_archive/admin_part_changes.sql` (applied 2026-10-13 as `20261013033628`)
 wrote the one correction that existed then into its build.
 
 **Added and removed parts carry their part under `part`, never a top-level
@@ -2341,7 +2352,7 @@ plus a function the owner reads it through), logged.
 
 **The builder is told once, by the database.** `trg_zz_notify_build_changes`
 (BEFORE UPDATE, named to run after every guard and after
-`stamp_build_review`; `supabase/admin_part_changes.sql`, applied 2026-10-13
+`stamp_build_review`; `supabase/migrations_archive/admin_part_changes.sql`, applied 2026-10-13
 as `20261013033628`, after #163 was live) keeps `builds.changes_notified_count` — how many log
 entries the builder has been told about, a **position** because `edited_at`
 is the reviewer's browser clock. On a live build with entries past it, it
@@ -2356,7 +2367,7 @@ later starts from new rows; see the file's header.
 
 **The database enforces the review queue; the pages do not have to.**
 `trg_restrict_build_status` on `builds` (BEFORE INSERT OR UPDATE,
-`supabase/restrict_build_status_to_reviewers.sql`, applied 2026-10-06 as
+`supabase/migrations_archive/restrict_build_status_to_reviewers.sql`, applied 2026-10-06 as
 `20261006235015`): a caller who is not an admin and not a trusted backend
 may insert a build only as `draft` or `pending`, and may change a status
 only *to* `draft` or `pending`. Writing `approved` or `rejected` is refused

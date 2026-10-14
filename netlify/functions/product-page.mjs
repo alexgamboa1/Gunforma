@@ -319,7 +319,7 @@ async function fetchSpecs(category, productId) {
 }
 
 // Capacity-restricted states: products.restricted_states, the two-letter
-// codes a part cannot ship to (supabase/magazine_category.sql; a product
+// codes a part cannot ship to (supabase/migrations_archive/magazine_category.sql; a product
 // field, not a magazine one). Read in a query of its own, never in
 // fetchProduct's select, for the same reason as part_type above: a column
 // named there that the database does not have yet fails every product
@@ -843,7 +843,7 @@ export default async (req) => {
     restrictedStates = await fetchRestrictedStates(product.id);
   } catch (err) {
     // Non-fatal, like the two above — and expected for the minutes between
-    // this deploy and supabase/magazine_category.sql being applied, when the
+    // this deploy and supabase/migrations_archive/magazine_category.sql being applied, when the
     // column does not exist and PostgREST answers 400 here.
     console.error('[product-page] restricted-states lookup failed', err);
   }

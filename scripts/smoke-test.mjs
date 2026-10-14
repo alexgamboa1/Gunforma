@@ -7,7 +7,7 @@
 // toast. The cause was two layers down: a storage policy read `profiles`
 // inline, a revoke took `SELECT` on that table away from `authenticated`, and
 // Postgres then threw 42501 on every write to storage.objects whatever the
-// bucket. Full incident record: supabase/fix_product_image_policies.sql, and
+// bucket. Full incident record: supabase/migrations_archive/fix_product_image_policies.sql, and
 // the invariant it cost us is in CLAUDE.md.
 //
 // So this test walks the real upload path end to end, on a schedule, and goes

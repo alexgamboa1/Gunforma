@@ -128,7 +128,7 @@ const PAINT = { category: 'paintjob', refId: null, brand: 'Shop', name: 'FDE · 
   pending: false, finish: { shop: 'Shop', color: 'FDE', stipple: 'Dragon scale' } };
 const PENDING = { category: 'grips', refId: null, brand: 'Someone', name: 'Custom grip', pending: true };
 
-// A part re-linked by relink_build_part() (supabase/relink_build_part.sql),
+// A part re-linked by relink_build_part() (supabase/migrations_archive/relink_build_part.sql),
 // exactly as the function stored it in its dry run against Gunforma-v2:
 // "P365 Complete Build" part 6, the pending "Base Plate +3", linked to the
 // Springer Precision base plate. Keys are in jsonb's own order, not
@@ -147,7 +147,7 @@ const RELINKED = {
 // js/variant-label.js) — the dry run's signed-in-admin case.
 const RELINKED_SPECS = Object.assign({}, RELINKED, { variantSpecs: '2 MOA · Red dot' });
 // A part typed under Other Parts (`misc`) and then linked to a catalog part:
-// create_product() and relink_build_part() (supabase/add_categories.sql)
+// create_product() and relink_build_part() (supabase/migrations_archive/add_categories.sql)
 // rewrite its category to the PRODUCT's, so it renders in its real section.
 // The keys and shape are what the dry run stored for "P365 Complete Build"
 // part 5 (the DMP Soft RSA) re-linked to a recoil spring (case r4), with the

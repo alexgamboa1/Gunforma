@@ -774,7 +774,7 @@ function reportPartner(st) {
 }
 
 // ─── persist the review list ────────────────────────────────────────────────
-// Best-effort: the table is created by supabase/sync_drift_review.sql. If it is
+// Best-effort: the table is created by supabase/migrations_archive/sync_drift_review.sql. If it is
 // not there yet the run must still succeed — the log already carries the same
 // information, and a missing review table is not a reason to skip price updates.
 async function writeDriftReview(st, runAt) {
