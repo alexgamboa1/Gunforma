@@ -114,6 +114,30 @@ export const GUN_HUBS = [
 // The hub index. A single always-valid path, which is what lets a browser
 // page link into this cluster without mirroring the registry client-side
 // (see the note at the top of this file — there is still no mirror).
+
+// ── the hubs' magazine section: every string a reader sees ──────────────────
+// Held here, not in gun-hub.mjs, so scripts/check-guide-content.mjs sweeps
+// it for typed prices and counts like the rest of the hub copy. Capacity and
+// style are never typed: they render from magazine_specs on each row.
+// "extended" describes how the magazine sits in the grip, never capacity —
+// capacity is always its own field on the row.
+export const HUB_MAGAZINE_COPY = {
+  heading:   'Magazines that fit your {model}',
+  intro:     'What the maker says fits this model, and how each magazine sits in the grip. ' +
+             'A baseplate that extends below the grip adds no rounds: capacity is always shown on its own.',
+  verdict: {
+    flush:                   'Flush fit',
+    extended:                'Fits, extends below the grip',
+    with_included_baseplate: 'Fits with the included baseplate',
+    not_compatible:          'Doesn\u2019t fit',
+  },
+  noFit:     'Doesn\u2019t fit the {model}:',
+  restricted:'Not available in:',
+  capacity:  'Capacity',
+  style:     'Style',
+  prices:    'Prices update from retailer feeds; a listing we could not verify in the last 7 days shows \u201cCheck price\u201d.',
+};
+
 export const HUB_INDEX_PATH = '/p365/';
 
 export function hubPath(gun) {

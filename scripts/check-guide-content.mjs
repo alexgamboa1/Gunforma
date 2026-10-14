@@ -15,7 +15,7 @@
 //   - a malformed updated date, an overlong title, or a FAQ that is not a
 //     question.
 // No network: this is tree-dependent, not time-dependent.
-import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS } from '../netlify/functions/_guide-meta.mjs';
+import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS, HUB_MAGAZINE_COPY } from '../netlify/functions/_guide-meta.mjs';
 import { GUIDE_CONTENT } from '../netlify/functions/_guide-content.mjs';
 
 let failures = 0;
@@ -27,7 +27,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 // does not trip it.
 const TYPED_PRICE = /\$\s*\d/;
 // "all 15", "15 optics", "15 red dots" — a typed count of the live set.
-const TYPED_COUNT = /\b(all|the)\s+\d+\s+(optics?|red dots?|lights?|slides?|products?)\b/i;
+const TYPED_COUNT = /\b(all|the)\s+\d+\s+(optics?|red dots?|lights?|slides?|products?|magazines?|mags?)\b/i;
 
 function checkProse(where, text) {
   if (TYPED_PRICE.test(text)) fail(where + ': typed dollar figure — prices render live, never in prose');
@@ -107,6 +107,16 @@ for (const h of GUN_HUBS) {
     fail('hub ' + h.gun + ': summary missing or too thin to be worth reading');
   checkProse('hub ' + h.gun + ' summary', h.summary || '');
 }
+// The hubs' magazine section copy (every string a reader sees there) obeys
+// the same rules as the summaries: no typed price, no typed count. Capacity
+// and style come from magazine_specs on each row, never from here.
+const flat = (o, where) => Object.entries(o).forEach(([k, v]) =>
+  typeof v === 'string' ? checkProse(where + '.' + k, v) : flat(v, where + '.' + k));
+flat(HUB_MAGAZINE_COPY, 'HUB_MAGAZINE_COPY');
+for (const fit of ['flush', 'extended', 'with_included_baseplate', 'not_compatible']) {
+  if (!HUB_MAGAZINE_COPY.verdict[fit]) fail('HUB_MAGAZINE_COPY.verdict: no wording for fit "' + fit + '" — a row would render its raw key');
+}
+
 const dupHubs = GUN_HUBS.map((h) => h.gun).filter((g, i, a) => a.indexOf(g) !== i);
 if (dupHubs.length) fail('GUN_HUBS has duplicate entries: ' + dupHubs.join(', '));
 if (!failures) pass(GUN_HUBS.length + ' gun hub(s) match the declared fit pages exactly');

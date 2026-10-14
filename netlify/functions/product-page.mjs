@@ -34,7 +34,7 @@ import { variantLabel } from './_variant-label.mjs';
 // Fit-guide links. An optic that fits a pistol we have a guide for should
 // say so: before this, the /fit/ cluster had no inbound link from anywhere
 // on the site and the sitemap was its only discovery path.
-import { GUIDE_PAGES, GUIDE_FAMILIES, guidePath, hubPath, GUN_META } from './_guide-meta.mjs';
+import { GUIDE_PAGES, GUIDE_FAMILIES, guidePath, hubPath, GUN_META, GUN_HUBS, isLiveGunHub, HUB_MAGAZINE_COPY } from './_guide-meta.mjs';
 // Stale-price rule and listing sort. These moved to _listing-rules.mjs when
 // guide-page.mjs arrived needing the same rules — two server renderers, one
 // copy, same reasoning as _variant-label.mjs. The browser copies
@@ -375,6 +375,31 @@ async function fetchFitGuides(category, productId) {
     }));
 }
 
+// Which model hubs a MAGAZINE links up to, from magazine_housing_fit: the
+// maker's own fit claim per housing class, mapped to the guns in that class
+// that have a live hub. The mirror of the hub's "Magazines that fit your
+// <model>" section, so magazines and hubs link both ways in served HTML —
+// the same rule as optics and fit guides. Registry-filtered, so it can never
+// emit a dead /p365/ URL. Magazines only; tolerated when the table is not
+// there yet (the handler catches and renders nothing).
+async function fetchMagazineHubs(category, productId) {
+  if (category !== 'magazine') return [];
+  const rows = await pgGet('magazine_housing_fit?magazine_product_id=eq.' + productId +
+    '&select=' + encodeURIComponent('housing_class,fit,note'));
+  const byClass = new Map(rows.map((r) => [r.housing_class, r]));
+  if (!byClass.size) return [];
+  const guns = await pgGet('guns?housing_class=in.(' +
+    [...byClass.keys()].map(encodeURIComponent).join(',') + ')&select=' +
+    encodeURIComponent('slug,name,housing_class'));
+  const bySlug = new Map(guns.map((g) => [g.slug, g]));
+  // GUN_HUBS order, live hubs only, fitting classes only.
+  return GUN_HUBS
+    .filter((h) => isLiveGunHub(h.gun) && bySlug.has(h.gun))
+    .map((h) => ({ gun: h.gun, gunName: GUN_META[h.gun] || bySlug.get(h.gun).name,
+                   row: byClass.get(bySlug.get(h.gun).housing_class), href: hubPath(h.gun) }))
+    .filter((x) => x.row && x.row.fit !== 'not_compatible');
+}
+
 // Approved builds that run this product, newest first, with a hero photo for
 // the card. Same fetch-and-filter shape as guide-page.mjs's
 // fetchBuildsUsing(): builds fit in one page today (5 approved), so one query
@@ -406,7 +431,7 @@ async function fetchBuildsUsing(productId) {
   return out;
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -541,6 +566,19 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
       '</div>' +
       '<div class="fitguide-note">Verified against each model&rsquo;s factory optic cut. ' +
         'Cut varies by SKU &mdash; each guide decodes it.</div>'
+    : '';
+
+  // A magazine's "Fits:" — the hubs of the models the maker says it fits,
+  // each with the fit verdict, in the same card style as the optic links
+  // above. Nothing renders for any other category or when no row exists.
+  const magazineHubsHtml = (magazineHubs && magazineHubs.length)
+    ? '<div class="section-title">Fits</div>' +
+      '<div class="fitguides mag-fits">' +
+        magazineHubs.map((g) => '<a class="fitguide" href="' + esc(g.href) + '">' +
+          '<span class="fg-gun">' + esc(g.gunName) + '</span>' +
+          '<span class="fg-go">' + esc(HUB_MAGAZINE_COPY.verdict[g.row.fit] || g.row.fit) + ' &middot; model page &rarr;</span></a>').join('') +
+      '</div>' +
+      '<div class="fitguide-note">As the maker states it. &ldquo;Extends&rdquo; describes how the magazine sits in the grip, never its capacity.</div>'
     : '';
 
   const specRowsHtml = (specs || [])
@@ -748,6 +786,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     '<div class="section-title">Specs</div>' +
     commonSpecs + specRowsHtml +
     fitGuidesHtml +
+    magazineHubsHtml +
     '<div class="section-title">Buy</div>' +
     // Capacity-restricted states, directly above the buttons they are
     // about. One line that wraps on a phone; the codes are the maker's.
@@ -848,7 +887,16 @@ export default async (req) => {
     console.error('[product-page] restricted-states lookup failed', err);
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates });
+  let magazineHubs = [];
+  try {
+    magazineHubs = await fetchMagazineHubs(product.category, product.id);
+  } catch (err) {
+    // Non-fatal, same as the three above — and expected until the
+    // magazine_housing_fit migration is applied, when the table is absent.
+    console.error('[product-page] magazine-hub lookup failed', err);
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs });
   return new Response(html, {
     status: 200,
     headers: {
