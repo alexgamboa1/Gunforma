@@ -770,6 +770,67 @@ shape to keep: logging must never be able to break buying. The legacy
 `scripts/check-routes.mjs` exercises both shapes on the wire, always with
 `x-go-no-log: 1`.
 
+### Which clicks are real
+
+**Report clicks from `link_clicks_real`, never from `link_clicks`.** The
+table is mostly bot traffic, and partnership decisions are made off it.
+
+Queried 2026-10-15: 1,047 of its rows landed on 2026-10-12 with referrer
+"/" on every one — a page that has no `/go/` links — at 20–40 a minute for
+hours across 599 targets; 62 and 97 more on 10-09 and 10-10 were exactly
+one click per link, spread out, a slow sweep. Around 80 rows in the whole
+table are plausibly people. **The known sweeps are 2026-10-09, 10 and 12**,
+and before the migration below was applied the table cannot tell a reader
+from a bot at all: it stored no user agent and no fetch metadata. Those rows
+stay as they are — nothing deletes or rewrites them — and the first row
+with `is_bot` set marks the cutover exactly
+(`select min(ts) from link_clicks where is_bot is not null`; the target is
+2026-10-15).
+
+**Three columns, written by `go.js` on the logged path only** (a request
+with `x-go-no-log` never reaches them), through
+`netlify/edge-functions/_lib/go-bot.mjs` — a pure module in a subdirectory
+so Netlify bundles it into the function instead of deploying it as one:
+
+- `user_agent` — the User-Agent header, trimmed, at most 256 characters,
+  null if absent. The evidence, kept so a verdict can be re-run later.
+- `sec_fetch` — Sec-Fetch-Mode "/" Sec-Fetch-User, e.g. `navigate/?1`,
+  which is what a real click in a modern browser sends; null if both are
+  absent. Recorded, not judged — an older browser sends neither.
+- `is_bot` — true when the user agent is **missing** or matches the bot
+  pattern (`BOT_PATTERNS` in that module: bot, crawl, spider, headless,
+  lighthouse, preview, curl, python, wget, the HTTP client libraries, the
+  SEO crawlers, the link-preview fetchers), false otherwise.
+  **A missing referrer never sets it** — the rule above `x-go-no-log` in
+  `go.js` still holds, and the test asserts it. **Null means unknown, not
+  human**: every row before the migration, and nothing after it.
+
+Until `supabase/migrations/*_link_clicks_bot_columns.sql` is applied the
+full insert is refused with PGRST204 and `go.js` retries once in the old
+shape, so no click is lost to the gap; `x-go-debug: 1` answers
+`x-go-insert-shape: full | legacy` so the plumbing is observable rather than
+assumed. `scripts/go-bot.test.mjs` runs the classifier over real user
+agents on every deploy.
+
+**`link_clicks_real`** (`security_invoker`, every grant revoked from `anon`
+and `authenticated`, `service_role` only — the same privacy as the table) is
+the rows a number can rest on, three conditions and all of them:
+
+- `is_bot = false`, so null is out;
+- not in a minute that holds clicks on five or more different targets
+  (`coalesce(link_id, product_id)`) — the shape of the 10-12 burst, which
+  no pattern can promise to catch next time;
+- `sec_fetch` is **null or exactly `navigate/?1`**. A Sec-Fetch pair that is
+  present but is not a user-activated top-level navigation (`no-cors/`,
+  `same-origin/`, `navigate/` with no `?1`) is a script, a prefetch or a
+  headless crawl wearing a browser's user agent. Null stays in: an older
+  browser sends neither header, and its absence says nothing — the same
+  reasoning as the referrer.
+
+The slow sweeps are not caught by the minute rule and are not meant to be;
+the pattern is what catches a tool. Bots still get their 302 — nothing here
+blocks a crawler from following a link, it only stops counting it.
+
 ## Build-time guards
 
 `publish = "."` means there is no compile step, so the Netlify build command's
@@ -800,6 +861,7 @@ Registered today:
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
+| `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
