@@ -128,7 +128,7 @@ export const HUB_MAGAZINE_COPY = {
   verdict: {
     flush:                   'Flush fit',
     extended:                'Fits, extends below the grip',
-    with_included_baseplate: 'Fits with the included baseplate',
+    with_included_baseplate: 'Fits with an included part',
     not_compatible:          'Doesn\u2019t fit',
   },
   noFit:     'Doesn\u2019t fit the {model}:',
