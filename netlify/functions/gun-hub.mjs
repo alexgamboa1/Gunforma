@@ -174,7 +174,6 @@ async function fetchMagazineFit(housingClass) {
       productId: p.id, slug: p.slug, name: p.name,
       href: '/parts/' + CATEGORY_META.magazine[0] + '/' + p.slug,
       capacity: spec.capacity != null ? Number(spec.capacity) : null,
-      style: spec.mag_style || null,
       restricted: Array.isArray(p.restricted_states) ? p.restricted_states.map(String).filter(Boolean) : [],
       hero: listings[0] || null,
       msrp: dv && dv.msrp != null ? Number(dv.msrp) : null,
@@ -221,8 +220,12 @@ function magazineSectionHtml(name, mags) {
       '<div class="mag-main">' +
         '<a class="mag-name" href="' + esc(m.href) + '">' + esc(m.name) + '</a>' +
         '<div class="mag-meta">' +
+          // Capacity only. magazine_specs.mag_style is written relative to
+          // the original P365 ("Extended" for the 17rd), so beside a per-gun
+          // verdict it contradicts itself on the XMACRO and FUSE hubs
+          // ("Style: Extended" next to "Flush fit"). The verdict is the
+          // per-gun answer; the product page still shows the style.
           (m.capacity != null ? '<span><span class="mag-k">' + esc(C.capacity) + '</span> ' + esc(String(m.capacity)) + ' rounds</span>' : '') +
-          (m.style ? '<span><span class="mag-k">' + esc(C.style) + '</span> ' + esc(m.style) + '</span>' : '') +
         '</div>' +
         '<div class="mag-verdict"><strong>' + esc(C.verdict[m.fit] || m.fit) + '</strong>' +
           (m.note ? ' — ' + esc(m.note) : '') + '</div>' +
