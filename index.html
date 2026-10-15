@@ -272,7 +272,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
   <!-- ══════════════════════════════════════════
        SECTION 2 — FEATURED BUILDS
-       Pulled live from Supabase — top 3 newest approved builds. Fewer
+       Pulled live from Supabase — 3 random approved builds, a new mix
+       on every load (builds with photos first). Fewer
        than three: the builds that exist, then the "Post your build" tile
        in the next cell. No placeholder cards. Zero: the tile alone.
        ══════════════════════════════════════════ -->
@@ -388,19 +389,52 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   function photoUrl(path) { return SB_URL + '/storage/v1/object/public/build-photos/' + path; }
   function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-  // Load the newest 3 approved builds — RLS allows anon SELECT on approved.
+  // Fisher-Yates. Array.sort with a random comparator is biased; this isn't.
+  function shuffle(a) {
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+
+  // Load 3 RANDOM approved builds — RLS allows anon SELECT on approved.
+  // PostgREST has no ORDER BY random(), so: one light query for every approved
+  // build's id (plus one photo id, to know if it has any), shuffle in the
+  // browser, then fetch full rows for the 3 picks. Builds with a photo are
+  // picked first; a photoless build only fills a slot when there aren't three
+  // with photos. Every visit shows a different mix, so a build posted last
+  // month gets the same front-page odds as one posted today.
+  // Scale note: the id list is a few bytes per build. Past ~5k approved builds,
+  // move the pick server-side (an RPC with ORDER BY random() LIMIT 3).
   async function loadFeatured() {
     const container = document.getElementById('featured-builds');
-    const { data: builds, error } = await sb
+    const { data: pool, error: poolErr } = await sb
       .from('builds')
-      .select(
-        'id,name,activities,parts_snapshot,platforms(name),'+
-        'profiles!builds_user_id_fkey(username),'+
-        'build_photos(storage_path,thumb_path,is_hero,position)'
-      )
+      .select('id,build_photos(id)')
       .eq('status', 'approved')
-      .order('created_at', { ascending: false })
-      .limit(3);
+      .limit(1, { referencedTable: 'build_photos' });
+
+    let builds = null, error = poolErr;
+    if (!poolErr && pool && pool.length) {
+      const withPhoto = shuffle(pool.filter(b => (b.build_photos || []).length).map(b => b.id));
+      const noPhoto   = shuffle(pool.filter(b => !(b.build_photos || []).length).map(b => b.id));
+      const picks = withPhoto.concat(noPhoto).slice(0, 3);
+      const res = await sb
+        .from('builds')
+        .select(
+          'id,name,activities,parts_snapshot,platforms(name),'+
+          'profiles!builds_user_id_fkey(username),'+
+          'build_photos(storage_path,thumb_path,is_hero,position)'
+        )
+        .eq('status', 'approved')
+        .in('id', picks);
+      error = res.error;
+      // .in() returns rows in table order; put them back in the shuffled order.
+      if (res.data) builds = picks.map(id => res.data.find(b => b.id === id)).filter(Boolean);
+    } else if (!poolErr) {
+      builds = [];
+    }
 
     if (error) {
       container.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px 20px;font-size:12px;color:#c25d3a;">Could not load featured builds.</div>';
