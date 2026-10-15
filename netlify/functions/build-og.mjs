@@ -471,6 +471,9 @@ function serverPartsHtml(build, productsById) {
           : esc(nameTxt)) +
         (variantTxt ? ' — ' + esc(variantTxt) : '') +
       '</div>' +
+      // The builder's own words about this part. For a crawler this is the
+      // one text on the page no other site has.
+      (p.details ? '<div class="part-details"><span class="part-details-label">Builder\'s notes</span>' + esc(String(p.details)) + '</div>' : '') +
     '</div></div></div>';
   }).join('');
   return '<div id="parts-container">' +
