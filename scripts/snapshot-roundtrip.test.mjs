@@ -123,7 +123,8 @@ const HOLO_GREEN = {
 const PLAIN = { category: 'triggers', refId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
   brand: 'Sig Sauer', name: 'Curved P365', pending: false };
 const NOTED = { category: 'optics', refId: '5795c40a-97b8-4a6a-9880-9ef4190685b9',
-  brand: 'Olight', name: 'Osight X', pending: false, variant: 'Two-tone' };
+  brand: 'Olight', name: 'Osight X', pending: false, variant: 'Two-tone',
+  details: 'Milled for RMR, Cerakote FDE' };
 const PAINT = { category: 'paintjob', refId: null, brand: 'Shop', name: 'FDE · Dragon scale stipple',
   pending: false, finish: { shop: 'Shop', color: 'FDE', stipple: 'Dragon scale' } };
 const PENDING = { category: 'grips', refId: null, brand: 'Someone', name: 'Custom grip', pending: true };

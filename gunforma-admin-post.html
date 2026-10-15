@@ -668,12 +668,26 @@ function categoryPickerState(cat) {
 // the default Brand / Part name / link form that files the part as pending
 // review. Placeholders are interpolated into double-quoted attributes, so a
 // double quote in one would truncate it — keep them clear of quotes.
+// Details for a typed part, asked while it is being typed — the same field
+// every added part offers on its card (js/part-picker.js PART DETAILS), so a
+// custom part that is nothing BUT custom work can say so up front.
+function customDetailsHtml(key) {
+  return '<textarea class="custom-link-input custom-details-input" rows="2" maxlength="' + PartPicker.DETAILS_MAX + '"' +
+    ' placeholder="Details (optional) — custom work, exact variant, what was done to it" id="cd-' + key + '"></textarea>';
+}
+function customDetailsValue(key) {
+  const el = document.getElementById('cd-' + key);
+  const v = ((el && el.value) || '').trim().slice(0, PartPicker.DETAILS_MAX);
+  return v || undefined;   // undefined, so the snapshot omits the key when blank
+}
+
 function customFormFieldsHtml(cat) {
   const c = cat.custom;
   if (c && c.fields) {
     return c.fields.map(function (f) {
       return '<input class="custom-link-input" type="text" placeholder="' + f.placeholder + '" id="cf-' + cat.key + '-' + f.id + '" />';
     }).join('') +
+      customDetailsHtml(cat.key) +
       '<div class="custom-part-note">' + c.note + '</div>' +
       '<button class="custom-part-submit" onclick="addCustomPart(\'' + cat.key + '\')">' + c.submit + '</button>';
   }
@@ -688,6 +702,7 @@ function customFormFieldsHtml(cat) {
     '</div>' +
     '<div class="custom-suggest" id="cs-'+cat.key+'"></div>' +
     '<input class="custom-link-input" type="text" placeholder="Link to where you bought it (optional)" id="cl-'+cat.key+'" />' +
+    customDetailsHtml(cat.key) +
     '<div class="custom-part-note">Your part goes into your build immediately as "Pending review." Once verified by Gunforma it\'s added to the catalog permanently — with your build as the first to list it.</div>' +
     '<button class="custom-part-submit" onclick="addCustomPart(\''+cat.key+'\')">Add for review →</button>';
 }
@@ -855,6 +870,7 @@ function addCustomPart(k) {
       uid:'p'+(uid++), refId:null, category:k,
       brand: vals.shop, name: name, pending: !!custom.pending,
       finish: { shop: vals.shop, color: vals.color, stipple: vals.stipple },
+      details: customDetailsValue(k),
     });
     PartPicker.closePickerAfterAdd(k);
     return;
@@ -863,7 +879,7 @@ function addCustomPart(k) {
   const brand = (document.getElementById('cb-'+k).value||'').trim();
   const name  = (document.getElementById('cn-'+k).value||'').trim();
   if (!brand||!name) return;
-  state.parts.push({ uid:'p'+(uid++), refId:null, category:k, brand, name, pending:true });
+  state.parts.push({ uid:'p'+(uid++), refId:null, category:k, brand, name, pending:true, details: customDetailsValue(k) });
   PartPicker.closePickerAfterAdd(k);
 }
 function removePart(partUid) {
@@ -955,6 +971,8 @@ function buildPartsSnapshot() {
     // appears here too — an admin posting on someone's behalf can record
     // "FDE" just as the builder would have.
     if (p.variant) row.variant = p.variant;
+    // The builder's own details for this part (js/part-picker.js PART DETAILS).
+    if (p.details) row.details = p.details;
     return row;
   });
 }

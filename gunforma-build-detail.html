@@ -185,6 +185,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 /* The chosen variant's spec line ("2 MOA · Red dot"), under its tag. Plain
    muted text, not another pill: it qualifies the tag, it is not a second one. */
 .part-variant-specs { font-size: 11px; color: #777; line-height: 1.35; margin-top: 4px; }
+/* The builder's own details for this part — custom work, the exact
+   variant, what was changed. Their words, so it reads as a quote, not as
+   catalog data. white-space: pre-line keeps their line breaks. */
+.part-details { font-size: 12.5px; color: #333; line-height: 1.5; margin-top: 8px; padding: 6px 10px; border-left: 2px solid #cfe0f0; background: #f8fbfe; border-radius: 0 4px 4px 0; white-space: pre-line; overflow-wrap: anywhere; }
+.part-details-label { display: block; font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #2a7bbd; margin-bottom: 2px; }
 .part-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 /* Variant note reads as the builder's own words, so it keeps its casing
    rather than being upper-cased like the structural tags beside it. */
@@ -1213,6 +1218,9 @@ function renderPartCard(build, part, idx) {
         // "2 MOA · Red dot" under the chosen-variant tag — the label alone
         // does not say which of three "Black · Anodized" optics this is.
         (vr.specs ? '<div class="part-variant-specs">'+escH(vr.specs)+'</div>' : '')+
+        // The builder's details (js/part-picker.js PART DETAILS). Free text,
+        // escaped like every other user string.
+        (part.details ? '<div class="part-details"><span class="part-details-label">Builder\'s notes</span>'+escH(part.details)+'</div>' : '')+
       '</div>'+
     '</div>'+
     affiliateHtml+

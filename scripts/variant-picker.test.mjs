@@ -262,3 +262,40 @@ test('the build row shows the stored spec line under the label', () => {
   const plain = PP.selectedPartHtml(part({ variantId: 'g', variantLabel: 'Gold / TiN', variantColor: 'Gold' }));
   assert.ok(!plain.includes('selected-part-variant-specs'));
 });
+
+// ── Part details (js/part-picker.js PART DETAILS) ─────────────────────────
+// Offered on EVERY part — a picked variant, an unpicked product, a typed
+// pending part — because custom work happens to all of them.
+test('every kind of part offers details, right after the colour', () => {
+  const kinds = {
+    picked:  part({ variantId: 'g', variantLabel: 'Gold / TiN', variantColor: 'Gold' }),
+    unpicked: part({}),
+    pending: part({ refId: null, pending: true }),
+  };
+  for (const [k, p] of Object.entries(kinds)) {
+    const html = PP.selectedPartHtml(p);
+    assert.ok(html.includes('selected-part-details-add'), k + ': no "+ Add details" offered');
+  }
+  // After the colour label, before Remove.
+  const html = PP.selectedPartHtml(kinds.picked);
+  assert.ok(html.indexOf('selected-part-variant-label') < html.indexOf('selected-part-details-add'));
+  assert.ok(html.indexOf('selected-part-details-add') < html.indexOf('selected-part-remove'));
+});
+
+test('saved details render open, escaped, with their count', () => {
+  const text = 'Milled for RMR <b>by</b> "Primary"';
+  const html = PP.selectedPartHtml(part({ details: text }));
+  assert.ok(!html.includes('selected-part-details-add'), 'had details but still showed the button');
+  assert.ok(html.includes('Milled for RMR &lt;b&gt;by&lt;/b&gt; &quot;Primary&quot;</textarea>'), 'not escaped / not restored');
+  assert.ok(html.includes(text.length + ' / ' + PP.DETAILS_MAX), 'count missing');
+});
+
+test('noteDetails trims, caps, and clears to undefined', () => {
+  STATE.parts = [part({ uid: 'p7' })];
+  PP.noteDetails('p7', '  Cerakote FDE  ');
+  assert.equal(STATE.parts[0].details, 'Cerakote FDE');
+  PP.noteDetails('p7', 'x'.repeat(PP.DETAILS_MAX + 50));
+  assert.equal(STATE.parts[0].details.length, PP.DETAILS_MAX, 'cap not enforced in code');
+  PP.noteDetails('p7', '   ');
+  assert.equal(STATE.parts[0].details, undefined, 'blank must clear the key, not store ""');
+});

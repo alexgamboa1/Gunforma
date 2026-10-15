@@ -1030,6 +1030,7 @@ async function loadBuildById(buildId) {
       // finish is post-build's object; it passes through untouched.
       finish:  part.finish  || undefined,
       variant: part.variant || undefined,
+      details: part.details || undefined,
       // Same pass-through as the two above, and the same trap: dropping a
       // field here loses it just as completely as dropping it from
       // buildPartsSnapshot(), because that function reads STATE.parts.
@@ -1550,6 +1551,8 @@ function buildPartsSnapshot() {
     // Armory's only job is not to destroy it.
     if (p.finish)  row.finish  = p.finish;
     if (p.variant) row.variant = p.variant;
+    // The builder's own details for this part (js/part-picker.js PART DETAILS).
+    if (p.details) row.details = p.details;
     // WHICH VARIANT — carried through UNTOUCHED, exactly like `finish` and
     // `variant` above. This page has no variant picker and should not grow
     // one; its only job is not to destroy post-build's fields.
@@ -1902,6 +1905,7 @@ function remixGuide(guideId) {
       // finish is post-build's object; it passes through untouched.
       finish:  part.finish  || undefined,
       variant: part.variant || undefined,
+      details: part.details || undefined,
       // Same pass-through as the two above, and the same trap: dropping a
       // field here loses it just as completely as dropping it from
       // buildPartsSnapshot(), because that function reads STATE.parts.

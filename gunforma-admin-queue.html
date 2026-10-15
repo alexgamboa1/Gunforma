@@ -134,6 +134,7 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 .simple-parts-list { border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden; }
 .simple-part-row { display: flex; gap: 14px; align-items: center; padding: 12px 16px; border-bottom: 0.5px solid #efece3; background: #fff; }
 .simple-part-row:last-child { border-bottom: none; }
+.simple-part-details { font-size: 11.5px; color: #444; line-height: 1.45; margin-top: 4px; padding-left: 8px; border-left: 2px solid #cfe0f0; white-space: pre-line; overflow-wrap: anywhere; }
 .simple-part-cat { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; width: 100px; flex-shrink: 0; }
 .simple-part-name { font-size: 13px; font-weight: 700; }
 .simple-part-thumb { flex-shrink: 0; width: 56px; height: 56px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
@@ -867,7 +868,10 @@ function renderDetail(b) {
           '<div class="simple-part-cat">'+escH(window.BuildCategories.categoryLabel(dCat)||'—')+'</div>'+
           '<div><div class="simple-part-name">'+escH(dName||'Unnamed part')+(p.pending?'<span class="simple-part-pending-tag">Pending catalog review</span>':'')+(history.length?'<span class="edited-flag">Edited</span>':'')+(addedByReviewer(b, p)?'<span class="edited-flag">Added by Gunforma</span>':'')+'</div>'+
           '<div class="simple-part-brand">'+escH(dBrand||'')+
-            (dVar ? '<span class="simple-part-variant">'+escH(dVar)+'</span>' : '')+'</div></div>'+
+            (dVar ? '<span class="simple-part-variant">'+escH(dVar)+'</span>' : '')+'</div>'+
+          // The builder's details, as the public page will show them. A
+          // reviewer reads these before approving: they are public text.
+          (p.details ? '<div class="simple-part-details">'+escH(p.details)+'</div>' : '')+'</div>'+
         '</div>'+
         '<div class="simple-part-actions">'+actionsHtml+'</div>'+
         catalogActionsHtml(b, p, i, history)+
@@ -1347,6 +1351,8 @@ function snapshotRow(p) {
   if (p.partId)        row.partId        = p.partId;
   if (p.finish) row.finish = p.finish;
   if (p.variant) row.variant = p.variant;
+  // The builder's own details for this part (js/part-picker.js PART DETAILS).
+  if (p.details) row.details = p.details;
   return row;
 }
 

@@ -126,6 +126,90 @@
     }
   }
 
+  // ===== PART DETAILS =====
+  //
+  // WHAT THIS IS FOR
+  // The catalog stores what a maker sells: brand, product, colour. A build is
+  // more than that — a slide milled for an RMR by a shop, a frame stippled, a
+  // barrel threaded after purchase, a colour or cut the catalog does not
+  // carry. None of it fits a dropdown, so it goes here as the builder's own
+  // words, one box per part, offered on EVERY part: a picked variant, a
+  // single-variant product, a typed pending part and a paint job alike.
+  //
+  // Distinct from `variant` above on purpose. `variant` is a short colour
+  // note, offered only where no variant was picked, so it can never
+  // contradict a picked one. `details` describes the work done to THIS part
+  // on THIS gun and sits beside a picked colour without contradicting it.
+  //
+  // Same storage rules as `variant`: trimmed, capped here as well as by
+  // maxlength (a paste walks past maxlength), and undefined rather than ''
+  // when blank, so a part nobody wrote details for round-trips byte-identical
+  // to its row before this field existed.
+  var DETAILS_MAX = 280;
+
+  function noteDetails(uid, value) {
+    var st = need().state();
+    var parts = (st && st.parts) || [];
+    var v = String(value == null ? '' : value).trim().slice(0, DETAILS_MAX);
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i].uid === uid) {
+        parts[i].details = v || undefined;
+        var count = document.getElementById('pd-count-' + uid);
+        if (count) count.textContent = v.length + ' / ' + DETAILS_MAX;
+        return;
+      }
+    }
+  }
+
+  // "+ Add details" swaps itself for the box IN PLACE and focuses it. No
+  // re-render, for the reason noteVariant() gives: renderParts() would rebuild
+  // every card in the section.
+  function openDetails(btn) {
+    if (!btn) return;
+    var uid = btn.getAttribute('data-uid');
+    var wrap = document.createElement('div');
+    wrap.innerHTML = detailsBoxHtml({ uid: uid, details: '', name: btn.getAttribute('data-name') || '' }, btn.getAttribute('data-hint') || '');
+    var box = wrap.firstChild;
+    btn.parentNode.replaceChild(box, btn);
+    var ta = box.querySelector('textarea');
+    if (ta) ta.focus();
+  }
+
+  // What to suggest, by section. Examples a builder would actually write.
+  function detailsHint(part) {
+    var k = String(part.category || '');
+    if (part.finish || /finish|paint/.test(k)) return 'e.g. Cerakote H-146 Graphite Black, full-wrap stipple, done 2025';
+    if (/slide/.test(k))   return 'e.g. Milled for RMR by Primary Machine, window cuts, Cerakote FDE';
+    if (/barrel|comp/.test(k)) return 'e.g. Threaded 1/2x28 aftermarket, DLC black, thread protector';
+    if (/grip|frame/.test(k))  return 'e.g. Laser stipple by Boss Grips, undercut trigger guard';
+    if (/optic/.test(k))   return 'e.g. 3.5 MOA dot on shake-awake, co-witnessed with suppressor sights';
+    if (/trigger/.test(k)) return 'e.g. Flat face, ~4.5 lb break after polish';
+    return 'e.g. custom work, a colour or cut we do not list, or what you changed';
+  }
+
+  function detailsBoxHtml(part, hint) {
+    var val = part.details || '';
+    return '<div class="selected-part-details">' +
+        '<label class="selected-part-details-label" for="pd-' + escAttr(part.uid) + '">Details' +
+          '<span class="selected-part-details-count" id="pd-count-' + escAttr(part.uid) + '">' + val.length + ' / ' + DETAILS_MAX + '</span></label>' +
+        '<textarea id="pd-' + escAttr(part.uid) + '" class="selected-part-details-input" rows="2" maxlength="' + DETAILS_MAX + '"' +
+          ' data-uid="' + escAttr(part.uid) + '"' +
+          ' placeholder="' + escAttr(hint || detailsHint(part)) + '"' +
+          ' aria-label="Details for ' + escAttr(part.name) + '"' +
+          ' oninput="PartPicker.noteDetails(this.dataset.uid, this.value)">' + escAttr(val) + '</textarea>' +
+      '</div>';
+  }
+
+  // Open when there is something in it; a one-line button when there is not,
+  // so ten parts do not mean ten empty boxes.
+  function detailsHtml(part) {
+    if (part.details) return detailsBoxHtml(part);
+    return '<button type="button" class="selected-part-details-add"' +
+        ' data-uid="' + escAttr(part.uid) + '" data-name="' + escAttr(part.name) + '"' +
+        ' data-hint="' + escAttr(detailsHint(part)) + '"' +
+        ' onclick="PartPicker.openDetails(this)">+ Add details <span>custom work, exact variant, mods</span></button>';
+  }
+
   // ===== CARD MARKUP =====
 
   // Product-thumbnail slot. Uses the default variant's primary_image_url when
@@ -252,6 +336,8 @@
             ' placeholder="Variant / colour (optional) — e.g. FDE, Coyote, 2-tone"' +
             ' aria-label="Variant or colour for ' + escAttr(part.name) + '"' +
             ' oninput="PartPicker.noteVariant(this.dataset.uid, this.value)" />') +
+        // After the colour, on every part. See PART DETAILS above.
+        detailsHtml(part) +
       '</div>' +
       '<button class="selected-part-remove" onclick="removePart(\'' + part.uid + '\')">Remove</button>' +
     '</div>';
@@ -774,7 +860,11 @@
     if (cfg.canSwap && !cfg.canSwap(sw.uid)) return;
     // In place: the catalog part takes the typed part's position, so the
     // order the builder listed their parts in does not change.
-    parts.splice(at, 1, parts.pop());
+    // The builder's details travel with it: they describe the part on the
+    // gun, which is still the same part, now with a catalog entry.
+    var typed = parts[at], picked = parts.pop();
+    if (typed && typed.details && !picked.details) picked.details = typed.details;
+    parts.splice(at, 1, picked);
   }
 
   // Forget a swap that is waiting on the colour step. Both pages call this
@@ -965,6 +1055,18 @@
 .selected-part-variant::placeholder { color: #b8b5ac; }
 .selected-part-variant:hover { border-color: #d5d3ca; }
 .selected-part-variant:focus { outline: none; border-color: #4a9edd; }
+/* Part details. The button is one quiet line; the box is a small textarea
+   with a running count, because 280 characters is a real limit. */
+.selected-part-details-add { align-self: flex-start; margin-top: 4px; background: none; border: 0; padding: 2px 0; font-family: inherit; font-size: 11px; font-weight: 700; color: #2a7bbd; cursor: pointer; text-align: left; }
+.selected-part-details-add span { font-weight: 400; color: #999; margin-left: 4px; }
+.selected-part-details-add:hover { text-decoration: underline; }
+.selected-part-details-add:focus-visible { outline: 2px solid #4a9edd; outline-offset: 2px; border-radius: 3px; }
+.selected-part-details { margin-top: 5px; display: flex; flex-direction: column; gap: 3px; }
+.selected-part-details-label { display: flex; justify-content: space-between; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #666; }
+.selected-part-details-count { font-weight: 400; letter-spacing: 0; color: #aaa; font-variant-numeric: tabular-nums; text-transform: none; }
+.selected-part-details-input { width: 100%; font-family: inherit; font-size: 12px; line-height: 1.45; color: #1a1a1a; background: #fff; border: 0.5px solid #e5e2d8; border-radius: 4px; padding: 6px 8px; box-sizing: border-box; resize: vertical; min-height: 44px; }
+.selected-part-details-input::placeholder { color: #b8b5ac; }
+.selected-part-details-input:focus { outline: none; border-color: #4a9edd; }
 .selected-part-pending { display: flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 600; color: #8a6d3b; }
 .selected-part-dot { width: 8px; height: 8px; border-radius: 50%; background: #f9b860; flex-shrink: 0; }
 .selected-part-remove { flex-shrink: 0; align-self: center; background: none; border: 0.5px solid #e5e2d8; border-radius: 4px; cursor: pointer; color: #888; font-size: 11px; font-weight: 700; padding: 6px 12px; font-family: inherit; transition: all 0.15s; }
@@ -1033,6 +1135,7 @@
 .custom-part-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
 .custom-part-grid input, .custom-link-input { font-size: 12px; padding: 8px 10px; border: 0.5px solid #e5e5e5; border-radius: 4px; font-family: inherit; width: 100%; background: #fff; }
 .custom-link-input { margin-bottom: 8px; display: block; }
+.custom-details-input { resize: vertical; min-height: 44px; line-height: 1.45; box-sizing: border-box; }
 .custom-part-note { font-size: 10px; color: #999; line-height: 1.6; margin-bottom: 10px; }
 .custom-part-submit { font-size: 11px; color: #fff; background: #1a1a1a; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 700; text-transform: uppercase; font-family: inherit; letter-spacing: 0.04em; }
 .custom-part-submit:hover { background: #4a9edd; }
@@ -1087,12 +1190,19 @@
      the price into the row Remove is pinned to and drops it BELOW Remove,
      which is what the variant label did in #122 and the spec line would
      have done here. */
-  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto auto auto 1fr auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
+  .selected-part { display: grid; grid-template-columns: 72px minmax(0, 1fr) auto; grid-template-rows: auto auto auto auto 1fr auto auto auto; column-gap: 10px; row-gap: 2px; align-items: start; padding: 10px; }
   .selected-part-thumb { grid-column: 1; grid-row: 1 / span 5; width: 72px; height: 54px; }
   .selected-part-body { display: contents; }
   .selected-part-brand, .selected-part-name, .selected-part-variant-label, .selected-part-variant-specs, .selected-part-price, .selected-part-pending { grid-column: 2 / -1; }
-  .selected-part-variant { grid-column: 1 / 3; grid-row: 6; margin-top: 8px; min-width: 0; padding: 7px 9px; }
-  .selected-part-remove { grid-column: 3; grid-row: 6; margin-top: 8px; align-self: stretch; }
+  .selected-part-variant { grid-column: 1 / -1; grid-row: 6; margin-top: 8px; min-width: 0; padding: 7px 9px; }
+  .selected-part-remove { grid-column: 1 / -1; grid-row: 8; justify-self: end; margin-top: 8px; }
+  /* Phone order is the desktop order: colour note (row 6), details
+     (row 7), then Remove alone on the last row (8). Remove used to share
+     row 6 with the colour note; with details added that put Remove ABOVE
+     the field it belongs after, so it moved down a row. */
+  .selected-part-details, .selected-part-details-add { grid-column: 1 / -1; grid-row: 7; margin-top: 8px; }
+  .selected-part-details-input { font-size: 16px; min-height: 68px; }
+  .selected-part-details-input::placeholder { font-size: 13px; }
   .selected-part-variant, .picker-search { font-size: 16px; }
   .selected-part-variant::placeholder, .picker-search::placeholder { font-size: 13px; }
 
@@ -1241,6 +1351,9 @@ button.match-row:hover, button.match-row:focus-visible { border-color: #4a9edd; 
     closePickerAfterAdd: closePickerAfterAdd,
     cancelSwap: cancelSwap,
     noteVariant: noteVariant,
+    noteDetails: noteDetails,
+    openDetails: openDetails,
+    DETAILS_MAX: DETAILS_MAX,
     hasColorChoice: hasColorChoice,
     variantsOf: variantsOf,
     variantListHtml: variantListHtml,
