@@ -33,10 +33,15 @@
 -- would be the bug in a new place.
 --
 -- THE VIEW. link_clicks_real is the set of rows that can be stood behind:
--- is_bot = false (so NULL is out), and not in a minute that holds clicks on
+-- is_bot = false (so NULL is out); not in a minute that holds clicks on
 -- five or more different targets (coalesce(link_id, product_id)) — the shape
 -- of the 10-12 burst, which no user-agent pattern can promise to catch next
--- time. The slow sweeps are not caught by that rule and are not meant to
+-- time; and sec_fetch either absent or exactly navigate/?1. A Sec-Fetch
+-- pair that is present but is not a user-activated top-level navigation
+-- (no-cors/, same-origin/, navigate/ with no ?1) is a script, a prefetch or
+-- a headless crawl wearing a browser's user agent, and is out. NULL stays
+-- in: an older browser sends neither header, and its absence says nothing.
+-- The slow sweeps are not caught by the minute rule and are not meant to
 -- be; the pattern is what catches a tool, and before this file nothing
 -- could. Report clicks from link_clicks_real, never from link_clicks.
 --
@@ -74,10 +79,11 @@ create view public.link_clicks_real with (security_invoker = true) as
     from public.link_clicks c
     join per_minute m on m.minute = date_trunc('minute', c.ts)
    where c.is_bot = false
-     and m.targets < 5;
+     and m.targets < 5
+     and (c.sec_fetch is null or c.sec_fetch = 'navigate/?1');
 
 comment on view public.link_clicks_real is
-  'link_clicks rows a decision can rest on: is_bot = false (rows with is_bot NULL — everything before 2026-10 — are excluded, since their history cannot be cleaned) and not in a minute holding clicks on five or more different targets, the shape of a link sweep. Report clicks from here, never from link_clicks. security_invoker: the caller needs SELECT on link_clicks, which only service_role holds.';
+  'link_clicks rows a decision can rest on: is_bot = false (rows with is_bot NULL — everything before 2026-10 — are excluded, since their history cannot be cleaned); not in a minute holding clicks on five or more different targets, the shape of a link sweep; and sec_fetch either NULL (an older browser sends nothing, which says nothing) or exactly navigate/?1 — a Sec-Fetch pair that is present but not a user-activated navigation is a script, a prefetch or a headless crawl. Report clicks from here, never from link_clicks. security_invoker: the caller needs SELECT on link_clicks, which only service_role holds.';
 
 revoke all on public.link_clicks_real from public, anon, authenticated;
 grant select on public.link_clicks_real to service_role;

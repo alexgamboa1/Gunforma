@@ -814,13 +814,22 @@ agents on every deploy.
 
 **`link_clicks_real`** (`security_invoker`, every grant revoked from `anon`
 and `authenticated`, `service_role` only — the same privacy as the table) is
-the rows a number can rest on: `is_bot = false`, so null is out, **and** not
-in a minute that holds clicks on five or more different targets
-(`coalesce(link_id, product_id)`) — the shape of the 10-12 burst, which no
-pattern can promise to catch next time. The slow sweeps are not caught by
-the minute rule and are not meant to be; the pattern is what catches a
-tool. Bots still get their 302 — nothing here blocks a crawler from
-following a link, it only stops counting it.
+the rows a number can rest on, three conditions and all of them:
+
+- `is_bot = false`, so null is out;
+- not in a minute that holds clicks on five or more different targets
+  (`coalesce(link_id, product_id)`) — the shape of the 10-12 burst, which
+  no pattern can promise to catch next time;
+- `sec_fetch` is **null or exactly `navigate/?1`**. A Sec-Fetch pair that is
+  present but is not a user-activated top-level navigation (`no-cors/`,
+  `same-origin/`, `navigate/` with no `?1`) is a script, a prefetch or a
+  headless crawl wearing a browser's user agent. Null stays in: an older
+  browser sends neither header, and its absence says nothing — the same
+  reasoning as the referrer.
+
+The slow sweeps are not caught by the minute rule and are not meant to be;
+the pattern is what catches a tool. Bots still get their 302 — nothing here
+blocks a crawler from following a link, it only stops counting it.
 
 ## Build-time guards
 
