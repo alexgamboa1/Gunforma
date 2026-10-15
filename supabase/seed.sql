@@ -618,3 +618,38 @@ begin
   raise notice 'magazine_housing_fit (21rd): % row(s) inserted (% before, % after); 4 expected where the magazine exists',
     n_after - n_before, n_before, n_after;
 end $$;
+
+-- ── magazine_housing_fit: the four Magpul AMAG SG9 magazines ────────────────
+-- Same statement as supabase/migrations/20261015035038_magazine_housing_fit_magpul_amag.sql
+-- (12 rows); the same guard as the blocks above, so it inserts nothing on a
+-- database with no products. Keep identical.
+
+do $$
+declare
+  n_before integer; n_after integer;
+begin
+  select count(*) into n_before from public.magazine_housing_fit;
+
+  insert into public.magazine_housing_fit (magazine_product_id, housing_class, fit, note, source)
+  select p.id, r.housing_class, r.fit, r.note, r.source
+  from (values
+    ('magpul-amag-10-sg9-p365-mag', 'p365',   'flush',                   'Flush with the standard floorplate; an extended floorplate is also in the box', 'https://magpul.com/amag-10-sg9-sig-p365.html'),
+    ('magpul-amag-10-sg9-p365-mag', 'p365xl', 'not_compatible',          'Magpul: not compatible with X/XL grip modules',                                  'https://magpul.com/amag-10-sg9-sig-p365.html'),
+    ('magpul-amag-10-sg9-p365-mag', 'xmacro', 'not_compatible',          'Magpul: not compatible with Macro grip modules',                                 'https://magpul.com/amag-10-sg9-sig-p365.html'),
+    ('magpul-amag-12-sg9-p365-mag', 'p365',   'with_included_baseplate', 'Fit the included Standard/Micro grip extension',                                 'https://magpul.com/amag-12-sg9-sig-p365.html'),
+    ('magpul-amag-12-sg9-p365-mag', 'p365xl', 'flush',                   'Flush with the included X/XL floorplate',                                        'https://magpul.com/amag-12-sg9-sig-p365.html'),
+    ('magpul-amag-12-sg9-p365-mag', 'xmacro', 'not_compatible',          'Magpul: not compatible with Macro grip modules',                                 'https://magpul.com/amag-12-sg9-sig-p365.html'),
+    ('magpul-amag-15-sg9-p365-mag', 'p365',   'with_included_baseplate', 'Fit the included Standard/Micro grip extension',                                 'https://magpul.com/amag-15-sg9-sig-p365.html'),
+    ('magpul-amag-15-sg9-p365-mag', 'p365xl', 'with_included_baseplate', 'Fit the included X/XL grip extension',                                           'https://magpul.com/amag-15-sg9-sig-p365.html'),
+    ('magpul-amag-15-sg9-p365-mag', 'xmacro', 'extended',                'Sits slightly below the grip; a little of the silver body shows',                'https://magpul.com/amag-15-sg9-sig-p365.html'),
+    ('magpul-amag-17-sg9-p365-mag', 'p365',   'with_included_baseplate', 'Fit the included Standard/Micro grip extension',                                 'https://magpul.com/amag-17-sg9-sig-p365.html'),
+    ('magpul-amag-17-sg9-p365-mag', 'p365xl', 'with_included_baseplate', 'Fit the included X/XL grip extension',                                           'https://magpul.com/amag-17-sg9-sig-p365.html'),
+    ('magpul-amag-17-sg9-p365-mag', 'xmacro', 'flush',                   'Flush with the standard floorplate',                                             'https://magpul.com/amag-17-sg9-sig-p365.html')
+  ) as r (slug, housing_class, fit, note, source)
+  join public.products p on p.slug = r.slug and p.category::text = 'magazine'
+  on conflict (magazine_product_id, housing_class) do nothing;
+
+  select count(*) into n_after from public.magazine_housing_fit;
+  raise notice 'magazine_housing_fit (Magpul AMAG): % row(s) inserted (% before, % after); 12 expected where all four magazines exist',
+    n_after - n_before, n_before, n_after;
+end $$;
