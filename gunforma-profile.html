@@ -833,7 +833,7 @@ function relTime(iso) {
 }
 
 // ============================================================
-// SAVED BUILDS TAB (private, requires migration + saved_builds table)
+// SAVED BUILDS TAB (private; rows come from the Save button on a build page)
 // ============================================================
 async function loadSavedBuilds() {
   const panel = document.getElementById('panel-saved');
@@ -845,8 +845,9 @@ async function loadSavedBuilds() {
     .order('created_at', { ascending: false });
 
   if (error) {
-    panel.innerHTML = '<div class="empty"><div class="empty-title">Saved builds isn\'t set up yet</div>'+
-      '<div class="empty-sub">Run the saved_builds migration in Supabase, then this tab goes live automatically.</div></div>';
+    panel.innerHTML = '<div class="empty"><div class="empty-title">Couldn\'t load your saved builds</div>'+
+      '<div class="empty-sub">Refresh the page to try again.</div></div>';
+    console.error('loadSavedBuilds', error);
     return;
   }
   SAVED_BUILDS = data || [];
@@ -856,7 +857,7 @@ async function loadSavedBuilds() {
     (SAVED_BUILDS.length
       ? '<div class="builds-grid">'+SAVED_BUILDS.map(function(r){ return renderSavedCard(r.builds); }).join('')+'</div>'
       : '<div class="empty"><div class="empty-title">No saved builds yet</div>'+
-          '<div class="empty-sub">Tap the star on any build in the community feed to bookmark it here.</div>'+
+          '<div class="empty-sub">Hit Save on any build to keep it here.</div>'+
           '<a class="empty-cta" href="gunforma-builds.html">Browse builds</a></div>');
 }
 
