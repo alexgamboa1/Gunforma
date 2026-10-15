@@ -820,12 +820,21 @@ the rows a number can rest on, three conditions and all of them:
 - not in a minute that holds clicks on five or more different targets
   (`coalesce(link_id, product_id)`) — the shape of the 10-12 burst, which
   no pattern can promise to catch next time;
-- `sec_fetch` is **null or exactly `navigate/?1`**. A Sec-Fetch pair that is
-  present but is not a user-activated top-level navigation (`no-cors/`,
-  `same-origin/`, `navigate/` with no `?1`) is a script, a prefetch or a
-  headless crawl wearing a browser's user agent. Null stays in: an older
-  browser sends neither header, and its absence says nothing — the same
-  reasoning as the referrer.
+- `sec_fetch` is **null**, or **exactly `navigate/?1`**, or **`navigate/` on
+  a WebKit user agent** (`AppleWebKit` present, no `Chrome/` token). Null
+  stays in: an older browser sends neither header, and its absence says
+  nothing — the same reasoning as the referrer. `navigate/?1` is a
+  user-activated navigation in Chrome, Edge, Firefox and Samsung Internet.
+  The WebKit clause exists because **WebKit never sends `Sec-Fetch-User`**:
+  the first real iPhone click (row 1869, Chrome on iOS, which says `CriOS/`
+  and is WebKit like everything on iOS) arrived as `navigate/` and the
+  first version of the view excluded it — and with it every iPhone, iPad,
+  desktop Safari and iOS in-app browser. `navigate/` on a **Chrome** user
+  agent stays out: that is a scripted Chrome (Puppeteer, Playwright, a
+  headless run wearing a real user agent) navigating without user
+  activation, which is exactly the sweep being filtered. Any other mode
+  (`no-cors/`, `same-origin/`, `cors/`) is a script or a subresource fetch
+  and is out.
 
 The slow sweeps are not caught by the minute rule and are not meant to be;
 the pattern is what catches a tool. Bots still get their 302 — nothing here
