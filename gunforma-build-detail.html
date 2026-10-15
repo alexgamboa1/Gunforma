@@ -142,6 +142,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .like-btn:hover { border-color: #d85a30; color: #d85a30; }
 .like-btn.liked { background: #faece7; border-color: #d85a30; color: #a25334; }
 .like-btn.liked svg { fill: currentColor; }
+.save-btn { display: inline-flex; align-items: center; gap: 7px; padding: 8px 14px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; cursor: pointer; color: #555; font-size: 12px; font-weight: 600; font-family: inherit; transition: all 0.15s; }
+.save-btn:hover { border-color: #2a7bbd; color: #2a7bbd; }
+.save-btn.saved { background: #eaf4fc; border-color: #2a7bbd; color: #1e63a0; }
+.save-btn.saved svg { fill: currentColor; }
 .like-count { font-weight: 700; }
 .like-count:empty { display: none; }
 
@@ -431,6 +435,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
           <span id="like-label">Like</span><span class="like-count" id="like-count"></span>
         </button>
+        <button class="save-btn" id="save-btn" title="Save to your profile" aria-pressed="false" onclick="toggleSave()">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          <span id="save-label">Save</span>
+        </button>
         <button class="share-btn" title="Copy link" onclick="copyLink()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
           Copy link
@@ -663,6 +671,7 @@ async function loadBuild() {
   renderChangesPanel();          // hidden until loadComments() learns who is looking
   loadComments();
   loadLikes();
+  loadSaved();
 }
 
 // ============================================================
@@ -711,6 +720,56 @@ async function toggleLike() {
     renderLike();
     showToast('Something went wrong — try again');
   }
+}
+
+// ============================================================
+// SAVES — saved_builds. Private bookmarks: RLS lets a reader see, add and
+// remove only their own rows, so there is no public count to show. They are
+// listed on the reader's profile, "Saved builds" tab. Same optimistic toggle
+// as likes above.
+// ============================================================
+var SAVED = false;
+
+async function loadSaved() {
+  SAVED = false;
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (user) {
+    var mine = await sb.from('saved_builds').select('build_id').eq('build_id', BUILD_ID).eq('user_id', user.id).maybeSingle();
+    SAVED = !!(mine.data);
+  }
+  renderSave();
+}
+
+function renderSave() {
+  var btn = document.getElementById('save-btn');
+  if (!btn) return;
+  btn.classList.toggle('saved', SAVED);
+  btn.setAttribute('aria-pressed', SAVED ? 'true' : 'false');
+  btn.title = SAVED ? 'Saved to your profile — click to remove' : 'Save to your profile';
+  document.getElementById('save-label').textContent = SAVED ? 'Saved' : 'Save';
+}
+
+async function toggleSave() {
+  var sess = await sb.auth.getSession();
+  var user = sess && sess.data && sess.data.session ? sess.data.session.user : null;
+  if (!user) { showToast('Sign in to save builds'); return; }
+  var was = SAVED;
+  SAVED = !was;
+  renderSave();
+  var res = was
+    ? await sb.from('saved_builds').delete().eq('build_id', BUILD_ID).eq('user_id', user.id)
+    : await sb.from('saved_builds').insert({ build_id: BUILD_ID, user_id: user.id });
+  // 23505 = already saved (another tab got there first): the row exists,
+  // which is what the reader asked for.
+  if (res.error && res.error.code !== '23505') {
+    console.error('toggleSave', res.error);
+    SAVED = was;
+    renderSave();
+    showToast('Something went wrong — try again');
+    return;
+  }
+  if (!was) showToast('Saved to your profile');
 }
 
 async function loadAffiliates(build) {
@@ -1614,6 +1673,7 @@ sb.auth.onAuthStateChange(function (event) {
   if (!BUILD_ID || (event !== 'SIGNED_IN' && event !== 'SIGNED_OUT')) return;
   loadComments();
   loadLikes();
+  loadSaved();
 });
 
 async function loadComments() {
