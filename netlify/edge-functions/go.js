@@ -38,9 +38,26 @@
 // goes through unlogged. An analytics table is not allowed to break buying —
 // which is also why the lookup happens first and the log second.
 //
-// WHAT IT RECORDS: link id, timestamp, and the on-site path the click came
-// from. No cookie, no user id, no IP, no full referrer — a path only, so it
-// cannot carry a search term or a token. privacy-policy.html says so.
+// WHAT IT RECORDS: link id, timestamp, the on-site path the click came from,
+// and — since 2026-10 — the client's user agent, its Sec-Fetch-Mode/User
+// pair, and whether that user agent is a bot's (_lib/go-bot.mjs decides).
+// No cookie, no user id, no IP, no full referrer — a path only, so it cannot
+// carry a search term or a token. privacy-policy.html says so.
+//
+// WHY THE CLIENT IS RECORDED. On 2026-10-12, 1,047 rows landed over several
+// hours, 20–40 a minute, every one with referrer "/" — a page that has no
+// /go/ links on it — across 599 different targets. On 10-09 and 10-10 a
+// slower sweep took every link once. Partnership decisions get made off this
+// table, and with only an id, a timestamp and a path those rows could not
+// be told from readers. Now they can, going forward: is_bot is set from the
+// user agent, and the migration's link_clicks_real view is the number to
+// read. The rows before it stay as they are, is_bot NULL — "unknown", which
+// is the truth about them.
+//
+// BEFORE THE THREE COLUMNS EXIST (supabase/migrations/…_link_clicks_bot_
+// columns.sql, applied after this is live, as the house order says) the full
+// insert is refused with PGRST204 and is retried once in the old shape, so
+// no click is lost to the gap. x-go-debug reports which shape landed.
 //
 // UNKNOWN id AND RETIRED id ARE THE SAME BRANCH. The lookup carries
 // retired_at=is.null, so a retired link returns zero rows exactly as an
@@ -70,6 +87,10 @@
 // x-go-no-log wins when both are set.
 const SB_URL  = "https://lagjjcpclvzrjlrswojt.supabase.co";
 const SB_ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4";
+
+// The one import. A relative module in a subdirectory, so Netlify bundles it
+// into this function instead of deploying it as one (see its header).
+import { clickMeta } from "./_lib/go-bot.mjs";
 
 // 8-4-4-4-12, anchored. Anything else 404s without a database round trip,
 // which is also what keeps arbitrary path input out of the PostgREST query.
@@ -234,7 +255,21 @@ export default async (request, context) => {
     }
   } catch { /* unparseable referrer is simply not recorded */ }
 
-  const insert = () => fetch(`${SB_URL}/rest/v1/link_clicks`, {
+  // One target per row — link_id OR product_id, never both; the table's
+  // check constraint refuses anything else.
+  const legacyRow = isPart
+    ? { product_id: id, referrer_path: referrerPath }
+    : { link_id: id, referrer_path: referrerPath };
+  // The client, on the LOGGED path only: a no-log request returned above and
+  // never reaches this, so nothing about our own tooling is ever recorded.
+  // clickMeta is pure and cannot throw on any header value, but it is
+  // guarded anyway — the rule is that nothing about logging may break the
+  // redirect, and a rule with one exception is not one. The fallback is the
+  // old shape: a click with no client fields, never no click.
+  let fullRow = legacyRow;
+  try { fullRow = { ...legacyRow, ...clickMeta(request.headers) }; } catch { /* legacy shape */ }
+
+  const post = (row) => fetch(`${SB_URL}/rest/v1/link_clicks`, {
     method: "POST",
     headers: {
       apikey: serviceKey,
@@ -242,16 +277,31 @@ export default async (request, context) => {
       "Content-Type": "application/json",
       Prefer: "return=minimal",
     },
-    // One target per row — link_id OR product_id, never both. The table's
-    // check constraint (once link_clicks_product_id.sql is applied) refuses
-    // anything else; before it is applied the product_id key is unknown to
-    // PostgREST and the insert fails, which is the documented, harmless case.
-    body: JSON.stringify(
-      isPart
-        ? { product_id: id, referrer_path: referrerPath }
-        : { link_id: id, referrer_path: referrerPath },
-    ),
+    body: JSON.stringify(row),
   });
+
+  // Resolves to { status, ok, body, shape } and never rejects on a PostgREST
+  // answer — only on a network failure, which the callers catch.
+  //
+  // THE FALLBACK. Until the migration adds user_agent / sec_fetch / is_bot,
+  // PostgREST refuses the full row with PGRST204 ("could not find the column
+  // … in the schema cache") — and for a while after it is applied too, until
+  // the schema cache reloads. Either way the click is retried ONCE in the
+  // shape the table has always taken, so the gap between deploy and
+  // migration costs nothing but the three new fields on those rows. Only
+  // PGRST204 triggers it: any other refusal (a bad id, a constraint) would
+  // fail the legacy shape identically and is reported as what it is.
+  const insert = async () => {
+    const first = await post(fullRow);
+    if (first.ok) return { status: first.status, ok: true, body: "", shape: "full" };
+    const firstBody = (await first.text()).slice(0, 220);
+    if (!firstBody.includes("PGRST204")) {
+      return { status: first.status, ok: false, body: firstBody, shape: "full" };
+    }
+    const second = await post(legacyRow);
+    const body = second.ok ? "" : (await second.text()).slice(0, 220);
+    return { status: second.status, ok: second.ok, body, shape: "legacy" };
+  };
 
   // DEBUG PATH, request-header gated so no normal click can reach it.
   // "queued" says the insert was HANDED to waitUntil. It does not say the
@@ -264,17 +314,22 @@ export default async (request, context) => {
   // status and body instead of guessing. It costs the caller the round trip —
   // which is exactly why it is opt-in and why normal traffic never takes it.
   if (request.headers.get("x-go-debug") === "1") {
-    let status = "no-response", body = "";
+    let status = "no-response", body = "", shape = "none";
     try {
       const r = await insert();
       status = String(r.status);
-      if (!r.ok) body = (await r.text()).slice(0, 220);
+      shape = r.shape;
+      if (!r.ok) body = r.body;
     } catch (e) {
       status = "threw";
       body = String((e && e.message) || e).slice(0, 220);
     }
     headers.set("x-go-log", "debug");
     headers.set("x-go-insert-status", status);
+    // full = the three client columns were written; legacy = the table does
+    // not have them yet (or PostgREST's cache does not), and the click was
+    // written without them; none = no insert got as far as an answer.
+    headers.set("x-go-insert-shape", shape);
     if (body) headers.set("x-go-insert-body", body.replace(/[\r\n]+/g, " "));
     headers.set("x-go-key-len", String(serviceKey.length));
     return new Response(null, { status: 302, headers });
