@@ -196,29 +196,41 @@ var PASSWORD_MIN = 8;   // same floor as gunforma-signup.html
 
 // ============================================================
 // INIT — three cases
-//   (a) no invite tokens → expired screen
-//   (b) tokens present, setSession fails → expired screen
-//   (c) success → fetch linked build, render form
+//   (A) a magic-link/invite session is already in the URL hash → set it up,
+//       then fetch the linked build and render the form.
+//   (B) a durable 7-day token is in ?t= → redeem it to a fresh magic link and
+//       redirect (it comes back as case A).
+//   (C) neither (or the hash carried an auth error) → expired screen.
 // ============================================================
 (async function init() {
+  var search       = new URLSearchParams(window.location.search || '');
+  var durableToken = search.get('t');
+
   var frag = new URLSearchParams((window.location.hash || '').replace(/^#/, ''));
   var accessToken  = frag.get('access_token');
   var refreshToken = frag.get('refresh_token');
   var type         = frag.get('type');
 
-  if (!accessToken || !refreshToken || type !== 'invite') return showExpired();
+  // redeem-claim mints type=magiclink; older invite emails used type=invite;
+  // a recovery link is type=recovery. Accept all three during the transition.
+  var ALLOWED_TYPES = { magiclink: 1, invite: 1, recovery: 1 };
 
-  var { data: sessData, error: sessErr } = await sb.auth.setSession({
-    access_token:  accessToken,
-    refresh_token: refreshToken,
-  });
-  if (sessErr || !sessData || !sessData.session) return showExpired();
-
-  CURRENT_USER = sessData.session.user;
-
-  // Clean the invite token out of the address bar so a refresh doesn't
-  // try to re-consume it and so it doesn't linger in browser history.
-  history.replaceState({}, '', window.location.pathname);
+  if (accessToken && refreshToken && ALLOWED_TYPES[type]) {
+    var { data: sessData, error: sessErr } = await sb.auth.setSession({
+      access_token:  accessToken,
+      refresh_token: refreshToken,
+    });
+    if (sessErr || !sessData || !sessData.session) return showExpired(durableToken);
+    CURRENT_USER = sessData.session.user;
+    // Clean the tokens out of the address bar so a refresh doesn't re-consume
+    // them and they don't linger in browser history.
+    history.replaceState({}, '', window.location.pathname);
+    // fall through to the build fetch + renderForm below
+  } else if (durableToken) {
+    return redeemToken(durableToken);
+  } else {
+    return showExpired(durableToken);
+  }
 
   // Best-effort fetch of the linked build. Some invited users may have no
   // build yet (per spec), so this failing silently is fine.
@@ -252,22 +264,75 @@ var PASSWORD_MIN = 8;   // same floor as gunforma-signup.html
 })();
 
 // ============================================================
-// RENDER — expired
+// REDEEM — exchange the durable ?t= token for a fresh magic link
 // ============================================================
-function showExpired() {
+async function redeemToken(token) {
+  var gate = document.getElementById('gate');
+  if (gate) gate.textContent = 'Verifying your invite…';
+  var res;
+  try {
+    res = await sb.functions.invoke('redeem-claim', { body: { token: token } });
+  } catch (e) {
+    return showExpired(token);
+  }
+  if (res.error) {
+    // Non-2xx: read the typed error code out of the response body.
+    var code = '';
+    try { var b = await res.error.context.json(); code = (b && b.error) || ''; } catch (e) { /* ignore */ }
+    if (code === 'already_claimed') return showAlreadyClaimed();
+    // invalid / expired / rate_limited → the expired screen, which offers a
+    // fresh link using this same token.
+    return showExpired(token);
+  }
+  var link = res.data && res.data.action_link;
+  if (!link) return showExpired(token);
+  // Hand off to the magic link, which returns to this page with a hash session.
+  window.location.href = link;
+}
+
+// ============================================================
+// RENDER — expired (optionally with a "send me a fresh link" button)
+// ============================================================
+function showExpired(token) {
   document.getElementById('hero-title').textContent = 'That invite didn’t work';
   document.getElementById('hero-sub').textContent   = '';
+  // When we still hold the durable token, the right fix is a fresh link, not
+  // "forgot password" — these builders may never have set a password.
+  var resendHtml = token
+    ? '<button class="btn-submit" id="resend-btn" onclick="requestFreshLink(\''+escH(token)+'\')">Send me a fresh link →</button>'+
+      '<div class="card-footer" id="resend-note">Links last 7 days. We’ll email you a new one.</div>'
+    : '<a class="btn-submit" href="gunforma-signin.html" style="text-decoration:none;">Go to sign in →</a>';
   document.getElementById('card').innerHTML =
     '<div class="state-expired">'+
       '<div class="state-expired-icon">✖</div>'+
-      '<div class="state-title">This invite link has expired or was already used</div>'+
-      // Two kinds of people land here. One claimed already and clicked the
-      // email again: they sign in. The other never got in — the link is
-      // single-use and lasts 24 hours — and has no password to sign in with,
-      // so "just sign in" is a dead end for them. Forgot password? is their
-      // way in: its link opens a "choose a new password" form on the sign-in
-      // page. The label matches the link on gunforma-signin.html verbatim.
-      '<div class="state-sub">Invite links work once and last 24 hours. If you’ve already claimed your account, sign in below. If you never got in, use <strong>Forgot password?</strong> on the sign-in page — it emails you a link to choose a password — or reply to your invite email and ask for a fresh link.</div>'+
+      '<div class="state-title">This claim link has expired or was already used</div>'+
+      '<div class="state-sub">Claim links last 7 days. If yours expired, request a fresh one below. If you’ve already claimed your account, <a href="gunforma-signin.html">sign in</a> instead.</div>'+
+      resendHtml +
+    '</div>';
+}
+
+// The "send me a fresh link" action → resend-claim (public, by token). The
+// response is always generic (no email enumeration), so the UI just confirms.
+async function requestFreshLink(token) {
+  var btn = document.getElementById('resend-btn');
+  var note = document.getElementById('resend-note');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  try { await sb.functions.invoke('resend-claim', { body: { token: token } }); } catch (e) { /* generic either way */ }
+  if (btn) btn.textContent = 'Link sent ✓';
+  if (note) note.textContent = 'If this invite is still open, a new link is on its way. Check your email (and promotions/spam).';
+}
+
+// ============================================================
+// RENDER — already claimed
+// ============================================================
+function showAlreadyClaimed() {
+  document.getElementById('hero-title').textContent = 'This build is already claimed';
+  document.getElementById('hero-sub').textContent   = '';
+  document.getElementById('card').innerHTML =
+    '<div class="state-expired">'+
+      '<div class="state-expired-icon">✓</div>'+
+      '<div class="state-title">This build has already been claimed</div>'+
+      '<div class="state-sub">Looks like this account is already set up. Sign in with your email and password — use <strong>Forgot password?</strong> on the sign-in page if you need to set one.</div>'+
       '<a class="btn-submit" href="gunforma-signin.html" style="text-decoration:none;">Go to sign in →</a>'+
     '</div>';
 }

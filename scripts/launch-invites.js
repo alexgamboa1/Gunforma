@@ -19,8 +19,8 @@
 // Two single-builder actions, each for one email that is in builders.json:
 //
 //   node scripts/launch-invites.js --resend  someone@example.com
-//       A fresh invite link. For a builder whose link expired (24 hours) or
-//       who lost the email. Only works while they have NOT claimed.
+//       A fresh 7-day claim link. For a builder whose link expired or who lost
+//       the email. Only works while they have NOT claimed.
 //
 //   node scripts/launch-invites.js --release someone@example.com
 //       Undo an invite nobody claimed: the build goes back to having no
@@ -152,7 +152,7 @@ async function sendOne(entry) {
     // `action` is left out of a normal invite so the request is byte-for-byte
     // what it has always been.
     body: JSON.stringify(ACTION === 'invite'
-      ? { email: entry.email, build_id: entry.build_id }
+      ? { email: entry.email, build_id: entry.build_id, name: entry.name || null, phone: entry.phone || null }
       : { email: entry.email, build_id: entry.build_id, action: ACTION }),
   });
   let body = null;
@@ -233,7 +233,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
           log('✗', entry, 'the function did not report a release — is the new launch-invite deployed?', 'red');
           failed++;
         } else if (ACTION === 'resend') {
-          log('✓', entry, `fresh invite sent (user_id=${body.user_id}) — good for 24 hours`, 'green');
+          log('✓', entry, `fresh invite sent (user_id=${body.user_id}) — good for 7 days`, 'green');
           ok++;
         } else if (ACTION === 'release') {
           log('✓', entry, `released: build ${body.build_id} has no owner again, unclaimed account deleted`, 'green');
@@ -275,7 +275,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     unclaimed.forEach(u => {
       console.log(c('yellow', `  ${u.entry.email}`) + c('grey', u.invitedAt ? `   invited ${u.invitedAt}` : ''));
     });
-    console.log(c('grey', '  An invite link lasts 24 hours. To send one of them a fresh link:'));
+    console.log(c('grey', '  A claim link lasts 7 days. To send one of them a fresh link:'));
     console.log(c('grey', '    node scripts/launch-invites.js --resend <email>'));
   }
 

@@ -2,9 +2,16 @@
   Gunforma - Invite User email template
   Paste target:  Supabase Dashboard > Authentication > Email Templates > Invite user
   Subject line:  Your build is live on Gunforma
-  Fired by:      admin.inviteUserByEmail() in BOTH supabase/functions/launch-invite
-                 and supabase/functions/invite-builder.
+  Fired by:      admin.inviteUserByEmail() in supabase/functions/invite-builder.
   Variable:      {{ .ConfirmationURL }}
+
+  NOTE (2026-10-16): launch-invite NO LONGER uses this template. The launch
+  cohort now gets a durable 7-day Gunforma claim token and OUR OWN branded
+  invite, sent from supabase/functions/_shared/email.ts (inviteEmail / Resend),
+  landing on gunforma-claim.html?t=<token>. See supabase/claim_invites.sql.
+  This template still governs invite-builder, whose links are the Supabase
+  mailer's single-use 24-hour links — so the 24-hour copy below is correct FOR
+  INVITE-BUILDER. Do not change it to 7 days: invite-builder's links are 24h.
 
   Subject carries the news, preheader carries the action - deliberately split.
   An earlier version subjected "Your build is live on Gunforma - claim your
