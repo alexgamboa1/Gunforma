@@ -2242,11 +2242,18 @@ everywhere — the build page, the home cards, the OG image, the queue — is
 "hero first, then the rest by position", so the write is just those two
 columns: the build's photos are renumbered 1..n in the new order with
 `is_hero` on the first, one UPDATE per row that changed (≤4), which also
-normalises any legacy duplicate positions. "Admins can edit any build
+normalises any legacy duplicate positions. **Demotions are written before
+the promotion**, because `build_photos_one_hero_per_build` is a unique
+partial index — one `is_hero` per build — and promote-first is refused
+with a unique violation mid-sequence. That is exactly how this shipped
+broken on its first preview: the index was invisible to a `pg_constraint`
+dump, because a standalone unique index lives only in `pg_indexes` — check
+both before declaring what a table enforces. "Admins can edit any build
 photo" (UPDATE, `is_admin()`) admits it and the path-tampering trigger
 guards other columns, so again no migration. A failure partway can leave a
-half-applied order — every reader falls back deterministically, the error
-path reloads and says so, and one more click finishes. Because the queue
+half-applied order — at worst briefly no hero, never two; every reader
+falls back deterministically, the error path reloads and says so, and one
+more click finishes. Because the queue
 now writes order, `reviewSignature()` includes `position`, so a builder
 re-ordering a pending build under an open review trips `ensureUnchanged()`
 like any other photo change. Same logging stance as the add: arrangement,

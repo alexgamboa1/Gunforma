@@ -1244,10 +1244,16 @@ async function doAddPhoto(id, file) {
 // ever feels wrong in practice, it logs the same way an add would.
 //
 // The writes are one UPDATE per row that changes (at most 4) rather than a
-// database function. A failure partway through can leave a half-applied
-// order — never duplicate heroes rendered wrongly (every reader falls back
-// deterministically) and never a refused row (position stays >= 1). The
-// error path reloads, says so, and one more click finishes the job.
+// database function, DEMOTIONS FIRST: build_photos_one_hero_per_build is a
+// unique partial index (one is_hero per build), so the old hero must lose
+// the flag before the new hero gains it — promote-first is refused with a
+// unique violation, which is exactly how this shipped broken the first
+// time. (The index never showed up in a pg_constraint dump; a standalone
+// unique index lives only in pg_indexes.) A failure partway through can
+// leave a half-applied order — at worst briefly NO hero, which every
+// reader falls back from deterministically (hero || first by position),
+// and never two. The error path reloads, says so, and one more click
+// finishes the job.
 var REORDERING = false;
 
 async function doReorder(id, photoId, how) {
@@ -1266,14 +1272,23 @@ async function doReorder(id, photoId, how) {
   if (to < 0 || to >= ordered.length || to === from) return;
   var tmp = ordered[to]; ordered[to] = ordered[from]; ordered[from] = tmp;
 
+  // Every row that changes, demotions (is_hero -> false) before the one
+  // promotion, so the unique hero index never sees two.
+  var writes = [];
+  for (var i = 0; i < ordered.length; i++) {
+    var want = { is_hero: i === 0, position: i + 1 };
+    if (ordered[i].is_hero !== want.is_hero || ordered[i].position !== want.position) {
+      writes.push({ row: ordered[i], want: want });
+    }
+  }
+  writes.sort(function (a, b) { return (a.want.is_hero ? 1 : 0) - (b.want.is_hero ? 1 : 0); });
+
   REORDERING = true;
   rerenderSelected(id);
   try {
-    for (var i = 0; i < ordered.length; i++) {
-      var want = { is_hero: i === 0, position: i + 1 };
-      var row = ordered[i];
-      if (row.is_hero === want.is_hero && row.position === want.position) continue;
-      const { data: wrote, error } = await sb.from('build_photos').update(want).eq('id', row.id).select('id');
+    for (var w = 0; w < writes.length; w++) {
+      var row = writes[w].row;
+      const { data: wrote, error } = await sb.from('build_photos').update(writes[w].want).eq('id', row.id).select('id');
       if (error || !wrote || wrote.length !== 1) {
         console.error('reorder write failed on', row.id, error);
         await loadBuilds();
