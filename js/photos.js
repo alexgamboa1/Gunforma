@@ -45,6 +45,21 @@
 //
 // The page still owns state.photos — the module reads and writes it through
 // that getter, and the submit step reads it directly, unchanged.
+//
+// ONE PHOTO, NO GRID. gunforma-admin-queue.html adds a single photo to a
+// build that already exists, with no slots and no init():
+//
+//   const r = await PhotoUploader.uploadOne(file, {
+//     ownerId: currentAdmin.id,   // first path segment — the bucket policy's rule
+//     folder:  build.id,
+//     prefix:  'added',
+//   });
+//   // null = cancelled in the redact modal; { error } = say it; else { path, thumbPath }
+//
+// It is the same validate → redact → normalize → upload as the slots, by
+// construction: processFile() and uploadOne() call the same three functions.
+// Do not give the queue its own copy of any of them — see WHY THIS IS ONE
+// FILE above.
 (function () {
 'use strict';
 
@@ -417,14 +432,8 @@ async function processFile(file) {
   if (!file || !slot) return;
   photoError('');
 
-  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-    photoError('Please choose a JPEG, PNG, or WebP photo.');
-    return;
-  }
-  if (file.size > MAX_PHOTO_BYTES) {
-    photoError('That photo is too large — please choose one under 8MB.');
-    return;
-  }
+  const invalid = validatePhotoFile(file);
+  if (invalid) { photoError(invalid); return; }
 
   // Redact-before-upload gate. Opens the modal in js/redact.js, where the
   // user can pixelate sensitive regions (serial numbers, faces, addresses)
@@ -481,11 +490,29 @@ async function processFile(file) {
   cfg.onChange();
 }
 
+// The type and size rules, as the sentence to show, or '' when the file is
+// fine. Shared by the slots and by uploadOne().
+function validatePhotoFile(file) {
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    return 'Please choose a JPEG, PNG, or WebP photo.';
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    return 'That photo is too large — please choose one under 8MB.';
+  }
+  return '';
+}
+
 // Put both sizes in the bucket under this draft's folder. Returns the two
 // keys, or null after cleaning up whichever half did land — a lone display
 // object with no thumbnail is an orphan nothing will ever reference.
 async function uploadPair(slot, displayBlob, thumbBlob) {
-  const base = cfg.ownerId() + '/' + cfg.draftId() + '/' + slot + '-' + Date.now();
+  return uploadPairAt(cfg.ownerId() + '/' + cfg.draftId() + '/' + slot + '-' + Date.now(), displayBlob, thumbBlob);
+}
+
+// `base` is the key without its extension. The first segment must be the
+// signed-in user's id: build_photos_owner_insert refuses anything else, for
+// an admin too.
+async function uploadPairAt(base, displayBlob, thumbBlob) {
   const path = base + '.jpg';
   const thumbPath = base + '-thumb.jpg';
   const opts = { contentType: 'image/jpeg', upsert: false };
@@ -758,6 +785,31 @@ window.PhotoUploader = {
     });
     photoError('');
     photoWarning('');
+  },
+
+  // One photo, outside the grid. Resolves null if the user cancelled the
+  // redact modal, { error } with a sentence to show, or { path, thumbPath }
+  // once both sizes are in the bucket. Nothing is written to build_photos —
+  // the caller does that, and calls removeUploaded() if its insert fails.
+  uploadOne: async function (file, opts) {
+    if (!file) return null;
+    if (!opts || !opts.ownerId || !opts.folder) throw new Error('PhotoUploader.uploadOne: missing ownerId or folder');
+    const invalid = validatePhotoFile(file);
+    if (invalid) return { error: invalid };
+    const redacted = await window.openRedactModal(file);   // same gate as the slots
+    if (!redacted) return null;
+    let normalized;
+    try { normalized = await normalizeImage(redacted); }
+    catch (e) { console.error(e); return { error: 'Couldn\'t read that image — try a different file.' }; }
+    const base = opts.ownerId + '/' + opts.folder + '/' + (opts.prefix || 'photo') + '-' + Date.now();
+    const up = await uploadPairAt(base, normalized.displayBlob, normalized.thumbBlob);
+    return up || { error: 'Upload failed — try again.' };
+  },
+
+  // Both objects from uploadOne(), for when the row that would have
+  // referenced them was never written. True only if both actually went.
+  removeUploaded: function (up) {
+    return deleteStoragePaths([up && up.path, up && up.thumbPath].filter(Boolean), 'an unattached upload');
   },
 
   error: photoError,

@@ -166,6 +166,11 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 .simple-part-main { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 0; }
 .simple-part-actions { flex-shrink: 0; }
 .edited-flag { font-size: 9px; color: #4a9edd; font-weight: 700; margin-left: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.photo-add-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.btn-add-photo { font-size: 11px; font-weight: 700; padding: 7px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px dashed #a7cdec; background: #fff; color: #2a7bbd; transition: all 0.15s; }
+.btn-add-photo:hover:not(:disabled) { border-style: solid; background: #f0f6fc; }
+.btn-add-photo:disabled { cursor: default; opacity: 0.6; }
+.photo-add-note { font-size: 11px; color: #999; line-height: 1.5; }
 .btn-edit-inline { font-size: 10px; font-weight: 700; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px solid #a7cdec; background: #fff; color: #2a7bbd; transition: all 0.15s; }
 .btn-edit-inline:hover { background: #eaf4fc; }
 .part-edit-panel { display: none; width: 100%; margin-top: 10px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px; }
@@ -369,6 +374,10 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 <script src="js/variant-label.js"></script>
 <!-- Which part a correction belongs to: by the part's own id. -->
 <script src="js/part-ids.js"></script>
+<!-- + Add a photo: the same validate → redact → normalize → upload as the two
+     posting pages (PhotoUploader.uploadOne). The grid is never mounted here. -->
+<script src="js/redact.js"></script>
+<script src="js/photos.js"></script>
 <script>
 // admin nav is intentionally NOT the shared nav (distinct admin-only links +
 // Admin tag) so nav.js is not loaded here. Same for the footer: admin has none.
@@ -776,6 +785,7 @@ function renderDetail(b) {
         return '<button type="button" class="detail-photo-thumb detail-photo-btn"'+photoBtnAttrs(i+1)+'><img src="'+escH(photoUrl(p.thumb_path || p.storage_path))+'" alt="" loading="lazy" /></button>';
       }).join('')+'</div>'
     : '';
+  var addPhotoHtml = addPhotoControlHtml(b, photos.length);
 
   var parts = b.parts_snapshot || [];
   // Pending and live builds, whoever owns them. A reviewer's change is
@@ -937,7 +947,7 @@ function renderDetail(b) {
       '</div>'+
     '</div>'+editBuildHtml+'</div>'+
     reviewedBanner+
-    '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+'</div></div>'+
+    '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+addPhotoHtml+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Description</div><div class="detail-desc">'+(b.description?escH(b.description):'<span style="color:#bbb">No description provided.</span>')+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Consent</div>'+consentHtml+'</div>'+
     '<div class="detail-section"><div class="detail-section-title">Parts ('+parts.length+')</div>'+partsHtml+'</div>'+
@@ -1073,6 +1083,135 @@ function refreshDeleteBtn() {
 //   doLink()             their own link changed the parts
 var REVIEWED = {};   // build id -> reviewSignature() of what was shown
 function markReviewed(b) { if (b) REVIEWED[b.id] = reviewSignature(b); }
+
+// ── + Add a photo ───────────────────────────────────────────────────────
+// For a builder who asks for another photo on a build they already posted
+// (they send it; we put it up). Pending and live builds, whoever owns them —
+// the same two statuses the part actions cover. A rejected build is the
+// builder's to fix.
+//
+// ADD ONLY. No remove, replace or re-order from here: those stay the
+// builder's (Undo → they edit → approve again), for the reason the editor
+// keeps admins out of owned builds — a silent rewrite of someone's photos.
+// Adding is what they asked for and can be undone by them.
+//
+// What makes it safe without a migration, all checked against the live
+// database on 2026-10-19:
+//   - RLS "Admins can add photos to any build" (is_admin()) admits the row
+//   - storage: the object goes under the ADMIN's uid, because
+//     build_photos_owner_insert requires the first segment to be auth.uid().
+//     That path is also the record of who added it.
+//   - row user_id = the build's OWNER, so the owner policies let them delete
+//     it later like any of their own photos. An unowned build gets the
+//     admin's id as the placeholder, exactly as gunforma-admin-post.html
+//     does, and launch-invite moves it to the builder with the rest.
+//   - trg_enforce_build_photo_limit refuses a fifth photo; the button is
+//     hidden at four so that refusal is a backstop, not the UI.
+//
+// NOT LOGGED, NOT NOTIFIED. It is not written to edit_history and the
+// builder gets no notification: notify_build_changes() skips kinds it does
+// not know, and the builder asked for this, so the reply to them is a
+// person's job. Logging it properly means a 'photo_added' kind in
+// edit_history, PartIds.changeText(), the build page and the trigger.
+var ADDING_PHOTO = null;   // build id while one is in flight
+var MAX_BUILD_PHOTOS = 4;  // trg_enforce_build_photo_limit
+
+function addPhotoControlHtml(b, count) {
+  if (b.status !== 'pending' && b.status !== 'approved') return '';
+  if (count >= MAX_BUILD_PHOTOS) {
+    return '<div class="photo-add-row"><span class="photo-add-note">'+MAX_BUILD_PHOTOS+' of '+MAX_BUILD_PHOTOS+
+      ' photos — the most a build can hold. Swapping one out is the builder\'s call.</span></div>';
+  }
+  var busy = ADDING_PHOTO === b.id;
+  var who = b.user_id
+    ? (b.status === 'approved'
+        ? 'Goes live on the build straight away. Removing it later takes an Undo, like any photo on a live build. The builder is not notified.'
+        : 'The builder can remove it like any of their own photos. They are not notified.')
+    : 'Nobody owns this build yet — it moves to the builder with the others when they claim it.';
+  return '<div class="photo-add-row">'+
+      '<button type="button" class="btn-add-photo" id="btn-add-photo"'+(busy ? ' disabled' : '')+' onclick="pickBuildPhoto(\''+b.id+'\')">'+
+        (busy ? 'Adding photo…' : '+ Add a photo')+'</button>'+
+      '<span class="photo-add-note">'+(MAX_BUILD_PHOTOS - count)+' slot'+(MAX_BUILD_PHOTOS - count === 1 ? '' : 's')+' left. '+who+'</span>'+
+      '<input type="file" id="add-photo-input" accept="image/jpeg,image/png,image/webp" hidden onchange="onBuildPhotoPicked(this, \''+b.id+'\')" />'+
+    '</div>';
+}
+
+function pickBuildPhoto(id) {
+  if (ADDING_PHOTO) return;
+  var input = document.getElementById('add-photo-input');
+  if (input) { input.value = ''; input.click(); }
+}
+
+function onBuildPhotoPicked(input, id) {
+  var file = input.files && input.files[0];
+  input.value = '';
+  if (file) doAddPhoto(id, file);
+}
+
+function rerenderSelected(id) {
+  if (selectedId !== id) return;
+  var b = BUILDS.find(function(x){ return x.id===id; });
+  if (b) renderDetail(b);
+}
+
+async function doAddPhoto(id, file) {
+  if (ADDING_PHOTO) return;
+  // Checked before the redact modal so nobody blurs a photo for a build
+  // that has moved, and again after it, right before the write.
+  if (!await ensureUnchanged(id, 'add the photo')) return;
+
+  ADDING_PHOTO = id;
+  rerenderSelected(id);
+  var up = null;
+  try {
+    up = await PhotoUploader.uploadOne(file, { ownerId: currentAdmin.id, folder: id, prefix: 'added' });
+    if (!up) return;                                   // cancelled in the redact modal
+    if (up.error) { showToast('red', up.error); up = null; return; }
+
+    var fresh = await ensureUnchanged(id, 'add the photo');
+    if (!fresh) { await discardUpload(up); up = null; return; }
+    var existing = fresh.build_photos || [];
+    if (existing.length >= MAX_BUILD_PHOTOS) {
+      await discardUpload(up); up = null;
+      showToast('red', 'This build already has ' + MAX_BUILD_PHOTOS + ' photos — nothing was added');
+      return;
+    }
+    var nextPos = existing.reduce(function (m, p) { return Math.max(m, p.position || 0); }, 0) + 1;
+
+    const { data: row, error } = await sb.from('build_photos').insert({
+      build_id: id,
+      user_id: fresh.user_id || currentAdmin.id,
+      storage_path: up.path,
+      thumb_path: up.thumbPath,
+      is_hero: !existing.some(function (p) { return p.is_hero; }),
+      position: nextPos,
+    }).select('id').maybeSingle();
+    if (error || !row) {
+      console.error(error);
+      await discardUpload(up); up = null;
+      showToast('red', 'Could not add the photo' + (error && error.message ? ' — ' + error.message : '') + '. Nothing was added.');
+      return;
+    }
+    up = null;   // attached now; never discard it
+
+    await loadBuilds();
+    // Their own change, so the pane they are now looking at is what they
+    // were shown — the next Approve must not refuse over it.
+    markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+    showToast('green', fresh.status === 'approved' ? 'Photo added — it is live on the build' : 'Photo added');
+  } finally {
+    if (up && !up.error) await discardUpload(up);
+    ADDING_PHOTO = null;
+    rerenderSelected(id);
+  }
+}
+
+// Objects that never got a row. Say so if they could not be removed —
+// orphaned, unpublished bytes, but bytes nonetheless.
+async function discardUpload(up) {
+  var ok = await PhotoUploader.removeUploaded(up);
+  if (!ok) console.warn('add photo: uploaded files could not be removed', up);
+}
 
 // Re-reads the build and returns the fresh row, or null after saying why
 // not. `verb` finishes the sentence the reviewer reads ("…then approve.").
