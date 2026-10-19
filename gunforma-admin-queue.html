@@ -166,6 +166,17 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 .simple-part-main { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 0; }
 .simple-part-actions { flex-shrink: 0; }
 .edited-flag { font-size: 9px; color: #4a9edd; font-weight: 700; margin-left: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.photo-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.photo-tile-controls { display: flex; gap: 4px; }
+.photo-ctl { flex: 1; font-size: 10px; font-weight: 700; padding: 4px 0; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px solid #d9d6cc; background: #fff; color: #666; transition: all 0.15s; }
+.photo-ctl:hover:not(:disabled) { border-color: #4a9edd; color: #2a7bbd; }
+.photo-ctl:disabled { cursor: default; opacity: 0.45; }
+.photo-ctl.hero-ctl { flex: 2; }
+.photo-add-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
+.btn-add-photo { font-size: 11px; font-weight: 700; padding: 7px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px dashed #a7cdec; background: #fff; color: #2a7bbd; transition: all 0.15s; }
+.btn-add-photo:hover:not(:disabled) { border-style: solid; background: #f0f6fc; }
+.btn-add-photo:disabled { cursor: default; opacity: 0.6; }
+.photo-add-note { font-size: 11px; color: #999; line-height: 1.5; }
 .btn-edit-inline { font-size: 10px; font-weight: 700; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px solid #a7cdec; background: #fff; color: #2a7bbd; transition: all 0.15s; }
 .btn-edit-inline:hover { background: #eaf4fc; }
 .part-edit-panel { display: none; width: 100%; margin-top: 10px; background: #fafaf8; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px; }
@@ -369,6 +380,10 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 <script src="js/variant-label.js"></script>
 <!-- Which part a correction belongs to: by the part's own id. -->
 <script src="js/part-ids.js"></script>
+<!-- + Add a photo: the same validate → redact → normalize → upload as the two
+     posting pages (PhotoUploader.uploadOne). The grid is never mounted here. -->
+<script src="js/redact.js"></script>
+<script src="js/photos.js"></script>
 <script>
 // admin nav is intentionally NOT the shared nav (distinct admin-only links +
 // Admin tag) so nav.js is not loaded here. Same for the footer: admin has none.
@@ -523,7 +538,10 @@ function reviewSignature(b) {
     activities: b.activities || [],
     platform: b.platform_id || null,
     parts: b.parts_snapshot || [],
-    photos: (b.build_photos || []).map(function (p) { return p.id + ':' + (p.storage_path || '') + ':' + (p.is_hero ? 1 : 0); }).sort(),
+    // position is in it since the queue can reorder (2026-10): a builder
+    // re-ordering a pending build's photos under an open review is a change
+    // the reviewer should be shown, same as an added or removed photo.
+    photos: (b.build_photos || []).map(function (p) { return p.id + ':' + (p.storage_path || '') + ':' + (p.is_hero ? 1 : 0) + ':' + (p.position || 0); }).sort(),
   });
 }
 
@@ -766,6 +784,9 @@ function renderDetail(b) {
     return ' data-photo-index="'+i+'" aria-label="Photo '+(i+1)+' of '+DETAIL_PHOTOS.length+' — view full size"';
   }
 
+  // Reorder controls on pending and live builds — the same two statuses as
+  // the part actions and + Add a photo. See "photo order" by doReorder below.
+  var canOrder = (b.status === 'pending' || b.status === 'approved') && gallery.length > 0;
   var heroHtml = hero
     ? '<button type="button" class="detail-photo-hero detail-photo-btn"'+photoBtnAttrs(0)+'><img src="'+escH(photoUrl(hero.storage_path))+'" alt="" /></button>'
     : '<div class="detail-photo-hero">No hero photo</div>';
@@ -773,9 +794,19 @@ function renderDetail(b) {
     ? '<div class="detail-photo-thumbs">'+gallery.map(function(p, i){
         // thumb_path can be null on a photo whose thumbnail never generated;
         // the bare column then rendered a broken image at ".../null".
-        return '<button type="button" class="detail-photo-thumb detail-photo-btn"'+photoBtnAttrs(i+1)+'><img src="'+escH(photoUrl(p.thumb_path || p.storage_path))+'" alt="" loading="lazy" /></button>';
+        var tile = '<button type="button" class="detail-photo-thumb detail-photo-btn"'+photoBtnAttrs(i+1)+'><img src="'+escH(photoUrl(p.thumb_path || p.storage_path))+'" alt="" loading="lazy" /></button>';
+        if (canOrder) {
+          var dis = REORDERING ? ' disabled' : '';
+          tile += '<div class="photo-tile-controls">'+
+            '<button type="button" class="photo-ctl"'+(i===0?' disabled':dis)+' onclick="doReorder(\''+b.id+'\',\''+p.id+'\',\'left\')" title="Move earlier" aria-label="Move photo '+(i+2)+' earlier">◀</button>'+
+            '<button type="button" class="photo-ctl hero-ctl"'+dis+' onclick="doReorder(\''+b.id+'\',\''+p.id+'\',\'hero\')" title="Swap with the hero photo">Make hero</button>'+
+            '<button type="button" class="photo-ctl"'+(i===gallery.length-1?' disabled':dis)+' onclick="doReorder(\''+b.id+'\',\''+p.id+'\',\'right\')" title="Move later" aria-label="Move photo '+(i+2)+' later">▶</button>'+
+          '</div>';
+        }
+        return '<div class="photo-tile">'+tile+'</div>';
       }).join('')+'</div>'
     : '';
+  var addPhotoHtml = addPhotoControlHtml(b, photos.length);
 
   var parts = b.parts_snapshot || [];
   // Pending and live builds, whoever owns them. A reviewer's change is
@@ -937,7 +968,7 @@ function renderDetail(b) {
       '</div>'+
     '</div>'+editBuildHtml+'</div>'+
     reviewedBanner+
-    '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+'</div></div>'+
+    '<div class="detail-section"><div class="detail-section-title">Photos ('+photos.length+')</div><div class="detail-photos">'+heroHtml+thumbsHtml+addPhotoHtml+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Description</div><div class="detail-desc">'+(b.description?escH(b.description):'<span style="color:#bbb">No description provided.</span>')+'</div></div>'+
     '<div class="detail-section"><div class="detail-section-title">Consent</div>'+consentHtml+'</div>'+
     '<div class="detail-section"><div class="detail-section-title">Parts ('+parts.length+')</div>'+partsHtml+'</div>'+
@@ -1073,6 +1104,216 @@ function refreshDeleteBtn() {
 //   doLink()             their own link changed the parts
 var REVIEWED = {};   // build id -> reviewSignature() of what was shown
 function markReviewed(b) { if (b) REVIEWED[b.id] = reviewSignature(b); }
+
+// ── + Add a photo ───────────────────────────────────────────────────────
+// For a builder who asks for another photo on a build they already posted
+// (they send it; we put it up). Pending and live builds, whoever owns them —
+// the same two statuses the part actions cover. A rejected build is the
+// builder's to fix.
+//
+// ADD ONLY. No remove, replace or re-order from here: those stay the
+// builder's (Undo → they edit → approve again), for the reason the editor
+// keeps admins out of owned builds — a silent rewrite of someone's photos.
+// Adding is what they asked for and can be undone by them.
+//
+// What makes it safe without a migration, all checked against the live
+// database on 2026-10-19:
+//   - RLS "Admins can add photos to any build" (is_admin()) admits the row
+//   - storage: the object goes under the ADMIN's uid, because
+//     build_photos_owner_insert requires the first segment to be auth.uid().
+//     That path is also the record of who added it.
+//   - row user_id = the build's OWNER, so the owner policies let them delete
+//     it later like any of their own photos. An unowned build gets the
+//     admin's id as the placeholder, exactly as gunforma-admin-post.html
+//     does, and launch-invite moves it to the builder with the rest.
+//   - trg_enforce_build_photo_limit refuses a fifth photo; the button is
+//     hidden at four so that refusal is a backstop, not the UI.
+//
+// NOT LOGGED, NOT NOTIFIED. It is not written to edit_history and the
+// builder gets no notification: notify_build_changes() skips kinds it does
+// not know, and the builder asked for this, so the reply to them is a
+// person's job. Logging it properly means a 'photo_added' kind in
+// edit_history, PartIds.changeText(), the build page and the trigger.
+var ADDING_PHOTO = null;   // build id while one is in flight
+var MAX_BUILD_PHOTOS = 4;  // trg_enforce_build_photo_limit
+
+function addPhotoControlHtml(b, count) {
+  if (b.status !== 'pending' && b.status !== 'approved') return '';
+  if (count >= MAX_BUILD_PHOTOS) {
+    return '<div class="photo-add-row"><span class="photo-add-note">'+MAX_BUILD_PHOTOS+' of '+MAX_BUILD_PHOTOS+
+      ' photos — the most a build can hold. Swapping one out is the builder\'s call.</span></div>';
+  }
+  var busy = ADDING_PHOTO === b.id;
+  var who = b.user_id
+    ? (b.status === 'approved'
+        ? 'Goes live on the build straight away. Removing it later takes an Undo, like any photo on a live build. The builder is not notified.'
+        : 'The builder can remove it like any of their own photos. They are not notified.')
+    : 'Nobody owns this build yet — it moves to the builder with the others when they claim it.';
+  return '<div class="photo-add-row">'+
+      '<button type="button" class="btn-add-photo" id="btn-add-photo"'+(busy ? ' disabled' : '')+' onclick="pickBuildPhoto(\''+b.id+'\')">'+
+        (busy ? 'Adding photo…' : '+ Add a photo')+'</button>'+
+      '<span class="photo-add-note">'+(MAX_BUILD_PHOTOS - count)+' slot'+(MAX_BUILD_PHOTOS - count === 1 ? '' : 's')+' left. '+who+'</span>'+
+      '<input type="file" id="add-photo-input" accept="image/jpeg,image/png,image/webp" hidden onchange="onBuildPhotoPicked(this, \''+b.id+'\')" />'+
+    '</div>';
+}
+
+function pickBuildPhoto(id) {
+  if (ADDING_PHOTO) return;
+  var input = document.getElementById('add-photo-input');
+  if (input) { input.value = ''; input.click(); }
+}
+
+function onBuildPhotoPicked(input, id) {
+  var file = input.files && input.files[0];
+  input.value = '';
+  if (file) doAddPhoto(id, file);
+}
+
+function rerenderSelected(id) {
+  if (selectedId !== id) return;
+  var b = BUILDS.find(function(x){ return x.id===id; });
+  if (b) renderDetail(b);
+}
+
+async function doAddPhoto(id, file) {
+  if (ADDING_PHOTO) return;
+  // Checked before the redact modal so nobody blurs a photo for a build
+  // that has moved, and again after it, right before the write.
+  if (!await ensureUnchanged(id, 'add the photo')) return;
+
+  ADDING_PHOTO = id;
+  rerenderSelected(id);
+  var up = null;
+  try {
+    up = await PhotoUploader.uploadOne(file, { ownerId: currentAdmin.id, folder: id, prefix: 'added' });
+    if (!up) return;                                   // cancelled in the redact modal
+    if (up.error) { showToast('red', up.error); up = null; return; }
+
+    var fresh = await ensureUnchanged(id, 'add the photo');
+    if (!fresh) { await discardUpload(up); up = null; return; }
+    var existing = fresh.build_photos || [];
+    if (existing.length >= MAX_BUILD_PHOTOS) {
+      await discardUpload(up); up = null;
+      showToast('red', 'This build already has ' + MAX_BUILD_PHOTOS + ' photos — nothing was added');
+      return;
+    }
+    var nextPos = existing.reduce(function (m, p) { return Math.max(m, p.position || 0); }, 0) + 1;
+
+    const { data: row, error } = await sb.from('build_photos').insert({
+      build_id: id,
+      user_id: fresh.user_id || currentAdmin.id,
+      storage_path: up.path,
+      thumb_path: up.thumbPath,
+      is_hero: !existing.some(function (p) { return p.is_hero; }),
+      position: nextPos,
+    }).select('id').maybeSingle();
+    if (error || !row) {
+      console.error(error);
+      await discardUpload(up); up = null;
+      showToast('red', 'Could not add the photo' + (error && error.message ? ' — ' + error.message : '') + '. Nothing was added.');
+      return;
+    }
+    up = null;   // attached now; never discard it
+
+    await loadBuilds();
+    // Their own change, so the pane they are now looking at is what they
+    // were shown — the next Approve must not refuse over it.
+    markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+    showToast('green', fresh.status === 'approved' ? 'Photo added — it is live on the build' : 'Photo added');
+  } finally {
+    if (up && !up.error) await discardUpload(up);
+    ADDING_PHOTO = null;
+    rerenderSelected(id);
+  }
+}
+
+// ── photo order ─────────────────────────────────────────────────────────
+// ◀ / ▶ swaps a gallery photo with its neighbour; "Make hero" swaps it with
+// the hero. Order everywhere on the site — the build page, the home cards,
+// the queue, the OG image — is "hero first, then the rest by position", so
+// writing is_hero and position is the whole change. The write renumbers ALL
+// of the build's photos 1..n in the new order (hero = 1), which also
+// normalises any legacy duplicate positions instead of working around them.
+//
+// Same policy shape as + Add a photo: "Admins can edit any build photo"
+// (UPDATE, is_admin()) admits the writes, and the path-tampering trigger
+// only guards storage_path/thumb_path/build_id/user_id — position and
+// is_hero are exactly the columns it leaves to the policies. No migration.
+// Not logged to edit_history: arrangement, not content — the photos the
+// builder posted are all still the photos, in a different order. If that
+// ever feels wrong in practice, it logs the same way an add would.
+//
+// The writes are one UPDATE per row that changes (at most 4) rather than a
+// database function, DEMOTIONS FIRST: build_photos_one_hero_per_build is a
+// unique partial index (one is_hero per build), so the old hero must lose
+// the flag before the new hero gains it — promote-first is refused with a
+// unique violation, which is exactly how this shipped broken the first
+// time. (The index never showed up in a pg_constraint dump; a standalone
+// unique index lives only in pg_indexes.) A failure partway through can
+// leave a half-applied order — at worst briefly NO hero, which every
+// reader falls back from deterministically (hero || first by position),
+// and never two. The error path reloads, says so, and one more click
+// finishes the job.
+var REORDERING = false;
+
+async function doReorder(id, photoId, how) {
+  if (REORDERING || ADDING_PHOTO) return;
+  var fresh = await ensureUnchanged(id, 'reorder the photos');
+  if (!fresh) return;
+
+  var all     = (fresh.build_photos || []).slice().sort(function(x,y){ return (x.position||0) - (y.position||0) || String(x.id).localeCompare(String(y.id)); });
+  var hero    = all.find(function(p){ return p.is_hero; }) || all[0];
+  var gallery = all.filter(function(p){ return p !== hero; });
+  var ordered = (hero ? [hero] : []).concat(gallery);   // displayed order, hero first
+  var from    = ordered.findIndex(function(p){ return p.id === photoId; });
+  if (from < 1) return;   // gone, or already the hero — the pane was stale either way
+
+  var to = how === 'hero' ? 0 : how === 'left' ? from - 1 : from + 1;
+  if (to < 0 || to >= ordered.length || to === from) return;
+  var tmp = ordered[to]; ordered[to] = ordered[from]; ordered[from] = tmp;
+
+  // Every row that changes, demotions (is_hero -> false) before the one
+  // promotion, so the unique hero index never sees two.
+  var writes = [];
+  for (var i = 0; i < ordered.length; i++) {
+    var want = { is_hero: i === 0, position: i + 1 };
+    if (ordered[i].is_hero !== want.is_hero || ordered[i].position !== want.position) {
+      writes.push({ row: ordered[i], want: want });
+    }
+  }
+  writes.sort(function (a, b) { return (a.want.is_hero ? 1 : 0) - (b.want.is_hero ? 1 : 0); });
+
+  REORDERING = true;
+  rerenderSelected(id);
+  try {
+    for (var w = 0; w < writes.length; w++) {
+      var row = writes[w].row;
+      const { data: wrote, error } = await sb.from('build_photos').update(writes[w].want).eq('id', row.id).select('id');
+      if (error || !wrote || wrote.length !== 1) {
+        console.error('reorder write failed on', row.id, error);
+        await loadBuilds();
+        markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+        showToast('red', 'The new order only partly saved — reloaded. Check it and try again.');
+        return;
+      }
+    }
+    await loadBuilds();
+    // Their own change: the pane now shows what they were shown, so the next
+    // Approve must not refuse over it (position is in reviewSignature now).
+    markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+    showToast('green', how === 'hero' ? 'Hero photo changed' : 'Photo order saved');
+  } finally {
+    REORDERING = false;
+    rerenderSelected(id);
+  }
+}
+
+// Objects that never got a row. Say so if they could not be removed —
+// orphaned, unpublished bytes, but bytes nonetheless.
+async function discardUpload(up) {
+  var ok = await PhotoUploader.removeUploaded(up);
+  if (!ok) console.warn('add photo: uploaded files could not be removed', up);
+}
 
 // Re-reads the build and returns the fresh row, or null after saying why
 // not. `verb` finishes the sentence the reviewer reads ("…then approve.").

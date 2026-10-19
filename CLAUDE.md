@@ -1733,10 +1733,12 @@ remember the second one.
 
 The pre-upload photo redaction modal — markup, CSS and JS — lives in
 **`js/redact.js` and nowhere else**. It is loaded as a plain `<script src>`
-global by the two pages that upload a build photo:
+global by the pages that upload a build photo:
 
 - `gunforma-post-build.html` — a builder posting their own build
 - `gunforma-admin-post.html` — an admin posting on a builder's behalf
+- `gunforma-admin-queue.html` — the queue's **+ Add a photo**, through
+  `PhotoUploader.uploadOne()` (no grid; see **Editing a build** below)
 
 The module injects its own markup into `document.body` and its own CSS into
 `document.head` on the first call, so a page adds the script tag and nothing
@@ -2207,9 +2209,55 @@ and a pending one stays pending, and it filters on `user_id is null`.
 owner.** A rewrite from the editor would leave no record. The tool for an
 owned build is the review queue's per-part **Edit / Remove / + Add a part**
 (see **A reviewer's part changes** below): parts only, each change logged in
-`edit_history` and shown to the builder. Photos, name and description stay
-the builder's: to let them change photos on a live build, **Undo** (back to
-pending), they edit it, approve it again.
+`edit_history` and shown to the builder. Name and description stay the
+builder's, and so do the photos with two exceptions: the queue can **+ Add
+a photo** (below the photo grid) for the builder who sends one in after
+posting, and it can **reorder** them (◀ / Make hero / ▶ under each gallery
+thumbnail). Removing or replacing a photo on a live build is still **Undo**
+(back to pending), they edit it, approve it again.
+
+**+ Add a photo** (2026-10) is `PhotoUploader.uploadOne()` from the queue:
+the same validate → redact → normalize → upload pipeline as the two posting
+pages, by construction — `uploadOne()` and the slots' `processFile()` call
+the same three functions, so do not give the queue a copy of any of them.
+No migration carried it: "Admins can add photos to any build" (INSERT,
+`is_admin()`) already admits the row, `trg_enforce_build_photo_limit`
+refuses a fifth photo (the button hides at four so that refusal is a
+backstop), and the storage object goes under the **admin's** uid because
+`build_photos_owner_insert` requires the first path segment to be
+`auth.uid()`. The row's `user_id` is the build's **owner**, so they can
+delete it like any of their photos (after an Undo, on a live build); on an
+unowned build it is the admin's id, the placeholder launch-invite moves to
+the builder with the rest. `ensureUnchanged()` runs twice — before the
+redact modal and again right before the insert — and a refusal discards the
+uploaded pair (`PhotoUploader.removeUploaded()`). Deliberately **not**
+logged to `edit_history` and no notification: the builder asked for the
+photo, and `notify_build_changes()` would need a new kind, the build page a
+renderer, `PartIds.changeText()` a sentence. If adds start happening that a
+builder did not ask for, that logging is the next change.
+
+**Reorder / Make hero** (2026-10) is the companion: ◀ / ▶ swaps a gallery
+photo with its neighbour, Make hero swaps it with the hero. Order
+everywhere — the build page, the home cards, the OG image, the queue — is
+"hero first, then the rest by position", so the write is just those two
+columns: the build's photos are renumbered 1..n in the new order with
+`is_hero` on the first, one UPDATE per row that changed (≤4), which also
+normalises any legacy duplicate positions. **Demotions are written before
+the promotion**, because `build_photos_one_hero_per_build` is a unique
+partial index — one `is_hero` per build — and promote-first is refused
+with a unique violation mid-sequence. That is exactly how this shipped
+broken on its first preview: the index was invisible to a `pg_constraint`
+dump, because a standalone unique index lives only in `pg_indexes` — check
+both before declaring what a table enforces. "Admins can edit any build
+photo" (UPDATE, `is_admin()`) admits it and the path-tampering trigger
+guards other columns, so again no migration. A failure partway can leave a
+half-applied order — at worst briefly no hero, never two; every reader
+falls back deterministically, the error path reloads and says so, and one
+more click finishes. Because the queue
+now writes order, `reviewSignature()` includes `position`, so a builder
+re-ordering a pending build under an open review trips `ensureUnchanged()`
+like any other photo change. Same logging stance as the add: arrangement,
+not content, so no `edit_history` entry and no notification.
 
 ### A build in review has two writers
 
