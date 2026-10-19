@@ -2210,10 +2210,11 @@ owner.** A rewrite from the editor would leave no record. The tool for an
 owned build is the review queue's per-part **Edit / Remove / + Add a part**
 (see **A reviewer's part changes** below): parts only, each change logged in
 `edit_history` and shown to the builder. Name and description stay the
-builder's, and so do the photos with one exception: the queue can **+ Add a
-photo** (below the photo grid) for the builder who sends one in after
-posting. Add only — removing, replacing or re-ordering photos on a live
-build is still **Undo** (back to pending), they edit it, approve it again.
+builder's, and so do the photos with two exceptions: the queue can **+ Add
+a photo** (below the photo grid) for the builder who sends one in after
+posting, and it can **reorder** them (◀ / Make hero / ▶ under each gallery
+thumbnail). Removing or replacing a photo on a live build is still **Undo**
+(back to pending), they edit it, approve it again.
 
 **+ Add a photo** (2026-10) is `PhotoUploader.uploadOne()` from the queue:
 the same validate → redact → normalize → upload pipeline as the two posting
@@ -2234,6 +2235,22 @@ logged to `edit_history` and no notification: the builder asked for the
 photo, and `notify_build_changes()` would need a new kind, the build page a
 renderer, `PartIds.changeText()` a sentence. If adds start happening that a
 builder did not ask for, that logging is the next change.
+
+**Reorder / Make hero** (2026-10) is the companion: ◀ / ▶ swaps a gallery
+photo with its neighbour, Make hero swaps it with the hero. Order
+everywhere — the build page, the home cards, the OG image, the queue — is
+"hero first, then the rest by position", so the write is just those two
+columns: the build's photos are renumbered 1..n in the new order with
+`is_hero` on the first, one UPDATE per row that changed (≤4), which also
+normalises any legacy duplicate positions. "Admins can edit any build
+photo" (UPDATE, `is_admin()`) admits it and the path-tampering trigger
+guards other columns, so again no migration. A failure partway can leave a
+half-applied order — every reader falls back deterministically, the error
+path reloads and says so, and one more click finishes. Because the queue
+now writes order, `reviewSignature()` includes `position`, so a builder
+re-ordering a pending build under an open review trips `ensureUnchanged()`
+like any other photo change. Same logging stance as the add: arrangement,
+not content, so no `edit_history` entry and no notification.
 
 ### A build in review has two writers
 

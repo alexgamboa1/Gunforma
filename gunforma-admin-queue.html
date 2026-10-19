@@ -166,6 +166,12 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 .simple-part-main { display: flex; gap: 14px; align-items: center; flex: 1; min-width: 0; }
 .simple-part-actions { flex-shrink: 0; }
 .edited-flag { font-size: 9px; color: #4a9edd; font-weight: 700; margin-left: 6px; letter-spacing: 0.04em; text-transform: uppercase; }
+.photo-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.photo-tile-controls { display: flex; gap: 4px; }
+.photo-ctl { flex: 1; font-size: 10px; font-weight: 700; padding: 4px 0; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px solid #d9d6cc; background: #fff; color: #666; transition: all 0.15s; }
+.photo-ctl:hover:not(:disabled) { border-color: #4a9edd; color: #2a7bbd; }
+.photo-ctl:disabled { cursor: default; opacity: 0.45; }
+.photo-ctl.hero-ctl { flex: 2; }
 .photo-add-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 2px; }
 .btn-add-photo { font-size: 11px; font-weight: 700; padding: 7px 12px; border-radius: 4px; cursor: pointer; font-family: inherit; border: 0.5px dashed #a7cdec; background: #fff; color: #2a7bbd; transition: all 0.15s; }
 .btn-add-photo:hover:not(:disabled) { border-style: solid; background: #f0f6fc; }
@@ -532,7 +538,10 @@ function reviewSignature(b) {
     activities: b.activities || [],
     platform: b.platform_id || null,
     parts: b.parts_snapshot || [],
-    photos: (b.build_photos || []).map(function (p) { return p.id + ':' + (p.storage_path || '') + ':' + (p.is_hero ? 1 : 0); }).sort(),
+    // position is in it since the queue can reorder (2026-10): a builder
+    // re-ordering a pending build's photos under an open review is a change
+    // the reviewer should be shown, same as an added or removed photo.
+    photos: (b.build_photos || []).map(function (p) { return p.id + ':' + (p.storage_path || '') + ':' + (p.is_hero ? 1 : 0) + ':' + (p.position || 0); }).sort(),
   });
 }
 
@@ -775,6 +784,9 @@ function renderDetail(b) {
     return ' data-photo-index="'+i+'" aria-label="Photo '+(i+1)+' of '+DETAIL_PHOTOS.length+' — view full size"';
   }
 
+  // Reorder controls on pending and live builds — the same two statuses as
+  // the part actions and + Add a photo. See "photo order" by doReorder below.
+  var canOrder = (b.status === 'pending' || b.status === 'approved') && gallery.length > 0;
   var heroHtml = hero
     ? '<button type="button" class="detail-photo-hero detail-photo-btn"'+photoBtnAttrs(0)+'><img src="'+escH(photoUrl(hero.storage_path))+'" alt="" /></button>'
     : '<div class="detail-photo-hero">No hero photo</div>';
@@ -782,7 +794,16 @@ function renderDetail(b) {
     ? '<div class="detail-photo-thumbs">'+gallery.map(function(p, i){
         // thumb_path can be null on a photo whose thumbnail never generated;
         // the bare column then rendered a broken image at ".../null".
-        return '<button type="button" class="detail-photo-thumb detail-photo-btn"'+photoBtnAttrs(i+1)+'><img src="'+escH(photoUrl(p.thumb_path || p.storage_path))+'" alt="" loading="lazy" /></button>';
+        var tile = '<button type="button" class="detail-photo-thumb detail-photo-btn"'+photoBtnAttrs(i+1)+'><img src="'+escH(photoUrl(p.thumb_path || p.storage_path))+'" alt="" loading="lazy" /></button>';
+        if (canOrder) {
+          var dis = REORDERING ? ' disabled' : '';
+          tile += '<div class="photo-tile-controls">'+
+            '<button type="button" class="photo-ctl"'+(i===0?' disabled':dis)+' onclick="doReorder(\''+b.id+'\',\''+p.id+'\',\'left\')" title="Move earlier" aria-label="Move photo '+(i+2)+' earlier">◀</button>'+
+            '<button type="button" class="photo-ctl hero-ctl"'+dis+' onclick="doReorder(\''+b.id+'\',\''+p.id+'\',\'hero\')" title="Swap with the hero photo">Make hero</button>'+
+            '<button type="button" class="photo-ctl"'+(i===gallery.length-1?' disabled':dis)+' onclick="doReorder(\''+b.id+'\',\''+p.id+'\',\'right\')" title="Move later" aria-label="Move photo '+(i+2)+' later">▶</button>'+
+          '</div>';
+        }
+        return '<div class="photo-tile">'+tile+'</div>';
       }).join('')+'</div>'
     : '';
   var addPhotoHtml = addPhotoControlHtml(b, photos.length);
@@ -1202,6 +1223,72 @@ async function doAddPhoto(id, file) {
   } finally {
     if (up && !up.error) await discardUpload(up);
     ADDING_PHOTO = null;
+    rerenderSelected(id);
+  }
+}
+
+// ── photo order ─────────────────────────────────────────────────────────
+// ◀ / ▶ swaps a gallery photo with its neighbour; "Make hero" swaps it with
+// the hero. Order everywhere on the site — the build page, the home cards,
+// the queue, the OG image — is "hero first, then the rest by position", so
+// writing is_hero and position is the whole change. The write renumbers ALL
+// of the build's photos 1..n in the new order (hero = 1), which also
+// normalises any legacy duplicate positions instead of working around them.
+//
+// Same policy shape as + Add a photo: "Admins can edit any build photo"
+// (UPDATE, is_admin()) admits the writes, and the path-tampering trigger
+// only guards storage_path/thumb_path/build_id/user_id — position and
+// is_hero are exactly the columns it leaves to the policies. No migration.
+// Not logged to edit_history: arrangement, not content — the photos the
+// builder posted are all still the photos, in a different order. If that
+// ever feels wrong in practice, it logs the same way an add would.
+//
+// The writes are one UPDATE per row that changes (at most 4) rather than a
+// database function. A failure partway through can leave a half-applied
+// order — never duplicate heroes rendered wrongly (every reader falls back
+// deterministically) and never a refused row (position stays >= 1). The
+// error path reloads, says so, and one more click finishes the job.
+var REORDERING = false;
+
+async function doReorder(id, photoId, how) {
+  if (REORDERING || ADDING_PHOTO) return;
+  var fresh = await ensureUnchanged(id, 'reorder the photos');
+  if (!fresh) return;
+
+  var all     = (fresh.build_photos || []).slice().sort(function(x,y){ return (x.position||0) - (y.position||0) || String(x.id).localeCompare(String(y.id)); });
+  var hero    = all.find(function(p){ return p.is_hero; }) || all[0];
+  var gallery = all.filter(function(p){ return p !== hero; });
+  var ordered = (hero ? [hero] : []).concat(gallery);   // displayed order, hero first
+  var from    = ordered.findIndex(function(p){ return p.id === photoId; });
+  if (from < 1) return;   // gone, or already the hero — the pane was stale either way
+
+  var to = how === 'hero' ? 0 : how === 'left' ? from - 1 : from + 1;
+  if (to < 0 || to >= ordered.length || to === from) return;
+  var tmp = ordered[to]; ordered[to] = ordered[from]; ordered[from] = tmp;
+
+  REORDERING = true;
+  rerenderSelected(id);
+  try {
+    for (var i = 0; i < ordered.length; i++) {
+      var want = { is_hero: i === 0, position: i + 1 };
+      var row = ordered[i];
+      if (row.is_hero === want.is_hero && row.position === want.position) continue;
+      const { data: wrote, error } = await sb.from('build_photos').update(want).eq('id', row.id).select('id');
+      if (error || !wrote || wrote.length !== 1) {
+        console.error('reorder write failed on', row.id, error);
+        await loadBuilds();
+        markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+        showToast('red', 'The new order only partly saved — reloaded. Check it and try again.');
+        return;
+      }
+    }
+    await loadBuilds();
+    // Their own change: the pane now shows what they were shown, so the next
+    // Approve must not refuse over it (position is in reviewSignature now).
+    markReviewed(BUILDS.find(function(x){ return x.id===id; }));
+    showToast('green', how === 'hero' ? 'Hero photo changed' : 'Photo order saved');
+  } finally {
+    REORDERING = false;
     rerenderSelected(id);
   }
 }
