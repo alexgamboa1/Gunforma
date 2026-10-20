@@ -208,29 +208,31 @@ export const GUIDE_CONTENT = {
     },
 
     // ── P365 XMacro ───────────────────────────────────────────────────────
-    // The uncertainty page: the SIG-LOC row is confidence 'likely' because
-    // Sig's own spec field contradicts itself. guide-page.mjs renders a
-    // "likely" note from the data; the prose explains WHY.
+    // The SKU-split page: the -SL/-RXSL SKUs carry the SIG-LOC Compact cut,
+    // verified 2026-10-19 (Alex). Sig's own spec field still lists COMPACT
+    // (Shield RMSc) for those SKUs, so the prose says why the spec sheet and
+    // the gun disagree. guide-page.mjs renders a "likely" note only from a
+    // row marked so in the data; none is, now.
     'p365-xmacro': {
       title: 'Red Dots That Fit the Sig P365 XMacro (2026): Verified',
       metaDescription:
         'What red dots fit the Sig P365 XMacro? Every optic verified against ' +
-        'the XMacro’s RMSc-pattern cut, and an honest note on the -RXSL SKUs ' +
-        'where Sig’s own spec sheet contradicts itself.',
+        'the XMacro’s RMSc-pattern cut, and the SIG-LOC Compact cut its -SL ' +
+        'and -RXSL SKUs carry.',
       introAfter:
         'Standard XMacro SKUs carry the RMSc-pattern cut and are straightforward. ' +
-        'The -RXSL SKUs are the one place in this family where we will not claim ' +
-        'certainty: Sig’s spec field still lists RMSc on guns that ship with a ' +
-        'factory-mounted ROMEO-X SIG-LOC, and SIG-LOC optics need the SIG-LOC ' +
-        'cut. We have marked that row as likely rather than verified and said so ' +
-        'on the page instead of picking whichever answer sounded tidier.',
+        'The -SL and -RXSL SKUs carry the SIG-LOC Compact cut instead, verified ' +
+        'in October 2026. Sig’s spec field still lists COMPACT (Shield RMSc) for ' +
+        'those SKUs; that entry is stale — they ship with a factory-mounted ' +
+        'ROMEO-X SIG-LOC, and SIG-LOC optics need the SIG-LOC cut. Read the ' +
+        'suffix on your SKU before ordering.',
       staticTakeaways: [
         'Standard P365 XMacro SKUs use the RMSc-pattern cut, read per-SKU from ' +
         'Sig’s spec sheets in September 2026.',
-        'On -RXSL SKUs our fit data is marked likely, not verified: Sig’s spec ' +
-        'field shows RMSc while the gun ships with a factory ROMEO-X SIG-LOC, and ' +
-        'per sigsauer.com/sig-loc a SIG-LOC optic requires the SIG-LOC cut. If ' +
-        'you own one, confirm against your own slide before ordering.',
+        'The -SL and -RXSL XMacro SKUs are cut for SIG-LOC Compact, verified in ' +
+        'October 2026. Sig’s spec field still lists COMPACT (Shield RMSc) for ' +
+        'them, but the gun ships with a factory ROMEO-X SIG-LOC, and per ' +
+        'sigsauer.com/sig-loc a SIG-LOC optic requires the SIG-LOC cut.',
         'The XMacro uses the same magazine as the P365 FUSE, so a carry setup ' +
         'built around one feeds the other.',
       ],
@@ -249,14 +251,14 @@ export const GUIDE_CONTENT = {
              'adapter plate.' },
         { q: 'What optic cut does the P365 XMacro use?',
           a: 'The RMSc pattern on standard SKUs, read per-SKU from Sig’s spec sheets ' +
-             'in September 2026. The -RXSL SKUs are the open question — see the ' +
-             'note on this page about Sig’s conflicting spec field.' },
+             'in September 2026, and SIG-LOC Compact on the -SL and -RXSL SKUs, ' +
+             'verified in October 2026. The suffix on the SKU is what decides it.' },
         { q: 'Do the -RXSL XMacro SKUs have the SIG-LOC cut?',
-          a: 'Probably, and we have marked it likely rather than verified. Sig’s ' +
-             'spec field lists RMSc for those SKUs, but they ship with a ' +
-             'factory-mounted ROMEO-X SIG-LOC, and Sig states that SIG-LOC optics ' +
-             'require the SIG-LOC cut. The two claims cannot both be right, so we ' +
-             'are not asserting either one.' },
+          a: 'Yes — verified in October 2026. Sig’s spec field still lists COMPACT ' +
+             '(Shield RMSc) for those SKUs, but they ship with a factory-mounted ' +
+             'ROMEO-X SIG-LOC, and Sig states that SIG-LOC optics require the ' +
+             'SIG-LOC cut. The spec field is the stale entry; the slide is cut ' +
+             'for SIG-LOC Compact.' },
         { q: 'Do the P365 XMacro and P365 FUSE take the same red dots?',
           a: 'The footprints overlap, but the defaults are reversed: the XMacro is ' +
              'RMSc-pattern as standard while the FUSE defaults to SIG-LOC Compact ' +
