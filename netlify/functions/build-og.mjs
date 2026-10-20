@@ -53,6 +53,7 @@ import { buildUrl, buildIdFromPath } from './_build-url.mjs';
 // its own category map.
 import { CATEGORY_META } from './_category-meta.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { CDN_CACHE_BUILD, CDN_CACHE_NO_STORE } from './_cache.mjs';
 import { pgRows, unavailable } from './_pg.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
@@ -600,6 +601,9 @@ function notFound(status = 404) {
         // is the common case here, not an edge one: every build starts
         // pending and becomes shareable the moment it is approved.
         'Cache-Control': 'public, max-age=60',
+        // And never at the CDN: a 404 or 410 stored durably would keep
+        // answering gone for an hour after the approval (_cache.mjs).
+        'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE,
       },
     },
   );
@@ -816,6 +820,10 @@ export default async (req) => {
     headers: {
       'Content-Type':  'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=600',
+      // Durable for an hour, NO stale-while-revalidate: a reviewer's
+      // correction to a live build must reach every reader within the
+      // hour, including the first one after it (_cache.mjs explains).
+      'Netlify-CDN-Cache-Control': CDN_CACHE_BUILD,
     },
   }));
 };

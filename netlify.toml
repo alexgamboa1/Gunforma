@@ -156,7 +156,7 @@
 # should ever get the chance to claim a page path.
 [[redirects]]
   from = "/gunforma-post-build-v6.html"
-  to = "/gunforma-post-build"
+  to = "/gunforma-post-build.html"
   status = 301
 
 # Shareable profile URLs. status = 200 is a rewrite, not a redirect — the
@@ -265,10 +265,91 @@
   to = "/.netlify/functions/sitemap"
   status = 200
 
+# /sitemap.xml is a sitemap INDEX now (2026-10-20), and these are its typed
+# children: /sitemap-static.xml, -hubs, -fit, -builds, -profiles, -parts.
+# Same function; it reads the pathname to decide which document to emit and
+# 404s any child it does not declare (SITEMAP_CHILDREN in sitemap.mjs).
+# Netlify only treats "*" as a splat at the END of a path, so this cannot be
+# written as /sitemap-*.xml — the function checks the .xml suffix itself.
+# Search Console keeps its one submitted URL; the children show up under it.
+[[redirects]]
+  from = "/sitemap-*"
+  to = "/.netlify/functions/sitemap?child=:splat"
+  status = 200
+
+# ---------------------------------------------------------------------------
+# One URL per page (2026-10-20). Every static page declares a .html canonical,
+# the sitemap lists the .html form and every internal link uses it — and the
+# extensionless form answered 200 as well (Netlify serves /foo for foo.html),
+# so each content page had two live addresses. The .html form stays the
+# canonical (nothing indexed moves); the bare form 301s to it.
+#
+# force = true on every one: the bare path has no file of its own, but
+# Netlify's implicit .html lookup can satisfy it before an unforced rule is
+# consulted, and a rule that may or may not apply is worse than none.
+# The home page is the one exception in the other direction — its canonical
+# is "/", so /index.html is the duplicate and 301s to the root.
+#
+# App pages (sign-in, sign-up, post-build, admin …) are noindex and get no
+# rule here; the _redirects aliases /signin, /signup, /post-build, /admin
+# are unchanged. /builds, /build and /field-notes did point at indexable
+# content and are 301s now (/builds and /build in _redirects).
+# ---------------------------------------------------------------------------
+[[redirects]]
+  from = "/index.html"
+  to = "/"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/gunforma-builds"
+  to = "/gunforma-builds.html"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/gunforma-parts-catalog"
+  to = "/gunforma-parts-catalog.html"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/gunforma-legal"
+  to = "/gunforma-legal.html"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/privacy-policy"
+  to = "/privacy-policy.html"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/terms-of-service"
+  to = "/terms-of-service.html"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/builder-agreement"
+  to = "/builder-agreement.html"
+  status = 301
+  force = true
+
+# Was a 200 rewrite (a second live address for field-notes.html, whose
+# canonical says .html). Both slash forms, so neither leaves a 200 behind.
 [[redirects]]
   from = "/field-notes"
   to = "/field-notes.html"
-  status = 200
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "/field-notes/"
+  to = "/field-notes.html"
+  status = 301
+  force = true
 
 # Static crawler-facing index of every product, grouped by category — see
 # parts-index.mjs. Netlify redirects are first-match-wins, so these two exact
@@ -356,11 +437,6 @@
 [[redirects]]
   from = "/p365/*"
   to = "/.netlify/functions/gun-hub?splat=:splat"
-  status = 200
-
-[[redirects]]
-  from = "/field-notes/"
-  to = "/field-notes.html"
   status = 200
 
 # Runs on every request so it can branch on Host, which Netlify's redirect

@@ -9,8 +9,11 @@ name: Check sitemap
 # page actually serves. Neither shows up anywhere a person looks, and both
 # cost indexing.
 #
-# So the check runs against a URL, not a mock: it fetches the sitemap, then
-# fetches each /b/ page in it and compares canonicals. Only a real deploy can
+# So the check runs against a URL, not a mock: it fetches the sitemap INDEX
+# (/sitemap.xml, one child per page type since 2026-10-20), then every child
+# it names, asserts each child holds only its own page type, that the union
+# is still the whole site and that no lastmod is the request time, then
+# fetches each /b/ page and compares canonicals. Only a real deploy can
 # answer that — which is also why it is not in scripts/check-all.sh (the site
 # is not serving during its own build).
 #
@@ -46,7 +49,7 @@ jobs:
 
       # No install step: check-sitemap.mjs imports nothing but the repo's own
       # _build-url.mjs.
-      - name: Check sitemap
+      - name: Check sitemap index and children
         env:
           DEPLOY_URL: ${{ github.event.inputs.origin || 'https://gunforma.com' }}
         run: node scripts/check-sitemap.mjs "$DEPLOY_URL"

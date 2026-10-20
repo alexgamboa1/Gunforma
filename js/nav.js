@@ -254,13 +254,13 @@ function ensureAccountNavStyles() {
   if (variant === 'auth-signin') {
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+        '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<a class="nav-link" href="gunforma-signup.html">Create account →</a>' +
       '</nav>';
   } else if (variant === 'auth-signup') {
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+        '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<a class="nav-link" href="gunforma-signin.html">Sign in instead →</a>' +
       '</nav>';
   } else if (variant === 'full-authed') {
@@ -271,9 +271,9 @@ function ensureAccountNavStyles() {
     // which also gives it its href — hence an <a> with no initial href.
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+        '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<div class="nav-links">' +
-          '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
+          '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
@@ -289,9 +289,9 @@ function ensureAccountNavStyles() {
     // full — the default
     html =
       '<nav class="nav">' +
-        '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+        '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<div class="nav-links">' +
-          '<a class="nav-link' + activeIf('index.html') + '" href="index.html">Home</a>' +
+          '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +

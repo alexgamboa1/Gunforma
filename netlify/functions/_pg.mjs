@@ -27,6 +27,8 @@
 // A per-attempt timeout is attached so that one hung connection cannot eat
 // the whole function budget before the retry gets its turn.
 
+import { CDN_CACHE_NO_STORE } from './_cache.mjs';
+
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
 
@@ -94,6 +96,10 @@ export function unavailable() {
     headers: {
       'Content-Type':  'text/plain; charset=utf-8',
       'Cache-Control': 'no-store',
+      // Said twice on purpose: Netlify reads the CDN-specific header when it
+      // is present, and a 503 stored durably is an outage that outlives the
+      // outage (_cache.mjs).
+      'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE,
       'Retry-After':   String(RETRY_AFTER_SECONDS),
     },
   });

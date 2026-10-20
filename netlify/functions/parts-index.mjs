@@ -21,6 +21,7 @@
 
 import { CATEGORY_META } from './_category-meta.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -225,9 +226,9 @@ function renderPage(products) {
 '</style>' +
 '</head><body>' +
 '<nav class="nav">' +
-  '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+  '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
-    '<a class="nav-link" href="index.html">Home</a>' +
+    '<a class="nav-link" href="/">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
     '<a class="nav-link" href="/p365/">Your P365</a>' +
     '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
@@ -278,7 +279,8 @@ export default async () => {
     console.error('[parts-index] product list fetch failed', err);
     return new Response('Temporarily unavailable — try again shortly.', {
       status: 502,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store',
+                 'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE },
     });
   }
 
@@ -288,6 +290,7 @@ export default async () => {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
+      'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,   // durable — see _cache.mjs
     },
   });
 };

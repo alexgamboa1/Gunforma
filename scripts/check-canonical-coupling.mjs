@@ -34,11 +34,22 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const FN   = 'netlify/functions/build-og.mjs';
-const PAGE = 'gunforma-build-detail.html';
+
+// Every function that transforms a static page by exact-string replace, with
+// the page it transforms. profile-og.mjs joined build-og.mjs here on
+// 2026-10-20, when gunforma-profile.html became noindex (it is the bare
+// "my profile" app screen) and /u/<username> had to strip that line as it
+// already stripped the static canonical — a noindex that survives the
+// strip deindexes every public profile and renders perfectly.
+const PAIRS = [
+  { fn: 'netlify/functions/build-og.mjs',    page: 'gunforma-build-detail.html', route: '/b/…' },
+  { fn: 'netlify/functions/profile-og.mjs',  page: 'gunforma-profile.html',      route: '/u/…' },
+];
 
 const problems = [];
+let checked = 0;
 
+for (const { fn: FN, page: PAGE, route } of PAIRS) {
 const fnSrc   = await readFile(join(ROOT, FN), 'utf8');
 const pageSrc = await readFile(join(ROOT, PAGE), 'utf8');
 
@@ -86,7 +97,7 @@ for (const lit of literals) {
     problems.push(
       `${FN} replaces a string that does not occur in ${PAGE}:\n` +
       `    ${shown}\n` +
-      `  That replace is a silent no-op. Depending on which one it is, every /b/\n` +
+      `  That replace is a silent no-op. Depending on which one it is, every ${route}\n` +
       `  page now ships two canonicals, or ships none of its OG meta at all —\n` +
       `  and looks completely normal either way.\n` +
       `  Change the literal in ${FN} to match the page, in the same commit.`);
@@ -105,12 +116,31 @@ const canonicals = pageSrc.match(/<link[^>]+rel=["']canonical["'][^>]*>/gi) || [
 if (canonicals.length !== 1) {
   problems.push(
     `${PAGE} ships ${canonicals.length} <link rel="canonical"> tags; expected exactly 1.\n` +
-    `  build-og.mjs strips one of them at /b/… — any other survives alongside\n` +
+    `  ${FN} strips one of them at ${route} — any other survives alongside\n` +
     `  the injected per-build canonical.`);
+}
+
+// A page that carries noindex must have exactly one such tag, and the
+// function must strip it (a literal naming it must be among the replaces),
+// or the served route ships the bare page's noindex. The static canonical
+// is held the same way: present once in the page, named once in the
+// function's replaces.
+for (const [what, re] of [['noindex', /<meta[^>]+name=["']robots["'][^>]*>/gi],
+                          ['canonical', /<link[^>]+rel=["']canonical["'][^>]*>/gi]]) {
+  const tags = pageSrc.match(re) || [];
+  if (tags.length && !literals.some((l) => tags.some((t) => l.includes(t)))) {
+    problems.push(
+      `${PAGE} carries a ${what} tag that ${FN} never strips:\n` +
+      `    ${tags[0]}\n` +
+      `  At ${route} that tag survives the transform and is served to crawlers.`);
+  }
+}
+checked += literals.length;
+console.log(`ok: ${literals.length} ${FN} page literal(s) still present in ${PAGE}, one canonical in the page`);
 }
 
 if (problems.length) {
   for (const p of problems) console.error('error: ' + p + '\n');
   process.exit(1);
 }
-console.log(`ok: ${literals.length} build-og.mjs page literal(s) still present in ${PAGE}, one canonical in the page`);
+console.log(`ok: ${checked} page literal(s) across ${PAIRS.length} function/page pair(s)`);

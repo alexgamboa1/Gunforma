@@ -26,9 +26,9 @@ export function navHtml({ active } = {}) {
   const on = (key) => (active === key ? ' active' : '');
   return (
 '<nav class="nav">' +
-  '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+  '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
-    '<a class="nav-link' + on('home') + '" href="index.html">Home</a>' +
+    '<a class="nav-link' + on('home') + '" href="/">Home</a>' +
     '<a class="nav-link' + on('builds') + '" href="gunforma-builds.html">Builds</a>' +
     '<a class="nav-link' + on('p365') + '" href="/p365/">Your P365</a>' +
     '<a class="nav-link' + on('parts') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +

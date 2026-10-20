@@ -23,8 +23,9 @@
 // holds, and this is what keeps it true.
 import {
   GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH, HUB_MAGAZINE_COPY,
-  hubPath, isLiveGunHub, guidePagesForGun, guidePath,
+  hubPath, isLiveGunHub, guidePagesForGun, guidePath, hubTitle,
 } from './_guide-meta.mjs';
+import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 // The magazine rows' buy buttons: the same hero-listing rules and the same
 // unpaid "Buy from <maker>" fallback the fit guides and product pages use,
 // so one listing reads the same on every page (CLAUDE.md, "Duplicated
@@ -87,7 +88,8 @@ function notFound(detail) {
     '</head><body><div><div style="font-size:20px;font-weight:700">Page not found</div>' +
     '<div class="s">' + esc(detail || 'No model page at this address.') + '</div>' +
     '<a href="' + SITE + HUB_INDEX_PATH + '">See the P365 models we cover &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
-    { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
+    { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60',
+                              'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE } },
   );
 }
 
@@ -96,7 +98,8 @@ function notFound(detail) {
 function unavailable() {
   return new Response('Temporarily unavailable — try again shortly.', {
     status: 502,
-    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store',
+               'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE },
   });
 }
 
@@ -120,6 +123,41 @@ async function fetchCuts(gunId) {
 }
 
 const IN = (v) => (v == null ? null : String(v) + '"');
+
+// How many red dots the fit guide for this gun lists: the same chain
+// guide-page.mjs walks (cuts → optic_cut_footprints → optic_specs → a live
+// product with a slug), counted rather than rendered, so the hub's meta
+// description can state the number the guide proves. Any failure here is
+// null, and the description simply does not claim a count — the hub is the
+// hub with or without it.
+async function countFitOptics(cuts) {
+  const mountable = [...new Set(cuts.map((c) => c.optic_cut))].filter((c) => c && c !== 'none');
+  if (!mountable.length) return 0;
+  const maps = await pgGet('optic_cut_footprints?optic_cut=in.(' + mountable.map(encodeURIComponent).join(',') + ')' +
+    '&select=footprint_id');
+  const fpIds = [...new Set(maps.map((m) => m.footprint_id).filter(Boolean))];
+  if (!fpIds.length) return 0;
+  // optic_specs → products is the two-FK pair: name it (CLAUDE.md, PGRST201).
+  const rows = await pgGet('optic_specs?footprint_id=in.(' + fpIds.join(',') + ')' +
+    '&select=' + encodeURIComponent('product_id,products!optic_specs_product_id_fkey(slug,is_discontinued)'));
+  return rows.filter((r) => r.products && r.products.slug && !r.products.is_discontinued).length;
+}
+
+// The meta description states the concrete answer the page gives, from the
+// same rows the page renders: how many magazines and red dots are verified
+// to fit, and which cut. Nothing typed, so it cannot rot. A count that
+// could not be read (null) or is zero is left out rather than stated.
+function hubDescription(name, magCount, opticCount, cutNames) {
+  const claims = [];
+  if (magCount)   claims.push(magCount + (magCount === 1 ? ' magazine' : ' magazines'));
+  if (opticCount) claims.push(opticCount + (opticCount === 1 ? ' red dot' : ' red dots'));
+  const lead = claims.length
+    ? claims.join(' and ') + ' verified to fit the Sig ' + name
+    : 'What fits the Sig ' + name;
+  const cut = cutNames.length ? ', on its ' + cutNames.join(' / ') + ' optic cut' : '';
+  // Kept under ~150 characters so a results page shows the whole answer.
+  return lead + cut + '. Specs, the cut by SKU, and live prices.';
+}
 
 // ── magazines that fit this model ─────────────────────────────────────────
 // One row per magazine_housing_fit row for the gun's housing class — the
@@ -253,18 +291,20 @@ function magazineSectionHtml(name, mags) {
 
 
 // ── the model hub ─────────────────────────────────────────────────────────
-function renderHub({ hub, gun, cuts, vocab, guides, mags }) {
+function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount }) {
   mags = mags || [];
   const fittingMags = mags.filter(fitsIt);
   const name = gun.name;
   const canonical = SITE + hubPath(gun.slug);
-  const title = 'Sig ' + name + ': Specs, Optic Cut and Red Dot Fit (2026)';
-  const description =
-    'Sig Sauer ' + name + ' at a glance: slide and barrel length, capacity, ' +
-    'which optic cut each SKU carries, and every red dot verified to fit it.';
 
   const cutNames = [...new Set(cuts.filter((c) => c.optic_cut !== 'none')
     .map((c) => (vocab[c.optic_cut] || {}).display_name || c.optic_cut))];
+
+  // The title names the fit question (registry, pinned under 60 chars by
+  // scripts/check-guide-content.mjs); the description states the answer
+  // from live counts. The H1 below stays the model name.
+  const title = hubTitle(gun.slug);
+  const description = hubDescription(name, fittingMags.length, opticCount, cutNames);
 
   const specRows = [
     ['Model', name],
@@ -487,6 +527,7 @@ export default async (req) => {
       headers: {
         'Content-Type': 'text/html; charset=utf-8',
         'Cache-Control': 'public, max-age=300, s-maxage=1800',
+        'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,   // durable — see _cache.mjs
         'x-gun-hub': 'index',
         'x-gun-hub-count': String(GUN_HUBS.length),
       },
@@ -525,12 +566,25 @@ export default async (req) => {
     console.error('[gun-hub] magazine-fit lookup failed', err);
   }
 
-  const html = renderHub({ hub, gun, cuts: cutsRes.cuts, vocab: cutsRes.vocab, guides, mags });
+  let opticCount = null;
+  try {
+    opticCount = await countFitOptics(cutsRes.cuts);
+  } catch (err) {
+    // Non-fatal: the description drops its red-dot count and says so in
+    // x-gun-hub-optics below; the page is otherwise the page.
+    console.error('[gun-hub] optic count failed', err);
+  }
+
+  const html = renderHub({ hub, gun, cuts: cutsRes.cuts, vocab: cutsRes.vocab, guides, mags, opticCount });
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
+      'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,   // durable — see _cache.mjs
+      // Red dots counted into the meta description, or "unknown" when the
+      // count could not be read; the guide's x-guide-optics must agree.
+      'x-gun-hub-optics': opticCount == null ? 'unknown' : String(opticCount),
       // Observability, same as guide-page's x-guide-* headers.
       'x-gun-hub': route.gun,
       'x-gun-hub-guides': String(guides.length),

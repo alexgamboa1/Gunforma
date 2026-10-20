@@ -165,7 +165,15 @@ key only, and return a real 404 for unknown slugs rather than a soft 404.
 `netlify/functions/gun-hub.mjs` is the newest, `/p365/:gun-slug` plus
 `/p365/` as its index — page type #4, the page a fit guide links UP to. It
 follows `guide-page.mjs` exactly: declared-registry only (`GUN_HUBS`), apex
-canonical, JSON-LD, hard 404 for an undeclared gun.
+canonical, JSON-LD, hard 404 for an undeclared gun. **Its `<title>` names
+the fit question** — `hubTitle()` in `_guide-meta.mjs`, "P365 XMacro: Which
+Mags, Red Dots & Parts Fit | Gunforma", under 60 characters (the two
+longest names drop "& Parts"), pinned by `check-guide-content.mjs` — and
+its meta description is built from the live counts the page renders (mags
+that fit, red dots that fit, the cut), never typed. The H1 stays the model
+name. The red-dot count walks the guide's own chain (`countFitOptics`) and
+is reported as `x-gun-hub-optics`; it must equal the guide's
+`x-guide-optics`.
 
 **Its reason for existing is a defect worth remembering.** The nine `/fit/`
 pages shipped in #104 and #119 were **orphaned** — a grep of every `.html`,
@@ -178,7 +186,20 @@ every check in a browser. The fix is links in both directions, and
 page must link into a fit guide.
 
 `netlify/functions/sitemap.mjs` is a third, `/sitemap.xml`, generated from the
-database. Two things about it are load-bearing:
+database. **Since 2026-10-20 it is a sitemap INDEX** with one typed child per
+page type — `/sitemap-static.xml`, `-hubs`, `-fit`, `-builds`, `-profiles`,
+`-parts` (`SITEMAP_CHILDREN`) — so Search Console reports indexing per page
+type instead of "113 of 319". Same function, routed by pathname; the
+`/sitemap-*` rule in `netlify.toml` sends the children to it and it 404s any
+child it does not declare. The union of the children is exactly the old flat
+list, and `scripts/check-sitemap.mjs` walks the index and every child, holds
+each child to its own URL shape, and asserts the union against the pinned
+baseline. A field-notes child is deliberately not emitted until an article
+exists. **lastmod is the row's own date, never the request time**:
+`products.updated_at`, `builds.updated_at`, the newest build for a profile,
+the registry `updated` for a fit page, and for a hub the latest change among
+the hub and its fit rows; static pages carry none. Three things about it are
+load-bearing:
 
 - It builds `/b/` URLs with `buildUrl()` from `_build-url.mjs` — the same
   module `build-og.mjs` uses for the canonical it injects into that page. **A
@@ -194,6 +215,48 @@ database. Two things about it are load-bearing:
 Only approved builds appear (`status=eq.approved`, redundant with RLS on
 purpose, same as `build-og.mjs`), and a profile is listed only if it has one —
 a `/u/` page with nothing on it is a thin page.
+
+### One URL per page
+
+Every static page declares its **`.html` form** as canonical, the sitemap
+lists it and every internal link uses it — and Netlify also answered the
+extensionless form (`/gunforma-legal`) at 200, so each content page had two
+live addresses. Since 2026-10-20 the bare form is a **forced 301** to the
+`.html` form in `netlify.toml` (forced because Netlify's implicit `.html`
+lookup can satisfy the bare path before an unforced rule is consulted); the
+home page goes the other way, `/index.html` → `/`, and every nav logo and
+Home link says `href="/"`. The `/builds`, `/build` and `/field-notes`
+aliases pointed at indexable content and are 301s too; the aliases for
+noindex app screens (`/signin`, `/signup`, `/post-build`, `/admin`) are
+untouched. `scripts/check-routes.mjs` ("one URL per page") asserts every
+pair on the wire. Do not flip a canonical to the bare form: nothing indexed
+moves this way, and flipping would.
+
+**App screens are noindex, and `gunforma-profile.html` is one of them**
+(it redirects to sign-in without a username). It is also the file
+`profile-og.mjs` serves at `/u/<username>`, so that function strips the
+robots tag by exact string, as it already stripped the static canonical —
+`scripts/check-canonical-coupling.mjs` now holds **both** injecting
+functions (`build-og.mjs` ↔ the build page, `profile-og.mjs` ↔ the profile
+page) to their pages, and refuses a noindex or canonical in a page that its
+function never strips.
+
+### Edge caching: `_cache.mjs`
+
+Measured 2026-10-20: every server-rendered page sent `s-maxage=1800`, which
+the edge honoured per node and never stored durably (`Netlify Durable;
+fwd=bypass`), so a "warm" second hit on a hub was still an 814 ms miss and
+every cold hub, guide, part and build paid the Supabase round trips at
+1.5–1.6 s. `netlify/functions/_cache.mjs` holds the three directives:
+`CDN_CACHE_PAGE` (`public, durable, s-maxage=3600,
+stale-while-revalidate=86400`) on every 200 from the hubs, guides, parts
+pages and `/parts`; `CDN_CACHE_BUILD` (the same hour, **no**
+stale-while-revalidate) on a `/b/` 200, so a reviewer's correction to a
+live build reaches every reader within the hour including the first request
+after it; and `CDN_CACHE_NO_STORE` on every 404, 410, 502 and 503,
+`_pg.mjs`'s `unavailable()` included — a not-found cached durably keeps
+saying not-found after the row appears. Browser `Cache-Control` is
+unchanged. Spell none of these inline.
 
 `netlify/functions/build-og.mjs` is the fourth, and it holds to the same rule.
 Two routes reach it — `/b/<slug>-<uuid>`, the share URL, and
@@ -864,10 +927,10 @@ Registered today:
 | `scripts/check-analytics-snippet.mjs` | a public page or HTML-emitting function without the Cloudflare Web Analytics tag, an excluded page with it, or a `/b/` or `/u/` page that renders it twice (double-counted) — discovers pages and functions rather than listing them, and renders `build-og.mjs` / `profile-og.mjs` against a stubbed fetch |
 | `scripts/check-category-labels.mjs` | a `parts_snapshot` category with no label — `.part-type` is `text-transform: uppercase`, so it reaches a reader shouted ("OTHER_PARTS"); also a section declared with no group, which renders in no group heading and so nowhere at all |
 | `scripts/check-categories.mjs` | the browser and server category lists differing; a category in no build section; a page carrying its own category list; a spec sheet the product page never renders |
-| `scripts/check-canonical-coupling.mjs` | `build-og.mjs` replacing a literal the build page no longer contains |
+| `scripts/check-canonical-coupling.mjs` | `build-og.mjs` or `profile-og.mjs` replacing a literal its page no longer contains, or a page carrying a noindex or canonical its function never strips |
 | `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
 | `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
-| `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose |
+| `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose; a hub `<title>` at 60 characters or over, or off the "`<model>`: Which Mags … Fit \| Gunforma" shape |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |

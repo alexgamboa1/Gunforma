@@ -603,6 +603,66 @@ for (const [label, path, want] of [
   ok(linked.length > 0,
      'an optic product page links to at least one fit guide', linked.length + ' linked');
   note('fit guides linked from that product page', linked.map((g) => g.gun).join(', '));
+  // Since 2026-10-20 the same "Fits these pistols" card also links UP to the
+  // gun's hub — before, an optic page reached no hub but the nav index, so
+  // the hubs had inbound links from the homepage picker and nothing else.
+  const { hubPath, GUN_HUBS } = await import('../netlify/functions/_guide-meta.mjs');
+  const hubs = GUN_HUBS.filter((h) => r.body.includes('class="fg-gun" href="' + hubPath(h.gun) + '"'));
+  ok(hubs.length > 0 && hubs.length === linked.length,
+     'and to the hub of every one of those models', hubs.length + ' hub links, ' + linked.length + ' guide links');
+}
+
+// ── one URL per page: the bare forms 301 to the .html canonical ──────────
+// Every static page declares its .html form canonical, and Netlify also
+// answered the extensionless form at 200, so each content page had two live
+// addresses (2026-10-20). The bare form is a forced 301 in netlify.toml now;
+// the home page goes the other way (/index.html → /). The /builds, /build
+// and /field-notes aliases, which pointed at indexable content, are 301s
+// too. Asserted on the wire because a forced rule is the only kind that
+// beats Netlify's implicit .html lookup, and whether it does is not
+// something a local run can see.
+{
+  console.log('\n── one URL per page');
+  for (const [from, to] of [
+    ['/index.html',             '/'],
+    ['/gunforma-builds',        '/gunforma-builds.html'],
+    ['/gunforma-parts-catalog', '/gunforma-parts-catalog.html'],
+    ['/gunforma-legal',         '/gunforma-legal.html'],
+    ['/privacy-policy',         '/privacy-policy.html'],
+    ['/terms-of-service',       '/terms-of-service.html'],
+    ['/builder-agreement',      '/builder-agreement.html'],
+    ['/field-notes',            '/field-notes.html'],
+    ['/builds',                 '/gunforma-builds.html'],
+    ['/build',                  '/gunforma-builds.html'],
+    ['/gunforma-post-build-v6.html', '/gunforma-post-build.html'],
+  ]) {
+    const r = await get(from);
+    const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');
+    ok(r.status === 301, `${from}: 301`, r.status);
+    ok(loc === to, `  -> ${to}`, r.location);
+  }
+  for (const p of ['/gunforma-builds.html', '/gunforma-parts-catalog.html', '/gunforma-legal.html', '/field-notes.html']) {
+    const r = await get(p);
+    ok(r.status === 200 && r.canon[0] === 'https://gunforma.com' + p, `${p}: 200 and canonical to itself`, r.status + ' ' + (r.canon[0] || 'none'));
+  }
+}
+
+// ── app screens are noindex; content is not ──────────────────────────────
+// A noindex that lands on a content page is the quietest way to lose it,
+// and the bare profile page (an app screen) is the same file /u/<username>
+// is served from — profile-og.mjs must strip the tag it carries.
+{
+  console.log('\n── robots meta');
+  const NOINDEX = /<meta[^>]+name=["']robots["'][^>]+noindex/i;
+  for (const p of ['/gunforma-signin.html', '/gunforma-post-build.html', '/gunforma-profile.html', '/gunforma-admin-queue.html']) {
+    const r = await get(p);
+    ok(r.status === 200 && NOINDEX.test(r.body), `${p}: noindex`, r.status);
+  }
+  const { GUN_HUBS, hubPath } = await import('../netlify/functions/_guide-meta.mjs');
+  for (const p of [hubPath(GUN_HUBS[0].gun), '/parts/optics/holosun-507k-x2', '/gunforma-builds.html']) {
+    const r = await get(p);
+    ok(r.status === 200 && !NOINDEX.test(r.body), `${p}: no noindex`, r.status);
+  }
 }
 
 // ── magazines link back up to the hubs ─────────────────────────────────
