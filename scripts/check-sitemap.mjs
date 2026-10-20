@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// check-sitemap.mjs — assert /sitemap.xml against a real origin.
+// check-sitemap.mjs — assert /sitemap.xml, its children and their union
+// against a real origin.
 //
 // THE ASSERTION THAT MATTERS is the last one: every /b/ URL listed must equal
 // the canonical that URL actually serves. A sitemap disagreeing with a
@@ -45,37 +46,93 @@ const note = (l, d) => console.log(`   ·  ${l}${d !== undefined ? ': ' + d : ''
 
 console.log(`checking ${origin}/sitemap.xml\n`);
 
+// ── the index, and each child under it ─────────────────────────────────
+// /sitemap.xml is a sitemap INDEX since 2026-10-20 (netlify/functions/
+// sitemap.mjs): one <sitemap> per page type — static, hubs, fit, builds,
+// profiles, parts — so Search Console reports indexing per type. The
+// assertions below walk the index, fetch every child it names, check each
+// is a well-formed urlset holding only URLs of ITS type, and then run the
+// flat-sitemap checks over the UNION, which must still be the whole site.
+// A URL under the wrong child, a child the index does not list, or a child
+// that 503s while the index says 200, each fails here.
+const SITEMAP_NOW = Date.now();
+const WELL_FORMED = (xml, root, item, label) => {
+  const decl = /^<\?xml version="1\.0" encoding="UTF-8"\?>/.test(xml.trim());
+  const opens = (xml.match(new RegExp('<' + item + '>', 'g')) || []).length;
+  const closes = (xml.match(new RegExp('</' + item + '>', 'g')) || []).length;
+  const locs = (xml.match(/<loc>/g) || []).length;
+  const bare = (xml.replace(new RegExp('</?(?:\\?xml[^>]*\\?|' + root + '[^>]*|' + item + '|loc|lastmod)>', 'g'), '')
+                   .match(/[<>]/g) || []).length;
+  ok(decl, `${label}: has an XML declaration`);
+  ok(new RegExp('<' + root + ' xmlns="http://www\\.sitemaps\\.org/schemas/sitemap/0\\.9">').test(xml) &&
+     new RegExp('</' + root + '>').test(xml), `${label}: <${root}> element with the sitemap namespace`);
+  ok(opens === closes && opens === locs, `${label}: every <${item}> is closed and has one <loc>`,
+     `${opens} open / ${closes} close / ${locs} loc`);
+  ok(bare === 0, `${label}: no unescaped < or > outside the known tags`, bare);
+  // lastmod: a valid W3C date, never in the future — and never the request
+  // time, which is what "every URL got today's date" looks like on the wire.
+  const mods = [...xml.matchAll(/<lastmod>([^<]+)<\/lastmod>/g)].map((m) => m[1]);
+  const badMod = mods.find((m) => Number.isNaN(Date.parse(m)) || Date.parse(m) > SITEMAP_NOW + 60_000);
+  ok(!badMod, `${label}: every lastmod parses and is not in the future`, badMod || `${mods.length} lastmod(s)`);
+  const fresh = mods.filter((m) => SITEMAP_NOW - Date.parse(m) < 120_000).length;
+  ok(fresh === 0, `${label}: no lastmod is the request time`, fresh ? fresh + ' within 2 min of now' : 'none');
+};
+
 const res = await fetch(origin + '/sitemap.xml');
 const xml = await res.text();
-ok(res.status === 200, 'sitemap returns 200', res.status);
+ok(res.status === 200, 'sitemap index returns 200', res.status);
 ok(/^application\/xml|^text\/xml/.test(res.headers.get('content-type') || ''),
    'served as XML', res.headers.get('content-type'));
 ok(/max-age|s-maxage/.test(res.headers.get('cache-control') || ''),
    'cached — it changes when a build is approved, not per request',
    res.headers.get('cache-control'));
+WELL_FORMED(xml, 'sitemapindex', 'sitemap', '/sitemap.xml');
+ok(!/<urlset/.test(xml), '/sitemap.xml is an index, not a flat urlset');
 
-// ── parses as XML ──────────────────────────────────────────────────────
-// No XML parser in the standard library and this file takes no
-// dependencies, so: well-formedness is checked structurally. Mismatched or
-// unescaped markup shows up as a tag-balance error here.
-{
-  const decl = /^<\?xml version="1\.0" encoding="UTF-8"\?>/.test(xml.trim());
-  const opens = (xml.match(/<url>/g) || []).length;
-  const closes = (xml.match(/<\/url>/g) || []).length;
-  const locs = (xml.match(/<loc>/g) || []).length;
-  const bare = (xml.replace(/<\/?(?:\?xml[^>]*\?|urlset[^>]*|url|loc|lastmod)>/g, '')
-                   .match(/[<>]/g) || []).length;
-  ok(decl, 'has an XML declaration');
-  ok(/<urlset xmlns="http:\/\/www\.sitemaps\.org\/schemas\/sitemap\/0\.9">/.test(xml) && /<\/urlset>/.test(xml),
-     'urlset element with the sitemap namespace');
-  ok(opens === closes && opens === locs, 'every <url> is closed and has one <loc>',
-     `${opens} open / ${closes} close / ${locs} loc`);
-  ok(bare === 0, 'no unescaped < or > outside the known tags', bare);
+const { SITEMAP_CHILDREN, childPath } = await import(join(ROOT, 'netlify/functions/sitemap.mjs'));
+const childLocs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+ok(childLocs.join(' ') === SITEMAP_CHILDREN.map((k) => SITE + childPath(k)).join(' '),
+   'the index lists exactly the declared children, in order',
+   childLocs.map((u) => u.slice(SITE.length)).join(' '));
+
+// What each child may contain: the prefix test for its page type.
+const CHILD_RULE = {
+  static:   (p) => !/^\/(p365|fit|b|u|parts)\//.test(p) || p === '/parts',
+  hubs:     (p) => p === '/p365/' || /^\/p365\/[^/]+$/.test(p),
+  fit:      (p) => /^\/fit\/p365\/[^/]+\/[^/]+$/.test(p),
+  builds:   (p) => /^\/b\/[^/]+$/.test(p),
+  profiles: (p) => /^\/u\/[^/]+$/.test(p),
+  parts:    (p) => /^\/parts\/[^/]+\/[^/]+$/.test(p),
+};
+
+const locs = [];
+const perChild = {};
+let claimedTotal = 0;
+for (const key of SITEMAP_CHILDREN) {
+  const path = childPath(key);
+  const cr = await fetch(origin + path);
+  const cx = await cr.text();
+  ok(cr.status === 200, `${path}: 200`, cr.status);
+  ok(/^application\/xml|^text\/xml/.test(cr.headers.get('content-type') || ''), `${path}: served as XML`);
+  WELL_FORMED(cx, 'urlset', 'url', path);
+  const cl = [...cx.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  perChild[key] = cl.length;
+  claimedTotal += Number(cr.headers.get('x-sitemap-urls') || 0);
+  ok(cl.length > 0, `${path}: not empty`, cl.length + ' urls');
+  ok(String(cl.length) === cr.headers.get('x-sitemap-urls'), `${path}: x-sitemap-urls agrees with the body`,
+     cr.headers.get('x-sitemap-urls'));
+  const stray = cl.filter((u) => !u.startsWith(SITE + '/') || !CHILD_RULE[key](u.slice(SITE.length)));
+  ok(stray.length === 0, `${path}: every URL is a ${key} URL`, stray.slice(0, 3).join(', ') || 'all');
+  if (key === 'parts' || key === 'builds' || key === 'profiles') {
+    const withMod = (cx.match(/<lastmod>/g) || []).length;
+    ok(withMod === cl.length, `${path}: every row-backed URL carries its row's lastmod`, `${withMod} of ${cl.length}`);
+  }
+  locs.push(...cl);
 }
-
-const locs = [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
-note('urls in sitemap', locs.length);
-ok(new Set(locs).size === locs.length, 'no duplicate URLs',
+console.log('\n   ·  per child: ' + SITEMAP_CHILDREN.map((k) => `${k}=${perChild[k]}`).join('  ') + `   total=${locs.length}`);
+ok(String(locs.length) === res.headers.get('x-sitemap-urls'),
+   'the index\'s x-sitemap-urls equals the children\'s total', res.headers.get('x-sitemap-urls'));
+ok(new Set(locs).size === locs.length, 'no URL appears in two children (or twice in one)',
    `${locs.length} total, ${new Set(locs).size} unique`);
 ok(locs.every((u) => u.startsWith(SITE + '/')), 'every URL is an apex https://gunforma.com URL',
    locs.find((u) => !u.startsWith(SITE + '/')) || 'all');

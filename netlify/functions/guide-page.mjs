@@ -33,6 +33,7 @@ import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
+import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SITE = 'https://gunforma.com';
@@ -84,7 +85,8 @@ function notFound(detail) {
     '</head><body><div><div style="font-size:20px;font-weight:700">Page not found</div>' +
     '<div class="s">' + esc(detail || 'No fit guide at this address.') + '</div>' +
     '<a href="' + SITE + '/parts">Browse parts by category &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
-    { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
+    { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60',
+                              'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE } },
   );
 }
 
@@ -524,7 +526,8 @@ export default async (req) => {
       console.error('[guide-page] no gun_optic_cuts rows for ' + gunSlug);
       return new Response('Temporarily unavailable — try again shortly.', {
         status: 502,
-        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
+        headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store',
+                   'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE },
       });
     }
     fitRes = await fetchFitOptics([...new Set(cutsRes.cuts.map((c) => c.optic_cut))]);
@@ -545,6 +548,7 @@ export default async (req) => {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
+      'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,   // durable — see _cache.mjs
       // Observability, same idea as build-og's x-build-og-* headers: the
       // page's inputs readable from outside, so check-routes prints facts.
       'x-guide-gun': gunSlug,

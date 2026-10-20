@@ -20,6 +20,7 @@
 // -----------------------------------------------------------------------------
 import { readFile } from 'node:fs/promises';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
+import { CDN_CACHE_NO_STORE } from './_cache.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -38,6 +39,19 @@ const PAGE_CANDIDATES = [
   './gunforma-profile.html',
   new URL('../../gunforma-profile.html', import.meta.url),
 ];
+
+// The two lines gunforma-profile.html carries for its OWN address and
+// which are false at /u/<username>: the .html canonical (the injected one
+// must win) and the robots noindex (the bare page is an app screen — it
+// redirects to sign-in without a username — and is kept out of the index;
+// a public profile is not). Exact-string replaces, so a whitespace change
+// on either line in the page makes one a silent no-op:
+// scripts/check-canonical-coupling.mjs holds both literals to the page.
+function stripStatic(page) {
+  return page
+    .replace('<link rel="canonical" href="https://gunforma.com/gunforma-profile.html" />\n', '')
+    .replace('<meta name="robots" content="noindex" />\n', '');
+}
 
 let cachedPage = null;
 async function loadPage() {
@@ -102,6 +116,7 @@ function notFound(username) {
         'Content-Type':  'text/html; charset=utf-8',
         // Short — a username registered a minute from now shouldn't stay 404.
         'Cache-Control': 'public, max-age=60',
+        'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE,
       },
     },
   );
@@ -149,7 +164,11 @@ export default async (req) => {
     // over it. Hand back the page unadorned and let the client render.
     const page = await loadPage();
     if (!page) return notFound(requested);
-    return new Response(page, {
+    // Stripped, not raw: the static file says noindex (it is the bare app
+    // screen) and declares its own .html canonical, and neither is true of
+    // /u/<username>. A hiccup must not hand a crawler a noindex for a real
+    // profile.
+    return new Response(stripStatic(page), {
       status: 200,
       headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' },
     });
@@ -178,8 +197,7 @@ export default async (req) => {
   // The page also ships a static <link rel="canonical"> for its direct URL
   // (/gunforma-profile.html). At /u/:username the injected canonical must
   // win, so strip the static one before appending the meta block.
-  const html = page
-    .replace('<link rel="canonical" href="https://gunforma.com/gunforma-profile.html" />\n', '')
+  const html = stripStatic(page)
     .replace('<title>Profile — Gunforma</title>', metaBlock(username));
 
   return new Response(html, {

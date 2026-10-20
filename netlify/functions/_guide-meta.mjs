@@ -139,6 +139,27 @@ export const HUB_MAGAZINE_COPY = {
 
 export const HUB_INDEX_PATH = '/p365/';
 
+// ── the hub <title>: the fit question, as people type it ──────────────────
+// "P365 XMacro: Which Mags, Red Dots & Parts Fit | Gunforma". The old title
+// ("Sig P365 XMacro: Specs, Optic Cut and Red Dot Fit (2026)") named the
+// page's sections; nobody searches for a section. Under 60 characters so it
+// is not cut in a results page: the two longest names ("P365 AXG Legion",
+// "P365 XF DH3 AXG") reach exactly 60 with the full suffix, so those drop
+// "& Parts" — the hub's own content is the mags and the red dots; parts are
+// a link out — and read "…: Which Mags & Red Dots Fit | Gunforma".
+// scripts/check-guide-content.mjs holds every hub's title under 60. The H1
+// stays "Sig Sauer <model>"; the meta description is built from live counts
+// in gun-hub.mjs, never typed here.
+export const HUB_TITLE_SUFFIX       = ': Which Mags, Red Dots & Parts Fit | Gunforma';
+export const HUB_TITLE_SUFFIX_SHORT = ': Which Mags & Red Dots Fit | Gunforma';
+export const HUB_TITLE_MAX = 60;   // exclusive: a title must be UNDER this
+
+export function hubTitle(gun) {
+  const name = GUN_META[gun] || gun;
+  const full = name + HUB_TITLE_SUFFIX;
+  return full.length < HUB_TITLE_MAX ? full : name + HUB_TITLE_SUFFIX_SHORT;
+}
+
 export function hubPath(gun) {
   return '/p365/' + gun;
 }

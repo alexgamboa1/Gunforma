@@ -1,13 +1,19 @@
 /signin        /gunforma-signin.html              200
 /signup        /gunforma-signup.html              200
 # /builds pointed at the post form, not the gallery — nothing in the repo
-# linked to it, so it was only ever reachable by typing it.
-/builds        /gunforma-builds.html              200
+# linked to it, so it was only ever reachable by typing it. A 301 since
+# 2026-10-20: the gallery's canonical is the .html form, and a 200 alias was
+# a second live address for an indexed page (see netlify.toml, "One URL per
+# page"). The aliases below it point at noindex app screens and stay 200.
+/builds        /gunforma-builds.html              301
 /post-build    /gunforma-post-build.html          200
-/build         /gunforma-build-detail.html        200
+# /build with no id is a build page with no build — the same soft 404 the
+# bare gunforma-build-detail.html path used to serve (netlify.toml 301s that
+# one to the gallery). Nothing links here; send a crawler to the gallery too.
+/build         /gunforma-builds.html              301
 /admin-post    /gunforma-admin-post.html          200
 /admin         /gunforma-admin-queue.html         200
-/field-notes   /field-notes.html                  200
+# /field-notes moved to netlify.toml as a 301 to field-notes.html.
 
 # Old home URL Google still has indexed. No file of that name exists and
 # nothing in the repo links to it, so this shadows no live route — it just

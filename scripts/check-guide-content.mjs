@@ -15,7 +15,7 @@
 //   - a malformed updated date, an overlong title, or a FAQ that is not a
 //     question.
 // No network: this is tree-dependent, not time-dependent.
-import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS, HUB_MAGAZINE_COPY } from '../netlify/functions/_guide-meta.mjs';
+import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS, HUB_MAGAZINE_COPY, hubTitle, HUB_TITLE_MAX } from '../netlify/functions/_guide-meta.mjs';
 import { GUIDE_CONTENT } from '../netlify/functions/_guide-content.mjs';
 
 let failures = 0;
@@ -106,6 +106,15 @@ for (const h of GUN_HUBS) {
   if (!h.summary || h.summary.length < 40)
     fail('hub ' + h.gun + ': summary missing or too thin to be worth reading');
   checkProse('hub ' + h.gun + ' summary', h.summary || '');
+  // The <title> the hub serves: under 60 characters (a results page cuts
+  // there), opening with the model name, and ending in the fit question —
+  // a name long enough to push the full suffix past the limit takes the
+  // short suffix rather than shipping a truncated title.
+  const t = hubTitle(h.gun);
+  if (t.length >= HUB_TITLE_MAX)
+    fail('hub ' + h.gun + ': title is ' + t.length + ' chars, must be under ' + HUB_TITLE_MAX + ': "' + t + '"');
+  if (!t.startsWith(GUN_META[h.gun] + ': Which Mags') || !t.endsWith(' Fit | Gunforma'))
+    fail('hub ' + h.gun + ': title does not follow "<model>: Which Mags … Fit | Gunforma": "' + t + '"');
 }
 // The hubs' magazine section copy (every string a reader sees there) obeys
 // the same rules as the summaries: no typed price, no typed count. Capacity

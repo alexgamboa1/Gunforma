@@ -52,6 +52,7 @@ import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
+import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 
@@ -261,7 +262,8 @@ function notFound(slug) {
     '</head><body><div><div style="font-size:20px;font-weight:700">Part not found</div>' +
     '<div class="s">' + (s ? 'No listing at &ldquo;' + s + '&rdquo;.' : 'That part link is not valid.') + '</div>' +
     '<a href="' + SITE + '/gunforma-parts-catalog.html">Browse the catalog &rarr;</a></div>' + ANALYTICS_SNIPPET + '</body></html>',
-    { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60' } },
+    { status: 404, headers: { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=60',
+                              'Netlify-CDN-Cache-Control': CDN_CACHE_NO_STORE } },
   );
 }
 
@@ -371,7 +373,9 @@ async function fetchFitGuides(category, productId) {
       gunName: GUN_META[g.gun] || g.gun,
       familyLabel: (GUIDE_FAMILIES[g.family] || {}).label || g.family,
       href: guidePath(g.family, g.gun),
-      hubHref: hubPath(g.gun),
+      // Only a live hub is linked — the registry says which (same rule as
+      // the magazine cards below and the guide page's breadcrumb).
+      hubHref: isLiveGunHub(g.gun) ? hubPath(g.gun) : null,
     }));
 }
 
@@ -557,12 +561,21 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   // has just checked whether this optic suits them and has not yet clicked
   // out, which is the one moment "does it fit my gun?" is the live question.
   // Nothing renders for a non-optic or for an optic with no declared guide.
+  //
+  // Each card carries TWO links since 2026-10-20: the model name goes to the
+  // gun's hub (/p365/<gun>) and the second line to the fit guide. Before,
+  // the card was one anchor to the guide and an optic page linked to no hub
+  // at all — the hubs were reachable from the homepage picker and the nav
+  // index only. hubHref is null for a gun with no live hub, and the name
+  // then renders as text rather than a dead link.
   const fitGuidesHtml = (fitGuides && fitGuides.length)
     ? '<div class="section-title">Fits these pistols</div>' +
       '<div class="fitguides">' +
-        fitGuides.map((g) => '<a class="fitguide" href="' + esc(g.href) + '">' +
-          '<span class="fg-gun">' + esc(g.gunName) + '</span>' +
-          '<span class="fg-go">' + esc(g.familyLabel) + ' fit guide &rarr;</span></a>').join('') +
+        fitGuides.map((g) => '<div class="fitguide">' +
+          (g.hubHref
+            ? '<a class="fg-gun" href="' + esc(g.hubHref) + '">' + esc(g.gunName) + '</a>'
+            : '<span class="fg-gun">' + esc(g.gunName) + '</span>') +
+          '<a class="fg-go" href="' + esc(g.href) + '">' + esc(g.familyLabel) + ' fit guide &rarr;</a></div>').join('') +
       '</div>' +
       '<div class="fitguide-note">Verified against each model&rsquo;s factory optic cut. ' +
         'Cut varies by SKU &mdash; each guide decodes it.</div>'
@@ -717,8 +730,9 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.fitguides { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 2px; }' +
 '.fitguide { display: flex; flex-direction: column; gap: 2px; padding: 9px 13px; border: 0.5px solid #e5e5e5; border-radius: 7px; background: #fff; text-decoration: none; }' +
 '.fitguide:hover { border-color: #4a9edd; }' +
-'.fg-gun { font-size: 13px; font-weight: 700; color: #1a1a1a; }' +
-'.fg-go { font-size: 11px; color: #4a9edd; }' +
+'.fg-gun { font-size: 13px; font-weight: 700; color: #1a1a1a; text-decoration: none; }' +
+'.fg-go { font-size: 11px; color: #4a9edd; text-decoration: none; }' +
+'a.fg-gun:hover { color: #4a9edd; } a.fg-go:hover { text-decoration: underline; }' +
 '.fitguide-note { font-size: 11.5px; color: #888; margin: 6px 0 2px; }' +
 '.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +
 '.build-card { display: flex; flex-direction: column; gap: 4px; width: 160px; text-decoration: none; color: #1a1a1a; }' +
@@ -746,9 +760,9 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '</style>' +
 '</head><body>' +
 '<nav class="nav">' +
-  '<a class="nav-logo" href="index.html"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
+  '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
-    '<a class="nav-link" href="index.html">Home</a>' +
+    '<a class="nav-link" href="/">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
     '<a class="nav-link" href="/p365/">Your P365</a>' +
     '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
@@ -902,6 +916,9 @@ export default async (req) => {
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
+      // Durable, shared across every edge node — see _cache.mjs for the
+      // measurement that put it here.
+      'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,
     },
   });
 };
