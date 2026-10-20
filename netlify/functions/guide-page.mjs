@@ -23,7 +23,7 @@
 // this function makes three of them Netlify functions). A nav change now
 // means changing fifteen files — update CLAUDE.md's count when sweeping.
 
-import { GUIDE_FAMILIES, GUIDE_PAGES, guidePath, isLiveGuidePage, hubPath, isLiveGunHub } from './_guide-meta.mjs';
+import { GUIDE_FAMILIES, GUIDE_PAGES, APPLIES_TO_LABEL, guidePath, isLiveGuidePage, hubPath, isLiveGunHub } from './_guide-meta.mjs';
 import { GUIDE_CONTENT } from './_guide-content.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
@@ -41,14 +41,6 @@ const PHOTO_BASE = SB_URL + '/storage/v1/object/public/build-photos/';
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-// Human wording for gun_optic_cuts.applies_to — the SKU decoder.
-const APPLIES_TO_LABEL = {
-  'default':                'Standard SKUs',
-  'all-current-skus':       'All current SKUs',
-  'sku-sl-rxsl':            'SKUs ending in -SL or -RXSL',
-  'sku-rs':                 'SKUs ending in -RS',
-  'legacy-non-optic-ready': 'Older non-optic-ready SKUs',
-};
 
 // esc, the nav, the footer and the chrome CSS come from _page-chrome.mjs.
 

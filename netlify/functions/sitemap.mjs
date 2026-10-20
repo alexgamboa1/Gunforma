@@ -21,9 +21,11 @@
 //   /sitemap-profiles.xml   every profile with at least one approved build
 //   /sitemap-parts.xml      every live /parts/<category>/<slug>
 //
-// A field-notes child is deliberately NOT emitted until an article exists —
-// an empty child is a sitemap that says nothing. field-notes.html itself is
-// a static page and lives in sitemap-static.xml.
+//   /sitemap-field-notes.xml  every live /field-notes/<slug> — present only
+//                           once the registry holds a live article (an
+//                           empty child is a sitemap that says nothing)
+//
+// field-notes.html itself is a static page and lives in sitemap-static.xml.
 //
 // THE URL SET IS THE SAME SET. The union of the children is exactly what the
 // flat sitemap listed; nothing was added or dropped by the split, and
@@ -72,6 +74,10 @@ import { buildUrl } from './_build-url.mjs';
 // (live prices don't move lastmod; they are live on every fetch).
 import { GUIDE_PAGES, guidePath, GUN_HUBS, hubPath, HUB_INDEX_PATH, guidePagesForGun } from './_guide-meta.mjs';
 import { CDN_CACHE_NO_STORE } from './_cache.mjs';
+// Article URLs come from the registry field-note.mjs serves, same principle
+// as GUIDE_PAGES above: listed exactly when the function would render
+// them, drafts never, lastmod the registry's editorial `updated`.
+import { liveFieldNotes, fieldNotePath } from './_field-notes-meta.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -96,7 +102,13 @@ const STATIC_PATHS = [
 // The children, in the order the index lists them. The key is the path
 // segment: /sitemap-<key>.xml. check-sitemap.mjs holds every URL in a child
 // to that child's prefix test, so a URL cannot be filed under the wrong type.
-export const SITEMAP_CHILDREN = ['static', 'hubs', 'fit', 'builds', 'profiles', 'parts'];
+// 'field-notes' appears only while the registry holds a live article: an
+// empty child is a sitemap that says nothing, and check-sitemap.mjs refuses
+// an empty one. The list is computed at module load, so it is one fact
+// here and in the guard that imports it.
+export const SITEMAP_CHILDREN = ['static', 'hubs', 'fit',
+  ...(liveFieldNotes().length ? ['field-notes'] : []),
+  'builds', 'profiles', 'parts'];
 
 export function childPath(key) {
   return '/sitemap-' + key + '.xml';
@@ -174,6 +186,10 @@ function fitUrls() {
   return GUIDE_PAGES.map((g) => ({ loc: SITE + guidePath(g.family, g.gun), lastmod: g.updated }));
 }
 
+function fieldNoteUrls() {
+  return liveFieldNotes().map((a) => ({ loc: SITE + fieldNotePath(a.slug), lastmod: a.updated || a.published }));
+}
+
 async function productUrls() {
   const rows = await pgAll((limit, offset) =>
     'products?select=' + encodeURIComponent('slug,category,updated_at') +
@@ -238,6 +254,7 @@ async function childEntries(key) {
     case 'static':   return staticUrls();
     case 'hubs':     return hubUrls();
     case 'fit':      return fitUrls();
+    case 'field-notes': return fieldNoteUrls();
     case 'parts':    return productUrls();
     case 'builds':   return (await buildAndProfileUrls()).builds;
     case 'profiles': return (await buildAndProfileUrls()).profiles;
@@ -275,8 +292,8 @@ function indexXml(children) {
 function whichDocument(req) {
   const url = new URL(req.url);
   if (/^\/sitemap\.xml$/.test(url.pathname)) return { index: true };
-  const m = url.pathname.match(/^\/sitemap-([a-z]+)\.xml$/) ||
-            ('/' + (url.searchParams.get('child') || '')).match(/^\/([a-z]+)(?:\.xml)?$/);
+  const m = url.pathname.match(/^\/sitemap-([a-z-]+)\.xml$/) ||
+            ('/' + (url.searchParams.get('child') || '')).match(/^\/([a-z-]+)(?:\.xml)?$/);
   if (m && SITEMAP_CHILDREN.includes(m[1])) return { index: false, key: m[1] };
   return null;
 }
@@ -332,7 +349,7 @@ export default async (req) => {
   let children;
   try {
     const [products, { builds, profiles }] = await Promise.all([productUrls(), buildAndProfileUrls()]);
-    const sets = { static: staticUrls(), hubs: hubUrls(), fit: fitUrls(), builds, profiles, parts: products };
+    const sets = { static: staticUrls(), hubs: hubUrls(), fit: fitUrls(), 'field-notes': fieldNoteUrls(), builds, profiles, parts: products };
     children = SITEMAP_CHILDREN.map((key) => ({
       key,
       loc: SITE + childPath(key),

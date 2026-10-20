@@ -74,6 +74,8 @@ check "guide registry + content"   scripts/check-guide-content.mjs
 check "homepage picker = hubs"     scripts/check-home-picker.mjs
 check "DB failure is 503, not 404"  scripts/upstream-failure.test.mjs
 check "click bot classifier"       scripts/go-bot.test.mjs
+check "field notes registry+files" scripts/check-field-notes.mjs
+check "field note renderer"        scripts/field-notes.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

@@ -40,6 +40,7 @@ const FILES = [
   'js/part-picker.js',
   'netlify/functions/product-page.mjs',
   'netlify/functions/guide-page.mjs',
+  'netlify/functions/field-note.mjs',
   'gunforma-build-detail.html',
   'gunforma-armory.html',
   'gunforma-parts-catalog.html',
