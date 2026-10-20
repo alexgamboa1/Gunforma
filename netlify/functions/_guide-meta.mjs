@@ -49,7 +49,7 @@ export const GUIDE_PAGES = [
   { family: 'red-dots', gun: 'p365-xl',         updated: '2026-09-30' },
   { family: 'red-dots', gun: 'p365',            updated: '2026-10-02' },
   { family: 'red-dots', gun: 'p365-x',          updated: '2026-10-02' },
-  { family: 'red-dots', gun: 'p365-xmacro',     updated: '2026-10-02' },
+  { family: 'red-dots', gun: 'p365-xmacro',     updated: '2026-10-19' },
   { family: 'red-dots', gun: 'p365-axg',        updated: '2026-10-02' },
   { family: 'red-dots', gun: 'p365-xf-dh3',     updated: '2026-10-02' },
   { family: 'red-dots', gun: 'p365-xf-dh3-axg', updated: '2026-10-02' },
@@ -61,9 +61,10 @@ export const GUIDE_PAGES = [
 // above rather than its own answer, and eleven near-identical pages is the
 // doorway-content shape Google penalises as a cluster:
 //   p365-xmacro-comp  — its gun_optic_cuts rows are the XMacro's, down to
-//                       the same `likely` confidence and the same stale-Sig
-//                       -spec note. The integrated comp changes the gun, not
-//                       what mounts on it.
+//                       the same SIG-LOC Compact -SL/-RXSL row (verified
+//                       2026-10-19) and the same stale-Sig-spec note. The
+//                       integrated comp changes the gun, not what mounts on
+//                       it.
 //   p365-xl-rose-comp — the XL's answer plus one -SL SKU. Rose is a product
 //                       line, not a fitment fact.
 // Both are in GUN_META and gun_optic_cuts, so declaring one here plus a
@@ -97,8 +98,8 @@ export const GUN_HUBS = [
     summary: 'The base P365 slide under an X-series grip module: the shortest slide that is optic-ready across the current line.' },
   { gun: 'p365-xl',         updated: '2026-10-02',
     summary: 'The original optic-ready P365 at full length: one RMSc-pattern cut across every current SKU, and no compensator to shorten the barrel under it.' },
-  { gun: 'p365-xmacro',     updated: '2026-10-02',
-    summary: 'The 17-round carry gun, sharing its magazine with the FUSE, and the one model where our cut data for the -RXSL SKUs is marked likely rather than verified.' },
+  { gun: 'p365-xmacro',     updated: '2026-10-19',
+    summary: 'The 17-round carry gun, sharing its magazine with the FUSE. The optic cut changes with the SKU suffix: -SL and -RXSL guns are SIG-LOC Compact.' },
   { gun: 'p365-axg',        updated: '2026-10-02',
     summary: 'An alloy AXG grip module and an integrated compensator — the heaviest, flattest-shooting gun in the family.' },
   { gun: 'p365-xf-dh3',     updated: '2026-10-02',
