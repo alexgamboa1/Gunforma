@@ -194,11 +194,13 @@ type instead of "113 of 319". Same function, routed by pathname; the
 child it does not declare. The union of the children is exactly the old flat
 list, and `scripts/check-sitemap.mjs` walks the index and every child, holds
 each child to its own URL shape, and asserts the union against the pinned
-baseline. A field-notes child is deliberately not emitted until an article
-exists. **lastmod is the row's own date, never the request time**:
+baseline. A `/sitemap-field-notes.xml` child appears only while
+`_field-notes-meta.mjs` holds a live article (`SITEMAP_CHILDREN` is
+computed at module load; an empty child is a sitemap that says nothing).
+**lastmod is the row's own date, never the request time**:
 `products.updated_at`, `builds.updated_at`, the newest build for a profile,
-the registry `updated` for a fit page, and for a hub the latest change among
-the hub and its fit rows; static pages carry none. Three things about it are
+the registry `updated` for a fit page or a field note, and for a hub the
+latest change among the hub and its fit rows; static pages carry none. Three things about it are
 load-bearing:
 
 - It builds `/b/` URLs with `buildUrl()` from `_build-url.mjs` — the same
@@ -364,8 +366,8 @@ The reader is **`netlify/functions/_pg.mjs`**: `pgRows(path)` resolves only
 to an array (possibly empty — the one real not-found) and throws
 `UpstreamError` on everything else, with a per-attempt timeout so a hung
 connection cannot eat the retry's turn; `unavailable()` is the one 503.
-`build-og.mjs`, `product-page.mjs`, `guide-page.mjs` and `gun-hub.mjs` read
-through it. Do not add a local `pgGet` back to any of them, and do not write
+`build-og.mjs`, `product-page.mjs`, `guide-page.mjs`, `gun-hub.mjs` and
+`field-note.mjs` read through it. Do not add a local `pgGet` back to any of them, and do not write
 `Array.isArray(rows) && rows.length ? rows[0] : null` as a way of surviving
 a bad body: that line is exactly how a 2xx proxy page used to become a 404.
 (`parts-index.mjs` and `profile-og.mjs` still carry their own copies, logged
@@ -377,9 +379,72 @@ whose gun has **zero** `gun_optic_cuts` rows answers 502 without
 and a request with no key in it at all (no uuid, a slug that fails the
 pattern) is 404 before any read.
 
-`scripts/upstream-failure.test.mjs` runs all four handlers against a stubbed
-`fetch` that fails each of those ways and requires the 503, the header, the
-retry count, and that an empty array alone yields the 404/410.
+`scripts/upstream-failure.test.mjs` runs the four lookup handlers against a
+stubbed `fetch` that fails each of those ways and requires the 503, the
+header, the retry count, and that an empty array alone yields the 404/410.
+`scripts/field-notes.test.mjs` does the same for `field-note.mjs`, where an
+empty array is a 200 that names the missing part, not a 404 — the page is
+the prose; the catalog only decorates it.
+
+### Field Notes articles: `/field-notes/<slug>`
+
+`netlify/functions/field-note.mjs` is the fifth server-rendered page type,
+built for the article pipeline (an article is link bait first and an SEO
+page second, and ships only if it would survive r/P365 the same day). It
+follows `guide-page.mjs` exactly: declared-registry only, apex canonical,
+Article + BreadcrumbList JSON-LD, the shared chrome, `_pg.mjs`, the cache
+directives. What is new:
+
+- **The prose is a Markdown file, `field-notes/<slug>.md`**, with title,
+  description, author, `author_credential`, `type` (review / comparison /
+  guide), `category` and an optional `cover` in its front matter. It is
+  rendered by `_markdown.mjs`, a dependency-free subset (headings, lists,
+  tables, quotes, fences, images, links, bold/italic/code). **Raw HTML is
+  text, not markup, and a `javascript:` link is dropped to its text.** The
+  file ships inside the function through `included_files` in
+  `netlify.toml`; a declared article whose file is not in the bundle
+  answers **502** with `x-field-note-source: missing`.
+- **A page is a deliberate act: `_field-notes-meta.mjs` is the registry.**
+  A file alone is not a page; an undeclared slug is a 404 before any read.
+  **Dates live in the registry and nowhere else** (`published`, `updated`
+  — the latter drives `dateModified` and the sitemap lastmod, so bump it
+  when the prose changes). The guard refuses a date in the front matter.
+- **`draft: true` is served only off the apex.** On gunforma.com a draft
+  is a 404; on a deploy preview, a branch deploy or `netlify dev` it is
+  the page, `noindex` and `no-store`. The hostname is read off `req.url`,
+  the original request URL, the same thing `canonical-host.js` branches
+  on. `renderer-check` is the permanent draft fixture — every construct
+  and both blocks on real catalog slugs — and `scripts/field-notes.test.mjs`
+  and the preview walk-through both run over it. Keep it.
+- **Two block directives, one per line, are where the live data goes.**
+  `::price <slug>[, <slug>…]` renders each part's hero listing under the
+  shared stale-price and sort rules (`_listing-rules.mjs`), the partner
+  button through `/go/<link>` or the maker button through
+  `/go/part/<id>`, and the three-way disclosure. `::fit optic=<slug>
+  gun=<gun-slug>` walks the optic's footprint (and its adapter plates)
+  against the gun's cuts by SKU — one verdict per `applies_to` row, with
+  the *likely* marker — and `::fit magazine=<slug> gun=<gun-slug>` renders
+  the maker's own `magazine_housing_fit` claim, or says there is none.
+  Thread pitch and magwell rules are not block kinds yet. **A typed dollar
+  figure in the prose fails the build**; so does a prose link to a
+  retailer, which would bypass `/go/`.
+- **The rewrite is forced.** `publish = "."` would otherwise serve
+  `field-notes/<slug>.md` as a static file at the same prefix. The
+  function 404s anything that is not a declared slug (a `.md` suffix fails
+  its slug test), so forcing the rule never exposes the source. Article
+  images therefore cannot live under `/field-notes/`; put them under
+  `/assets/field-notes/` (the guard refuses the other path). `/field-notes`
+  and `/field-notes/` still 301 to `/field-notes.html`, the index, which
+  is a static page whose `STATIC_POSTS` list still points at two mockups
+  that do not exist on the site — wiring the index to the registry is the
+  change that ships with the first live article.
+- **Observable from outside**: `x-field-note`, `-draft`, `-source`,
+  `-blocks`, `-products` (found/asked) and `-fits` (resolved/asked).
+  `scripts/check-routes.mjs` asserts on the wire that the raw `.md` is not
+  served, that the bundle carries the file, that every slug a block names
+  is in the catalog, and that a draft is a 404 on the apex and a page off
+  it. `scripts/check-field-notes.mjs` holds registry and files in step
+  and sweeps the prose on every deploy.
 
 ### The analytics tag: one module, sixteen literals, four deliberate absences
 
@@ -408,8 +473,8 @@ carries its own hardcoded copy — desktop `.nav-links` *and* the mobile
 - **`netlify/functions/product-page.mjs`** — server-renders `/parts/:category/:slug`
 - **`netlify/functions/parts-index.mjs`** — server-renders `/parts`
 - **`netlify/functions/_page-chrome.mjs`** — the nav for `guide-page.mjs`
-  (`/fit/p365/...`) and `gun-hub.mjs` (`/p365/...`), which share one copy
-  rather than holding two
+  (`/fit/p365/...`), `gun-hub.mjs` (`/p365/...`) and `field-note.mjs`
+  (`/field-notes/<slug>`), which share one copy rather than holding three
 
 That last one is the direction to keep going. `_page-chrome.mjs` exists
 because `gun-hub.mjs` would otherwise have been the sixteenth copy: it owns
@@ -934,6 +999,8 @@ Registered today:
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
+| `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose; a directive that does not parse or names an unknown gun; an image under `/field-notes/`, which the forced rewrite swallows |
+| `scripts/field-notes.test.mjs` | `field-note.mjs` answering 404 when PostgREST failed, serving a draft on the apex, serving raw HTML or a `javascript:` link as markup, stating a stale price, or getting a fit verdict wrong — runs the handler over the `renderer-check` fixture against a stubbed catalog and pins every verdict shape |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation

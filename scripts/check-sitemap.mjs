@@ -97,9 +97,10 @@ ok(childLocs.join(' ') === SITEMAP_CHILDREN.map((k) => SITE + childPath(k)).join
 
 // What each child may contain: the prefix test for its page type.
 const CHILD_RULE = {
-  static:   (p) => !/^\/(p365|fit|b|u|parts)\//.test(p) || p === '/parts',
+  static:   (p) => !/^\/(p365|fit|b|u|parts|field-notes)\//.test(p) || p === '/parts',
   hubs:     (p) => p === '/p365/' || /^\/p365\/[^/]+$/.test(p),
   fit:      (p) => /^\/fit\/p365\/[^/]+\/[^/]+$/.test(p),
+  'field-notes': (p) => /^\/field-notes\/[^/]+$/.test(p),
   builds:   (p) => /^\/b\/[^/]+$/.test(p),
   profiles: (p) => /^\/u\/[^/]+$/.test(p),
   parts:    (p) => /^\/parts\/[^/]+\/[^/]+$/.test(p),

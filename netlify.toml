@@ -45,6 +45,13 @@
 [functions."build-og"]
   included_files = ["gunforma-build-detail.html"]
 
+# field-note reads the article's Markdown from disk at request time, so the
+# whole directory ships inside the function. A declared article whose file
+# is missing from the bundle answers 502, and x-field-note-source says
+# "missing" — check-routes.mjs reads it.
+[functions."field-note"]
+  included_files = ["field-notes/*.md"]
+
 # ---------------------------------------------------------------------------
 # Not-the-website paths. publish = "." serves the whole repo root, so source
 # that happens to live next to the pages is reachable over HTTP. None of it is
@@ -349,6 +356,21 @@
   from = "/field-notes/"
   to = "/field-notes.html"
   status = 301
+  force = true
+
+# Field Notes articles — /field-notes/<slug>, server-rendered by
+# field-note.mjs from field-notes/<slug>.md (bundled with the function by
+# included_files above). BELOW the two exact rules, so /field-notes and
+# /field-notes/ still 301 to the index and only a real slug reaches the
+# function. force = true is REQUIRED and is what keeps the Markdown off the
+# wire: publish = "." serves field-notes/<slug>.md as a static file at the
+# same prefix, and without force the file would win. The function 404s any
+# path that is not a declared slug — a `.md` suffix fails its slug test —
+# so forcing the rule never serves the source. Same :splat note as /fit/*.
+[[redirects]]
+  from = "/field-notes/*"
+  to = "/.netlify/functions/field-note?splat=:splat"
+  status = 200
   force = true
 
 # Static crawler-facing index of every product, grouped by category — see

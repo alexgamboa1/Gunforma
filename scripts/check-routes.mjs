@@ -66,6 +66,10 @@ async function get(path, headers) {
     hubGun: res.headers.get('x-gun-hub'),
     hubGuides: res.headers.get('x-gun-hub-guides'),
     hubMags: res.headers.get('x-gun-hub-mags'),
+    fieldNote: res.headers.get('x-field-note'),
+    fnSource: res.headers.get('x-field-note-source'),
+    fnProducts: res.headers.get('x-field-note-products'),
+    fnFits: res.headers.get('x-field-note-fits'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -612,6 +616,47 @@ for (const [label, path, want] of [
      'and to the hub of every one of those models', hubs.length + ' hub links, ' + linked.length + ' guide links');
 }
 
+// ── Field Notes articles: /field-notes/<slug> ───────────────────────────
+// field-note.mjs serves a declared article from a Markdown file bundled
+// with the function (included_files) behind a FORCED rewrite. Three things
+// here can only be seen on the wire: that the forced rule beats the static
+// file and the raw .md is not served; that the bundle actually carries the
+// file (x-field-note-source: file, not missing); and that every part and
+// pistol the blocks name exists in the catalog this origin reads
+// (x-field-note-products / -fits, found/asked). A draft is asserted both
+// ways: a 404 on the apex, a page on a preview.
+{
+  console.log('\n── field notes');
+  const { FIELD_NOTES, fieldNotePath } = await import('../netlify/functions/_field-notes-meta.mjs');
+  const apex = origin === 'https://gunforma.com';
+  const NAV_LINK = 'href="/p365/">Your P365</a>';
+  const NOINDEX = /<meta[^>]+name=["']robots["'][^>]+noindex/i;
+  const same = (ratio) => { const [a, b] = String(ratio || '').split('/'); return a !== undefined && a === b; };
+
+  let r = await get('/field-notes/not-an-article');
+  ok(r.status === 404 && r.fieldNote === 'none', '/field-notes/<undeclared>: the function\'s own 404', `${r.status}, x-field-note=${r.fieldNote}`);
+  for (const a of FIELD_NOTES) {
+    const raw = fieldNotePath(a.slug) + '.md';
+    r = await get(raw);
+    ok(r.status === 404 && r.fieldNote === 'none', `${raw}: the Markdown source is not served`, `${r.status}, x-field-note=${r.fieldNote}`);
+  }
+  for (const a of FIELD_NOTES) {
+    const path = fieldNotePath(a.slug);
+    r = await get(path);
+    if (a.draft && apex) { ok(r.status === 404, `${path}: a draft is a 404 on the apex`, r.status); continue; }
+    ok(r.status === 200, `${path}: 200${a.draft ? ' (draft, off the apex)' : ''}`, r.status);
+    ok(r.fnSource === 'file', `${path}: the Markdown file is in the bundle`, `x-field-note-source=${r.fnSource}`);
+    ok(r.canon.length === 1 && r.canon[0] === 'https://gunforma.com' + path, `${path}: one apex canonical`, r.canon.join(' | ') || 'none');
+    ok(r.body.split(NAV_LINK).length - 1 >= 2, `${path}: the shared nav, desktop and mobile`);
+    ok(r.body.includes('"@type":"Article"'), `${path}: Article JSON-LD`);
+    ok(r.body.split('cloudflareinsights').length - 1 === 1, `${path}: analytics tag once`);
+    ok(same(r.fnProducts), `${path}: every part a block names is in the catalog`, `x-field-note-products=${r.fnProducts}`);
+    ok(same(r.fnFits), `${path}: every fit block resolved its part and pistol`, `x-field-note-fits=${r.fnFits}`);
+    if (a.draft) ok(NOINDEX.test(r.body) && r.cacheControl === 'no-store', `${path}: draft is noindex and no-store`, r.cacheControl);
+    else ok(!NOINDEX.test(r.body) && /s-maxage/.test(r.cacheControl || ''), `${path}: live article is indexable and cached`, r.cacheControl);
+  }
+}
+
 // ── one URL per page: the bare forms 301 to the .html canonical ──────────
 // Every static page declares its .html form canonical, and Netlify also
 // answered the extensionless form at 200, so each content page had two live
@@ -632,6 +677,7 @@ for (const [label, path, want] of [
     ['/terms-of-service',       '/terms-of-service.html'],
     ['/builder-agreement',      '/builder-agreement.html'],
     ['/field-notes',            '/field-notes.html'],
+    ['/field-notes/',           '/field-notes.html'],
     ['/builds',                 '/gunforma-builds.html'],
     ['/build',                  '/gunforma-builds.html'],
     ['/gunforma-post-build-v6.html', '/gunforma-post-build.html'],

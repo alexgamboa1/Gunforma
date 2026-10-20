@@ -23,8 +23,7 @@
 // holds, and this is what keeps it true.
 import {
   GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH, HUB_MAGAZINE_COPY,
-  hubPath, isLiveGunHub, guidePagesForGun, guidePath, hubTitle,
-} from './_guide-meta.mjs';
+  hubPath, isLiveGunHub, guidePagesForGun, guidePath, hubTitle, APPLIES_TO_LABEL } from './_guide-meta.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 // The magazine rows' buy buttons: the same hero-listing rules and the same
 // unpaid "Buy from <maker>" fallback the fit guides and product pages use,
@@ -45,15 +44,6 @@ import { pgRows as pgGet, unavailable as upstreamUnavailable } from './_pg.mjs';
 const SITE = 'https://gunforma.com';
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 
-// Same decoder wording as guide-page.mjs — the hub shows the same table, so
-// a reader who lands here first is not learning a second vocabulary.
-const APPLIES_TO_LABEL = {
-  'default':                'Standard SKUs',
-  'all-current-skus':       'All current SKUs',
-  'sku-sl-rxsl':            'SKUs ending in -SL or -RXSL',
-  'sku-rs':                 'SKUs ending in -RS',
-  'legacy-non-optic-ready': 'Older non-optic-ready SKUs',
-};
 
 // pgGet is _pg.mjs's pgRows: one retry, a per-attempt timeout, and a body
 // that is guaranteed to be the array PostgREST returns — so `rows.length`

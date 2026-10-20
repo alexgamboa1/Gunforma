@@ -70,6 +70,17 @@ export const GUIDE_PAGES = [
 // Both are in GUN_META and gun_optic_cuts, so declaring one here plus a
 // content block is all it takes if that call changes.
 
+// Human wording for gun_optic_cuts.applies_to — the SKU decoder. One copy
+// here since 2026-10-20: guide-page.mjs, gun-hub.mjs and field-note.mjs
+// each used to hold it (two did; the third would have been the third).
+export const APPLIES_TO_LABEL = {
+  'default':                'Standard SKUs',
+  'all-current-skus':       'All current SKUs',
+  'sku-sl-rxsl':            'SKUs ending in -SL or -RXSL',
+  'sku-rs':                 'SKUs ending in -RS',
+  'legacy-non-optic-ready': 'Older non-optic-ready SKUs',
+};
+
 export function guidePath(family, gun) {
   return '/fit/p365/' + family + '/' + gun;
 }
