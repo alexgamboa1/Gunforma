@@ -298,17 +298,14 @@ async function resolveFit(block, products, guns, caches) {
     const rows = opticVerdicts(optic, caches.cuts.get(gun.id));
     return { block, product, gun, ok: true, footprint: fpName(optic.native && optic.native.footprints), rows, overall: overall(rows) };
   }
-  // magazine: the maker's own claim for this housing class, or none.
-  const rows = gun.housing_class
-    ? await pgGet('magazine_housing_fit?housing_class=eq.' + encodeURIComponent(gun.housing_class) +
-        '&magazine_product_id=eq.' + encodeURIComponent(product.id) + '&select=' + encodeURIComponent('fit,note') + '&limit=1')
-    : [];
-  const specs = await pgGet('magazine_specs?product_id=eq.' + encodeURIComponent(product.id) + '&select=capacity&limit=1');
-  const claim = rows[0] || null;
+  // magazine: the maker's own claim for this housing class, or none. Read
+  // from the page-wide prefetch (prefetchMagazines), never per block.
+  const claim = gun.housing_class ? (caches.magFit.get(product.id + '|' + gun.housing_class) || null) : null;
+  const cap = caches.magCapacity.get(product.id);
   const fits = claim ? claim.fit !== 'not_compatible' : null;
   return {
     block, product, gun, ok: true, claim,
-    capacity: specs[0] && specs[0].capacity != null ? Number(specs[0].capacity) : null,
+    capacity: cap != null ? Number(cap) : null,
     overall: claim ? { cls: fits ? 'yes' : 'no', text: HUB_MAGAZINE_COPY.verdict[claim.fit] || claim.fit }
                    : { cls: 'unknown', text: 'The maker makes no claim for this combination' },
   };
@@ -345,6 +342,29 @@ function fitBlockHtml(f) {
   return '<div class="fn-block fn-fit">' + head + body + (links.length ? '<div class="fn-fit-links">' + links.join('') + '</div>' : '') + '</div>';
 }
 
+// Magazine blocks are read TWICE per page, not twice per block: one
+// magazine_housing_fit read for every (magazine, housing class) pair the
+// page asks about and one magazine_specs read for every magazine. The
+// first article (p365-magazine-fit, 2026-10-21) carries 48 magazine blocks
+// — every catalog magazine against every factory grip module — and the
+// per-block shape cost 98 sequential reads and 8.5 s to render, against a
+// 10 s function budget. Measured locally against production PostgREST;
+// field-notes.test.mjs pins the read count so it cannot creep back.
+async function prefetchMagazines(blocks, products, guns, caches) {
+  const mag = blocks.filter((b) => b.kind === 'fit' && b.part === 'magazine');
+  const ids = [...new Set(mag.map((b) => products.get(b.slug)).filter(Boolean).map((p) => p.id))];
+  const classes = [...new Set(mag.map((b) => guns.get(b.gun)).filter(Boolean).map((g) => g.housing_class).filter(Boolean))];
+  if (!ids.length) return;
+  const list = (xs) => xs.map(encodeURIComponent).join(',');
+  if (classes.length) {
+    const rows = await pgGet('magazine_housing_fit?magazine_product_id=in.(' + list(ids) + ')' +
+      '&housing_class=in.(' + list(classes) + ')&select=' + encodeURIComponent('magazine_product_id,housing_class,fit,note'));
+    for (const r of rows) caches.magFit.set(r.magazine_product_id + '|' + r.housing_class, { fit: r.fit, note: r.note });
+  }
+  const specs = await pgGet('magazine_specs?product_id=in.(' + list(ids) + ')&select=' + encodeURIComponent('product_id,capacity'));
+  for (const s of specs) if (s.capacity != null) caches.magCapacity.set(s.product_id, s.capacity);
+}
+
 // ── all the blocks of one article, resolved ──────────────────────────────
 async function resolveBlocks(blocks) {
   const productSlugs = new Set();
@@ -355,7 +375,8 @@ async function resolveBlocks(blocks) {
   }
   const products = new Map((await fetchProducts([...productSlugs])).map((p) => [p.slug, p]));
   const guns = new Map((await fetchGuns([...gunSlugs])).map((g) => [g.slug, g]));
-  const caches = { optic: new Map(), cuts: new Map() };
+  const caches = { optic: new Map(), cuts: new Map(), magFit: new Map(), magCapacity: new Map() };
+  await prefetchMagazines(blocks, products, guns, caches);
   const rendered = [];
   let fitsOk = 0, fitsAsked = 0;
   for (const b of blocks) {

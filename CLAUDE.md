@@ -434,10 +434,33 @@ directives. What is new:
   its slug test), so forcing the rule never exposes the source. Article
   images therefore cannot live under `/field-notes/`; put them under
   `/assets/field-notes/` (the guard refuses the other path). `/field-notes`
-  and `/field-notes/` still 301 to `/field-notes.html`, the index, which
-  is a static page whose `STATIC_POSTS` list still points at two mockups
-  that do not exist on the site — wiring the index to the registry is the
-  change that ships with the first live article.
+  and `/field-notes/` still 301 to `/field-notes.html`, the index.
+- **The index is a static page holding a COPY of the live set.**
+  `field-notes.html` renders its cards from `FIELD_NOTE_POSTS`, a JSON
+  array literal between two markers, because a file cannot import the
+  registry — the same shape as the homepage picker and `GUN_HUBS`.
+  `check-field-notes.mjs` holds it to `liveFieldNotes()` plus each
+  article's front matter and prints the exact literal on a mismatch, so
+  flipping an article live is two edits (the registry's `draft`, and its
+  card) and a draft can never show on the index. The two Holosun mockups
+  and the "coming soon" card that used to sit there linked to pages that
+  never existed; they are gone (2026-10-21).
+- **Magazine fit blocks are read per PAGE, not per block.** The first
+  article, `p365-magazine-fit`, carries 48 `::fit magazine=` blocks —
+  every catalog magazine against every factory grip module — and the
+  per-block shape (one `magazine_housing_fit` read and one
+  `magazine_specs` read each) cost 98 sequential reads and 8.5 s to
+  render, measured locally against production PostgREST, against a 10 s
+  function budget. `prefetchMagazines()` in `field-note.mjs` now makes one
+  `in.()` read of each table for the whole page (4 reads, 0.5 s, HTML
+  byte-identical), and `field-notes.test.mjs` pins the read count. Optic
+  blocks still read per optic and per gun, cached within the page; an
+  article with many of them is the next thing to batch.
+- **`field-notes/_distribution/`** holds the Reddit post and maker note
+  that go out with an article. Nothing there is a page: the guard scans
+  one level, `included_files` bundles one level, and the forced rewrite
+  404s any path that is not a declared slug — `check-routes.mjs` asserts
+  the last of those on the wire.
 - **Observable from outside**: `x-field-note`, `-draft`, `-source`,
   `-blocks`, `-products` (found/asked) and `-fits` (resolved/asked).
   `scripts/check-routes.mjs` asserts on the wire that the raw `.md` is not
@@ -1090,8 +1113,8 @@ Registered today:
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
-| `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose; a directive that does not parse or names an unknown gun; an image under `/field-notes/`, which the forced rewrite swallows |
-| `scripts/field-notes.test.mjs` | `field-note.mjs` answering 404 when PostgREST failed, serving a draft on the apex, serving raw HTML or a `javascript:` link as markup, stating a stale price, or getting a fit verdict wrong — runs the handler over the `renderer-check` fixture against a stubbed catalog and pins every verdict shape |
+| `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose; a directive that does not parse or names an unknown gun; an image under `/field-notes/`, which the forced rewrite swallows; the index page's `FIELD_NOTE_POSTS` copy drifting from the live registry (a live article with no card, a card for a draft, a title or date that is not the article's own) |
+| `scripts/field-notes.test.mjs` | `field-note.mjs` answering 404 when PostgREST failed, serving a draft on the apex, serving raw HTML or a `javascript:` link as markup, stating a stale price, getting a fit verdict wrong, or reading magazine fit per block again (one read of each table per page) — runs the handler over the `renderer-check` fixture against a stubbed catalog and pins every verdict shape |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation

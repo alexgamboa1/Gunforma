@@ -152,9 +152,14 @@ function catalog(n, path) {
   if (path.startsWith('optic_cut_footprints?')) return json([
     { optic_cut: 'rmsc', fit: 'direct', footprint_id: FP.RMSC }, { optic_cut: 'rmsc', fit: 'direct', footprint_id: FP.K },
     { optic_cut: 'sig-loc-compact', fit: 'direct', footprint_id: FP.SLC }]);
-  if (path.startsWith('magazine_housing_fit?housing_class=eq.xmacro')) return json([{ fit: 'flush', note: 'The XMacro’s own magazine.' }]);
-  if (path.startsWith('magazine_housing_fit?housing_class=eq.p365&')) return json([{ fit: 'not_compatible', note: null }]);
-  if (path.startsWith('magazine_specs?')) return json([{ capacity: 17 }]);
+  // Magazine reads are page-wide: one magazine_housing_fit read for every
+  // (magazine, housing class) pair on the page, one magazine_specs read.
+  // The stub answers the batched shape and the render test counts them.
+  if (path.startsWith('magazine_housing_fit?')) return json([
+    { magazine_product_id: 'P3', housing_class: 'xmacro', fit: 'flush', note: 'The XMacro’s own magazine.' },
+    { magazine_product_id: 'P3', housing_class: 'p365', fit: 'not_compatible', note: null },
+  ]);
+  if (path.startsWith('magazine_specs?')) return json([{ product_id: 'P3', capacity: 17 }]);
   throw new Error('unexpected query in test: ' + path);
 }
 
@@ -178,10 +183,15 @@ test('a draft is a 404 on the apex, with no read', async () => {
 });
 
 test('the fixture renders off the apex: verdicts, prices, chrome, meta', async () => {
-  stubFetch(catalog);
+  const seen = stubFetch(catalog);
   const r = await run(PREVIEW + fieldNotePath(FIXTURE.slug));
   assert.equal(r.status, 200);
   const h = r.html;
+  // two magazine blocks, ONE fit read and ONE specs read: the page-wide
+  // prefetch. Per-block reads cost a 48-block article 8.5 s (2026-10-21).
+  assert.equal(seen.paths.filter((p) => p.startsWith('magazine_housing_fit?')).length, 1, 'one magazine_housing_fit read per page');
+  assert.equal(seen.paths.filter((p) => p.startsWith('magazine_specs?')).length, 1, 'one magazine_specs read per page');
+  assert.ok(seen.paths.some((p) => /magazine_housing_fit\?magazine_product_id=in\.\(P3\)&housing_class=in\.\((xmacro,p365|p365,xmacro)\)/.test(p)), 'the fit read names every pair');
   // headers say what was asked and found
   assert.equal(r.headers.get('x-field-note'), FIXTURE.slug);
   assert.equal(r.headers.get('x-field-note-draft'), '1');
