@@ -370,6 +370,7 @@ INSERT INTO "public"."platform_skus" ("gun_id", "gun_db_platform_id") VALUES ('f
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('c-port', 'C-Port', 10, NULL);
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('e-port', 'E-Port', 20, NULL);
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('slide-matched', 'Slide-Matched', 30, 'Barrel port matches whatever slide it is fitted to');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('chunk-port', 'Chunk Port', 40, 'Large single cut at the front of the slide top, paired with a top-and-chunk ported barrel (Fdez Werx 365RS).');
 
 --
 -- Data for Name: rail_types; Type: TABLE DATA; Schema: public; Owner: postgres
