@@ -25,7 +25,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Loaded in the order the pages load them, which check-script-order.mjs
 // enforces in the HTML.
 const win = { document: null };
-for (const f of ['js/variant-label.js', 'js/variant-swatch.js']) {
+for (const f of ['js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js']) {
   new Function('window', await readFile(join(ROOT, f), 'utf8'))(win);
 }
 // part-picker touches `document` at init only; the card layer does not.

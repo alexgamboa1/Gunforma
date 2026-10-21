@@ -195,7 +195,7 @@
         '<textarea id="pd-' + escAttr(part.uid) + '" class="selected-part-details-input" rows="2" maxlength="' + DETAILS_MAX + '"' +
           ' data-uid="' + escAttr(part.uid) + '"' +
           ' placeholder="' + escAttr(hint || detailsHint(part)) + '"' +
-          ' aria-label="Details for ' + escAttr(part.name) + '"' +
+          ' aria-label="Details for ' + escAttr(global.displayProductName(part)) + '"' +
           ' oninput="PartPicker.noteDetails(this.dataset.uid, this.value)">' + escAttr(val) + '</textarea>' +
       '</div>';
   }
@@ -205,7 +205,7 @@
   function detailsHtml(part) {
     if (part.details) return detailsBoxHtml(part);
     return '<button type="button" class="selected-part-details-add"' +
-        ' data-uid="' + escAttr(part.uid) + '" data-name="' + escAttr(part.name) + '"' +
+        ' data-uid="' + escAttr(part.uid) + '" data-name="' + escAttr(global.displayProductName(part)) + '"' +
         ' data-hint="' + escAttr(detailsHint(part)) + '"' +
         ' onclick="PartPicker.openDetails(this)">+ Add details <span>custom work, exact variant, mods</span></button>';
   }
@@ -226,7 +226,7 @@
                '<div class="part-card-img-label">Photo coming soon</div>' +
              '</div></div>';
     }
-    var alt = ((item.brand ? item.brand + ' ' : '') + (item.name || '')).replace(/"/g, '&quot;');
+    var alt = global.displayProductName(item).replace(/"/g, '&quot;');
     return '<div class="part-card-img">' +
              '<img src="' + item.image + '" alt="' + alt + '" loading="lazy" ' +
                'onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-img-bg&quot;><div class=&quot;part-card-img-label&quot;>No photo</div></div>\'"/>' +
@@ -291,7 +291,7 @@
       return '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' +
                (part.pending ? 'Pending' : 'No photo') + '</div></div>';
     }
-    var alt = ((part.brand ? part.brand + ' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
+    var alt = global.displayProductName(part).replace(/"/g, '&quot;');
     return '<div class="selected-part-thumb">' +
              '<img src="' + src + '" alt="' + alt + '" loading="lazy" ' +
                'onerror="this.parentElement.innerHTML=\'<div class=&quot;selected-part-thumb-label&quot;>No photo</div>\'"/>' +
@@ -334,7 +334,7 @@
             ' value="' + escAttr(part.variant || '') + '"' +
             ' data-uid="' + escAttr(part.uid) + '"' +
             ' placeholder="Variant / colour (optional) — e.g. FDE, Coyote, 2-tone"' +
-            ' aria-label="Variant or colour for ' + escAttr(part.name) + '"' +
+            ' aria-label="Variant or colour for ' + escAttr(global.displayProductName(part)) + '"' +
             ' oninput="PartPicker.noteVariant(this.dataset.uid, this.value)" />') +
         // After the colour, on every part. See PART DETAILS above.
         detailsHtml(part) +

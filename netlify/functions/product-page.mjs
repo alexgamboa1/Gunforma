@@ -46,6 +46,14 @@ import { isStalePrice, compareListingRows, displayPartnerName } from './_listing
 // and the disclosure wording are decided in _maker-link.mjs, mirrored by
 // js/maker-link.js and parity-tested on every deploy.
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+// What the product is CALLED in the <title>, the meta, the breadcrumb, the
+// hero alt, the H1 and the JSON-LD: "{brand} {name}" unless the name
+// already carries the brand (_display-name.mjs, the one rule). The H1 used
+// to print the stored name over a linked "by <maker>" line; decided
+// 2026-10-21: the H1 is the display name and the line is gone — with the
+// brand in the H1 it said the same maker twice. The maker's site is still
+// linked from the buy row (makerLink) when the part has no partner listing.
+import { displayProductName } from './_display-name.mjs';
 // For the "Used in these builds" row: /b/ links are built with the shared
 // builder, never by hand — see CLAUDE.md, "A build's URL is built in two
 // places, on purpose".
@@ -508,7 +516,11 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     return imgs.length ? imgs[0].url : null;
   })();
 
-  const title = product.name + (brand.name ? ' by ' + brand.name : '') + ' | Gunforma';
+  // "Magpul AMAG 15 SG9 P365 9mm 15rd Magazine | Gunforma", and "Holosun
+  // 507K X2 | Gunforma" — not "… by Holosun", which named the brand twice
+  // on the 214 products whose name already carries it.
+  const shownName = displayProductName({ name: product.name, brand: brand.name });
+  const title = shownName + ' | Gunforma';
   const priceText = minPrice != null
     ? (maxPrice != null && maxPrice !== minPrice ? '$' + minPrice.toFixed(2) + '–$' + maxPrice.toFixed(2) : '$' + minPrice.toFixed(2))
     : null;
@@ -521,7 +533,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   const jsonLd = {
     '@context': 'https://schema.org/',
     '@type': 'Product',
-    name: product.name,
+    name: shownName,
     description: product.description || metaDescription,
     sku: (variants.find((v) => v.is_default) || variants[0] || {}).sku || undefined,
     brand: brand.name ? { '@type': 'Brand', name: brand.name } : undefined,
@@ -709,9 +721,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.hero-img { width: 100%; border-radius: 8px; border: 0.5px solid #e5e5e5; background: #fff; object-fit: contain; aspect-ratio: 1; }' +
 '.hero-placeholder { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 0.5px dashed #d9d6cc; background: #fff; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 12px; }' +
 '.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #4a9edd; font-weight: 700; margin-bottom: 6px; }' +
-'h1 { font-size: 26px; line-height: 1.25; margin-bottom: 6px; }' +
-'.brand-line { font-size: 13px; color: #888; margin-bottom: 14px; }' +
-'.brand-line a { color: #888; }' +
+'h1 { font-size: 26px; line-height: 1.25; margin-bottom: 14px; }' +
 '.price-line { font-size: 20px; font-weight: 700; margin-bottom: 16px; }' +
 '.desc { font-size: 14px; line-height: 1.6; color: #333; margin-bottom: 18px; }' +
 '.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }' +
@@ -782,16 +792,15 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '<div class="breadcrumb">' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a> / ' +
   '<a href="gunforma-parts-catalog.html?category=' + encodeURIComponent(product.category) + '">' + esc(categoryPlural) + '</a> / ' +
-  esc(product.name) +
+  esc(shownName) +
 '</div>' +
 '<div class="page">' +
   '<div>' + (heroImage
-    ? '<img class="hero-img" src="' + esc(heroImage) + '" alt="' + esc(product.name) + '" loading="eager" />'
+    ? '<img class="hero-img" src="' + esc(heroImage) + '" alt="' + esc(shownName) + '" loading="eager" />'
     : '<div class="hero-placeholder">No photo yet</div>') + '</div>' +
   '<div>' +
     '<div class="eyebrow">' + esc(categorySingular) + ' &middot; Sig Sauer P365</div>' +
-    '<h1>' + esc(product.name) + '</h1>' +
-    (brand.name ? '<div class="brand-line">by ' + (brand.website_url ? '<a href="' + esc(brand.website_url) + '" target="_blank" rel="noopener">' + esc(brand.name) + '</a>' : esc(brand.name)) + '</div>' : '') +
+    '<h1>' + esc(shownName) + '</h1>' +
     (priceText ? '<div class="price-line">' + esc(priceText) + '</div>' : '') +
     (product.description ? '<div class="desc">' + esc(product.description) + '</div>' : '') +
     bestForHtml +

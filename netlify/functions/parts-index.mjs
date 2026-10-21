@@ -22,6 +22,13 @@
 import { CATEGORY_META } from './_category-meta.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
+// What a product is CALLED: "{brand} {name}" unless the name already
+// carries the brand. The one rule, shared with every other product row on
+// the site; see _display-name.mjs. Every name this page prints goes
+// through it, so a magazine or a light reads with its maker like every
+// other row — which is why the old trailing "— Brand" span is gone: it
+// would now double the brand on 214 of 277 rows.
+import { displayProductName } from './_display-name.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
@@ -41,6 +48,13 @@ function displayPartnerName(name) {
   // notes) that isn't meant for display.
   if (!name) return name;
   return name.replace(/\s*\([^)]*\)\s*$/, '').trim() || name;
+}
+
+// The name a row shows: the stored name with its brand in front when the
+// maker left it out. The brand is the manufacturers row, minus the
+// parenthetical suffix displayPartnerName() strips.
+function shownName(p) {
+  return displayProductName({ name: p.name, brand: displayPartnerName(p.manufacturers ? p.manufacturers.name : null) });
 }
 
 async function pgGet(path) {
@@ -114,11 +128,8 @@ function renderPage(products) {
 
   const sectionsHtml = categoryEntries.map((c) => {
     const itemsHtml = c.items.map((p) => {
-      const brand = displayPartnerName(p.manufacturers ? p.manufacturers.name : null);
       const href = '/parts/' + c.segment + '/' + p.slug;
-      return '<li><a href="' + esc(href) + '">' + esc(p.name) +
-        (brand ? ' <span class="brand">— ' + esc(brand) + '</span>' : '') +
-        '</a></li>';
+      return '<li><a href="' + esc(href) + '">' + esc(shownName(p)) + '</a></li>';
     }).join('');
     return '<section id="' + esc(c.segment) + '" class="category">' +
       '<h2>' + esc(c.label) + ' <span class="count">(' + c.items.length + ')</span></h2>' +
@@ -143,7 +154,7 @@ function renderPage(products) {
           '@type': 'ListItem',
           position: i + 1,
           url: SITE + '/parts/' + segment + '/' + p.slug,
-          name: p.name,
+          name: shownName(p),
         };
       }),
     },
@@ -204,7 +215,6 @@ function renderPage(products) {
 '.category li { font-size: 13px; padding: 6px 0; border-bottom: 0.5px solid #f2f2f2; }' +
 '.category a { color: #1a1a1a; text-decoration: none; }' +
 '.category a:hover { color: #4a9edd; }' +
-'.brand { color: #999; font-weight: 400; }' +
 '.footer-bar { max-width: 900px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 6px 16px; justify-content: space-between; border-top: 0.5px solid #e5e5e5; font-size: 11px; color: #999; }' +
 '.footer-bar a { color: #999; }' +
 '.nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }' +

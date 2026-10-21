@@ -513,6 +513,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- The label and rel for a buy button to a part's own store, for parts with
      no partner listing. Mirrored by netlify/functions/_maker-link.mjs. -->
 <script src="js/maker-link.js"></script>
+<script src="js/display-name.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
@@ -1242,7 +1243,7 @@ function renderPartCard(build, part, idx) {
     : { color: part.variantColor, finish: part.variantFinish, variant_label: part.variantLabel,
         primary_image_url: part.imageUrl || null };
   var thumbUrl = vr.imageUrl || null;
-  var alt = ((part.brand ? part.brand+' ' : '') + (part.name || '')).replace(/"/g, '&quot;');
+  var alt = window.displayProductName(part).replace(/"/g, '&quot;');
   var thumbHtml;
   if (thumbUrl) {
     // A <button>, so Enter and Space come for free and it lands in the tab
