@@ -302,6 +302,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-hero { aspect-ratio: 4/3; background: #f4f3ee; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .detail-hero img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }
 .detail-hero-nophoto { font-size: 11px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
+.detail-hero-swatch { width: 96px; height: 96px; border-radius: 50%; display: block; }
 
 .detail-thumbs { display: flex; gap: 8px; flex-wrap: wrap; }
 .detail-thumb { width: 56px; height: 56px; border: 0.5px solid #e5e5e5; border-radius: 4px; overflow: hidden; padding: 0; background: #f4f3ee; cursor: pointer; transition: border-color 0.15s; }
@@ -844,7 +845,12 @@ async function loadEverything() {
       brand_id: r.brand_id,
       brand: (r.brands && r.brands.name) || 'Unknown',
       price: price,
-      image: (dv && dv.primary_image_url) || null,
+      // The PRODUCT's picture, for the grid card: the default variant's own
+      // photo, else the first variant that has one. A product-level image is
+      // not a variant choice; the detail panel's hero below never uses it
+      // for a chosen variant that has no photo of its own.
+      image: (dv && dv.primary_image_url) ||
+             (variants.filter(function (v) { return v.primary_image_url; })[0] || {}).primary_image_url || null,
       buy_url: r.url || null,
       variants: variants,
       created_at: r.created_at,
@@ -1978,14 +1984,22 @@ function renderDetail(p) {
     descEl.innerHTML = '<p style="color:#999;">No description available.</p>';
   }
 
-  // Hero follows the selected variant. Falls back to the product image only
-  // when that variant has no photo of its own — NEVER to a different colour's
-  // photo, which is the bug check-variant-image-sku.mjs exists to catch.
-  var heroSrc = (activeV && activeV.primary_image_url) || p.image;
+  // Hero follows the selected variant: its OWN photo, else its colour swatch
+  // (js/variant-swatch.js) — NEVER the product image, which is the default
+  // variant's photo and usually a different colour. That fallback was here
+  // until 2026-10-21 under a comment claiming it was not; the chips below
+  // already did it right. The product image is only for a product with no
+  // variant to choose.
   var heroEl = document.getElementById('detail-hero');
-  heroEl.innerHTML = heroSrc
-    ? '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(window.displayProductName(p)) + '"/>'
-    : '<div class="detail-hero-nophoto">No photo</div>';
+  var heroSrc = activeV ? activeV.primary_image_url : p.image;
+  if (heroSrc) {
+    heroEl.innerHTML = '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(window.displayProductName(p)) + '"/>';
+  } else if (activeV && activeV.color && window.variantSwatch) {
+    heroEl.innerHTML = '<span class="detail-hero-swatch" style="' + window.variantSwatch(activeV.color).css + '"' +
+                       ' role="img" aria-label="' + escAttr(activeV.color) + '"></span>';
+  } else {
+    heroEl.innerHTML = '<div class="detail-hero-nophoto">No photo</div>';
+  }
   // The old photo-only thumb strip is retired: the variant picker below does
   // the same job and covers the variants we have no photo for.
   document.getElementById('detail-thumbs').innerHTML = '';

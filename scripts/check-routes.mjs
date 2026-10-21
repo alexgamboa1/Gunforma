@@ -903,5 +903,52 @@ for (const [label, path, want] of [
   }
 }
 
+// ── a variant's photo is its own: no two colours share one ─────────────
+// Live data, so it lives here and not in check-all.sh (same reasoning as
+// check-variant-image-sku.mjs, which only sees a sibling's SKU in a
+// filename). The rule from the 2026-10-21 audit: a photo sits on a variant
+// only if it is the maker's image of that colour and finish; a variant with
+// no real photo carries none and the pages draw its swatch. So two live
+// variants of one product with a DIFFERENT colour or finish must never
+// share a primary_image_url. Same colour and finish may (a 2 MOA and a 6
+// MOA optic are one housing). A group shot that is the only photo a product
+// has may stay on the DEFAULT variant alone, listed here with its reason.
+{
+  console.log('\n── variant photos: one colour, one photo');
+  const SHARED_PHOTO_ALLOWED = {
+    // OpticsPlanet's one five-plate composite; the product's only photo, so
+    // it stays on Black (the default) and the other four show the swatch.
+    'anarchy-outdoors-slide-plate-p365': 'five-colour composite kept on the default variant only (audit 2026-10-21, item 3)',
+  };
+  const res = await fetch(`${SB_URL}/rest/v1/product_variants?select=slug,color,finish,is_default,primary_image_url,products!product_variants_product_id_fkey(slug,is_discontinued)&retired_at=is.null&primary_image_url=not.is.null&limit=3000`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const variants = res.ok ? await res.json() : null;
+  ok(Array.isArray(variants) && variants.length > 0, 'live variants with a photo readable with the public key', res.status + ', ' + (variants ? variants.length : 0) + ' variants');
+  if (Array.isArray(variants) && variants.length) {
+    const byProduct = new Map();
+    for (const v of variants) {
+      const p = v.products;
+      if (!p || p.is_discontinued) continue;
+      if (!byProduct.has(p.slug)) byProduct.set(p.slug, []);
+      byProduct.get(p.slug).push(v);
+    }
+    const key = (v) => (v.color || '').trim().toLowerCase() + '|' + (v.finish || '').trim().toLowerCase();
+    let shared = 0, allowed = 0;
+    for (const [slug, vs] of byProduct) {
+      const byUrl = new Map();
+      for (const v of vs) { if (!byUrl.has(v.primary_image_url)) byUrl.set(v.primary_image_url, []); byUrl.get(v.primary_image_url).push(v); }
+      for (const [url, group] of byUrl) {
+        const colours = new Set(group.map(key));
+        if (colours.size < 2) continue;
+        const reason = SHARED_PHOTO_ALLOWED[slug];
+        if (reason && group.some((v) => v.is_default)) { allowed++; note(`${slug}: allowed`, reason); continue; }
+        shared++;
+        note(`${slug}: ${group.map((v) => v.slug).join(', ')} share one photo`, url);
+      }
+    }
+    ok(shared === 0, 'no two variants of different colour or finish share a primary_image_url', shared + ' shared photo(s) over ' + byProduct.size + ' products, ' + allowed + ' allowlisted');
+  }
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures ? 1 : 0);

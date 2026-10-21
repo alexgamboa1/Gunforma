@@ -46,6 +46,7 @@ import { isStalePrice, compareListingRows, displayPartnerName } from './_listing
 // and the disclosure wording are decided in _maker-link.mjs, mirrored by
 // js/maker-link.js and parity-tested on every deploy.
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+import { swatchFor } from './_variant-swatch.mjs';
 // What the product is CALLED in the <title>, the meta, the breadcrumb, the
 // hero alt, the H1 and the JSON-LD: "{brand} {name}" unless the name
 // already carries the brand (_display-name.mjs, the one rule). The H1 used
@@ -624,6 +625,25 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     .map((s) => '<div class="spec-row"><span class="spec-label">' + esc(s.label) + '</span><span class="spec-value">' + esc(s.value) + '</span></div>')
     .join('');
 
+  // The thumbnail left of each buy row: the variant's OWN photo, else its
+  // colour swatch. Never the hero, which is the first variant that has a
+  // photo and is usually a different colour — a black barrel's photo over
+  // the words "Gold / TiN" reads as an answer. Same rule, same colours as
+  // the catalog's chips and the builder's colour step (js/variant-swatch.js;
+  // scripts/variant-swatch.test.mjs holds the two copies equal). A dead
+  // image URL degrades to the swatch, not to a blank box.
+  const variantMediaHtml = (v, label) => {
+    const sw = swatchFor(v && v.color);
+    const swatch = '<span class="variant-media-swatch" style="' + sw.css + '"></span>';
+    if (v && v.primary_image_url) {
+      return '<div class="variant-media">' +
+          '<img src="' + esc(v.primary_image_url) + '" alt="' + esc(label) + '" loading="lazy"' +
+            ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'block\'"/>' +
+          swatch.replace('style="', 'style="display:none;') +
+        '</div>';
+    }
+    return '<div class="variant-media">' + swatch + '</div>';
+  };
   const variantRowsHtml = rows.map((r) => {
     // Three cases, and the order matters:
     //   fresh price        → the number
@@ -649,8 +669,11 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
             esc(r.maker.label) + ' ↗</a>'
         : '<span class="buy-btn disabled">No listing yet</span>';
     return '<div class="variant-row">' +
-        '<div class="variant-info"><span class="variant-label">' + esc(r.label) + '</span>' +
-        '<span class="variant-sub">' + price + partner + ' ' + stock + '</span></div>' +
+        '<div class="variant-left">' +
+          variantMediaHtml(r.v, r.label) +
+          '<div class="variant-info"><span class="variant-label">' + esc(r.label) + '</span>' +
+          '<span class="variant-sub">' + price + partner + ' ' + stock + '</span></div>' +
+        '</div>' +
         btn +
       '</div>';
   }).join('') || '<div class="variant-row"><div class="variant-info"><span class="variant-sub">No retailer listings available yet.</span></div></div>';
@@ -730,6 +753,10 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.spec-row { display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-bottom: 0.5px solid #ececec; }' +
 '.spec-label { color: #777; } .spec-value { font-weight: 600; }' +
 '.variant-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 0.5px solid #e5e5e5; border-radius: 6px; background: #fff; margin-bottom: 8px; }' +
+'.variant-left { display: flex; align-items: center; gap: 10px; min-width: 0; }' +
+'.variant-media { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 4px; overflow: hidden; background: #f4f3ee; display: flex; align-items: center; justify-content: center; }' +
+'.variant-media img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }' +
+'.variant-media-swatch { width: 24px; height: 24px; border-radius: 50%; display: block; }' +
 '.variant-info { display: flex; flex-direction: column; gap: 3px; }' +
 '.variant-label { font-size: 13px; font-weight: 700; }' +
 '.variant-sub { font-size: 12px; color: #666; }' +
