@@ -41,6 +41,7 @@ import { parseFrontMatter, renderMarkdown, inline, textOf } from './_markdown.mj
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+import { displayProductName } from './_display-name.mjs';
 import { CATEGORY_META } from './_category-meta.mjs';
 import { GUN_META, APPLIES_TO_LABEL, HUB_MAGAZINE_COPY, guidePath, isLiveGuidePage, hubPath, isLiveGunHub } from './_guide-meta.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
@@ -150,6 +151,9 @@ function shapeProduct(p) {
   const brand = p.manufacturers ? p.manufacturers.name : null;
   return {
     id: p.id, slug: p.slug, name: p.name, category: p.category, brand,
+    // What the page prints (_display-name.mjs): the brand is part of the
+    // name, so no row carries a separate brand line under it.
+    displayName: displayProductName({ brand, name: p.name }),
     href: meta ? '/parts/' + meta[0] + '/' + p.slug : '/parts',
     discontinued: p.is_discontinued === true,
     restricted: Array.isArray(p.restricted_states) ? p.restricted_states.map(String).filter(Boolean) : [],
@@ -195,9 +199,8 @@ function priceBlockHtml(block, products) {
   const rows = found.map((o) =>
     '<tr>' +
       '<td><div class="t-part">' +
-        (o.photo ? '<img class="t-photo" src="' + esc(o.photo) + '" alt="' + esc(o.name) + '" loading="lazy" width="44" height="44"/>' : '') +
-        '<div><a href="' + esc(o.href) + '">' + esc(o.name) + '</a>' +
-        (o.brand ? '<span class="t-brand">' + esc(o.brand) + '</span>' : '') +
+        (o.photo ? '<img class="t-photo" src="' + esc(o.photo) + '" alt="' + esc(o.displayName) + '" loading="lazy" width="44" height="44"/>' : '') +
+        '<div><a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' +
         (o.restricted.length ? '<span class="t-restricted">' + esc(HUB_MAGAZINE_COPY.restricted) + ' ' + esc(o.restricted.join(', ')) + '</span>' : '') +
         '</div></div></td>' +
       '<td class="t-price">' + esc(priceText(o)) + '</td>' +
@@ -316,7 +319,7 @@ function fitBlockHtml(f) {
   if (!f.gun)     return '<div class="fn-block fn-fit">' + missingLine('Pistol', f.block.gun) + '</div>';
   const gunName = f.gun.name || GUN_META[f.gun.slug] || f.gun.slug;
   const head =
-    '<div class="fn-fit-q">Does the <a href="' + esc(f.product.href) + '">' + esc(f.product.name) + '</a> fit the Sig Sauer ' + esc(gunName) + '?</div>' +
+    '<div class="fn-fit-q">Does the <a href="' + esc(f.product.href) + '">' + esc(f.product.displayName) + '</a> fit the Sig Sauer ' + esc(gunName) + '?</div>' +
     '<div class="fn-verdict ' + esc(f.overall.cls) + '">' + esc(f.overall.text) + '</div>';
   let body;
   if (f.block.part === 'optic') {
@@ -447,7 +450,6 @@ function renderPage({ article, meta, bodyHtml, data }) {
 '.fn-block td a { color: #1a1a1a; font-weight: 600; text-decoration: none; } .fn-block td a:hover { color: #4a9edd; }' +
 '.t-part { display: flex; align-items: center; gap: 10px; }' +
 '.t-photo { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 0.5px solid #ececec; background: #fff; flex: none; }' +
-'.t-brand { display: block; font-size: 11px; color: #888; font-weight: 400; }' +
 '.t-restricted { display: block; font-size: 11px; color: #b03a2e; font-weight: 400; }' +
 '.t-price { font-weight: 700; white-space: nowrap; }' +
 '.buy-btn { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; padding: 7px 12px; border-radius: 6px; text-decoration: none; white-space: nowrap; }' +

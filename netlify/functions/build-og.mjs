@@ -52,6 +52,7 @@ import { buildUrl, buildIdFromPath } from './_build-url.mjs';
 // never a local copy: scripts/check-categories.mjs fails any file carrying
 // its own category map.
 import { CATEGORY_META } from './_category-meta.mjs';
+import { displayProductName } from './_display-name.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { CDN_CACHE_BUILD, CDN_CACHE_NO_STORE } from './_cache.mjs';
 import { pgRows, unavailable } from './_pg.mjs';
@@ -160,15 +161,11 @@ function clamp(s, max) {
 // builder shared.
 
 // A part's display name: brand + name, except when the stored name already
-// repeats the brand ("True Precision" + "True Precision Axiom P365" is a
-// live example — concatenating blindly ships the brand twice).
-function partDisplayName(p) {
-  const name  = (p && p.name  ? String(p.name)  : '').replace(/\s+/g, ' ').trim();
-  const brand = (p && p.brand ? String(p.brand) : '').replace(/\s+/g, ' ').trim();
-  if (!name) return brand;
-  if (!brand || name.toLowerCase().startsWith(brand.toLowerCase())) return name;
-  return brand + ' ' + name;
-}
+// carries the brand ("True Precision" + "True Precision Axiom P365" is a
+// live example — concatenating blindly ships the brand twice). The rule
+// lives in _display-name.mjs, shared with the hubs, guides and Field Notes;
+// a snapshot part carries the same {brand, name} pair a product row does.
+const partDisplayName = displayProductName;
 
 // Up to `max` parts worth naming in a title or description, most searched-for
 // categories first. parts_snapshot carries two vocabularies (section keys

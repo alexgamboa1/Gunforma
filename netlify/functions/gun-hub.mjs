@@ -31,6 +31,7 @@ import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 // logic to keep in sync").
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+import { displayProductName } from './_display-name.mjs';
 import { CATEGORY_META } from './_category-meta.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 // The Cloudflare Web Analytics tag, at the end of every document this
@@ -200,6 +201,9 @@ async function fetchMagazineFit(housingClass) {
     mags.push({
       fit: r.fit, note: r.note || '', source: r.source,
       productId: p.id, slug: p.slug, name: p.name,
+      // What the row prints: "Magpul AMAG 15 SG9 …", never the bare model
+      // name (_display-name.mjs). Sorting below stays on the stored name.
+      displayName: displayProductName({ brand: p.manufacturers ? p.manufacturers.name : null, name: p.name }),
       href: '/parts/' + CATEGORY_META.magazine[0] + '/' + p.slug,
       capacity: spec.capacity != null ? Number(spec.capacity) : null,
       restricted: Array.isArray(p.restricted_states) ? p.restricted_states.map(String).filter(Boolean) : [],
@@ -246,7 +250,7 @@ function magazineSectionHtml(name, mags) {
   const rows = fits.map((m) =>
     '<div class="mag-row">' +
       '<div class="mag-main">' +
-        '<a class="mag-name" href="' + esc(m.href) + '">' + esc(m.name) + '</a>' +
+        '<a class="mag-name" href="' + esc(m.href) + '">' + esc(m.displayName) + '</a>' +
         '<div class="mag-meta">' +
           // Capacity only. magazine_specs.mag_style is written relative to
           // the original P365 ("Extended" for the 17rd), so beside a per-gun
@@ -269,7 +273,7 @@ function magazineSectionHtml(name, mags) {
   const noFit = mags.filter((m) => !fitsIt(m));
   const noFitHtml = noFit.length
     ? '<p class="mag-nofit"><strong>' + esc(C.noFit.replace('{model}', name)) + '</strong> ' +
-      noFit.map((m) => '<a href="' + esc(m.href) + '">' + esc(m.name) + '</a>').join(', ') + '</p>'
+      noFit.map((m) => '<a href="' + esc(m.href) + '">' + esc(m.displayName) + '</a>').join(', ') + '</p>'
     : '';
   const second = buyDisclosure(fits.some(hasPartnerLink), fits.some(hasMakerLink));
   return '<h2 id="magazines">' + esc(C.heading.replace('{model}', name)) + '</h2>' +
@@ -357,7 +361,7 @@ function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount }) {
       name: HUB_MAGAZINE_COPY.heading.replace('{model}', 'Sig ' + name),
       itemListElement: fittingMags.map((m, i) => ({
         '@type': 'ListItem', position: i + 1,
-        name: m.name,
+        name: m.displayName,
         item: SITE + m.href,
       })),
     }] : []),
