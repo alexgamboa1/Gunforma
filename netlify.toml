@@ -421,6 +421,18 @@
   status = 301
   force = true
 
+# Sig's P365 manual-safety kit was in the catalog twice (the 2026-10-20 audit;
+# supabase/migrations/20261021152936_audit_2026_10_20_data_fixes.sql). The
+# newer copy is discontinued, never deleted, and its path lands on the
+# survivor. Same placement rule: an exact path above the /parts/* rewrite; the
+# old path is in RETIRED in scripts/check-sitemap.mjs, the pair in
+# scripts/check-routes.mjs.
+[[redirects]]
+  from = "/parts/safety-selectors/sig-sauer-manual-safety-parts-kit-black-p365"
+  to = "/parts/safety-selectors/sig-sauer-manual-safety-kit-p365"
+  status = 301
+  force = true
+
 # Per-product pages, server-rendered so crawlers see real content instead of
 # the "Loading parts…" shell the client-side catalog shows before Supabase
 # resolves. :splat carries "category/slug" (or just "slug" — the function

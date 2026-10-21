@@ -169,6 +169,12 @@ const RETIRED = new Set([
   // /parts/magazines/ now, and the old path 301s there (netlify.toml; the
   // pair is asserted in check-routes.mjs).
   '/parts/basepads/tti-xmacro-completed-mag-w-basepad',
+  // The 2026-10-20 audit: Sig's P365 manual-safety kit was in the catalog
+  // twice. The newer copy (added 2026-10-14, after this baseline was pinned,
+  // so this line documents rather than exempts) is discontinued and 301s to
+  // /parts/safety-selectors/sig-sauer-manual-safety-kit-p365 (netlify.toml;
+  // the pair is asserted in check-routes.mjs).
+  '/parts/safety-selectors/sig-sauer-manual-safety-parts-kit-black-p365',
 ]);
 
 const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'))
