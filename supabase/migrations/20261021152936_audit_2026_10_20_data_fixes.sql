@@ -34,6 +34,13 @@
 --   printed the brand twice. The name becomes the maker's title minus the
 --   brand, and displayProductName() puts "Herrington Arms" in front once.
 --
+-- On a fresh database (supabase db reset, the check-migrations runner)
+-- there is no catalog at all — seed.sql carries lookup tables only — so
+-- there is nothing to fix and nothing to refuse: the file says so in a
+-- NOTICE and does nothing, the same shape as 20261020161643. On any database
+-- that HAS a catalog, every row below must be exactly as described or the
+-- whole file stops.
+--
 -- Sitemap: this file changes the sitemap in exactly two ways — the
 -- discontinued kit's URL leaves /sitemap-parts.xml, and lastmod moves on the
 -- rows touched here (products_updated_at / builds_updated_at set updated_at
@@ -62,6 +69,12 @@ declare
   -- item 4
   c_ha         constant uuid := '90305239-5a83-5f86-aac0-9e3918f7385f';  -- herrington-arms-magwell-p365xmacro
 begin
+  -- fresh database: no catalog, nothing to do (see the header)
+  if not exists (select 1 from public.products) then
+    raise notice 'audit 2026-10-20 data fixes: products is empty (fresh database), nothing to fix';
+    return;
+  end if;
+
   -- ── item 2a: the brand row ──────────────────────────────────────────
   update public.manufacturers
      set name = 'DPM Systems', website_url = 'https://www.dpmsystems.com'
