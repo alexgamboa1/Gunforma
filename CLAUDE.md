@@ -934,27 +934,32 @@ it:
 - `scripts/check-routes.mjs` runs both copies over the live catalog on
   every scheduled run, asserts every `/parts` row is served under its
   display name with no trailing "— Brand" span, that a product page's
-  `<title>`, `og:title` and JSON-LD `name` are the display name, and that
+  `<title>`, `og:title`, H1 and JSON-LD `name` are the display name with
+  no "by <maker>" line under the H1, and that
   every hub magazine row opens with a brand from `manufacturers` and
   doubles none.
 
 **What is still excused by name, and why** (the allowlist, in short):
 
-- **A brand line directly above the name.** The picker cards and selected
-  rows (`js/part-picker.js`), the colour-step title, the build page's part
-  card (`.part-brand` over `.part-model`, and its server mirror in
-  `build-og.mjs`), the catalog card and detail panel, and the profile's
-  Favorite parts card all print the stored name under a separate brand
-  line — so today they read "Icarus Precision" over "Icarus Precision 311
-  Series 311" on the 214 branded names. Folding the two into one branded
-  line, or keeping the brand line and printing the model alone, is a
-  visible-layout decision for Alex (see **Verifying changes**); until it is
-  made they print the stored name, and the alt text, aria-labels and
-  `data-name` on the same cards already go through the helper.
-- **The product page's H1** over its linked "by <maker>" line, the same
-  decision. Its `<title>`, `og:title`, meta, breadcrumb, hero alt and
-  JSON-LD `name` go through the helper — the title used to read "… by
-  Holosun" after a name that already said Holosun.
+- **A brand line directly above the name — decided 2026-10-21: left as
+  it is.** The picker cards and selected rows (`js/part-picker.js`), the
+  colour-step title, the build page's part card (`.part-brand` over
+  `.part-model`, and its server mirror in `build-og.mjs`), the catalog
+  card and detail panel, and the profile's Favorite parts card print the
+  stored name under a separate brand line, so they read "Icarus
+  Precision" over "Icarus Precision 311 Series 311" on the 214 branded
+  names. Alex ruled the helper applies only where a name stands alone;
+  these cards keep their two lines unchanged, and the alt text,
+  aria-labels and `data-name` on the same cards go through the helper. (A
+  brand-over-model split was drafted and parked, not applied:
+  `display-name-parts-wip-2026-10-21.patch` in the shared notes folder.)
+- **The product page's H1 — decided 2026-10-21: it IS the display name,
+  and the "by <maker>" line under it is gone.** With the brand in the H1
+  the line said the same maker twice. Its `<title>`, `og:title`, meta,
+  breadcrumb, hero alt and JSON-LD `name` were already the display name;
+  `check-routes.mjs` asserts the H1 on the wire too, and that no product
+  page carries a `brand-line`. The maker's own site is still reachable
+  from the buy row (`makerLink()`) when a part has no partner listing.
 - **Admin screens** (`gunforma-admin-queue.html`, `-part.html`,
   `-data.html`) print brand and name as two fields for the admin matching
   a typed part to a catalog row; no reader sees them.

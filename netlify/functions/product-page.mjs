@@ -47,11 +47,12 @@ import { isStalePrice, compareListingRows, displayPartnerName } from './_listing
 // js/maker-link.js and parity-tested on every deploy.
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 // What the product is CALLED in the <title>, the meta, the breadcrumb, the
-// hero alt and the JSON-LD: "{brand} {name}" unless the name already
-// carries the brand (_display-name.mjs, the one rule). The H1 is the ONE
-// place that still prints the stored name, over its linked "by <maker>"
-// line — a different shape, left as it is until Alex decides it, and
-// excused by name in scripts/check-display-name.mjs.
+// hero alt, the H1 and the JSON-LD: "{brand} {name}" unless the name
+// already carries the brand (_display-name.mjs, the one rule). The H1 used
+// to print the stored name over a linked "by <maker>" line; decided
+// 2026-10-21: the H1 is the display name and the line is gone — with the
+// brand in the H1 it said the same maker twice. The maker's site is still
+// linked from the buy row (makerLink) when the part has no partner listing.
 import { displayProductName } from './_display-name.mjs';
 // For the "Used in these builds" row: /b/ links are built with the shared
 // builder, never by hand — see CLAUDE.md, "A build's URL is built in two
@@ -720,9 +721,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.hero-img { width: 100%; border-radius: 8px; border: 0.5px solid #e5e5e5; background: #fff; object-fit: contain; aspect-ratio: 1; }' +
 '.hero-placeholder { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 0.5px dashed #d9d6cc; background: #fff; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 12px; }' +
 '.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #4a9edd; font-weight: 700; margin-bottom: 6px; }' +
-'h1 { font-size: 26px; line-height: 1.25; margin-bottom: 6px; }' +
-'.brand-line { font-size: 13px; color: #888; margin-bottom: 14px; }' +
-'.brand-line a { color: #888; }' +
+'h1 { font-size: 26px; line-height: 1.25; margin-bottom: 14px; }' +
 '.price-line { font-size: 20px; font-weight: 700; margin-bottom: 16px; }' +
 '.desc { font-size: 14px; line-height: 1.6; color: #333; margin-bottom: 18px; }' +
 '.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; }' +
@@ -801,8 +800,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     : '<div class="hero-placeholder">No photo yet</div>') + '</div>' +
   '<div>' +
     '<div class="eyebrow">' + esc(categorySingular) + ' &middot; Sig Sauer P365</div>' +
-    '<h1>' + esc(product.name) + '</h1>' +
-    (brand.name ? '<div class="brand-line">by ' + (brand.website_url ? '<a href="' + esc(brand.website_url) + '" target="_blank" rel="noopener">' + esc(brand.name) + '</a>' : esc(brand.name)) + '</div>' : '') +
+    '<h1>' + esc(shownName) + '</h1>' +
     (priceText ? '<div class="price-line">' + esc(priceText) + '</div>' : '') +
     (product.description ? '<div class="desc">' + esc(product.description) + '</div>' : '') +
     bestForHtml +

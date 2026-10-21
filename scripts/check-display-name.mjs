@@ -51,11 +51,6 @@ export const ALLOWLIST = [
   { file: 'gunforma-parts-catalog.html', match: "'<a class=\"part-card-link\" href=\"' + escAttr(href) + '\">' + esc(r.name)", reason: 'catalog card: .part-card-brand line above the name' },
   { file: 'gunforma-parts-catalog.html', match: ": esc(r.name);", reason: 'catalog card, unlinked branch of the line above' },
   { file: 'gunforma-parts-catalog.html', match: "document.getElementById('detail-title').textContent = p.name", reason: 'catalog detail panel: #detail-brand sits above #detail-title' },
-  // ── The product page's H1 is the stored name over a linked "by <maker>"
-  //    line — a different shape, left as it is until Alex decides it
-  //    (#187 said the same). The title, meta, breadcrumb, alt and JSON-LD
-  //    on that page DO go through the helper.
-  { file: 'netlify/functions/product-page.mjs', match: "'<h1>' + esc(product.name) + '</h1>'", reason: 'product page H1 over the "by <maker>" line — ask first' },
   // ── Admin screens print brand and name as two fields ("<b>Brand</b> —
   //    name") for the admin who is matching a typed part to a catalog row;
   //    no reader sees them. Listed, not fixed.

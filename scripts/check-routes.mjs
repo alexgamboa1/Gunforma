@@ -657,6 +657,13 @@ for (const [label, path, want] of [
       const ld = (r.body.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/) || [])[1];
       let ldName = null; try { ldName = JSON.parse(ld).name; } catch (e) { /* asserted below */ }
       ok(ldName === want, `${path}: JSON-LD Product.name is the display name`, ldName);
+      // Decided 2026-10-21: the H1 is the display name too, and the "by
+      // <maker>" line that used to sit under it is gone — with the brand in
+      // the H1 it named the same maker twice.
+      const h1 = unesc((r.body.match(/<h1>([^<]*)<\/h1>/) || ['', ''])[1]);
+      ok(h1 === want, `${path}: <h1> is the display name`, h1);
+      ok(!r.body.includes('class="brand-line"'), `${path}: no "by <maker>" line under the H1`);
+      ok(!server.hasDoubledBrand(h1, p.manufacturers.name), `${path}: <h1> does not double its brand`, h1);
     }
   }
 }
