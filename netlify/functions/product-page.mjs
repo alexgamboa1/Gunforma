@@ -757,6 +757,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.variant-media { flex: 0 0 44px; width: 44px; height: 44px; border-radius: 4px; overflow: hidden; background: #f4f3ee; display: flex; align-items: center; justify-content: center; }' +
 '.variant-media img { width: 100%; height: 100%; object-fit: contain; display: block; background: #fff; }' +
 '.variant-media-swatch { width: 24px; height: 24px; border-radius: 50%; display: block; }' +
+'@media (max-width: 480px) { .variant-media { flex-basis: 36px; width: 36px; height: 36px; } .variant-media-swatch { width: 20px; height: 20px; } }' +
 '.variant-info { display: flex; flex-direction: column; gap: 3px; }' +
 '.variant-label { font-size: 13px; font-weight: 700; }' +
 '.variant-sub { font-size: 12px; color: #666; }' +
