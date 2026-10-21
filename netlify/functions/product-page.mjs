@@ -74,13 +74,18 @@ const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 // guessed. slide_plate has no dedicated spec table in the schema, so it gets
 // no extra spec rows beyond the common product fields.
 const YESNO = (v) => (v === true ? 'Yes' : v === false ? 'No' : null);
+// Port style is a key into port_styles ('c-port', 'chunk-port'); the reader
+// sees its display_name ("C-Port", "Chunk Port"), read through the one FK
+// each spec table has to port_styles (barrel_specs_port_style_fk,
+// slide_specs_port_style_fk), so a new style needs a row, not a code change.
+const PORT_STYLE = ['port_styles(display_name)', 'Port Style', (v) => (v && v.display_name) || null];
 const SPEC_TABLES = {
   barrel: ['barrel_specs', [
     ['barrel_length_in', 'Barrel Length', (v) => v + '"'],
     ['caliber', 'Caliber'],
     ['barrel_type', 'Type'],
     ['thread_pitch', 'Thread Pitch'],
-    ['port_style', 'Port Style'],
+    PORT_STYLE,
     ['is_lci', 'Loaded Chamber Indicator', YESNO],
   ]],
   slide: ['slide_specs', [
@@ -90,7 +95,7 @@ const SPEC_TABLES = {
     ['barrel_included', 'Barrel Included', YESNO],
     ['window_cuts', 'Window Cuts', YESNO],
     ['internally_ported', 'Internally Ported', YESNO],
-    ['port_style', 'Port Style'],
+    PORT_STYLE,
     ['integrated_comp', 'Integrated Compensator', YESNO],
     ['threaded_barrel_ok', 'Fits Threaded Barrel', YESNO],
     ['required_spring_weight', 'Required Spring Weight'],
