@@ -1244,6 +1244,10 @@ function renderPartCard(build, part, idx) {
         primary_image_url: part.imageUrl || null };
   var thumbUrl = vr.imageUrl || null;
   var alt = window.displayProductName(part).replace(/"/g, '&quot;');
+  // Brand over model from the one rule (js/display-name.js): a snapshot
+  // froze the name at the time of the build, when it could still carry the
+  // brand. build-og.mjs renders the same split server-side.
+  var np = window.displayProductParts(part);
   var thumbHtml;
   if (thumbUrl) {
     // A <button>, so Enter and Space come for free and it lands in the tab
@@ -1272,8 +1276,8 @@ function renderPartCard(build, part, idx) {
       thumbHtml +
       '<div class="part-body">'+
         '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
-        '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
-        '<div class="part-model">'+partModelHtml(part)+'</div>'+
+        '<div class="part-brand">'+escH(np.brand||'Unknown brand')+'</div>'+
+        '<div class="part-model">'+partModelHtml(part, np.model)+'</div>'+
         ((pendingTag || variantTag || chosenTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+'</div>' : '')+
         // "2 MOA · Red dot" under the chosen-variant tag — the label alone
         // does not say which of three "Black · Anodized" optics this is.
@@ -1294,8 +1298,8 @@ function renderPartCard(build, part, idx) {
 // builder and returns null rather than a dead href for a category it does
 // not know. build-og.mjs emits the same link server-side, so what a crawler
 // follows and what a reader clicks are the same URL.
-function partModelHtml(part) {
-  var nameHtml = escH(part.name || 'Unnamed part');
+function partModelHtml(part, model) {
+  var nameHtml = escH(model || 'Unnamed part');
   var firstV = part.refId ? (VARIANTS_BY_PRODUCT_ID[part.refId] || [])[0] : null;
   var prod = firstV && firstV.products;
   var href = (prod && typeof window.productPath === 'function')

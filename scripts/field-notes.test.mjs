@@ -116,20 +116,21 @@ const count = (s, needle) => s.split(needle).length - 1;
 
 // A realistic catalog: one optic on a partner listing with a fresh price,
 // one with no listing but a maker url, one magazine on a stale listing.
-// The optics' names carry their brand and the magazine's does not — the
-// live split — so the page is held to print "Sig Sauer P365 9mm 17rd …"
-// and never "Holosun Holosun 507K X2" (_display-name.mjs).
+// Every stored name is the model alone (the naming convention), so the
+// page is held to print "Sig Sauer P365 9mm 17rd …" and "Holosun 507K X2"
+// — brand + name, never the bare model and never a doubled brand
+// (_display-name.mjs).
 const today = new Date().toISOString().slice(0, 10);
 const FP = { K: 'fp-holosun-k', RMSC: 'fp-rmsc', RMR: 'fp-rmr', SLC: 'fp-sig-loc-compact' };
 const PRODUCTS = {
-  'holosun-507k-x2': { id: 'P1', slug: 'holosun-507k-x2', name: 'Holosun 507K X2', category: 'optic', url: 'https://holosun.com/507k', is_discontinued: false, restricted_states: null,
+  'holosun-507k-x2': { id: 'P1', slug: 'holosun-507k-x2', name: '507K X2', category: 'optic', url: 'https://holosun.com/507k', is_discontinued: false, restricted_states: null,
     manufacturers: { name: 'Holosun', website_url: 'https://holosun.com' },
     product_variants: [{ id: 'V1', msrp: 359.99, is_default: true, primary_image_url: 'https://img/507k.jpg',
       affiliate_links: [{ id: 'L1', url: 'https://www.opticsplanet.com/x', affiliate_url: 'https://www.awin1.com/x', street_price: 329.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } }] }] },
-  'holosun-507c-x2': { id: 'P2', slug: 'holosun-507c-x2', name: 'Holosun 507C X2', category: 'optic', url: 'https://holosun.com/507c', is_discontinued: false, restricted_states: null,
+  'holosun-507c-x2': { id: 'P2', slug: 'holosun-507c-x2', name: '507C X2', category: 'optic', url: 'https://holosun.com/507c', is_discontinued: false, restricted_states: null,
     manufacturers: { name: 'Holosun', website_url: 'https://holosun.com' },
     product_variants: [{ id: 'V2', msrp: 309.99, is_default: true, primary_image_url: null, affiliate_links: [] }] },
-  'sig-sauer-p365-17rd-mag': { id: 'P3', slug: 'sig-sauer-p365-17rd-mag', name: 'P365 9mm 17rd Magazine (All 9mm Models)', category: 'magazine', url: 'https://sigsauer.com/mag', is_discontinued: false, restricted_states: ['CA', 'NY'],
+  'sig-sauer-p365-17rd-mag': { id: 'P3', slug: 'sig-sauer-p365-17rd-mag', name: 'P365 9mm 17rd Magazine', category: 'magazine', url: 'https://sigsauer.com/mag', is_discontinued: false, restricted_states: ['CA', 'NY'],
     manufacturers: { name: 'Sig Sauer', website_url: 'https://www.sigsauer.com' },
     product_variants: [{ id: 'V3', msrp: 59.99, is_default: true, primary_image_url: null,
       affiliate_links: [{ id: 'L3', url: 'https://www.opticsplanet.com/m', affiliate_url: null, street_price: 54.99, in_stock: true, last_checked: '2026-01-01', op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } }] }] },
@@ -211,11 +212,11 @@ test('the fixture renders off the apex: verdicts, prices, chrome, meta', async (
   assert.ok(h.includes('Capacity: <strong>17 rounds</strong>'));
   // product names carry their brand exactly once — the fit question and
   // the price table's part cell
-  assert.ok(h.includes('Does the <a href="/parts/magazines/sig-sauer-p365-17rd-mag">Sig Sauer P365 9mm 17rd Magazine (All 9mm Models)</a> fit the Sig Sauer P365 XMacro?'),
+  assert.ok(h.includes('Does the <a href="/parts/magazines/sig-sauer-p365-17rd-mag">Sig Sauer P365 9mm 17rd Magazine</a> fit the Sig Sauer P365 XMacro?'),
     'an unbranded stored name is printed with its brand');
   assert.ok(h.includes('Does the <a href="/parts/optics/holosun-507k-x2">Holosun 507K X2</a> fit the Sig Sauer P365 XL?'),
     'a branded stored name is printed as stored');
-  assert.ok(h.includes('<a href="/parts/magazines/sig-sauer-p365-17rd-mag">Sig Sauer P365 9mm 17rd Magazine (All 9mm Models)</a>'),
+  assert.ok(h.includes('<a href="/parts/magazines/sig-sauer-p365-17rd-mag">Sig Sauer P365 9mm 17rd Magazine</a>'),
     'the price table names the brand');
   assert.ok(h.includes('alt="Holosun 507K X2"') && !h.includes('alt="Holosun Holosun'), 'the photo alt is the same name (the magazine stub has no photo)');
   assert.ok(!h.includes('Holosun Holosun') && !h.includes('Sig Sauer Sig Sauer'), 'no brand is doubled');

@@ -251,6 +251,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <script src="js/build-url.js"></script>
+<script src="js/display-name.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 
@@ -928,12 +929,13 @@ function renderFavoritePartCard(p) {
     ? '<img src="'+escH(dv.primary_image_url)+'" alt=""/>'
     : '<div class="part-card-img-fallback">No photo</div>';
   const price = dv && dv.msrp != null ? '$'+Number(dv.msrp).toFixed(2) : '—';
-  const brand = p.manufacturers ? p.manufacturers.name : 'Unknown brand';
+  // Brand over model from the one rule (js/display-name.js).
+  const np = window.displayProductParts({ brand: p.manufacturers ? p.manufacturers.name : '', name: p.name });
   return '<div class="part-card">'+
       '<div class="part-card-img">'+img+'</div>'+
       '<div class="part-card-body">'+
-        '<div class="part-card-brand">'+escH(brand)+'</div>'+
-        '<div class="part-card-name">'+escH(p.name)+'</div>'+
+        '<div class="part-card-brand">'+escH(np.brand || 'Unknown brand')+'</div>'+
+        '<div class="part-card-name">'+escH(np.model)+'</div>'+
         '<div class="part-card-footer"><div class="part-card-price">'+price+'</div>'+
           '<button class="remove-btn" onclick="unfavoritePart(\''+p.id+'\')">Remove</button>'+
         '</div>'+

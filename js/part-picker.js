@@ -238,11 +238,13 @@
   // near-identical strings, and had already drifted: the search results
   // printed a bare "$0" where the initial grid printed an em dash.
   function partCardHtml(catKey, item) {
+    // Brand over model from the one rule (js/display-name.js).
+    var np = global.displayProductParts(item);
     return '<div class="part-card">' +
       partImageHtml(item) +
       '<div class="part-card-body">' +
-        '<div class="part-card-brand">' + item.brand + '</div>' +
-        '<div class="part-card-name">'  + item.name  + '</div>' +
+        '<div class="part-card-brand">' + np.brand + '</div>' +
+        '<div class="part-card-name">'  + np.model + '</div>' +
         '<div class="part-card-desc">'  + item.desc  + '</div>' +
       '</div>' +
       '<div class="part-card-footer">' +
@@ -303,11 +305,14 @@
   // than wrong for a pending part or a product that has since lost its MSRP.
   function selectedPartHtml(part) {
     var item = findCatalogItem(part.refId);
+    // Brand over model from the one rule (js/display-name.js); a typed part
+    // that names its brand in both fields is printed once.
+    var np = global.displayProductParts(part);
     return '<div class="selected-part">' +
       selectedPartThumbHtml(part, item) +
       '<div class="selected-part-body">' +
-        '<div class="selected-part-brand">' + part.brand + '</div>' +
-        '<div class="selected-part-name">'  + part.name  + '</div>' +
+        '<div class="selected-part-brand">' + np.brand + '</div>' +
+        '<div class="selected-part-name">'  + np.model + '</div>' +
         // The colour they picked, under the name — the photo alone does not
         // say "Gold / TiN", and a swatch says even less.
         (part.variantLabel
@@ -508,12 +513,13 @@
   // restores the grid by re-rendering.
   function variantListHtml(catKey, item) {
     var vs = variantsOf(item);
+    var np = global.displayProductParts(item);
     return '<div class="variant-step">' +
         '<div class="variant-step-head">' +
           '<button type="button" class="variant-step-back" onclick="cancelVariantPick(\'' + catKey + '\')">← All options</button>' +
           '<div class="variant-step-title">' +
-            '<span class="variant-step-brand">' + escAttr(item.brand || '') + '</span>' +
-            '<span class="variant-step-name">' + escAttr(item.name || '') + '</span>' +
+            '<span class="variant-step-brand">' + escAttr(np.brand) + '</span>' +
+            '<span class="variant-step-name">' + escAttr(np.model) + '</span>' +
           '</div>' +
           '<div class="variant-step-count">' + vs.length + ' colors</div>' +
         '</div>' +
@@ -797,12 +803,11 @@
       ? '<span class="match-thumb"><img src="' + escAttr(item.image) + '" alt="" loading="lazy" onerror="this.remove()"/></span>'
       : '<span class="match-thumb"></span>';
   }
-  // The catalog name, without repeating a brand the name already starts with
-  // ("Holosun" + "Holosun 407K X2").
+  // Bold brand, then the model — the same split every card prints, from
+  // the one rule (js/display-name.js).
   function matchNameHtml(item) {
-    var brand = String(item.brand || ''), name = String(item.name || '');
-    var rest = name.toLowerCase().indexOf(brand.toLowerCase()) === 0 ? name.slice(brand.length).trim() : name;
-    return '<span class="match-name"><b>' + escAttr(brand) + '</b> ' + escAttr(rest || name) + '</span>';
+    var np = global.displayProductParts(item);
+    return '<span class="match-name"><b>' + escAttr(np.brand) + '</b> ' + escAttr(np.model) + '</span>';
   }
 
   // ----- while they type -----

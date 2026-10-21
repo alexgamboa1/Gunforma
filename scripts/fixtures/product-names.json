@@ -1,42 +1,42 @@
 {
- "captured": "2026-10-20",
- "source": "products?select=slug,category,name,manufacturers!products_brand_id_fkey(name)&is_discontinued=eq.false (public key)",
+ "captured": "2026-10-21",
+ "source": "products?select=slug,category,name,manufacturers!products_brand_id_fkey(name)&is_discontinued=eq.false (public key), as it reads once 20261021160000_product_naming_convention.sql is applied — run --refresh-fixture after db push and expect no diff",
  "products": [
   {
    "slug": "aimpoint-acro-p2",
    "category": "optic",
    "brand": "Aimpoint",
-   "name": "Aimpoint ACRO P-2"
+   "name": "ACRO P-2"
   },
   {
    "slug": "align-tactical-offset-mag-release-p365",
    "category": "mag_release",
    "brand": "Align Tactical",
-   "name": "Align Tactical OFFSET P365 Extended Magazine Release"
+   "name": "OFFSET Extended Magazine Release"
   },
   {
    "slug": "align-tactical-thumb-rest-takedown-p365",
    "category": "takedown_lever",
    "brand": "Align Tactical",
-   "name": "Align Tactical P365 Thumb Rest Takedown Lever"
+   "name": "Thumb Rest Takedown Lever"
   },
   {
    "slug": "anarchy-outdoors-slide-plate-p365",
    "category": "slide_plate",
    "brand": "Anarchy Outdoors",
-   "name": "Anarchy Outdoors Slide Plate for Sig 365"
+   "name": "Slide Plate"
   },
   {
    "slug": "angry-bear-arms-blank-sights-p365",
    "category": "sight",
    "brand": "Angry Bear Arms",
-   "name": "Angry Bear Arms Blank Pistol Sights for Sig P365"
+   "name": "Blank Sights"
   },
   {
    "slug": "angry-bear-arms-fiber-optic-sights-p365",
    "category": "sight",
    "brand": "Angry Bear Arms",
-   "name": "Angry Bear Arms Fiber Optic Pistol Sights for Sig P365"
+   "name": "Fiber Optic Sights"
   },
   {
    "slug": "armory-craft-adjustable-skeleton-flat-trigger-p365",
@@ -48,19 +48,19 @@
    "slug": "armory-craft-ambi-extended-safety-p365",
    "category": "safety_selector",
    "brand": "Armory Craft",
-   "name": "P365 - AMBI. EXTENDED Safety"
+   "name": "Ambi Extended Safety"
   },
   {
    "slug": "armory-craft-comp-p365",
    "category": "compensator",
    "brand": "Armory Craft",
-   "name": "Armory Craft P365 Compensator"
+   "name": "P365 Compensator"
   },
   {
    "slug": "armory-craft-ext-slide-release-p365",
    "category": "slide_release",
    "brand": "Armory Craft",
-   "name": "Armory Craft P365 Extended Slide Release"
+   "name": "Extended Slide Release"
   },
   {
    "slug": "armory-craft-extended-mag-release-p365",
@@ -72,259 +72,259 @@
    "slug": "armory-craft-grip-module-p365xmacro",
    "category": "frame",
    "brand": "Armory Craft",
-   "name": "Armory Craft P365 XMACRO/FUSE Grip Module"
+   "name": "P365 XMacro/FUSE Grip Module"
   },
   {
    "slug": "armory-craft-pinky-ext-p365-10rd",
    "category": "basepad",
    "brand": "Armory Craft",
-   "name": "Armory Craft P365 Pinky Extension for 10-Round Magazines"
+   "name": "10rd Pinky Extension"
   },
   {
    "slug": "dmp-springs-soft-rsa-p365",
    "category": "recoil_spring",
    "brand": "DMP Springs",
-   "name": "DMP Soft RSA"
+   "name": "Soft RSA"
   },
   {
    "slug": "ecm-precision-carry-basepad-p365xmacro",
    "category": "basepad",
    "brand": "ECM Precision",
-   "name": "ECM Precision Carry 17-Round Magazine Base Pad for the P365"
+   "name": "Carry Basepad"
   },
   {
    "slug": "ecm-precision-carry-magwell-r11",
    "category": "magwell",
    "brand": "ECM Precision",
-   "name": "ECM Precision Carry Magwell for R11 P365 Grip Modules"
+   "name": "R11 Carry Magwell"
   },
   {
    "slug": "ecm-precision-extended-aggressive-mag-release-p365",
    "category": "mag_release",
    "brand": "ECM Precision",
-   "name": "ECM Precision Extended Aggressive OEM Style Mag Release"
+   "name": "Extended Aggressive Magazine Release"
   },
   {
    "slug": "ecm-precision-extended-oem-mag-release-p365",
    "category": "mag_release",
    "brand": "ECM Precision",
-   "name": "ECM Precision Extended OEM Style Mag Release"
+   "name": "Extended Magazine Release"
   },
   {
    "slug": "ecm-precision-r11-edge-fuse",
    "category": "frame",
    "brand": "ECM Precision",
-   "name": "ECM Precision R11 Edge Fuse"
+   "name": "R11 Edge Fuse"
   },
   {
    "slug": "ecm-precision-r11-edge-fuse-comp",
    "category": "frame",
    "brand": "ECM Precision",
-   "name": "ECM Precision R11 Edge Fuse Comp"
+   "name": "R11 Edge Fuse Comp"
   },
   {
    "slug": "ecm-precision-r11-edge-xmacro",
    "category": "frame",
    "brand": "ECM Precision",
-   "name": "ECM Precision R11 Edge XMacro"
+   "name": "R11 Edge XMacro"
   },
   {
    "slug": "ecm-precision-r11-fuse",
    "category": "frame",
    "brand": "ECM Precision",
-   "name": "ECM Precision R11 Fuse"
+   "name": "R11 Fuse"
   },
   {
    "slug": "ecm-precision-r11-fuse-comp",
    "category": "frame",
    "brand": "ECM Precision",
-   "name": "ECM Precision R11 Fuse Comp"
+   "name": "R11 Fuse Comp"
   },
   {
    "slug": "ecm-precision-r11-macro",
    "category": "frame",
    "brand": "ECM Precision",
-   "name": "ECM Precision R11 Macro"
+   "name": "R11 Macro"
   },
   {
    "slug": "ecm-precision-recoil-spring-kit-3-1-p365",
    "category": "recoil_spring",
    "brand": "ECM Precision",
-   "name": "ECM Precision P365 Recoil Spring Assembly 3.1 (3 Spring Kit)"
+   "name": "Recoil Spring Assembly 3.1 Kit"
   },
   {
    "slug": "ecm-precision-recoil-spring-kit-3-7-p365",
    "category": "recoil_spring",
    "brand": "ECM Precision",
-   "name": "ECM Precision P365 Recoil Spring Assembly 3.7 (3 Spring Kit)"
+   "name": "Recoil Spring Assembly 3.7 Kit"
   },
   {
    "slug": "ecm-precision-recoil-spring-kit-4-3-p365",
    "category": "recoil_spring",
    "brand": "ECM Precision",
-   "name": "ECM Precision P365 Recoil Spring Assembly 4.3 (3 Spring Kit)"
+   "name": "Recoil Spring Assembly 4.3 Kit"
   },
   {
    "slug": "ecm-precision-standard-magwell-r11",
    "category": "magwell",
    "brand": "ECM Precision",
-   "name": "ECM Precision Standard Magwell for R11 P365 Grip Modules"
+   "name": "R11 Standard Magwell"
   },
   {
    "slug": "eotech-eflx",
    "category": "optic",
    "brand": "EOTech",
-   "name": "EOTech EFLX"
+   "name": "EFLX"
   },
   {
    "slug": "eotech-eflx-ce",
    "category": "optic",
    "brand": "EOTech",
-   "name": "EOTech EFLX CE"
+   "name": "EFLX CE"
   },
   {
    "slug": "faxon-firearms-exos-comp-p365",
    "category": "compensator",
    "brand": "Faxon Firearms",
-   "name": "Faxon Exos P365 Compensator"
+   "name": "Exos Compensator"
   },
   {
    "slug": "grayguns-p365-gm",
    "category": "frame",
    "brand": "Grayguns",
-   "name": "Grayguns P365 Laser-Sculpted Grip Module"
+   "name": "P365 Laser-Sculpted Grip Module"
   },
   {
    "slug": "grayguns-p365-xl-gm",
    "category": "frame",
    "brand": "Grayguns",
-   "name": "Grayguns P365XL Laser-Sculpted Grip Module"
+   "name": "P365 XL Laser-Sculpted Grip Module"
   },
   {
    "slug": "grayguns-p365-xmacro-gm",
    "category": "frame",
    "brand": "Grayguns",
-   "name": "Grayguns P365 XMACRO Laser-Sculpted Grip Module"
+   "name": "P365 XMacro Laser-Sculpted Grip Module"
   },
   {
    "slug": "grey-ghost-precision-v1-p365",
    "category": "slide",
    "brand": "Grey Ghost Precision",
-   "name": "Grey Ghost Precision GGP365 V1"
+   "name": "GGP365 V1"
   },
   {
    "slug": "grey-ghost-precision-v2-p365",
    "category": "slide",
    "brand": "Grey Ghost Precision",
-   "name": "Grey Ghost Precision GGP365 V2"
+   "name": "GGP365 V2"
   },
   {
    "slug": "herrington-arms-hc365-p365",
    "category": "compensator",
    "brand": "Herrington Arms",
-   "name": "Herrington Arms HC365 Compensator P365"
+   "name": "HC365 Compensator"
   },
   {
    "slug": "herrington-arms-hc365p-p365",
    "category": "compensator",
    "brand": "Herrington Arms",
-   "name": "Herrington Arms HC365P Compensator P365"
+   "name": "HC365P Compensator"
   },
   {
    "slug": "herrington-arms-magwell-p365xmacro",
    "category": "magwell",
    "brand": "Herrington Arms",
-   "name": "Herrington Arms HA Magwell for P365 X Macro"
+   "name": "P365 XMacro Magwell"
   },
   {
    "slug": "herrington-arms-zero-p365",
    "category": "compensator",
    "brand": "Herrington Arms",
-   "name": "Herrington Arms Zero Series Compensator P365"
+   "name": "Zero Series Compensator"
   },
   {
    "slug": "hogue-rubber-basepad-p365-10rd",
    "category": "basepad",
    "brand": "Hogue",
-   "name": "Hogue OverMolded Rubber Grip Extension Base Pad (10-Round) for P365"
+   "name": "OverMolded 10rd Grip Extension"
   },
   {
    "slug": "hogue-rubber-basepad-p365xl-15rd",
    "category": "basepad",
    "brand": "Hogue",
-   "name": "Hogue OverMolded Rubber Grip Extension Base Pad (15-Round) for P365X/XL"
+   "name": "OverMolded 15rd Grip Extension"
   },
   {
    "slug": "holosun-407c-x3",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 407C X3"
+   "name": "407C X3"
   },
   {
    "slug": "holosun-407comp",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 407COMP"
+   "name": "407COMP"
   },
   {
    "slug": "holosun-407k-x2",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 407K X2"
+   "name": "407K X2"
   },
   {
    "slug": "holosun-507-promax",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 507 PROMAX"
+   "name": "507 PROMAX"
   },
   {
    "slug": "holosun-507c-x2",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 507C X2"
+   "name": "507C X2"
   },
   {
    "slug": "holosun-507c-x3",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 507C X3"
+   "name": "507C X3"
   },
   {
    "slug": "holosun-507comp",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 507COMP"
+   "name": "507COMP"
   },
   {
    "slug": "holosun-507k-x2",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 507K X2"
+   "name": "507K X2"
   },
   {
    "slug": "holosun-508t-x2",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun 508T X2"
+   "name": "508T X2"
   },
   {
    "slug": "holosun-eps",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun EPS"
+   "name": "EPS"
   },
   {
    "slug": "holosun-eps-carry",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun EPS Carry"
+   "name": "EPS Carry"
   },
   {
    "slug": "holosun-eps-core",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun EPS CORE"
+   "name": "EPS CORE"
   },
   {
    "slug": "holosun-p-id",
@@ -366,487 +366,487 @@
    "slug": "holosun-scs-carry-gr",
    "category": "optic",
    "brand": "Holosun",
-   "name": "Holosun SCS Carry GR"
+   "name": "SCS Carry GR"
   },
   {
    "slug": "icarus-precision-311",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision 311 Series 311"
+   "name": "311"
   },
   {
    "slug": "icarus-precision-311-fuse",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision 311 Series 311 FUSE"
+   "name": "311 FUSE"
   },
   {
    "slug": "icarus-precision-311-fuse-sl",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision 311 Series 311 FUSE SL"
+   "name": "311 FUSE SL"
   },
   {
    "slug": "icarus-precision-311-sl",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision 311 Series 311 SL"
+   "name": "311 SL"
   },
   {
    "slug": "icarus-precision-ace-axg-xmacro",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision AXG Series AXG MACRO (A.C.E.)"
+   "name": "A.C.E. AXG MACRO"
   },
   {
    "slug": "icarus-precision-ace-fuse",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision MACRO Series FUSE MACRO (A.C.E.)"
+   "name": "A.C.E. FUSE MACRO"
   },
   {
    "slug": "icarus-precision-ace-fuse-evo",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision EVO Series FUSE EVO (A.C.E.)"
+   "name": "A.C.E. FUSE EVO"
   },
   {
    "slug": "icarus-precision-ace-xl-evo",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision EVO Series XL EVO (A.C.E.)"
+   "name": "A.C.E. XL EVO"
   },
   {
    "slug": "icarus-precision-ace-xmacro",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision MACRO Series X MACRO (A.C.E.)"
+   "name": "A.C.E. X MACRO"
   },
   {
    "slug": "icarus-precision-air-xmacro",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision AIR Polymer Series XMACRO"
+   "name": "AIR XMACRO"
   },
   {
    "slug": "icarus-precision-axg-fuse",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision AXG Series AXG FUSE"
+   "name": "AXG FUSE"
   },
   {
    "slug": "icarus-precision-elite-x-elite",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision Elite Series X Elite"
+   "name": "X Elite"
   },
   {
    "slug": "icarus-precision-evo-x-evo",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision EVO Series X EVO"
+   "name": "X EVO"
   },
   {
    "slug": "icarus-precision-hybrid-standard",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision Hybrid Series Standard Hybrid"
+   "name": "Standard Hybrid"
   },
   {
    "slug": "icarus-precision-hybrid-xl",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision Hybrid Series XL Hybrid"
+   "name": "XL Hybrid"
   },
   {
    "slug": "icarus-precision-hybrid-xl-pro",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision Hybrid Series XL Hybrid Pro"
+   "name": "XL Hybrid Pro"
   },
   {
    "slug": "icarus-precision-macro-sub-macro",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision MACRO Series Sub MACRO"
+   "name": "Sub MACRO"
   },
   {
    "slug": "icarus-precision-pro-elite-ace-xmacro",
    "category": "frame",
    "brand": "Icarus Precision",
-   "name": "Icarus Precision Elite Series Pro Elite (A.C.E.)"
+   "name": "A.C.E. Pro Elite"
   },
   {
    "slug": "jl-billet-17rd-adapter-p365-oem",
    "category": "basepad",
    "brand": "JL Billet",
-   "name": "JL Billet 17-Round Mag Adaptor for SIG P365 OEM Grip"
+   "name": "17rd Mag Adaptor for P365 Grip"
   },
   {
    "slug": "killer-innovations-velo-v1-p365",
    "category": "slide",
    "brand": "Killer Innovations",
-   "name": "Killer Innovations Velocity V1 Sig P365"
+   "name": "Velocity V1 P365"
   },
   {
    "slug": "killer-innovations-velo-v1-p365-xl",
    "category": "slide",
    "brand": "Killer Innovations",
-   "name": "Killer Innovations Velocity V1 Sig P365XL"
+   "name": "Velocity V1 P365 XL"
   },
   {
    "slug": "leupold-deltapoint-pro",
    "category": "optic",
    "brand": "Leupold",
-   "name": "Leupold DeltaPoint Pro"
+   "name": "DeltaPoint Pro"
   },
   {
    "slug": "magpul-amag-10-sg9-p365-mag",
    "category": "magazine",
    "brand": "Magpul",
-   "name": "AMAG 10 SG9 P365 9mm 10rd Magazine"
+   "name": "AMAG 10 9mm 10rd Magazine"
   },
   {
    "slug": "magpul-amag-12-sg9-p365-mag",
    "category": "magazine",
    "brand": "Magpul",
-   "name": "AMAG 12 SG9 P365 9mm 12rd Magazine"
+   "name": "AMAG 12 9mm 12rd Magazine"
   },
   {
    "slug": "magpul-amag-15-sg9-p365-mag",
    "category": "magazine",
    "brand": "Magpul",
-   "name": "AMAG 15 SG9 P365 9mm 15rd Magazine"
+   "name": "AMAG 15 9mm 15rd Magazine"
   },
   {
    "slug": "magpul-amag-17-sg9-p365-mag",
    "category": "magazine",
    "brand": "Magpul",
-   "name": "AMAG 17 SG9 P365 9mm 17rd Magazine"
+   "name": "AMAG 17 9mm 17rd Magazine"
   },
   {
    "slug": "maskas-precision-mpi-mag-release-macro-frame-p365",
    "category": "mag_release",
    "brand": "MASKAS Precision",
-   "name": "MPI P365 Single Piece Extended Magazine Release - Macro Frame"
+   "name": "Single Piece Extended Magazine Release (Macro Frame)"
   },
   {
    "slug": "mcarbo-comp-p365",
    "category": "compensator",
    "brand": "MCARBO",
-   "name": "MCARBO P365 Compensator"
+   "name": "P365 Compensator"
   },
   {
    "slug": "mcarbo-short-stroke-flat-p365",
    "category": "trigger",
    "brand": "MCARBO",
-   "name": "MCARBO Short Stroke Flat Trigger"
+   "name": "Short Stroke Flat Trigger"
   },
   {
    "slug": "mcarbo-stainless-slide-ported-barrel-p365xl",
    "category": "slide",
    "brand": "MCARBO",
-   "name": "P365 XL Stainless Compensated Slide with Ported Barrel"
+   "name": "P365 XL Compensated Slide"
   },
   {
    "slug": "mcarbo-tbarrel-comp-p365",
    "category": "compensator",
    "brand": "MCARBO",
-   "name": "MCARBO P365 Threaded Barrel and Compensator"
+   "name": "P365 Threaded Barrel and Compensator"
   },
   {
    "slug": "mischief-machine-alpha-g3-fuse",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Alpha Gen 3 Fuse"
+   "name": "Alpha Gen 3 Fuse"
   },
   {
    "slug": "mischief-machine-alpha-g3-xmacro",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Alpha Gen 3 XMacro"
+   "name": "Alpha Gen 3 XMacro"
   },
   {
    "slug": "mischief-machine-com-g2-fuse",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Commander G2 XMacro/Fuse Plus"
+   "name": "Commander G2 Fuse Plus"
   },
   {
    "slug": "mischief-machine-com-g2-xl",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Commander G2 X and XL"
+   "name": "Commander G2 X/XL"
   },
   {
    "slug": "mischief-machine-com-g2-xmacro",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Commander G2 XMacro"
+   "name": "Commander G2 XMacro"
   },
   {
    "slug": "mischief-machine-com-g2-xxl",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Commander G2 XXL"
+   "name": "Commander G2 XXL"
   },
   {
    "slug": "night-fision-ors-night-sights-240-p365",
    "category": "sight",
    "brand": "Night Fision",
-   "name": "Night Fision Optics Ready Stealth Night Sights for Sig P365 (.240/.238)"
+   "name": "Optics Ready Stealth Night Sights .240/.238"
   },
   {
    "slug": "night-fision-ors-night-sights-289-p365",
    "category": "sight",
    "brand": "Night Fision",
-   "name": "Night Fision Optics Ready Stealth Night Sights for Sig P365 (.289/.287)"
+   "name": "Optics Ready Stealth Night Sights .289/.287"
   },
   {
    "slug": "norsso-barracuda-edc-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Barracuda EDC"
+   "name": "P365 FUSE Barracuda EDC"
   },
   {
    "slug": "norsso-bentham-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Bentham"
+   "name": "P365 Bentham"
   },
   {
    "slug": "norsso-bentham-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Bentham"
+   "name": "P365 XL Bentham"
   },
   {
    "slug": "norsso-n365-cport",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso N365 3.1\" C Port Barrel"
+   "name": "N365 C Port Barrel"
   },
   {
    "slug": "norsso-n365-fuse-cport",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso N365-FUSE 4.3\" 9mm C Port Barrel"
+   "name": "N365-FUSE C Port Barrel"
   },
   {
    "slug": "norsso-n365-fuse-eport",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso N365-FUSE 4.3\" 9mm E Port Barrel"
+   "name": "N365-FUSE E Port Barrel"
   },
   {
    "slug": "norsso-n365xl-cport",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso N365XL 3.7\" C Port Barrel"
+   "name": "N365XL C Port Barrel"
   },
   {
    "slug": "norsso-p365-fuse-standard",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE 4.3\" Standard Barrel, LVL1.5"
+   "name": "P365 FUSE LVL1.5 Standard Barrel"
   },
   {
    "slug": "norsso-p365-standard-lvl1-5",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso P365 3.1\" LVL1.5 Standard Barrel"
+   "name": "P365 LVL1.5 Standard Barrel"
   },
   {
    "slug": "norsso-p365-threaded-lvl1-5",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso P365 3.1\" LVL1.5 Threaded Barrel"
+   "name": "P365 LVL1.5 Threaded Barrel"
   },
   {
    "slug": "norsso-p365-xl-standard-lvl1-5",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso P365-XL/XMACRO 3.7\" LVL1.5 Standard Barrel"
+   "name": "P365 XL LVL1.5 Standard Barrel"
   },
   {
    "slug": "norsso-p365-xl-threaded-lvl1-5",
    "category": "barrel",
    "brand": "Norsso",
-   "name": "Norsso P365-XL/XMACRO 3.7\" LVL1.5 Threaded Barrel"
+   "name": "P365 XL LVL1.5 Threaded Barrel"
   },
   {
    "slug": "norsso-piranha-cport-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Piranha C"
+   "name": "P365 FUSE Piranha C"
   },
   {
    "slug": "norsso-rail-cport-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Rail C"
+   "name": "P365 XL Rail C"
   },
   {
    "slug": "norsso-rail-edc-cport-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Rail EDC C"
+   "name": "P365 Rail EDC C"
   },
   {
    "slug": "norsso-rail-edc-cport-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Rail EDC C"
+   "name": "P365 XL Rail EDC C"
   },
   {
    "slug": "norsso-rail-edc-n365dg-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365DG Rail EDC"
+   "name": "N365DG Rail EDC"
   },
   {
    "slug": "norsso-rail-edc-n365dg-xp-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365DG Rail EDC XP"
+   "name": "N365DG Rail EDC XP"
   },
   {
    "slug": "norsso-rail-edc-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Rail EDC"
+   "name": "P365 Rail EDC"
   },
   {
    "slug": "norsso-rail-edc-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Rail EDC"
+   "name": "P365 FUSE Rail EDC"
   },
   {
    "slug": "norsso-rail-edc-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Rail EDC"
+   "name": "P365 XL Rail EDC"
   },
   {
    "slug": "norsso-rail-kp-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Rail KP"
+   "name": "P365 FUSE Rail KP"
   },
   {
    "slug": "norsso-rail-n365dg-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365DG Rail"
+   "name": "N365DG Rail"
   },
   {
    "slug": "norsso-rail-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Rail"
+   "name": "P365 XL Rail"
   },
   {
    "slug": "norsso-reptile-cport-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Reptile C"
+   "name": "P365 Reptile C"
   },
   {
    "slug": "norsso-reptile-cport-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Reptile C"
+   "name": "P365 FUSE Reptile C"
   },
   {
    "slug": "norsso-reptile-cport-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Reptile C"
+   "name": "P365 XL Reptile C"
   },
   {
    "slug": "norsso-reptile-edc-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Reptile EDC"
+   "name": "P365 Reptile EDC"
   },
   {
    "slug": "norsso-reptile-edc-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Reptile EDC"
+   "name": "P365 FUSE Reptile EDC"
   },
   {
    "slug": "norsso-reptile-edc-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Reptile EDC"
+   "name": "P365 XL Reptile EDC"
   },
   {
    "slug": "norsso-reptile-kp-p365-fuse",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365-FUSE Reptile KP"
+   "name": "P365 FUSE Reptile KP"
   },
   {
    "slug": "norsso-reptile-n365dg-xp-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365DG Reptile XP"
+   "name": "N365DG Reptile XP"
   },
   {
    "slug": "norsso-reptile-og-n365dg-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365DG Reptile OG"
+   "name": "N365DG Reptile OG"
   },
   {
    "slug": "norsso-reptile-og-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Reptile OG"
+   "name": "P365 Reptile OG"
   },
   {
    "slug": "norsso-reptile-og-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Reptile OG"
+   "name": "P365 XL Reptile OG"
   },
   {
    "slug": "norsso-spec-ops-bull-barrel-ported-set-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365XL Bull Barrel Spec Ops Ported Set"
+   "name": "N365XL Bull Barrel Spec Ops Ported Set"
   },
   {
    "slug": "norsso-spec-ops-cport-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Spec Ops C"
+   "name": "P365 Spec Ops C"
   },
   {
    "slug": "norsso-spec-ops-cport-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Spec Ops C"
+   "name": "P365 XL Spec Ops C"
   },
   {
    "slug": "norsso-spec-ops-n365dg-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso N365DG Spec Ops"
+   "name": "N365DG Spec Ops"
   },
   {
    "slug": "norsso-spec-ops-p365",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365 Spec Ops"
+   "name": "P365 Spec Ops"
   },
   {
    "slug": "norsso-spec-ops-p365-xl",
    "category": "slide",
    "brand": "Norsso",
-   "name": "Norsso P365XL Spec Ops"
+   "name": "P365 XL Spec Ops"
   },
   {
    "slug": "olight-baldr-mini",
@@ -888,13 +888,13 @@
    "slug": "olight-pl-x-gl",
    "category": "light",
    "brand": "Olight",
-   "name": "PL X GL"
+   "name": "PL-X GL"
   },
   {
    "slug": "osight-3moa",
    "category": "optic",
    "brand": "Olight",
-   "name": "Osight 3 MOA"
+   "name": "Osight"
   },
   {
    "slug": "osight-c",
@@ -954,109 +954,109 @@
    "slug": "pmm-tbarrel-comp-p365",
    "category": "compensator",
    "brand": "Parker Mountain Machine",
-   "name": "PMM P365 Compensator"
+   "name": "P365 Compensator"
   },
   {
    "slug": "pmm-tbarrel-comp-p365xl",
    "category": "compensator",
    "brand": "Parker Mountain Machine",
-   "name": "PMM P365XL Compensator"
+   "name": "P365 XL Compensator"
   },
   {
    "slug": "radian-backstrap-magwell-p365xmacro",
    "category": "magwell",
    "brand": "Radian Weapons",
-   "name": "Radian Weapons Backstrap + Magwell Combo for Sig P365 XMACRO"
+   "name": "Backstrap + Magwell Combo"
   },
   {
    "slug": "radian-ramjet-afterburner-p365-comp",
    "category": "compensator",
    "brand": "Radian Weapons",
-   "name": "Radian Ramjet + Afterburner Compensator P365"
+   "name": "Ramjet + Afterburner P365"
   },
   {
    "slug": "radian-ramjet-afterburner-p365-xl-comp",
    "category": "compensator",
    "brand": "Radian Weapons",
-   "name": "Radian Ramjet + Afterburner Compensator P365XL"
+   "name": "Ramjet + Afterburner P365 XL"
   },
   {
    "slug": "radian-tru17-basepad-p365xmacro",
    "category": "basepad",
    "brand": "Radian Weapons",
-   "name": "Radian TRU-17 Magazine Base Pad (2-Pack)"
+   "name": "TRU-17 Basepad"
   },
   {
    "slug": "ramm-tactical-leverage-trigger-p365",
    "category": "trigger",
    "brand": "Ramm Tactical",
-   "name": "Ramm Tactical Leverage P365"
+   "name": "Leverage Trigger"
   },
   {
    "slug": "shalotek-flex-magwell-p365",
    "category": "magwell",
    "brand": "Shalotek",
-   "name": "ShaloTek FLEX Magwell"
+   "name": "FLEX Magwell"
   },
   {
    "slug": "shalotek-p365-flex-xlr-12",
    "category": "frame",
    "brand": "Shalotek",
-   "name": "Shalotek FLEX XLR-12 Grip Module"
+   "name": "FLEX XLR-12"
   },
   {
    "slug": "shalotek-p365-flex-xlr-17",
    "category": "frame",
    "brand": "Shalotek",
-   "name": "Shalotek FLEX XLR-17 Grip Module"
+   "name": "FLEX XLR-17"
   },
   {
    "slug": "shalotek-p365-flex-xr-10",
    "category": "frame",
    "brand": "Shalotek",
-   "name": "Shalotek FLEX XR-10 Grip Module"
+   "name": "FLEX XR-10"
   },
   {
    "slug": "shalotek-p365-flex-xr-17",
    "category": "frame",
    "brand": "Shalotek",
-   "name": "Shalotek FLEX XR-17 Grip Module"
+   "name": "FLEX XR-17"
   },
   {
    "slug": "shalotek-p365-flex-xxlr-17",
    "category": "frame",
    "brand": "Shalotek",
-   "name": "Shalotek FLEX XXLR-17 Grip Module"
+   "name": "FLEX XXLR-17"
   },
   {
    "slug": "sharps-bros-p365-m01",
    "category": "frame",
    "brand": "Sharps Bros",
-   "name": "Sharps Bros P365X/ P365XL M01"
+   "name": "M01"
   },
   {
    "slug": "sharps-bros-p365-m05-g3",
    "category": "frame",
    "brand": "Sharps Bros",
-   "name": "Sharps Bros P365 X-Macro M05 G3"
+   "name": "M05 G3"
   },
   {
    "slug": "sig-sauer-curved-p365",
    "category": "trigger",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Curved P365"
+   "name": "P365 Curved Trigger"
   },
   {
    "slug": "sig-sauer-extended-slide-catch-lever-black-p365",
    "category": "slide_release",
    "brand": "Sig Sauer",
-   "name": "P365 EXTENDED SLIDE CATCH LEVER-BLACK"
+   "name": "P365 Extended Slide Catch Lever"
   },
   {
    "slug": "sig-sauer-flat-oem-p365",
    "category": "trigger",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Flat OEM P365"
+   "name": "P365 Flat Trigger"
   },
   {
    "slug": "sig-sauer-foxtrot1x",
@@ -1074,19 +1074,19 @@
    "slug": "sig-sauer-mag-funnel-p365xmacro",
    "category": "magwell",
    "brand": "Sig Sauer",
-   "name": "SIG SAUER P365-XMACRO Magazine Funnel - Black"
+   "name": "P365 XMacro Magazine Funnel"
   },
   {
    "slug": "sig-sauer-manual-safety-kit-p365",
    "category": "safety_selector",
    "brand": "Sig Sauer",
-   "name": "SIG SAUER P365X Manual Safety Controls Parts Kit"
+   "name": "P365X Manual Safety Controls Parts Kit"
   },
   {
    "slug": "sig-sauer-manual-safety-parts-kit-black-p365",
    "category": "safety_selector",
    "brand": "Sig Sauer",
-   "name": "P365 MANUAL SAFETY PARTS KIT - BLACK"
+   "name": "P365 Manual Safety Parts Kit"
   },
   {
    "slug": "sig-sauer-p365-10rd-finger-ext-mag",
@@ -1104,7 +1104,7 @@
    "slug": "sig-sauer-p365-17rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
-   "name": "P365 9mm 17rd Magazine (All 9mm Models)"
+   "name": "P365 9mm 17rd Magazine"
   },
   {
    "slug": "sig-sauer-p365-21rd-mag",
@@ -1116,151 +1116,151 @@
    "slug": "sig-sauer-p365-axg-legion-17rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
-   "name": "P365-AXG LEGION 9mm 17rd Magazine"
+   "name": "P365 AXG Legion 9mm 17rd Magazine"
   },
   {
    "slug": "sig-sauer-p365-fuse-xmacro-gm-oem",
    "category": "frame",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer P365 Fuse/X-Macro OEM"
+   "name": "P365 FUSE Grip Module"
   },
   {
    "slug": "sig-sauer-p365-gm-oem",
    "category": "frame",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer P365 OEM"
+   "name": "P365 Grip Module"
   },
   {
    "slug": "sig-sauer-p365-x-xl-10rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
-   "name": "P365X/XL 9mm 10rd Flush Magazine"
+   "name": "P365 XL 9mm 10rd Magazine"
   },
   {
    "slug": "sig-sauer-p365-x-xl-12rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
-   "name": "P365/X/XL 9mm 12rd Magazine"
+   "name": "P365 9mm 12rd Magazine"
   },
   {
    "slug": "sig-sauer-p365-x-xl-15rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
-   "name": "P365/X/XL 9mm 15rd Magazine"
+   "name": "P365 9mm 15rd Magazine"
   },
   {
    "slug": "sig-sauer-p365-xl-gm-oem",
    "category": "frame",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer P365 XL OEM"
+   "name": "P365 XL Grip Module"
   },
   {
    "slug": "sig-sauer-p365-xmacro-10rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
-   "name": "P365-XMACRO 9mm 10rd Magazine"
+   "name": "P365 XMacro 9mm 10rd Magazine"
   },
   {
    "slug": "sig-sauer-p365-xmacro-gm-oem",
    "category": "frame",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer P365 X-Macro OEM"
+   "name": "P365 XMacro Grip Module"
   },
   {
    "slug": "sig-sauer-romeo-m17",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo-M17"
+   "name": "Romeo-M17"
   },
   {
    "slug": "sig-sauer-romeo-mdc",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo MDC"
+   "name": "Romeo MDC"
   },
   {
    "slug": "sig-sauer-romeo-rs-compact",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo RS Compact"
+   "name": "Romeo RS Compact"
   },
   {
    "slug": "sig-sauer-romeo-rs-pro",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo RS Pro"
+   "name": "Romeo RS Pro"
   },
   {
    "slug": "sig-sauer-romeo-x-compact",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo X-Compact"
+   "name": "Romeo-X Compact"
   },
   {
    "slug": "sig-sauer-romeo-x-enclosed-compact",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo-X Enclosed Compact"
+   "name": "Romeo-X Enclosed Compact"
   },
   {
    "slug": "sig-sauer-romeo-x-enclosed-pro",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo-X Enclosed Pro"
+   "name": "Romeo-X Enclosed Pro"
   },
   {
    "slug": "sig-sauer-romeo-x-pro",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo-X Pro"
+   "name": "Romeo-X Pro"
   },
   {
    "slug": "sig-sauer-romeo-x-sigloc-compact",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo-X SIG-LOC Compact"
+   "name": "Romeo-X SIG-LOC Compact"
   },
   {
    "slug": "sig-sauer-romeo-x-sigloc-pro",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo-X SIG-LOC PRO"
+   "name": "Romeo-X SIG-LOC Pro"
   },
   {
    "slug": "sig-sauer-romeo1pro",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo1Pro"
+   "name": "Romeo1Pro"
   },
   {
    "slug": "sig-sauer-romeo2",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo2"
+   "name": "Romeo2"
   },
   {
    "slug": "sig-sauer-romeo2-large-shroud",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo2 Large Shroud"
+   "name": "Romeo2 Large Shroud"
   },
   {
    "slug": "sig-sauer-romeo3pro",
    "category": "optic",
    "brand": "Sig Sauer",
-   "name": "Sig Sauer Romeo3Pro"
+   "name": "Romeo3Pro"
   },
   {
    "slug": "springer-precision-3-mag-extension-p365xmacro",
    "category": "basepad",
    "brand": "Springer Precision",
-   "name": "+3 Magazine Extension for Sig Sauer X Macro 17rd Mags"
+   "name": "+3 Magazine Extension"
   },
   {
    "slug": "springer-precision-carry-basepad-p365xmacro",
    "category": "basepad",
    "brand": "Springer Precision",
-   "name": "Carry Basepad for Sig Sauer - P365 X-Macro"
+   "name": "Carry Basepad"
   },
   {
    "slug": "streamlight-tlr-1-hl",
@@ -1326,25 +1326,25 @@
    "slug": "strike-industries-mag-release-p365",
    "category": "mag_release",
    "brand": "Strike Industries",
-   "name": "Strike Industries Magazine Release for SIG SAUER P365"
+   "name": "P365 Magazine Release"
   },
   {
    "slug": "strike-industries-mag-release-p365-xmacro",
    "category": "mag_release",
    "brand": "Strike Industries",
-   "name": "Strike Industries Mag Release for SIG P365 XMACRO"
+   "name": "P365 XMacro Magazine Release"
   },
   {
    "slug": "strike-industries-p365-gm",
    "category": "frame",
    "brand": "Strike Industries",
-   "name": "Strike Industries SIG P365/365XL Enhanced Grip Module"
+   "name": "Enhanced Grip Module"
   },
   {
    "slug": "surefire-x300t-a-turbo",
    "category": "light",
    "brand": "SureFire",
-   "name": "X300T-A (Turbo)"
+   "name": "X300T-A Turbo"
   },
   {
    "slug": "surefire-x300u-a",
@@ -1362,7 +1362,7 @@
    "slug": "surefire-xc3",
    "category": "light",
    "brand": "SureFire",
-   "name": "XC3 (XC3-A)"
+   "name": "XC3"
   },
   {
    "slug": "surefire-xc3-sub",
@@ -1374,295 +1374,295 @@
    "slug": "tactical-development-dual-flat-face-p365",
    "category": "trigger",
    "brand": "Tactical Development",
-   "name": "Tactical Development Enhanced Dual Flat Faced"
+   "name": "Enhanced Dual Flat Faced Trigger"
   },
   {
    "slug": "tactical-development-pro-ledge-tar-p365xmacro",
    "category": "other",
    "brand": "Tactical Development",
-   "name": "Pro Ledge TAR for Sig P365 xMacro"
+   "name": "Pro Ledge TAR"
   },
   {
    "slug": "tactical-development-pro-ledge-tlr7-sub-1913-p365",
    "category": "other",
    "brand": "Tactical Development",
-   "name": "Pro Ledge for TLR7 SUB-1913"
+   "name": "Pro Ledge TLR7 Sub 1913"
   },
   {
    "slug": "tag-precision-optic-ready-sights-p365",
    "category": "sight",
    "brand": "TAG Precision",
-   "name": "TAG Precision SIG P365 Optic Ready Sights"
+   "name": "Optic Ready Sights"
   },
   {
    "slug": "tag-precision-tactical-sights-p365",
    "category": "sight",
    "brand": "TAG Precision",
-   "name": "TAG Precision SIG P365 Tactical Sights"
+   "name": "Tactical Sights"
   },
   {
    "slug": "timber-creek-extended-mag-release-p365",
    "category": "mag_release",
    "brand": "Timber Creek Outdoors",
-   "name": "Timber Creek Sig Sauer P365 Extended Magazine Release"
+   "name": "Extended Magazine Release"
   },
   {
    "slug": "true-precision-axiom-p365",
    "category": "slide",
    "brand": "True Precision",
-   "name": "True Precision Axiom P365"
+   "name": "Axiom P365"
   },
   {
    "slug": "true-precision-axiom-p365-xl",
    "category": "slide",
    "brand": "True Precision",
-   "name": "True Precision Axiom P365XL"
+   "name": "Axiom P365 XL"
   },
   {
    "slug": "true-precision-flat-p365",
    "category": "trigger",
    "brand": "True Precision",
-   "name": "True Precision Flat P365"
+   "name": "Flat Trigger"
   },
   {
    "slug": "true-precision-magwell-p365xmacro",
    "category": "magwell",
    "brand": "True Precision",
-   "name": "True Precision Stainless Steel Magwell for Sig Sauer P365 XMacro & FUSE"
+   "name": "Magwell"
   },
   {
    "slug": "true-precision-p365-fuse",
    "category": "slide",
    "brand": "True Precision",
-   "name": "True Precision P365-FUSE"
+   "name": "P365 FUSE Slide"
   },
   {
    "slug": "true-precision-p365-fuse-non-threaded",
    "category": "barrel",
    "brand": "True Precision",
-   "name": "True Precision P365 Fuse 4.3\" Non-Threaded Barrels"
+   "name": "P365 FUSE Non-Threaded Barrel"
   },
   {
    "slug": "true-precision-p365-fuse-threaded",
    "category": "barrel",
    "brand": "True Precision",
-   "name": "True Precision P365 Fuse 4.3\" Threaded Barrels"
+   "name": "P365 FUSE Threaded Barrel"
   },
   {
    "slug": "true-precision-p365-non-threaded",
    "category": "barrel",
    "brand": "True Precision",
-   "name": "True Precision P365 3.1\" Non-Threaded Barrels"
+   "name": "P365 Non-Threaded Barrel"
   },
   {
    "slug": "true-precision-p365-threaded",
    "category": "barrel",
    "brand": "True Precision",
-   "name": "True Precision P365 3.1\" Threaded Barrels"
+   "name": "P365 Threaded Barrel"
   },
   {
    "slug": "true-precision-p365-xl-non-threaded",
    "category": "barrel",
    "brand": "True Precision",
-   "name": "True Precision P365XL 3.7\" Non-Threaded Barrels"
+   "name": "P365 XL Non-Threaded Barrel"
   },
   {
    "slug": "true-precision-p365-xl-threaded",
    "category": "barrel",
    "brand": "True Precision",
-   "name": "True Precision P365XL 3.7\" Threaded Barrels"
+   "name": "P365 XL Threaded Barrel"
   },
   {
    "slug": "true-precision-slide-cap-p365",
    "category": "slide_plate",
    "brand": "True Precision",
-   "name": "True Precision Stainless Steel Slide Cap Textured Back Plate"
+   "name": "Textured Slide Cap"
   },
   {
    "slug": "true-precision-stainless-mag-release-p365",
    "category": "mag_release",
    "brand": "True Precision",
-   "name": "True Precision Stainless Steel Extended Magazine Release for Sig Sauer ALL P365"
+   "name": "Extended Magazine Release"
   },
   {
    "slug": "true-precision-tl-comp-p365",
    "category": "compensator",
    "brand": "True Precision",
-   "name": "True Precision True-Lock Compensator P365"
+   "name": "True-Lock Compensator"
   },
   {
    "slug": "tti-xmacro-completed-mag-w-basepad",
    "category": "magazine",
    "brand": "Taran Tactical Innovations",
-   "name": "TTI SIG X-MACRO Completed Magazine w/ Versatile Basepad"
+   "name": "P365 XMacro 9mm 20rd Magazine"
   },
   {
    "slug": "tyrant-cnc-baseplate-p365xmacro",
    "category": "basepad",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 XMacro Base Plate"
+   "name": "XMacro Base Plate"
   },
   {
    "slug": "tyrant-cnc-ext-slide-catch-p365",
    "category": "slide_release",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 Extended Slide Catch Lever"
+   "name": "Extended Slide Catch Lever"
   },
   {
    "slug": "tyrant-cnc-extended-mag-release-p365",
    "category": "mag_release",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 Extended Magazine Release"
+   "name": "Extended Magazine Release"
   },
   {
    "slug": "tyrant-cnc-intellifire-p365",
    "category": "trigger",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 Intellifire Trigger"
+   "name": "Intellifire Trigger"
   },
   {
    "slug": "tyrant-cnc-mag-ext-p365xmacro-plus3",
    "category": "basepad",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 XMacro +3 Magazine Extension"
+   "name": "+3 Magazine Extension"
   },
   {
    "slug": "tyrant-cnc-magwell-p365xmacro",
    "category": "magwell",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC Sig Sauer P365 XMacro Magwell"
+   "name": "P365 XMacro Magwell"
   },
   {
    "slug": "tyrant-cnc-p365-sn-gm",
    "category": "frame",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 Snub Nose"
+   "name": "Snub Nose Grip Module"
   },
   {
    "slug": "tyrant-cnc-p365-xmacro-gm",
    "category": "frame",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 XMacro"
+   "name": "P365 XMacro Grip Module"
   },
   {
    "slug": "tyrant-cnc-safety-selector-p365",
    "category": "safety_selector",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC P365 Safety Selector"
+   "name": "Safety Selector"
   },
   {
    "slug": "tyrant-cnc-slide-cap-p365",
    "category": "slide_plate",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC Sig Sauer P365 Slide Cap"
+   "name": "Slide Cap"
   },
   {
    "slug": "tyrant-cnc-takedown-lever-p365",
    "category": "takedown_lever",
    "brand": "Tyrant CNC",
-   "name": "Tyrant CNC SIG SAUER P365 Takedown Lever"
+   "name": "Takedown Lever"
   },
   {
    "slug": "vortex-defender-ccw",
    "category": "optic",
    "brand": "Vortex",
-   "name": "Vortex Defender CCW"
+   "name": "Defender CCW"
   },
   {
    "slug": "vortex-defender-ccw-enclosed",
    "category": "optic",
    "brand": "Vortex",
-   "name": "Vortex Defender CCW Enclosed"
+   "name": "Defender CCW Enclosed"
   },
   {
    "slug": "vortex-defender-st",
    "category": "optic",
    "brand": "Vortex",
-   "name": "Vortex Defender ST"
+   "name": "Defender ST"
   },
   {
    "slug": "vortex-defender-st-enclosed",
    "category": "optic",
    "brand": "Vortex",
-   "name": "Vortex Defender ST Enclosed"
+   "name": "Defender ST Enclosed"
   },
   {
    "slug": "vortex-defender-xl",
    "category": "optic",
    "brand": "Vortex",
-   "name": "Vortex Defender XL"
+   "name": "Defender XL"
   },
   {
    "slug": "vortex-venom-enclosed",
    "category": "optic",
    "brand": "Vortex",
-   "name": "Vortex Venom Enclosed"
+   "name": "Venom Enclosed"
   },
   {
    "slug": "wilson-combat-wcp365",
    "category": "frame",
    "brand": "Wilson Combat",
-   "name": "Wilson Combat WCP365 Grip Module"
+   "name": "WCP365"
   },
   {
    "slug": "wilson-combat-wcp365-xl",
    "category": "frame",
    "brand": "Wilson Combat",
-   "name": "Wilson Combat WCP365 XL Grip Module"
+   "name": "WCP365 XL"
   },
   {
    "slug": "wilson-combat-wcp365-xmacro",
    "category": "frame",
    "brand": "Wilson Combat",
-   "name": "Wilson Combat WCP365 XMacro Grip Module"
+   "name": "WCP365 XMacro"
   },
   {
    "slug": "wilson-combat-wcp365-xmacro-sg",
    "category": "frame",
    "brand": "Wilson Combat",
-   "name": "Wilson Combat WCP365 XMacro Short Grip Module"
+   "name": "WCP365 XMacro Short"
   },
   {
    "slug": "zaffiri-p365-flush-crown",
    "category": "barrel",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision P365 Flush & Crown Barrel"
+   "name": "P365 Flush & Crown Barrel"
   },
   {
    "slug": "zaffiri-p365-threaded",
    "category": "barrel",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision P365 Threaded Barrel"
+   "name": "P365 Threaded Barrel"
   },
   {
    "slug": "zaffiri-p365-xl-flush-crown",
    "category": "barrel",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision P365XL Flush & Crown Barrel"
+   "name": "P365 XL Flush & Crown Barrel"
   },
   {
    "slug": "zaffiri-p365-xl-ported",
    "category": "barrel",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision P365XL Ported Barrel"
+   "name": "P365 XL Ported Barrel"
   },
   {
    "slug": "zaffiri-p365-xl-threaded",
    "category": "barrel",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision P365XL Threaded Barrel"
+   "name": "P365 XL Threaded Barrel"
   },
   {
    "slug": "zaffiri-zps2-p365-xl",
    "category": "slide",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision ZPS.2 P365XL"
+   "name": "ZPS.2 P365 XL"
   },
   {
    "slug": "zaffiri-zpsp-p365-xl",
    "category": "slide",
    "brand": "Zaffiri Precision",
-   "name": "Zaffiri Precision ZPS.P Ported P365XL"
+   "name": "ZPS.P Ported P365 XL"
   }
  ]
 }

@@ -1,20 +1,23 @@
 // display-name — what a product is CALLED on a page. BROWSER copy.
 // ─────────────────────────────────────────────────────────────────────────
 // netlify/functions/_display-name.mjs is the server copy, and its header
-// holds the reasoning: products.name carries the brand only when the maker
-// writes it that way, so every page prints displayProductName() —
-// "{brand} {name}" unless the name already carries the brand — and never
-// the stored name. The two are duplicated because these pages load plain
+// holds the reasoning: products.name is the model alone, the brand is
+// manufacturers.name, and a page prints displayProductName() (brand + ' '
+// + name) or the { brand, model } pair from displayProductParts() — never
+// the stored name, never brand + name assembled by hand. The one rule the
+// pair still applies is for a FROZEN name — a build's parts_snapshot, a
+// typed part — that opens with its brand: one leading brand form is
+// stripped. The two files are duplicated because these pages load plain
 // <script> globals with no module loader — the same split as
 // js/maker-link.js ↔ _maker-link.mjs. scripts/display-name.test.mjs runs
 // both over every live product name and fails the deploy if they differ
 // by a character, so change them together, and keep the bodies below
 // identical to the server's line for line.
 //
-// Globals: window.displayProductName, window.nameCarriesBrand,
+// Globals: window.displayProductName, window.displayProductParts,
 // window.brandForms, window.hasDoubledBrand, window.BRAND_ALIASES.
 (function (global) {
-  // Aliases the generic rules cannot derive — keyed by the brand in lower
+  // Aliases the generic forms cannot derive — keyed by the brand in lower
   // case, values in lower case. Add a line here AND in _display-name.mjs.
   var BRAND_ALIASES = {
     'maskas precision': ['mpi'],
@@ -23,8 +26,8 @@
   var squash = function (s) { return (s == null ? '' : String(s)).replace(/\s+/g, ' ').trim(); };
   var escapeRe = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
 
-  // The forms a name may START with to count as already branded, lower
-  // case, longest first. Empty for an empty brand.
+  // The forms a frozen name may open with, lower case, longest first.
+  // Empty for an empty brand.
   function brandForms(brand) {
     var b = squash(brand).toLowerCase();
     if (!b) return [];
@@ -40,26 +43,31 @@
     return forms.sort(function (x, y) { return y.length - x.length; });
   }
 
-  // A whole-word match: nothing alphanumeric may follow the form, and when
-  // anchored mid-string nothing alphanumeric may precede it.
-  var startsWithWord = function (text, form) { return new RegExp('^' + escapeRe(form) + '(?![a-z0-9])', 'i').test(text); };
-  var containsWord   = function (text, form) { return new RegExp('(^|[^a-z0-9])' + escapeRe(form) + '(?![a-z0-9])', 'i').test(text); };
+  // `text` opens with `form` as a whole word: a space or the end follows it.
+  var opensWith = function (text, form) { return new RegExp('^' + escapeRe(form) + '(?=\\s|$)', 'i').test(text); };
 
-  function nameCarriesBrand(name, brand) {
-    var n = squash(name);
-    var b = squash(brand).toLowerCase();
-    if (!n || !b) return false;
-    if (brandForms(b).some(function (f) { return startsWithWord(n, f); })) return true;
-    return containsWord(n, b);
-  }
-
-  // { name, brand } → the name a reader sees. Never returns the brand twice.
-  function displayProductName(p) {
+  // { name, brand } → { brand, model }: the two lines a card prints. For a
+  // catalog row `model` IS the stored name; for a frozen snapshot name it
+  // is the name with one leading brand form removed.
+  function displayProductParts(p) {
     var name  = squash(p && p.name);
     var brand = squash(p && p.brand);
-    if (!name) return brand;
-    if (!brand || nameCarriesBrand(name, brand)) return name;
-    return brand + ' ' + name;
+    if (!name || !brand) return { brand: brand, model: name };
+    var forms = brandForms(brand), form = null;
+    for (var i = 0; i < forms.length; i++) { if (opensWith(name, forms[i])) { form = forms[i]; break; } }
+    if (!form) return { brand: brand, model: name };
+    var model = name.slice(form.length).replace(/^[\s\-–—:·|,]+/, '').trim();
+    return { brand: brand, model: model || name };
+  }
+
+  // { name, brand } → the name a reader sees: brand + ' ' + model. A name
+  // that is nothing but its brand ("Olight" / "Olight") is printed once.
+  // Nothing else is collapsed: a frozen name that opened with TWO forms
+  // of its brand loses one and is printed as the maker wrote it.
+  function displayProductName(p) {
+    var np = displayProductParts(p);
+    if (!np.brand || !np.model) return np.brand || np.model;
+    return np.model.toLowerCase() === np.brand.toLowerCase() ? np.brand : np.brand + ' ' + np.model;
   }
 
   // True when `text` opens with two forms of the same brand.
@@ -68,16 +76,16 @@
     var forms = brandForms(brand);
     for (var i = 0; i < forms.length; i++) {
       var first = forms[i];
-      if (!startsWithWord(t, first)) continue;
+      if (!opensWith(t, first)) continue;
       var rest = t.slice(first.length).trim();
-      if (forms.some(function (second) { return startsWithWord(rest, second); })) return true;
+      if (forms.some(function (second) { return opensWith(rest, second); })) return true;
     }
     return false;
   }
 
-  global.BRAND_ALIASES      = BRAND_ALIASES;
-  global.brandForms         = brandForms;
-  global.nameCarriesBrand   = nameCarriesBrand;
-  global.displayProductName = displayProductName;
-  global.hasDoubledBrand    = hasDoubledBrand;
+  global.BRAND_ALIASES       = BRAND_ALIASES;
+  global.brandForms          = brandForms;
+  global.displayProductParts = displayProductParts;
+  global.displayProductName  = displayProductName;
+  global.hasDoubledBrand     = hasDoubledBrand;
 })(window);

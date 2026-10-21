@@ -52,7 +52,7 @@ import { buildUrl, buildIdFromPath } from './_build-url.mjs';
 // never a local copy: scripts/check-categories.mjs fails any file carrying
 // its own category map.
 import { CATEGORY_META } from './_category-meta.mjs';
-import { displayProductName } from './_display-name.mjs';
+import { displayProductName, displayProductParts } from './_display-name.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { CDN_CACHE_BUILD, CDN_CACHE_NO_STORE } from './_cache.mjs';
 import { pgRows, unavailable } from './_pg.mjs';
@@ -457,8 +457,13 @@ function serverPartsHtml(build, productsById) {
     const prod = p.refId ? productsById[p.refId] : null;
     const path = linkedProductPath(prod);
     const meta = prod && CATEGORY_META[prod.category];
-    const nameTxt = (p.name ? String(p.name) : '').replace(/\s+/g, ' ').trim() || 'Unnamed part';
-    const brandTxt = (p.brand ? String(p.brand) : '').replace(/\s+/g, ' ').trim() || 'Unknown brand';
+    // Brand over model, the split every card prints (_display-name.mjs):
+    // the snapshot froze the name at the time of the build, when it could
+    // still carry the brand. gunforma-build-detail.html hydrates the same
+    // two lines.
+    const np = displayProductParts(p);
+    const nameTxt = np.model || 'Unnamed part';
+    const brandTxt = np.brand || 'Unknown brand';
     const variantTxt = p.variantLabel ? String(p.variantLabel) : (p.variant ? String(p.variant) : '');
     return '<div class="part-card"><div class="part-card-top"><div class="part-body">' +
       (meta ? '<div class="part-type">' + esc(meta[2]) + '</div>' : '') +

@@ -1,78 +1,103 @@
-// display-name.test.mjs — pins netlify/functions/_display-name.mjs to the
-// documented rule over the shapes the live catalog actually has (surveyed
-// 2026-10-20: 204 of 277 live names start with their brand; the other 73
-// are the magazines, the Olight / Streamlight / SureFire lights, and a
-// handful of short-form names like "Faxon Exos" and "TTI SIG X-MACRO").
+// display-name.test.mjs — pins netlify/functions/_display-name.mjs and
+// js/display-name.js to the naming convention: products.name is the model
+// alone, the brand is manufacturers.name, and a page prints
+// displayProductName() (brand + ' ' + name) or the { brand, model } pair
+// from displayProductParts(). The convention is the migration
+// 20261021160000_product_naming_convention.sql; the fixture here is the
+// catalog as it reads once that file is applied, and every row of it is
+// held to the convention — a stored name that opens with its brand fails
+// this test before it reaches a page.
 //
-// Every case here fails silently in a browser: a hub row reading "AMAG 15
-// SG9" or "Magpul Magpul AMAG 15 SG9" renders perfectly. So each live shape
-// is pinned by name, and every output is held to never open with the same
-// brand twice.
+// The one rule the pair still applies is for a FROZEN name — a build's
+// parts_snapshot, a part a builder typed — that opens with its brand: one
+// leading brand form is stripped. Every case here fails silently in a
+// browser: a card reading "Sig Sauer" over "Sig Sauer Romeo-X …", or a hub
+// row reading "Magpul Magpul AMAG …", renders perfectly.
 //
 // Run: node --test scripts/display-name.test.mjs
+//      node scripts/display-name.test.mjs --refresh-fixture   (after db push)
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { displayProductName, nameCarriesBrand, brandForms, hasDoubledBrand, BRAND_ALIASES } =
+const { displayProductName, displayProductParts, brandForms, hasDoubledBrand, BRAND_ALIASES } =
   await import(join(ROOT, 'netlify/functions/_display-name.mjs'));
 
-// [brand, stored name, expected display] — live rows first, then the edges.
+// [brand, stored name, expected model, expected display name]
 const CASES = [
-  // The problem: the brand is not in the name.
-  ['Magpul',      'AMAG 15 SG9 P365 9mm 15rd Magazine',        'Magpul AMAG 15 SG9 P365 9mm 15rd Magazine'],
-  ['Sig Sauer',   'P365 9mm 17rd Magazine (All 9mm Models)',   'Sig Sauer P365 9mm 17rd Magazine (All 9mm Models)'],
-  ['Sig Sauer',   'P365-XMACRO 9mm 10rd Magazine',             'Sig Sauer P365-XMACRO 9mm 10rd Magazine'],
-  ['Olight',      'Osight SE',                                 'Olight Osight SE'],
-  ['Holosun',     'P.ID-K',                                    'Holosun P.ID-K'],
-  ['Streamlight', 'TLR-7 HL-X',                                'Streamlight TLR-7 HL-X'],
-  ['SureFire',    'X300T-A (Turbo)',                           'SureFire X300T-A (Turbo)'],
-  ['Armory Craft', 'P365 - AMBI. EXTENDED Safety',             'Armory Craft P365 - AMBI. EXTENDED Safety'],
-  // The name already starts with the full brand — any case.
-  ['Holosun',     'Holosun 507K X2',                           'Holosun 507K X2'],
-  ['Sig Sauer',   'Sig Sauer Romeo-X Pro',                     'Sig Sauer Romeo-X Pro'],
-  ['Sig Sauer',   'SIG SAUER P365 17rd',                       'SIG SAUER P365 17rd'],
-  ['True Precision', 'True Precision Axiom P365',              'True Precision Axiom P365'],
-  // The first word of a multi-word brand is how makers shorten themselves.
-  ['Sig Sauer',   'SIG P365 17rd',                             'SIG P365 17rd'],
-  ['Faxon Firearms', 'Faxon Exos P365 Compensator',            'Faxon Exos P365 Compensator'],
-  ['Radian Weapons', 'Radian Ramjet + Afterburner Compensator P365', 'Radian Ramjet + Afterburner Compensator P365'],
-  ['Timber Creek Outdoors', 'Timber Creek Sig Sauer P365 Extended Magazine Release', 'Timber Creek Sig Sauer P365 Extended Magazine Release'],
-  ['DMP Springs', 'DMP Soft RSA',                              'DMP Soft RSA'],
-  // Initials.
-  ['Taran Tactical Innovations', 'TTI SIG X-MACRO Completed Magazine w/ Versatile Basepad', 'TTI SIG X-MACRO Completed Magazine w/ Versatile Basepad'],
-  ['Parker Mountain Machine', 'PMM P365 Compensator',          'PMM P365 Compensator'],
-  // A listed alias the rules cannot derive.
-  ['MASKAS Precision', 'MPI P365 Single Piece Extended Magazine Release - Macro Frame', 'MPI P365 Single Piece Extended Magazine Release - Macro Frame'],
-  // The full brand anywhere in the name, as whole words.
-  ['Faxon Firearms', 'Exos Compensator by Faxon Firearms',     'Exos Compensator by Faxon Firearms'],
-  // Whole words only: a brand that happens to open a longer word is not a prefix.
-  ['Sig Sauer',   'Signature Grip',                            'Sig Sauer Signature Grip'],
-  ['Olight',      'Olighting Kit',                             'Olight Olighting Kit'],
-  // Another maker's name inside the product name is not this product's brand.
-  ['Springer Precision', 'Carry Basepad for Sig Sauer - P365 X-Macro', 'Springer Precision Carry Basepad for Sig Sauer - P365 X-Macro'],
-  ['Tactical Development', 'Pro Ledge for TLR7 SUB-1913',      'Tactical Development Pro Ledge for TLR7 SUB-1913'],
+  // ── The convention: a catalog row. model IS the name; the display name
+  //    is brand + ' ' + name, nothing else.
+  ['Holosun',        '507K X2',                                 '507K X2',                                 'Holosun 507K X2'],
+  ['Magpul',         'AMAG 15 9mm 15rd Magazine',               'AMAG 15 9mm 15rd Magazine',               'Magpul AMAG 15 9mm 15rd Magazine'],
+  ['Sig Sauer',      'P365 9mm 17rd Magazine',                  'P365 9mm 17rd Magazine',                  'Sig Sauer P365 9mm 17rd Magazine'],
+  ['Sig Sauer',      'Romeo-X SIG-LOC Compact',                 'Romeo-X SIG-LOC Compact',                 'Sig Sauer Romeo-X SIG-LOC Compact'],
+  ['Olight',         'Osight SE',                               'Osight SE',                               'Olight Osight SE'],
+  ['Streamlight',    'TLR-7 HL-X',                              'TLR-7 HL-X',                              'Streamlight TLR-7 HL-X'],
+  ['Herrington Arms', 'P365 XMacro Magwell',                    'P365 XMacro Magwell',                     'Herrington Arms P365 XMacro Magwell'],
+  ['Icarus Precision', '311',                                   '311',                                     'Icarus Precision 311'],
+  // A brand form followed by a HYPHEN is not the brand: True Precision's
+  // True-Lock keeps its "True-".
+  ['True Precision', 'True-Lock Compensator',                   'True-Lock Compensator',                   'True Precision True-Lock Compensator'],
+  // Whole words only: a brand that happens to open a longer word is not a
+  // prefix, and a brand mid-name is left where it is.
+  ['Sig Sauer',      'Signature Grip',                          'Signature Grip',                          'Sig Sauer Signature Grip'],
+  ['Olight',         'Olighting Kit',                           'Olighting Kit',                           'Olight Olighting Kit'],
+  ['Springer Precision', 'Carry Basepad for Sig Sauer - P365 X-Macro', 'Carry Basepad for Sig Sauer - P365 X-Macro', 'Springer Precision Carry Basepad for Sig Sauer - P365 X-Macro'],
+  ['Faxon Firearms', 'Exos Compensator by Faxon Firearms',      'Exos Compensator by Faxon Firearms',      'Faxon Firearms Exos Compensator by Faxon Firearms'],
+  // ── A frozen name (parts_snapshot, a typed part): one leading brand
+  //    form is stripped — the full name, any case …
+  ['Holosun',        'Holosun 507K X2',                         '507K X2',                                 'Holosun 507K X2'],
+  ['Sig Sauer',      'Sig Sauer Romeo-X Enclosed Compact',      'Romeo-X Enclosed Compact',                'Sig Sauer Romeo-X Enclosed Compact'],
+  ['Sig Sauer',      'SIG SAUER P365 17rd',                     'P365 17rd',                               'Sig Sauer P365 17rd'],
+  ['True Precision', 'True Precision Axiom P365',               'Axiom P365',                              'True Precision Axiom P365'],
+  ['ECM/LWS',        'ECM/LWS Collab Ported Barrel',            'Collab Ported Barrel',                    'ECM/LWS Collab Ported Barrel'],
+  // … the first word of a multi-word brand …
+  ['Sig Sauer',      'SIG P365 17rd',                           'P365 17rd',                               'Sig Sauer P365 17rd'],
+  ['Radian Weapons', 'Radian Ramjet + Afterburner Compensator P365', 'Ramjet + Afterburner Compensator P365', 'Radian Weapons Ramjet + Afterburner Compensator P365'],
+  ['DMP Springs',    'DMP Soft RSA',                            'Soft RSA',                                'DMP Springs Soft RSA'],
+  // … its initials …
+  ['Taran Tactical Innovations', 'TTI SIG X-MACRO Completed Magazine w/ Versatile Basepad', 'SIG X-MACRO Completed Magazine w/ Versatile Basepad', 'Taran Tactical Innovations SIG X-MACRO Completed Magazine w/ Versatile Basepad'],
+  ['Parker Mountain Machine', 'PMM P365 Compensator',           'P365 Compensator',                        'Parker Mountain Machine P365 Compensator'],
+  // … or a listed alias.
+  ['MASKAS Precision', 'MPI P365 Single Piece Extended Magazine Release - Macro Frame', 'P365 Single Piece Extended Magazine Release - Macro Frame', 'MASKAS Precision P365 Single Piece Extended Magazine Release - Macro Frame'],
+  // A separator after the brand (and its space) goes with it; a separator
+  // glued to the brand is the hyphen rule above, and stays.
+  ['Holosun',        'Holosun - 507K X2',                       '507K X2',                                 'Holosun 507K X2'],
+  ['Holosun',        'Holosun: 507K X2',                        'Holosun: 507K X2',                        'Holosun Holosun: 507K X2'],
+  // ONE form is stripped, and nothing is edited beyond that: the old
+  // Herrington name doubled its own brand (HA is the initials), a frozen
+  // copy of it still does, and it is printed as the maker wrote it. The
+  // helper never INTRODUCES a double; the assertion below says exactly
+  // that.
+  ['Herrington Arms', 'Herrington Arms HA Magwell for P365 X Macro', 'HA Magwell for P365 X Macro',        'Herrington Arms HA Magwell for P365 X Macro'],
+  ['Sig Sauer',      'Sig Sauer SIG P365',                      'SIG P365',                                'Sig Sauer SIG P365'],
+  // A name that IS the brand keeps it as its model (a card with no second
+  // line is worse) and is printed once as a display name.
+  ['Olight',         'Olight',                                  'Olight',                                  'Olight'],
   // Edges: no brand, no name, stray whitespace, non-strings.
-  [null,          'AMAG 15 SG9',                               'AMAG 15 SG9'],
-  ['',            'AMAG 15 SG9',                               'AMAG 15 SG9'],
-  ['Magpul',      '',                                          'Magpul'],
-  ['Magpul',      null,                                        'Magpul'],
-  ['  Magpul ',   '  AMAG   15  SG9 ',                         'Magpul AMAG 15 SG9'],
-  ['Sig Sauer',   '  Sig  Sauer  P365 17rd ',                  'Sig Sauer P365 17rd'],
+  [null,             'AMAG 15 SG9',                             'AMAG 15 SG9',                             'AMAG 15 SG9'],
+  ['',               'AMAG 15 SG9',                             'AMAG 15 SG9',                             'AMAG 15 SG9'],
+  ['Magpul',         '',                                        '',                                        'Magpul'],
+  ['Magpul',         null,                                      '',                                        'Magpul'],
+  ['  Magpul ',      '  AMAG   15  SG9 ',                       'AMAG 15 SG9',                             'Magpul AMAG 15 SG9'],
+  ['Sig Sauer',      '  Sig  Sauer  P365 17rd ',                'P365 17rd',                               'Sig Sauer P365 17rd'],
 ];
 
-for (const [brand, name, expected] of CASES) {
-  test(`displayProductName(${JSON.stringify(brand)}, ${JSON.stringify(name)}) → ${JSON.stringify(expected)}`, () => {
-    assert.equal(displayProductName({ brand, name }), expected);
-    assert.equal(hasDoubledBrand(displayProductName({ brand, name }), brand), false, 'the brand is never doubled');
+for (const [brand, name, model, shown] of CASES) {
+  test(`displayProductParts / displayProductName(${JSON.stringify(brand)}, ${JSON.stringify(name)})`, () => {
+    assert.deepEqual(displayProductParts({ brand, name }), { brand: (brand || '').trim().replace(/\s+/g, ' '), model });
+    assert.equal(displayProductName({ brand, name }), shown);
+    assert.equal(hasDoubledBrand(shown, brand), hasDoubledBrand(name, brand), 'the helper never introduces a doubled brand: ' + shown);
   });
 }
 
-test('displayProductName tolerates a missing object', () => {
+test('both helpers tolerate a missing object', () => {
   assert.equal(displayProductName(null), '');
   assert.equal(displayProductName({}), '');
+  assert.deepEqual(displayProductParts(null), { brand: '', model: '' });
+  assert.deepEqual(displayProductParts({}), { brand: '', model: '' });
 });
 
 test('brandForms: full brand, first word, initials, aliases — longest first, lower case', () => {
@@ -88,18 +113,8 @@ test('brandForms: full brand, first word, initials, aliases — longest first, l
   }
 });
 
-test('nameCarriesBrand: the decision alone', () => {
-  assert.equal(nameCarriesBrand('AMAG 15 SG9', 'Magpul'), false);
-  assert.equal(nameCarriesBrand('Magpul AMAG 15 SG9', 'Magpul'), true);
-  assert.equal(nameCarriesBrand('TTI SIG X-MACRO', 'Taran Tactical Innovations'), true);
-  assert.equal(nameCarriesBrand('TTI SIG X-MACRO', 'Sig Sauer'), false, 'a brand mid-name that is not the full brand does not count');
-  assert.equal(nameCarriesBrand('Made by Sig Sauer', 'Sig Sauer'), true);
-  assert.equal(nameCarriesBrand('', 'Sig Sauer'), false);
-  assert.equal(nameCarriesBrand('P365', ''), false);
-});
-
-// The guard the wire check reuses. It must catch every doubled shape the
-// rule could have produced, and pass every correct one.
+// The guard the wire check reuses. It must catch every doubled shape a
+// stored name could take, and pass every correct one.
 test('hasDoubledBrand catches a brand opening twice in any two of its forms', () => {
   for (const [text, brand] of [
     ['Magpul Magpul AMAG 15 SG9', 'Magpul'],
@@ -108,26 +123,30 @@ test('hasDoubledBrand catches a brand opening twice in any two of its forms', ()
     ['Radian Weapons Radian Ramjet', 'Radian Weapons'],
     ['Taran Tactical Innovations TTI SIG X-MACRO', 'Taran Tactical Innovations'],
     ['MASKAS Precision MPI P365', 'MASKAS Precision'],
+    ['Herrington Arms HA Magwell', 'Herrington Arms'],
   ]) assert.equal(hasDoubledBrand(text, brand), true, text);
   for (const [text, brand] of [
     ['Magpul AMAG 15 SG9', 'Magpul'],
-    ['Sig Sauer P365 9mm 17rd Magazine (All 9mm Models)', 'Sig Sauer'],
-    ['Timber Creek Sig Sauer P365 Extended Magazine Release', 'Timber Creek Outdoors'],
+    ['Sig Sauer P365 9mm 17rd Magazine', 'Sig Sauer'],
+    ['Sig Sauer Romeo-X SIG-LOC Compact', 'Sig Sauer'],
+    ['True Precision True-Lock Compensator', 'True Precision'],
+    ['Timber Creek Outdoors Sig Sauer P365 Extended Magazine Release', 'Timber Creek Outdoors'],
     ['Springer Precision Carry Basepad for Sig Sauer - P365 X-Macro', 'Springer Precision'],
     ['Sig Sauer Signature Grip', 'Sig Sauer'],
     ['', 'Magpul'],
   ]) assert.equal(hasDoubledBrand(text, brand), false, text);
 });
 
-// ── the browser copy ──────────────────────────────────────────────────────
-// js/display-name.js is the same rule as a plain <script> global, for the
-// picker, the build page, the catalog and the profile. Same split as
-// js/maker-link.js ↔ _maker-link.mjs, same test shape: run both copies over
-// the same inputs and fail if they disagree on ANY of them. The inputs are
-// every case above, every live product (scripts/fixtures/product-names.json,
-// the catalog as read with the public key — refresh it with
-// `node scripts/display-name.test.mjs --refresh-fixture`), and a fuzz over
-// the pieces those names are made of. scripts/check-routes.mjs runs the
+// ── the fixture, and the browser copy ────────────────────────────────────
+// scripts/fixtures/product-names.json is the live catalog as read with the
+// public key once the naming migration is applied — refresh it with
+// `node scripts/display-name.test.mjs --refresh-fixture` after `db push`
+// and expect no diff. js/display-name.js is the same rule as a plain
+// <script> global, for the picker, the build page, the catalog and the
+// profile. Same split as js/maker-link.js ↔ _maker-link.mjs, same test
+// shape: both copies over the same inputs — every case above, every
+// fixture row, and a fuzz over the pieces those names are made of — and
+// fail if they disagree on ANY of them. scripts/check-routes.mjs runs the
 // same comparison over the live catalog on every scheduled run, so a
 // product added after the fixture was captured is covered there.
 import { readFile, writeFile } from 'node:fs/promises';
@@ -166,33 +185,31 @@ test('the fixture is the live catalog shape: slug, category, brand, name on ever
   }
 });
 
+test('the convention holds on every fixture row: the stored name is the model alone, and the display name is brand + name', () => {
+  for (const p of fixture.products) {
+    assert.ok(p.brand, `${p.slug} has a brand`);
+    assert.equal(displayProductParts(p).model, p.name, `${p.slug}: "${p.name}" opens with a form of its brand "${p.brand}" — rename the product, not the rule`);
+    assert.equal(displayProductName(p), p.brand + ' ' + p.name, p.slug);
+    assert.equal(hasDoubledBrand(displayProductName(p), p.brand), false, p.slug);
+  }
+});
+
 const PAIRS = [
   ...CASES.map(([brand, name]) => [brand, name]),
   ...fixture.products.map((p) => [p.brand, p.name]),
 ];
 
-test('both copies agree on displayProductName for every pinned case and every live product', () => {
-  for (const [brand, name] of PAIRS) {
-    const b = browser.displayProductName({ brand, name });
-    const s = displayProductName({ brand, name });
-    assert.equal(b, s, `displayProductName(${JSON.stringify({ brand, name })})\n  browser: ${JSON.stringify(b)}\n  server:  ${JSON.stringify(s)}`);
-  }
-});
+const same = (brand, name) => {
+  assert.deepEqual(browser.displayProductParts({ brand, name }), displayProductParts({ brand, name }), `displayProductParts(${JSON.stringify({ brand, name })})`);
+  assert.equal(browser.displayProductName({ brand, name }), displayProductName({ brand, name }), `displayProductName(${JSON.stringify({ brand, name })})`);
+  const shown = displayProductName({ brand, name });
+  assert.equal(browser.hasDoubledBrand(shown, brand), hasDoubledBrand(shown, brand), `hasDoubledBrand(${JSON.stringify([shown, brand])})`);
+};
 
-test('both copies agree on nameCarriesBrand, brandForms and hasDoubledBrand', () => {
-  const brands = [...new Set(PAIRS.map(([b]) => b))];
-  for (const brand of brands) {
+test('both copies agree on every pinned case and every fixture row', () => {
+  for (const [brand, name] of PAIRS) same(brand, name);
+  for (const brand of [...new Set(PAIRS.map(([b]) => b))]) {
     assert.deepEqual(browser.brandForms(brand), brandForms(brand), `brandForms(${JSON.stringify(brand)})`);
-  }
-  for (const [brand, name] of PAIRS) {
-    assert.equal(browser.nameCarriesBrand(name, brand), nameCarriesBrand(name, brand), `nameCarriesBrand(${JSON.stringify([name, brand])})`);
-    const shown = displayProductName({ brand, name });
-    assert.equal(browser.hasDoubledBrand(shown, brand), hasDoubledBrand(shown, brand), `hasDoubledBrand(${JSON.stringify([shown, brand])})`);
-    // The helper never INTRODUCES a double. A stored name may already open
-    // with two forms of its brand — Herrington Arms calls its magwell "HA
-    // Magwell", so "Herrington Arms HA Magwell for P365 X Macro" is the
-    // maker's own name and is printed as stored.
-    assert.equal(hasDoubledBrand(shown, brand), hasDoubledBrand(name, brand), 'the helper never introduces a doubled brand: ' + shown);
   }
   assert.deepEqual(browser.BRAND_ALIASES, BRAND_ALIASES, 'BRAND_ALIASES is the same table in both files');
 });
@@ -200,7 +217,7 @@ test('both copies agree on nameCarriesBrand, brandForms and hasDoubledBrand', ()
 test('both copies agree over a fuzz of brand and name fragments', () => {
   const brands = [...new Set(PAIRS.map(([b]) => b))].filter(Boolean);
   const words  = [...new Set(PAIRS.flatMap(([, n]) => String(n || '').split(/\s+/)))].filter(Boolean);
-  let seed = 20261020;
+  let seed = 20261021;
   const rnd = (n) => { seed = (seed * 1103515245 + 12345) & 0x7fffffff; return seed % n; };
   for (let i = 0; i < 3000; i++) {
     const brand = rnd(5) === 0 ? ['', null, '  ', 'X', 'A B'][rnd(5)] : brands[rnd(brands.length)];
@@ -210,9 +227,7 @@ test('both copies agree over a fuzz of brand and name fragments', () => {
       const w = rnd(4) === 0 && brand ? String(brand).split(' ')[rnd(2) ? 0 : 1] || brand : words[rnd(words.length)];
       parts.push(rnd(3) === 0 ? String(w).toUpperCase() : w);
     }
-    const name = parts.join(rnd(4) === 0 ? '  ' : ' ');
-    const b = browser.displayProductName({ brand, name });
-    const s = displayProductName({ brand, name });
-    assert.equal(b, s, `fuzz ${JSON.stringify({ brand, name })}: browser ${JSON.stringify(b)} vs server ${JSON.stringify(s)}`);
+    const name = parts.join([' ', '  ', ' - ', '-'][rnd(4)]);
+    same(brand, name);
   }
 });

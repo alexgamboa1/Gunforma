@@ -1,47 +1,40 @@
 // _display-name.mjs — what a product is CALLED on a page.
 // ─────────────────────────────────────────────────────────────────────────
-// products.name is the maker's own model name and carries the brand only
-// when the maker writes it that way: "Holosun 507K X2" does, "AMAG 15 SG9
-// P365 9mm 15rd Magazine" (Magpul) and "Osight SE" (Olight) do not. Measured
-// 2026-10-20 over the 277 live products: 204 names start with their brand,
-// 73 do not, and every one of the 73 has a brand on its manufacturers row.
-// A hub row that read "AMAG 15 SG9 15rd" told a visitor nothing, so every
-// page that prints a product name prints displayProductName() instead:
-// "{brand} {name}", unless the name already carries the brand.
+// products.name is the MODEL alone, never the brand: "507K X2", not
+// "Holosun 507K X2". The brand is manufacturers.name, and every page prints
+// the two together through this module — displayProductName() for a name
+// that stands alone ("Holosun 507K X2"), displayProductParts() for a card
+// that prints the brand on one line and the model under it. The convention
+// is the migration 20261021160000_product_naming_convention.sql: it renamed
+// the 236 live products whose stored name carried the brand (or something a
+// spec column already holds), and it refuses to leave any live name opening
+// with its brand. scripts/display-name.test.mjs holds the fixture of the
+// catalog to the same rule, and scripts/check-routes.mjs holds production.
 //
-// "Already carries the brand" is decided from the name's own words, never
-// by editing the stored name:
-//   - it starts with the full brand ("Sig Sauer Romeo-X Pro", "SIG SAUER
-//     P365 17rd" — case does not matter);
-//   - it starts with the first word of a multi-word brand ("Faxon Exos" for
-//     Faxon Firearms, "Radian Ramjet" for Radian Weapons, "SIG P365" for
-//     Sig Sauer, "Timber Creek …" for Timber Creek Outdoors);
-//   - it starts with the brand's initials ("TTI SIG X-MACRO …" for Taran
-//     Tactical Innovations, "PMM P365 Compensator" for Parker Mountain
-//     Machine);
-//   - it starts with a listed alias the rules cannot derive (BRAND_ALIASES:
-//     "MPI" for MASKAS Precision);
-//   - or the full brand appears anywhere in it as whole words.
-// Every match is on whole words, so "Signature Grip" is not a Sig prefix,
-// and another maker's name inside the product name is not this product's
-// brand: Springer Precision's "Carry Basepad for Sig Sauer - P365 X-Macro"
-// still gets its Springer Precision prefix.
+// Before that migration the helper had to GUESS from the name's own words
+// whether the brand was already there — full name, first word, initials, a
+// listed alias — and the guess could not fix a name that doubled its own
+// brand ("Herrington Arms HA Magwell …"). For a catalog row the guess is
+// gone: brand + ' ' + name, and nothing else.
 //
-// The first-word rule is the one with a cost worth knowing: a future Night
-// Fision part named "Night Sights …" would be judged branded and ship
-// without its prefix — a missing brand, never a doubled one, and the
-// catalog has no such name today. scripts/display-name.test.mjs pins every
-// shape above against the live names; scripts/check-routes.mjs asserts on
-// the wire that every hub magazine row starts with a known brand and
-// doubles none.
+// One place still holds the old shape, and it is why the brand forms below
+// survive: builds.parts_snapshot froze each part's name and brand at the
+// time of the build. On 2026-10-21, 47 of the 86 parts in approved builds
+// opened with their brand ("Sig Sauer Romeo-X Enclosed Compact", "Radian
+// Ramjet …" for Radian Weapons), and a builder typing a part by hand may
+// write the brand in both fields. So displayProductParts() strips ONE
+// leading form of the brand — the full name, the first word of a multi-word
+// brand, its initials, or a listed alias (BRAND_ALIASES) — when the name
+// opens with it and a space (or nothing) follows. A hyphen does not count:
+// True Precision's "True-Lock Compensator" keeps its "True-". A brand that
+// appears only mid-name is left alone, and a name that IS the brand keeps
+// it rather than render an empty line.
 //
-// Dependency-free and server-side only. build-og.mjs used to hold its own
-// shorter copy (full-prefix only) for the build page's title; it imports
-// this one now, so the rule exists once.
+// Dependency-free and server-side only; js/display-name.js is the same
+// rule as a plain <script> global, held identical by the test.
 
-// Aliases the generic rules cannot derive — keyed by the brand in lower
-// case, values in lower case. Add a line here when a maker's short form is
-// neither its first word nor its initials.
+// Aliases the generic forms cannot derive — keyed by the brand in lower
+// case, values in lower case. Add a line here AND in js/display-name.js.
 export const BRAND_ALIASES = {
   'maskas precision': ['mpi'],
 };
@@ -49,8 +42,8 @@ export const BRAND_ALIASES = {
 const squash = (s) => (s == null ? '' : String(s)).replace(/\s+/g, ' ').trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// The forms a name may START with to count as already branded, lower case,
-// longest first. Empty for an empty brand.
+// The forms a frozen name may open with, lower case, longest first. Empty
+// for an empty brand.
 export function brandForms(brand) {
   const b = squash(brand).toLowerCase();
   if (!b) return [];
@@ -65,38 +58,45 @@ export function brandForms(brand) {
   return [...forms].sort((x, y) => y.length - x.length);
 }
 
-// A whole-word match: nothing alphanumeric may follow the form, and when
-// anchored mid-string nothing alphanumeric may precede it.
-const startsWithWord = (text, form) => new RegExp('^' + escapeRe(form) + '(?![a-z0-9])', 'i').test(text);
-const containsWord   = (text, form) => new RegExp('(^|[^a-z0-9])' + escapeRe(form) + '(?![a-z0-9])', 'i').test(text);
+// `text` opens with `form` as a whole word: a space or the end follows it.
+const opensWith = (text, form) => new RegExp('^' + escapeRe(form) + '(?=\\s|$)', 'i').test(text);
 
-export function nameCarriesBrand(name, brand) {
-  const n = squash(name);
-  const b = squash(brand).toLowerCase();
-  if (!n || !b) return false;
-  if (brandForms(b).some((f) => startsWithWord(n, f))) return true;
-  return containsWord(n, b);
-}
-
-// { name, brand } → the name a reader sees. Never returns the brand twice.
-export function displayProductName(p) {
+// { name, brand } → { brand, model }: the two lines a card prints. For a
+// catalog row `model` IS the stored name; for a frozen snapshot name it is
+// the name with one leading brand form removed.
+export function displayProductParts(p) {
   const name  = squash(p && p.name);
   const brand = squash(p && p.brand);
-  if (!name) return brand;
-  if (!brand || nameCarriesBrand(name, brand)) return name;
-  return brand + ' ' + name;
+  if (!name || !brand) return { brand, model: name };
+  const form = brandForms(brand).find((f) => opensWith(name, f));
+  if (!form) return { brand, model: name };
+  const model = name.slice(form.length).replace(/^[\s\-–—:·|,]+/, '').trim();
+  return { brand, model: model || name };
+}
+
+// { name, brand } → the name a reader sees: brand + ' ' + model. A name
+// that is nothing but its brand ("Olight" / "Olight") is printed once.
+// Nothing else is collapsed: a frozen name that opened with TWO forms of
+// its brand (the old "Herrington Arms HA Magwell …") loses one and is
+// printed as the maker wrote it — the helper never introduces a double,
+// and it does not edit what it was given.
+export function displayProductName(p) {
+  const { brand, model } = displayProductParts(p);
+  if (!brand || !model) return brand || model;
+  return model.toLowerCase() === brand.toLowerCase() ? brand : brand + ' ' + model;
 }
 
 // True when `text` opens with two forms of the same brand ("Magpul Magpul
-// AMAG", "Sig Sauer SIG P365", "Radian Weapons Radian Ramjet") — the thing
-// the rule above exists to prevent, checked from the outside by the test
-// and by check-routes.mjs over served HTML.
+// AMAG", "Sig Sauer SIG P365") — the thing a stored name must never do
+// again, checked by the test over the fixture and by check-routes.mjs over
+// production and served HTML.
 export function hasDoubledBrand(text, brand) {
   const t = squash(text);
-  for (const first of brandForms(brand)) {
-    if (!startsWithWord(t, first)) continue;
+  const forms = brandForms(brand);
+  for (const first of forms) {
+    if (!opensWith(t, first)) continue;
     const rest = t.slice(first.length).trim();
-    if (brandForms(brand).some((second) => startsWithWord(rest, second))) return true;
+    if (forms.some((second) => opensWith(rest, second))) return true;
   }
   return false;
 }

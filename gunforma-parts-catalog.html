@@ -1823,17 +1823,19 @@ function renderCard(r) {
     console.warn('[catalog] no product-page link for ' + r.id + ' (' + r.brand + ' ' + r.name + ') — ' +
       (r.slug ? 'category "' + r.category + '" not in CATEGORY_URL_SEGMENT' : 'missing slug'));
   }
+  // Brand over model from the one rule (js/display-name.js).
+  var np = window.displayProductParts(r);
   var nameHtml = href
-    ? '<a class="part-card-link" href="' + escAttr(href) + '">' + esc(r.name) + '</a>'
-    : esc(r.name);
+    ? '<a class="part-card-link" href="' + escAttr(href) + '">' + esc(np.model) + '</a>'
+    : esc(np.model);
   return '<div class="part-card" data-id="' + r.id + '" data-open-detail="1">' +
     '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
     '<div class="part-card-photo">' + photoHtml +
       (r.category ? '<div class="part-card-cat">' + esc(partCatLabel(r)) + '</div>' : '') +
     '</div>' +
     '<div class="part-card-body">' +
-      '<div class="part-card-brand">' + esc(r.brand) + '</div>' +
-      '<div class="part-card-name">'  + nameHtml     + '</div>' +
+      '<div class="part-card-brand">' + esc(np.brand) + '</div>' +
+      '<div class="part-card-name">'  + nameHtml      + '</div>' +
       (r.description ? '<div class="part-card-desc">' + esc(r.description) + '</div>' : '') +
       '<div class="part-card-footer">' + priceHtml + colorsHtml + '</div>' +
       (affHtml ? '<div class="part-card-aff" onclick="event.stopPropagation();">' + affHtml + '</div>' : '') +
@@ -1909,8 +1911,10 @@ document.addEventListener('keydown', function (e) {
 
 function renderDetail(p) {
   document.getElementById('detail-eyebrow').textContent = p.category ? partCatLabel(p) : 'Product';
-  document.getElementById('detail-brand').textContent = p.brand;
-  document.getElementById('detail-title').textContent = p.name;
+  // Brand over model from the one rule (js/display-name.js).
+  var np = window.displayProductParts(p);
+  document.getElementById('detail-brand').textContent = np.brand;
+  document.getElementById('detail-title').textContent = np.model;
   document.getElementById('detail-cat-badge-wrap').innerHTML = p.category
     ? '<div class="detail-cat-badge">' + esc(partCatLabel(p)) + '</div>' : '';
 

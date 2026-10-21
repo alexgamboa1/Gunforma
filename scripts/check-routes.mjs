@@ -592,12 +592,15 @@ for (const [label, path, want] of [
 // ── every product name goes through displayProductName() ───────────────
 // The rule exists in two copies — netlify/functions/_display-name.mjs and
 // js/display-name.js — and scripts/display-name.test.mjs holds them equal
-// over a fixture of the catalog. This is the live half: both copies over
-// every product the public key can read today, so a part added after the
-// fixture was captured is covered; then the served /parts index and a
-// product page, where the rule lands on the wire. "AMAG 15 SG9 …" with no
-// Magpul, and "… by Magpul" after a name that already says Magpul, both
-// render perfectly.
+// over a fixture of the catalog. This is the live half: the naming
+// convention itself over every product the public key can read today
+// (products.name is the model alone — a stored name opening with its
+// brand is a product added outside the convention, or the migration
+// 20261021160000_product_naming_convention.sql not yet applied), both
+// copies over the same rows, so a part added after the fixture was
+// captured is covered; then the served /parts index and a product page,
+// where the rule lands on the wire. "AMAG 15 SG9 …" with no Magpul, and
+// "Holosun Holosun 507K X2", both render perfectly.
 {
   console.log('\n── product names: both copies, live catalog, served pages');
   const server = await import('../netlify/functions/_display-name.mjs');
@@ -613,18 +616,20 @@ for (const [label, path, want] of [
   const products = res.ok ? await res.json() : null;
   ok(Array.isArray(products) && products.length > 0, 'live products readable with the public key', res.status + ', ' + (products ? products.length : 0) + ' products');
   if (Array.isArray(products) && products.length) {
-    let disagree = 0, changed = 0, doubled = 0;
+    let disagree = 0, branded = 0, noBrand = 0, doubled = 0;
     for (const p of products) {
       const brand = p.manufacturers ? p.manufacturers.name : null;
+      if (!brand) { noBrand++; note(`no brand on ${p.slug}`, p.name); continue; }
       const s = server.displayProductName({ name: p.name, brand });
       const b = browser.displayProductName({ name: p.name, brand });
       if (s !== b) { disagree++; note(`copies disagree on ${p.slug}`, `server "${s}" / browser "${b}"`); }
-      if (s !== p.name) changed++;
-      if (server.hasDoubledBrand(s, brand) && !server.hasDoubledBrand(p.name, brand)) { doubled++; note(`doubled brand on ${p.slug}`, s); }
+      if (server.displayProductParts({ name: p.name, brand }).model !== p.name) { branded++; if (branded <= 5) note(`stored name opens with its brand: ${p.slug}`, `"${p.name}" / ${brand}`); }
+      if (server.hasDoubledBrand(s, brand)) { doubled++; note(`doubled brand on ${p.slug}`, s); }
     }
+    ok(noBrand === 0, 'every live product has a brand', noBrand + ' without');
+    ok(branded === 0, 'every live product name is the model alone (20261021160000_product_naming_convention applied)', branded + ' of ' + products.length + ' open with their brand');
     ok(disagree === 0, 'js/display-name.js and _display-name.mjs agree on every live product', disagree + ' disagreement(s) over ' + products.length);
-    ok(doubled === 0, 'the rule never introduces a doubled brand on a live product', doubled);
-    note('live names the rule prefixes with a brand', changed + ' of ' + products.length);
+    ok(doubled === 0, 'no live product\'s display name doubles its brand', doubled);
 
     // The served /parts index: one link per product, each reading as the
     // rule says, and no trailing "— Brand" span (it would double the brand).
@@ -641,11 +646,12 @@ for (const [label, path, want] of [
     }
     ok(wrong === 0, '/parts: every live product is served under its display name', wrong + ' wrong of ' + products.length);
 
-    // A product page whose stored name lacks its brand: the title opens
-    // with the brand and never says "by <brand>" after a name that has it.
-    const unbranded = products.find((p) => p.manufacturers && server.displayProductName({ name: p.name, brand: p.manufacturers.name }) !== p.name);
-    const branded   = products.find((p) => p.manufacturers && server.nameCarriesBrand(p.name, p.manufacturers.name));
-    for (const p of [unbranded, branded].filter(Boolean)) {
+    // Two product pages, one with a one-word brand and one with a
+    // multi-word brand: the title and H1 open with the brand exactly once,
+    // and never say "by <brand>" under it.
+    const oneWord   = products.find((p) => p.manufacturers && !/\s/.test(p.manufacturers.name));
+    const multiWord = products.find((p) => p.manufacturers && /\s/.test(p.manufacturers.name));
+    for (const p of [oneWord, multiWord].filter(Boolean)) {
       const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
       const path = '/parts/' + CATEGORY_META[p.category][0] + '/' + p.slug;
       const r = await get(path);

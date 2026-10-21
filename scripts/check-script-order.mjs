@@ -52,6 +52,7 @@ const RULES = [
   // the tag throws inside a render and the card list stays empty — the
   // same silent shape as makerLink above.
   { global: 'displayProductName', defines: 'js/display-name.js', consumers: ['js/part-picker.js'] },
+  { global: 'displayProductParts', defines: 'js/display-name.js', consumers: ['js/part-picker.js'] },
   // BuildCategories is an OBJECT, not a function, so the inline-call regex
   // below cannot see it — `BuildCategories.CATEGORIES` is a member read. It
   // gets an explicit `pattern` instead.

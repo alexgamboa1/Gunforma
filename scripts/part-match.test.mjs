@@ -35,7 +35,7 @@ const win = {
     head: { appendChild() {} },
   },
 };
-for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/variant-label.js', 'js/variant-swatch.js']) {
+for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js']) {
   new Function('window', await read(f))(win);
 }
 new Function('window', 'document', 'setTimeout', await read('js/part-picker.js'))(win, win.document, () => {});

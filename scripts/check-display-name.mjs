@@ -15,9 +15,10 @@
 // product-shaped `.name` (p, product, item, part, prod, pr, r) AND emits
 // HTML or DOM text on the same line (a tag in a string, esc()/escH()/
 // escAttr(), textContent, innerHTML, document.title, alt= or aria-label=).
-// A read inside a displayProductName(...) call is the correct use and is
-// stripped before matching. A read with no HTML on its line (a query map, a
-// sort, a search haystack, a toast) is not a print and is not flagged.
+// A read inside a displayProductName(...) or displayProductParts(...) call
+// is the correct use and is stripped before matching. A read with no HTML on
+// its line (a query map, a sort, a search haystack, a toast) is not a print
+// and is not flagged.
 //
 // WHAT IS NOT CAUGHT, on purpose: a name read into a variable on one line
 // and printed on another. The rule in CLAUDE.md ("Every product name on a
@@ -38,19 +39,6 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 // { file, match, reason } — `match` is a substring of the offending line.
 export const ALLOWLIST = [
-  // ── A brand line sits directly above the name on these cards, so the
-  //    name is printed bare under it. Folding the two into one branded
-  //    line (or keeping the brand line and printing the model alone) is a
-  //    visible-layout decision for Alex (CLAUDE.md, "Verifying changes");
-  //    until it is made, these print the stored name under its brand.
-  { file: 'js/part-picker.js', match: "'<div class=\"part-card-name\">'  + item.name", reason: 'picker card: brand line above the name' },
-  { file: 'js/part-picker.js', match: "'<div class=\"selected-part-name\">'  + part.name", reason: 'picker selected row: brand line above the name' },
-  { file: 'js/part-picker.js', match: "'<span class=\"variant-step-name\">' + escAttr(item.name", reason: 'colour step title: brand span before the name' },
-  { file: 'gunforma-profile.html', match: "'<div class=\"part-card-name\">'+escH(p.name)", reason: 'profile Favorite parts card: .part-card-brand line above the name' },
-  { file: 'gunforma-build-detail.html', match: "var nameHtml = escH(part.name || 'Unnamed part')", reason: 'build page part card: .part-brand line above .part-model' },
-  { file: 'gunforma-parts-catalog.html', match: "'<a class=\"part-card-link\" href=\"' + escAttr(href) + '\">' + esc(r.name)", reason: 'catalog card: .part-card-brand line above the name' },
-  { file: 'gunforma-parts-catalog.html', match: ": esc(r.name);", reason: 'catalog card, unlinked branch of the line above' },
-  { file: 'gunforma-parts-catalog.html', match: "document.getElementById('detail-title').textContent = p.name", reason: 'catalog detail panel: #detail-brand sits above #detail-title' },
   // ── Admin screens print brand and name as two fields ("<b>Brand</b> —
   //    name") for the admin who is matching a typed part to a catalog row;
   //    no reader sees them. Listed, not fixed.
@@ -86,14 +74,20 @@ export const ALLOWLIST = [
 const NAME_READ = /\b(?:p|product|item|part|prod|pr|r)\.name\b/;
 const HTML_CONTEXT = /(['"`][^'"`]*<[a-zA-Z/][^'"`]*['"`])|\besc(?:H|Attr)?\(|\.textContent\b|\.innerHTML\b|document\.title|\balt=|aria-label=/;
 
-// Remove every balanced displayProductName(...) call so a correct use —
-// displayProductName({ name: p.name, brand }) — is not read as a raw print.
+// Remove every balanced displayProductName(...) / displayProductParts(...)
+// call so a correct use — displayProductParts({ name: p.name, brand }) — is
+// not read as a raw print.
+const HELPERS = ['displayProductName', 'displayProductParts'];
 function stripHelperCalls(line) {
   let out = line;
   for (;;) {
-    const at = out.indexOf('displayProductName(');
+    let at = -1, fn = null;
+    for (const h of HELPERS) {
+      const i = out.indexOf(h + '(');
+      if (i !== -1 && (at === -1 || i < at)) { at = i; fn = h; }
+    }
     if (at === -1) return out;
-    let depth = 0, i = at + 'displayProductName'.length;
+    let depth = 0, i = at + fn.length;
     for (; i < out.length; i++) {
       if (out[i] === '(') depth++;
       else if (out[i] === ')' && --depth === 0) { i++; break; }
@@ -133,7 +127,7 @@ for (const h of hits) {
   const entry = ALLOWLIST.find((a) => a.file === h.file && h.text.includes(a.match));
   if (entry) { used.add(entry); excused++; continue; }
   failures++;
-  console.log(`FAIL  ${h.file}:${h.line} prints a raw product name — route it through displayProductName()\n        ${h.text.slice(0, 160)}`);
+  console.log(`FAIL  ${h.file}:${h.line} prints a raw product name — route it through displayProductName() or displayProductParts()\n        ${h.text.slice(0, 160)}`);
 }
 for (const a of ALLOWLIST) {
   if (used.has(a)) continue;
@@ -141,6 +135,6 @@ for (const a of ALLOWLIST) {
   console.log(`FAIL  stale allowlist entry: ${a.file} has no flagged line containing ${JSON.stringify(a.match)} — remove the entry`);
 }
 console.log(`scanned ${hits.length} raw-name print(s): ${excused} excused by name, ${hits.length - excused} not`);
-console.log(failures === 0 ? 'ok: every product name a page prints goes through displayProductName(), or is excused by name'
+console.log(failures === 0 ? 'ok: every product name a page prints goes through displayProductName() or displayProductParts(), or is excused by name'
                            : `${failures} FAILURE(S)`);
 process.exit(failures ? 1 : 0);
