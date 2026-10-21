@@ -71,6 +71,7 @@ check "build-og page literals"     scripts/check-canonical-coupling.mjs
 check "listing rules pinned"       scripts/listing-rules.test.mjs
 check "maker-link copies agree"    scripts/maker-link.test.mjs
 check "product display names"      scripts/display-name.test.mjs
+check "names go through the helper" scripts/check-display-name.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
 check "homepage picker = hubs"     scripts/check-home-picker.mjs
 check "DB failure is 503, not 404"  scripts/upstream-failure.test.mjs

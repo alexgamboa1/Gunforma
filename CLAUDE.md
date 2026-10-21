@@ -882,31 +882,89 @@ Three rules that look like decoration:
   the wording. The guide page keeps its first sentence about prices and
   applies the rule to the second.
 
-### A product's name on a page is `displayProductName()`
+### Every product name on a page goes through `displayProductName()`
+
+**Every product name on a page goes through `displayProductName()`.** Not
+`p.name`, not `brand + ' ' + name`, not a prefix check of your own. The
+rule lives in two byte-for-byte-equivalent copies — the same split, for
+the same reason, as `js/maker-link.js` ↔ `_maker-link.mjs`:
+
+- `netlify/functions/_display-name.mjs` — the server copy, imported by
+  `gun-hub.mjs`, `guide-page.mjs`, `field-note.mjs`, `build-og.mjs`,
+  `parts-index.mjs` and `product-page.mjs`.
+- `js/display-name.js` — the browser copy, a plain `<script>` global
+  (`window.displayProductName`), loaded by the two builder pages (for
+  `js/part-picker.js`), `gunforma-build-detail.html` and
+  `gunforma-parts-catalog.html`. `check-script-order.mjs` holds the tag in
+  place.
 
 `products.name` carries the brand only when the maker writes it that way:
-204 of the 277 live names do ("Holosun 507K X2"), 73 do not — every
-magazine ("AMAG 15 SG9 P365 9mm 15rd Magazine" is Magpul's, "P365 9mm 17rd
-Magazine (All 9mm Models)" is Sig's), every Olight, Streamlight and
-SureFire light, and short forms like "Faxon Exos" and "TTI SIG X-MACRO".
-A hub row printing the bare name told a reader nothing. So every
-server-rendered product row prints **`displayProductName({ brand, name })`**
-from `netlify/functions/_display-name.mjs`: "{brand} {name}", unless the
-name already carries the brand — as a full-name prefix, the first word of
-a multi-word brand ("SIG", "Radian"), its initials ("TTI", "PMM"), a
-listed alias (`BRAND_ALIASES`: "MPI"), or the full name anywhere in it.
-Whole words only, and never a write: the stored name is untouched. It is
-used by `gun-hub.mjs` (rows, the "doesn't fit" line, the ItemList),
-`guide-page.mjs` (table, picks, the two prose takeaways, JSON-LD —
-the separate `.t-brand` / `.pick-brand` sub-lines went with it),
-`field-note.mjs` (the `::price` part cell and the `::fit` question) and
-`build-og.mjs` (the build title, which held its own shorter copy).
-`product-page.mjs` is deliberately NOT on that list: its H1 is the stored
-name with a linked "by <maker>" line beneath, a different shape. Sorting
-stays on the stored name everywhere, so no order changed.
-`scripts/display-name.test.mjs` pins the rule; `scripts/check-routes.mjs`
-asserts on the wire that every hub magazine row opens with a brand from
-`manufacturers` and doubles none, and that row counts match the header.
+measured 2026-10-20, 214 of the 277 live names do ("Holosun 507K X2",
+every grip module) and 63 do not — every magazine ("AMAG 15 SG9 P365 9mm
+15rd Magazine" is Magpul's), every Olight, Streamlight and SureFire light,
+ten optics, and short forms like "Osight SE". A row printing the bare name
+told a reader nothing. So `displayProductName({ brand, name })` is
+"{brand} {name}", unless the name already carries the brand — as a
+full-name prefix, the first word of a multi-word brand ("SIG", "Radian"),
+its initials ("TTI", "PMM"), a listed alias (`BRAND_ALIASES`: "MPI"), or
+the full name anywhere in it. Whole words only, and never a write: the
+stored name is untouched, and sorting stays on the stored name everywhere,
+so no order changes. It never introduces a doubled brand; a stored name
+may already hold one ("Herrington Arms HA Magwell …" is the maker's own
+model name) and is printed as stored.
+
+The point of the rule is what it does to the NEXT section or category: a
+grip-module row, a recoil-spring card, a page that does not exist yet is
+branded by default rather than by somebody remembering. Three guards hold
+it:
+
+- `scripts/display-name.test.mjs` pins every live name shape and runs both
+  copies over every pinned case, every product in
+  `scripts/fixtures/product-names.json` (the catalog as read with the
+  public key — `node scripts/display-name.test.mjs --refresh-fixture`
+  rewrites it) and a seeded fuzz, and fails if they differ by a character.
+- `scripts/check-display-name.mjs` fails the build when a render file
+  (root `*.html`, `js/*.js`, `netlify/functions/*.mjs`, the edge
+  functions) prints a raw product name — `p.name`, `product.name`,
+  `item.name`, `part.name`, `r.name`, `pr.name`, `prod.name` on a line
+  that emits HTML or DOM text — outside its allowlist. Every allowlist
+  entry names its line and its reason, and a stale entry fails the build
+  too. It does not see a name read into a variable on one line and printed
+  on another; the rule above does.
+- `scripts/check-routes.mjs` runs both copies over the live catalog on
+  every scheduled run, asserts every `/parts` row is served under its
+  display name with no trailing "— Brand" span, that a product page's
+  `<title>`, `og:title` and JSON-LD `name` are the display name, and that
+  every hub magazine row opens with a brand from `manufacturers` and
+  doubles none.
+
+**What is still excused by name, and why** (the allowlist, in short):
+
+- **A brand line directly above the name.** The picker cards and selected
+  rows (`js/part-picker.js`), the colour-step title, the build page's part
+  card (`.part-brand` over `.part-model`, and its server mirror in
+  `build-og.mjs`), the catalog card and detail panel, and the profile's
+  Favorite parts card all print the stored name under a separate brand
+  line — so today they read "Icarus Precision" over "Icarus Precision 311
+  Series 311" on the 214 branded names. Folding the two into one branded
+  line, or keeping the brand line and printing the model alone, is a
+  visible-layout decision for Alex (see **Verifying changes**); until it is
+  made they print the stored name, and the alt text, aria-labels and
+  `data-name` on the same cards already go through the helper.
+- **The product page's H1** over its linked "by <maker>" line, the same
+  decision. Its `<title>`, `og:title`, meta, breadcrumb, hero alt and
+  JSON-LD `name` go through the helper — the title used to read "… by
+  Holosun" after a name that already said Holosun.
+- **Admin screens** (`gunforma-admin-queue.html`, `-part.html`,
+  `-data.html`) print brand and name as two fields for the admin matching
+  a typed part to a catalog row; no reader sees them.
+- **The parked Armory** (see **The Armory is parked**).
+- **Lines where `p` is a platform or a partner**, not a product.
+
+`matchNameHtml()` in `js/part-picker.js` is a fourth, older copy of the
+prefix half of this rule (bold brand, then the name with a leading brand
+removed); it is on the same brand-line decision and is not flagged
+because it prints local variables.
 
 **Not in the JSON-LD.** A maker link with a hand-typed MSRP is not an offer
 we can stand behind in rich results; `product-page.mjs` filters maker rows
@@ -1021,7 +1079,8 @@ Registered today:
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` or `profile-og.mjs` replacing a literal its page no longer contains, or a page carrying a noindex or canonical its function never strips |
 | `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
 | `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
-| `scripts/display-name.test.mjs` | `_display-name.mjs` printing a product without its brand ("AMAG 15 SG9") or with it twice ("Magpul Magpul AMAG", "Sig Sauer SIG P365", "Radian Weapons Radian Ramjet") — pins every live name shape: full-brand prefix, first-word and initials short forms, a listed alias, a brand mid-name, another maker's name inside the name |
+| `scripts/display-name.test.mjs` | `_display-name.mjs` printing a product without its brand ("AMAG 15 SG9") or with it twice ("Magpul Magpul AMAG", "Sig Sauer SIG P365", "Radian Weapons Radian Ramjet") — pins every live name shape: full-brand prefix, first-word and initials short forms, a listed alias, a brand mid-name, another maker's name inside the name; and `js/display-name.js` drifting from it — both copies over every pinned case, every product in `scripts/fixtures/product-names.json` and a seeded fuzz |
+| `scripts/check-display-name.mjs` | a render file printing a raw product name (`p.name`, `item.name`, `part.name`, … on a line that emits HTML or DOM text) instead of `displayProductName()`, so a new section or category ships "AMAG 15 SG9" with nothing saying Magpul; also an allowlist entry whose line is gone |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose; a hub `<title>` at 60 characters or over, or off the "`<model>`: Which Mags … Fit \| Gunforma" shape |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |

@@ -623,6 +623,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- Before affiliate.js: it calls window.makerLink and window.buyDisclosure
      at render time, for the parts with no partner listing. -->
 <script src="js/maker-link.js"></script>
+<script src="js/display-name.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -1796,7 +1797,7 @@ function renderCard(r) {
     ? '<div class="part-card-price">$' + r.price.toFixed(r.price < 100 ? 2 : 0) + '</div>'
     : '<div class="part-card-price na">Price N/A</div>';
   var photoHtml = r.image
-    ? '<img src="' + escAttr(r.image) + '" alt="' + escAttr(r.brand + ' ' + r.name) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-nophoto&quot;>No photo</div>\'"/>'
+    ? '<img src="' + escAttr(r.image) + '" alt="' + escAttr(window.displayProductName(r)) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-nophoto&quot;>No photo</div>\'"/>'
     : '<div class="part-card-nophoto">No photo</div>';
   // Whole card is clickable; the heart button stopPropagation's so favoriting
   // doesn't open the detail panel. openDetail is delegated (see below) rather
@@ -1983,7 +1984,7 @@ function renderDetail(p) {
   var heroSrc = (activeV && activeV.primary_image_url) || p.image;
   var heroEl = document.getElementById('detail-hero');
   heroEl.innerHTML = heroSrc
-    ? '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '"/>'
+    ? '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(window.displayProductName(p)) + '"/>'
     : '<div class="detail-hero-nophoto">No photo</div>';
   // The old photo-only thumb strip is retired: the variant picker below does
   // the same job and covers the variants we have no photo for.

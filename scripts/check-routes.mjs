@@ -589,6 +589,78 @@ for (const [label, path, want] of [
   }
 }
 
+// ── every product name goes through displayProductName() ───────────────
+// The rule exists in two copies — netlify/functions/_display-name.mjs and
+// js/display-name.js — and scripts/display-name.test.mjs holds them equal
+// over a fixture of the catalog. This is the live half: both copies over
+// every product the public key can read today, so a part added after the
+// fixture was captured is covered; then the served /parts index and a
+// product page, where the rule lands on the wire. "AMAG 15 SG9 …" with no
+// Magpul, and "… by Magpul" after a name that already says Magpul, both
+// render perfectly.
+{
+  console.log('\n── product names: both copies, live catalog, served pages');
+  const server = await import('../netlify/functions/_display-name.mjs');
+  const browser = await (async () => {
+    const { readFile } = await import('node:fs/promises');
+    const src = await readFile(new URL('../js/display-name.js', import.meta.url), 'utf8');
+    const g = {};
+    new Function('window', src)(g);
+    return g;
+  })();
+  const res = await fetch(`${SB_URL}/rest/v1/products?select=slug,category,name,manufacturers!products_brand_id_fkey(name)&is_discontinued=eq.false&order=slug.asc&limit=1000`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const products = res.ok ? await res.json() : null;
+  ok(Array.isArray(products) && products.length > 0, 'live products readable with the public key', res.status + ', ' + (products ? products.length : 0) + ' products');
+  if (Array.isArray(products) && products.length) {
+    let disagree = 0, changed = 0, doubled = 0;
+    for (const p of products) {
+      const brand = p.manufacturers ? p.manufacturers.name : null;
+      const s = server.displayProductName({ name: p.name, brand });
+      const b = browser.displayProductName({ name: p.name, brand });
+      if (s !== b) { disagree++; note(`copies disagree on ${p.slug}`, `server "${s}" / browser "${b}"`); }
+      if (s !== p.name) changed++;
+      if (server.hasDoubledBrand(s, brand) && !server.hasDoubledBrand(p.name, brand)) { doubled++; note(`doubled brand on ${p.slug}`, s); }
+    }
+    ok(disagree === 0, 'js/display-name.js and _display-name.mjs agree on every live product', disagree + ' disagreement(s) over ' + products.length);
+    ok(doubled === 0, 'the rule never introduces a doubled brand on a live product', doubled);
+    note('live names the rule prefixes with a brand', changed + ' of ' + products.length);
+
+    // The served /parts index: one link per product, each reading as the
+    // rule says, and no trailing "— Brand" span (it would double the brand).
+    const idx = await get('/parts');
+    ok(idx.status === 200, '/parts: 200', idx.status);
+    const unesc = (t) => t.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const served = new Map([...idx.body.matchAll(/<li><a href="\/parts\/[^/"]+\/([^"]+)">([^<]*)<\/a><\/li>/g)].map((m) => [m[1], unesc(m[2])]));
+    ok(!idx.body.includes('<span class="brand">'), '/parts: no trailing "— Brand" span on any row');
+    let wrong = 0;
+    for (const p of products) {
+      const want = server.displayProductName({ name: p.name, brand: p.manufacturers ? String(p.manufacturers.name).replace(/\s*\([^)]*\)\s*$/, '').trim() : null });
+      const got = served.get(p.slug);
+      if (got !== want) { wrong++; if (wrong <= 5) note(`/parts row for ${p.slug}`, `served "${got}", expected "${want}"`); }
+    }
+    ok(wrong === 0, '/parts: every live product is served under its display name', wrong + ' wrong of ' + products.length);
+
+    // A product page whose stored name lacks its brand: the title opens
+    // with the brand and never says "by <brand>" after a name that has it.
+    const unbranded = products.find((p) => p.manufacturers && server.displayProductName({ name: p.name, brand: p.manufacturers.name }) !== p.name);
+    const branded   = products.find((p) => p.manufacturers && server.nameCarriesBrand(p.name, p.manufacturers.name));
+    for (const p of [unbranded, branded].filter(Boolean)) {
+      const { CATEGORY_META } = await import('../netlify/functions/_category-meta.mjs');
+      const path = '/parts/' + CATEGORY_META[p.category][0] + '/' + p.slug;
+      const r = await get(path);
+      const want = server.displayProductName({ name: p.name, brand: p.manufacturers.name });
+      const title = unesc((r.body.match(/<title>([^<]*)<\/title>/) || ['', ''])[1]);
+      ok(r.status === 200, `${path}: 200`, r.status);
+      ok(title === want + ' | Gunforma', `${path}: <title> is the display name`, title);
+      ok(r.body.includes('<meta property="og:title" content="' + want.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + ' | Gunforma"/>'), `${path}: og:title matches`);
+      const ld = (r.body.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/) || [])[1];
+      let ldName = null; try { ldName = JSON.parse(ld).name; } catch (e) { /* asserted below */ }
+      ok(ldName === want, `${path}: JSON-LD Product.name is the display name`, ldName);
+    }
+  }
+}
+
 // ── the front door: "Your P365" in the served nav, the picker on / ──────
 // The cluster above was reachable by crawlers (sitemap) and by nobody
 // else: no nav item, no homepage link. This asserts the way in on the

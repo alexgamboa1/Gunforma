@@ -46,6 +46,12 @@ const RULES = [
   // inside loadFor() and the buy rows silently render empty — the exact
   // shape the rule above describes.
   { global: 'makerLink',    defines: 'js/maker-link.js',    consumers: ['js/affiliate.js'] },
+  // What a product is called. part-picker.js reads window.displayProductName
+  // at render time for alt text and aria-labels; the build page and the
+  // catalog call it inline from their card renderers. A page that misses
+  // the tag throws inside a render and the card list stays empty — the
+  // same silent shape as makerLink above.
+  { global: 'displayProductName', defines: 'js/display-name.js', consumers: ['js/part-picker.js'] },
   // BuildCategories is an OBJECT, not a function, so the inline-call regex
   // below cannot see it — `BuildCategories.CATEGORIES` is a member read. It
   // gets an explicit `pattern` instead.
