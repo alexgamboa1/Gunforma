@@ -893,6 +893,7 @@ for (const [label, path, want] of [
     ['/parts/triggers/ramm-tactical-leverage-c-p365',  '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
     ['/parts/triggers/ramm-tactical-leverage-nc-p365', '/parts/triggers/ramm-tactical-leverage-trigger-p365'],
     ['/parts/basepads/tti-xmacro-completed-mag-w-basepad', '/parts/magazines/tti-xmacro-completed-mag-w-basepad'],
+    ['/parts/safety-selectors/sig-sauer-manual-safety-parts-kit-black-p365', '/parts/safety-selectors/sig-sauer-manual-safety-kit-p365'],
   ]) {
     const r = await get(from);
     const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');
