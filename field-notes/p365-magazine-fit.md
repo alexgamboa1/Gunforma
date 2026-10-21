@@ -1,6 +1,6 @@
 ---
-title: Which magazines fit which P365? Every model, every mag, and the state limits
-description: On the P365 the grip module decides which magazines fit, not the slide or the FCU. 14 magazines, 48 maker fit claims across four grip modules, and the state capacity limit on each one.
+title: Which magazines fit which P365? Every model, every mag, state limits
+description: On the P365 the grip module decides which magazines fit, not the slide or FCU. 14 mags, 48 maker fit claims, four grip modules, state limits on each.
 author: Alex Gamboa
 author_credential: Founder, Gunforma. The corrections below are owner-verified on the pistol named, on the date shown.
 type: guide
@@ -11,8 +11,8 @@ On the P365 platform the grip module decides which magazines fit. The
 serialized fire control unit and the slide have no say in it. The 11 P365
 models in the catalog ship with four grip modules, and the 14 magazines in
 the catalog carry 48 maker fit claims across them: 11 magazines are listed
-as fitting the P365 grip, 9 the P365 X / XL grip, 7 the XMacro-family grip
-and 5 the FUSE grip. Every 10-round magazine in the catalog carries no state
+as fitting the P365 grip, 9 the P365 X/XL grip, 7 the XMacro grip (five
+models ship with it) and 5 the FUSE grip. Every 10-round magazine in the catalog carries no state
 restriction; every magazine above 10 rounds is restricted in at least ten
 states.
 
@@ -27,7 +27,7 @@ module is not listed under it.
 The P365's own grip module takes the **Micro** magazine family. 12 of the 14
 catalog magazines carry a maker claim for it: 2 sit flush, 4 extend below the
 grip, 5 fit once the included P365 baseplate or grip extension is installed,
-and 1 is listed as not compatible.
+and 1 does not fit.
 
 ::fit magazine=sig-sauer-p365-10rd-flush-mag gun=p365
 
@@ -55,10 +55,10 @@ and 1 is listed as not compatible.
 
 ## P365 X
 
-The X and the XL share one grip module, which takes the **XL** magazine
-family. 12 of the 14 catalog magazines carry a maker claim for it: 3 sit
-flush, 2 extend below the grip, 4 fit with the included X/XL floorplate or
-grip extension, and 3 are listed as not compatible.
+The X and the XL share one grip module, the P365 X/XL grip, which takes the
+**XL** magazine family. 12 of the 14 catalog magazines carry a maker claim
+for it: 3 sit flush, 2 extend below the grip, 4 fit with the included X/XL
+floorplate or grip extension, and 3 do not fit.
 
 ::fit magazine=sig-sauer-p365-x-xl-10rd-mag gun=p365-x
 
@@ -86,20 +86,21 @@ grip extension, and 3 are listed as not compatible.
 
 ## P365 XL
 
-The XL ships with the same grip module as the P365 X, so the rows under
-[P365 X](#p365-x) are the XL's rows. Its longer slide changes nothing about
-the magazine. [Everything for the P365 XL &rarr;](/p365/p365-xl)
+The XL ships with the same P365 X/XL grip module as the P365 X, so the rows
+under [P365 X](#p365-x) are the XL's rows: 12 maker claims, 3 flush, 2
+extended, 4 with an included part, 3 that do not fit. Its longer slide
+changes nothing about the magazine. [Everything for the P365 XL →](/p365/p365-xl)
 
 ## P365 XL Rose Comp
 
-The same P365 X / XL grip module again, under a compensated slide: the rows
+The same P365 X/XL grip module again, under a compensated slide: the rows
 under [P365 X](#p365-x) apply.
 
 ## P365 XMacro
 
 The XMacro grip module takes the **Macro** magazine family, which it shares
 with the FUSE. All 14 catalog magazines carry a maker claim for it: 4 sit
-flush, 3 extend below the grip, and 7 are listed as not compatible.
+flush, 3 extend below the grip, and 7 do not fit.
 
 ::fit magazine=sig-sauer-p365-xmacro-10rd-mag gun=p365-xmacro
 
@@ -137,26 +138,26 @@ The same XMacro grip module under a compensated slide: the rows under
 ## P365 AXG Legion
 
 An alloy AXG grip module in the XMacro housing class, so the rows under
-[P365 XMacro](#p365-xmacro) apply. [Everything for the P365 AXG Legion &rarr;](/p365/p365-axg)
+[P365 XMacro](#p365-xmacro) apply. [Everything for the P365 AXG Legion →](/p365/p365-axg)
 
 ## P365 XF DH3
 
 The XMacro grip module under a longer compensated slide: the rows under
-[P365 XMacro](#p365-xmacro) apply. [Everything for the P365 XF DH3 &rarr;](/p365/p365-xf-dh3)
+[P365 XMacro](#p365-xmacro) apply. [Everything for the P365 XF DH3 →](/p365/p365-xf-dh3)
 
 ## P365 XF DH3 AXG
 
 The alloy AXG grip module, XMacro housing class: the rows under
-[P365 XMacro](#p365-xmacro) apply. [Everything for the P365 XF DH3 AXG &rarr;](/p365/p365-xf-dh3-axg)
+[P365 XMacro](#p365-xmacro) apply. [Everything for the P365 XF DH3 AXG →](/p365/p365-xf-dh3-axg)
 
 ## P365 FUSE
 
 The FUSE grip module is longer than the XMacro's but takes the same
 **Macro** magazine family. 10 of the 14 catalog magazines carry a maker claim
-for it: 3 sit flush, 2 extend below the grip, and 5 are listed as not
-compatible. Magpul's AMAG pages name the Standard/Micro, X/XL and Macro grips
-and the catalog holds no Magpul claim for the FUSE grip, so no AMAG appears
-in this section.
+for it: 3 sit flush, 2 extend below the grip, and 5 do not fit. Magpul's own
+fit lists for the AMAGs name the Standard/Micro, X/XL and Macro grips, and
+the catalog holds no Magpul claim for the FUSE grip, so no AMAG appears in
+this section.
 
 ::fit magazine=sig-sauer-p365-xmacro-10rd-mag gun=p365-fuse
 
@@ -181,7 +182,7 @@ in this section.
 ## P365 FUSE Comp
 
 The same FUSE grip module under a compensated slide: the rows under
-[P365 FUSE](#p365-fuse) apply. [Everything for the P365 FUSE Comp &rarr;](/p365/p365-fuse-comp)
+[P365 FUSE](#p365-fuse) apply. [Everything for the P365 FUSE Comp →](/p365/p365-fuse-comp)
 
 ## Your grip module decides your mag fit
 
@@ -193,8 +194,8 @@ it as a grip module's housing class and the magazine family that class takes:
 | Grip module | Factory models that ship with it | Magazine family |
 |---|---|---|
 | P365 | P365 | Micro |
-| P365 X / XL | P365 X, P365 XL, P365 XL Rose Comp | XL |
-| P365 XMACRO | XMacro, XMacro Comp, AXG Legion, XF DH3, XF DH3 AXG | Macro |
+| P365 X/XL | P365 X, P365 XL, P365 XL Rose Comp | XL |
+| P365 XMacro | XMacro, XMacro Comp, AXG Legion, XF DH3, XF DH3 AXG | Macro |
 | P365 FUSE | FUSE, FUSE Comp | Macro |
 
 Two things follow. Swap the grip module and the magazines that fit are the
@@ -229,8 +230,8 @@ This is not legal advice.
 
 ## Corrections worth knowing
 
-Two maker pages say something the magazine does not do. The rows above
-record what was verified, not what the page says.
+Two maker pages say something the magazine does not do, and one says
+nothing. The rows above record what was verified, not what the page says.
 
 **Magpul AMAG 15 in the XMacro.** Magpul's product page calls the AMAG 15
 flush-fit in the XMacro, and the text is copy-pasted from the AMAG 17 page.
@@ -244,9 +245,9 @@ with the included X/XL floorplate.
 **SIG's 21-round and "seats flush".** SIG's page for the 21-round magazine
 says it seats flush in XMacro-size grips. That means no gap at the grip
 line, not a flush-length magazine: the 21 extends below every grip it is
-listed for, and in the XMacro its baseplate meets the grip with no gap. The
-flush magazine in the XMacro, AXG and FUSE grips is the 17-round. Reading
-documented 2026-10-14.
+listed for, and in the XMacro its baseplate meets the grip with no gap. Of
+SIG's 17 and 21, the flush-length magazine in the XMacro, AXG and FUSE grips
+is the 17-round. Reading documented 2026-10-14.
 
 ## What they cost today
 
@@ -269,28 +270,29 @@ listing shows its list price and a link to the maker's own page.
 
 ### Do P365 XL mags fit the regular P365?
 
-SIG ships the X/XL 12-round and 15-round magazines with a second baseplate
-for the standard P365 grip, and lists the X/XL 10-round as not recommended
-in it. The [P365](#p365) section has the row for each one.
+Two of the three X/XL magazines are listed for the standard P365 grip; the
+X/XL 10-round is not. The [P365](#p365) section has the row for each one,
+and says which one needs its included baseplate.
 
 ### Are Sig P365 magazines interchangeable?
 
 Not across the line. The grip module decides: the P365 grip takes the Micro
-family, the X / XL grip the XL family, and the XMacro and FUSE grips the
+family, the P365 X/XL grip the XL family, and the XMacro and FUSE grips the
 Macro family. Where a magazine from one family is listed for another grip,
 its row says how it sits and whether an included part is needed.
 
 ### What magazines fit the P365 XMacro?
 
 The makers list 7 of the 14 catalog magazines as fitting the XMacro grip
-module, and 4 of those sit flush. The [P365 XMacro](#p365-xmacro) section
-shows each one, and the same rows apply to the XMacro Comp, AXG Legion,
-XF DH3 and XF DH3 AXG.
+module: SIG's XMacro 10-round, 17-round, AXG Legion 17-round and 21-round,
+Magpul's AMAG 15 and AMAG 17, and the TTI 20-round. 4 of those sit flush.
+The [P365 XMacro](#p365-xmacro) section shows each one, and the same rows
+apply to the XMacro Comp, AXG Legion, XF DH3 and XF DH3 AXG.
 
 ### Does the 17-round mag fit the P365 XL?
 
-SIG lists the 17-round for the X and XL with its included X/XL floorplate,
-extending below the grip. The [P365 X](#p365-x) section has the row.
+SIG lists the 17-round for the P365 X/XL grip with its included X/XL
+floorplate. The [P365 X](#p365-x) section shows how it sits.
 
 ### What is the highest-capacity CA-legal P365 magazine?
 
@@ -312,6 +314,9 @@ of the catalog magazines for it, and the catalog holds no Magpul claim for
 the FUSE grip. The [P365 FUSE](#p365-fuse) section has each row.
 
 ## Every P365, one page each
+
+Nine of the 11 models have a hub page. The XL Rose Comp and the XMacro Comp
+share their grip module's rows above.
 
 - [P365](/p365/p365)
 - [P365 X](/p365/p365-x)
