@@ -731,6 +731,17 @@ because the function refuses any build that already has a `user_id`. Partial
 success is not success, and a field nobody branches on is a field that does
 not exist.
 
+**`supabase db push` runs as `cli_login_postgres`, not `postgres`.** A dry
+run through the MCP connects as `postgres` and does not prove a migration
+will pass the guards on `builds`. Trust is decided by `is_trusted_backend()`:
+a PostgREST request by its role claim, a direct session by `session_user`,
+and that list did not name the CLI's login role until
+`20261021152900_trust_cli_login_role.sql` — the push of the 2026-10-20
+audit's data fixes stopped at its first write to `edit_history` with
+`42501`, rolled back whole, after a dry run that had passed. `session_user`
+cannot be simulated with `SET ROLE`, so a guard that admits a role is proven
+by the real push and nothing else.
+
 The through-line: **status codes, exit codes and log lines are claims. Row
 counts, listings and independently-read state are facts.** Prefer the fact.
 A call that reports on itself is a witness to its own case — ask the row
