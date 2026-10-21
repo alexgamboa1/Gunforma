@@ -498,6 +498,19 @@ for (const [label, path, want] of [
   console.log('\n── /p365/ gun hubs');
   const { GUN_HUBS, GUIDE_PAGES, hubPath, guidePath, HUB_INDEX_PATH } =
     await import('../netlify/functions/_guide-meta.mjs');
+  const { brandForms, hasDoubledBrand } = await import('../netlify/functions/_display-name.mjs');
+  // The brands a row may open with, read with the public key. When the
+  // read fails the brand assertions are skipped and said to be — never
+  // passed on a guess.
+  const BRANDS = await (async () => {
+    const res = await fetch(`${SB_URL}/rest/v1/manufacturers?select=name&order=name.asc&limit=1000`,
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+    const rows = res.ok ? await res.json() : null;
+    const names = Array.isArray(rows) ? rows.map((m) => m && m.name).filter(Boolean) : null;
+    ok(Array.isArray(names) && names.length > 0, 'manufacturers readable with the public key', res.status + ', ' + (names ? names.length : 0) + ' brands');
+    return names && names.length ? names : null;
+  })();
+  const unesc = (s) => s.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'");
 
   const idx = await get(HUB_INDEX_PATH);
   ok(idx.status === 200, `${HUB_INDEX_PATH}: 200`, idx.status);
@@ -534,6 +547,27 @@ for (const [label, path, want] of [
     note('magazine rows served (fit/doesn\'t fit)', r.hubMags || 'header absent');
     if (magCounts[0] > 0) {
       ok(r.body.includes('id="magazines"'), `${path}: magazine section served`);
+      // Every row names its brand, exactly once. "AMAG 15 SG9 15rd" told a
+      // reader nothing; "Magpul Magpul AMAG …" is the fix gone wrong. Both
+      // render perfectly, so the served text of each .mag-name link and
+      // each "doesn't fit" link is held to open with a form of a brand in
+      // `manufacturers` (full name, first word, initials or a listed alias
+      // — _display-name.mjs) and to not open with that brand twice. The
+      // row count must match the header: a header that says 7 over 5 rows
+      // is the silent failure this file exists for.
+      const rowNames = [...r.body.matchAll(/<a class="mag-name" href="[^"]*">([^<]*)<\/a>/g)].map((m) => unesc(m[1]));
+      ok(rowNames.length === magCounts[0], `${path}: one .mag-name per served fit row`, rowNames.length + ' rows, header ' + magCounts[0]);
+      const noFitBlock = (r.body.match(/<p class="mag-nofit">[\s\S]*?<\/p>/) || [''])[0];
+      const noFitNames = [...noFitBlock.matchAll(/<a href="\/parts\/magazines\/[^"]*">([^<]*)<\/a>/g)].map((m) => unesc(m[1]));
+      ok(noFitNames.length === magCounts[1], `${path}: one "doesn't fit" link per served not-compatible row`, noFitNames.length + ' links, header ' + magCounts[1]);
+      if (BRANDS) {
+        for (const name of [...rowNames, ...noFitNames]) {
+          const brand = BRANDS.find((b) => brandForms(b).some((f) => new RegExp('^' + f.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![a-z0-9])', 'i').test(name)));
+          ok(Boolean(brand), `${path}: "${name}" starts with a known brand`, brand || 'NONE');
+          if (brand) ok(!hasDoubledBrand(name, brand), `${path}: "${name}" does not double its brand`, brand);
+        }
+        note('magazine row names', [...rowNames, ...noFitNames].join(' | '));
+      }
       const magLinks = [...new Set([...r.body.matchAll(/href="(\/parts\/magazines\/[^"#?]+)"/g)].map((m) => m[1]))];
       ok(magLinks.length >= 1, `${path}: magazine section links to a product page`, magLinks.length + ' linked');
       ok(magLinks.length >= magCounts[0], `${path}: every served fit row is linked`, magLinks.length + ' of ' + magCounts[0]);

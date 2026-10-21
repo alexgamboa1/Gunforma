@@ -30,6 +30,7 @@ import { isStalePrice, compareListingRows, displayPartnerName } from './_listing
 // An optic with no partner listing links to its own products.url through
 // /go/part/<id>; label and disclosure rules live in _maker-link.mjs.
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
+import { displayProductName } from './_display-name.mjs';
 import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
@@ -176,6 +177,9 @@ async function fetchFitOptics(cutNames) {
       slug: p.slug,
       name: p.name,
       brand: p.manufacturers ? p.manufacturers.name : null,
+      // What the page prints (_display-name.mjs): "Olight Osight SE", not
+      // "Osight SE" over a small "Olight". The sort below stays on name.
+      displayName: displayProductName({ brand: p.manufacturers ? p.manufacturers.name : null, name: p.name }),
       fitmentConfidence: p.fitment_confidence,
       footprintName: (r.footprints && r.footprints.common_name) || (r.footprints && r.footprints.slug) || '',
       mountFit: mapping ? mapping.fit : null,
@@ -283,19 +287,18 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
     ...content.staticTakeaways,
     optics.length + ' optics fit the ' + gunName + ' as a direct mount; ' + freshPriced.length +
       ' of them have live, feed-verified prices today.',
-    ...(cheapest ? ['The least expensive with a verified price right now is the ' + cheapest.name +
+    ...(cheapest ? ['The least expensive with a verified price right now is the ' + cheapest.displayName +
       ' at $' + cheapest.hero.price.toFixed(2) + '.'] : []),
     ...(enclosed.length ? [String(enclosed.length) + ' of the fitting optics are enclosed-emitter designs, including the ' +
-      enclosed[0].name + '.'] : []),
+      enclosed[0].displayName + '.'] : []),
   ];
 
   const tableRows = optics.map((o) => {
     const productHref = '/parts/' + familyMeta.categorySegment + '/' + o.slug;
     return '<tr>' +
       '<td><div class="t-optic">' +
-        (o.photo ? '<img class="t-photo" src="' + esc(o.photo) + '" alt="' + esc(o.name) + '" loading="lazy" width="44" height="44"/>' : '') +
-        '<div><a href="' + esc(productHref) + '">' + esc(o.name) + '</a>' +
-        (o.brand ? '<span class="t-brand">' + esc(o.brand) + '</span>' : '') + '</div></div></td>' +
+        (o.photo ? '<img class="t-photo" src="' + esc(o.photo) + '" alt="' + esc(o.displayName) + '" loading="lazy" width="44" height="44"/>' : '') +
+        '<div><a href="' + esc(productHref) + '">' + esc(o.displayName) + '</a></div></div></td>' +
       '<td>' + esc(o.footprintName) + (o.mountFit === 'direct' ? '' : ' (plate)') + '</td>' +
       '<td>' + reticleCell(o) + '</td>' +
       '<td>' + (o.spec.window_size ? esc(o.spec.window_size) : '—') + '</td>' +
@@ -317,9 +320,8 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
     .filter((x) => x.o);
   const picksHtml = picks.map(({ pick, o }) =>
     '<div class="pick-card">' +
-      (o.photo ? '<img class="pick-photo" src="' + esc(o.photo) + '" alt="' + esc(o.name) + '" loading="lazy"/>' : '') +
-      '<div class="pick-name"><a href="/parts/' + esc(familyMeta.categorySegment) + '/' + esc(o.slug) + '">' + esc(o.name) + '</a></div>' +
-      (o.brand ? '<div class="pick-brand">' + esc(o.brand) + '</div>' : '') +
+      (o.photo ? '<img class="pick-photo" src="' + esc(o.photo) + '" alt="' + esc(o.displayName) + '" loading="lazy"/>' : '') +
+      '<div class="pick-name"><a href="/parts/' + esc(familyMeta.categorySegment) + '/' + esc(o.slug) + '">' + esc(o.displayName) + '</a></div>' +
       '<div class="pick-why">' + esc(pick.why) + '</div>' +
       '<div class="pick-meta">' +
         (o.spec.reticle ? esc(o.spec.reticle) + ' · ' : '') +
@@ -380,7 +382,7 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
       itemListElement: optics.map((o, i) => ({
         '@type': 'ListItem', position: i + 1,
         item: {
-          '@type': 'Product', name: o.name,
+          '@type': 'Product', name: o.displayName,
           url: SITE + '/parts/' + familyMeta.categorySegment + '/' + o.slug,
           ...(o.photo ? { image: o.photo } : {}),
           ...(o.brand ? { brand: { '@type': 'Brand', name: o.brand } } : {}),
@@ -419,7 +421,6 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
 'th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #667; padding: 10px 12px; border-bottom: 1px solid #e5e5e5; background: #fbfbfa; }' +
 'td { padding: 10px 12px; border-bottom: 0.5px solid #efefec; vertical-align: middle; }' +
 'td a { color: #1a1a1a; font-weight: 600; text-decoration: none; } td a:hover { color: #4a9edd; }' +
-'.t-brand { display: block; font-size: 11px; color: #888; font-weight: 400; }' +
 '.t-optic { display: flex; align-items: center; gap: 10px; }' +
 '.t-photo { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; border: 0.5px solid #ececec; background: #fff; flex: none; }' +
 '.pick-photo { width: 100%; aspect-ratio: 4/3; object-fit: contain; border-radius: 6px; border: 0.5px solid #ececec; background: #fff; }' +
@@ -432,7 +433,6 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
 '.picks { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin: 12px 0; }' +
 '.pick-card { border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; padding: 14px; display: flex; flex-direction: column; gap: 6px; }' +
 '.pick-name a { font-size: 14px; font-weight: 700; color: #1a1a1a; text-decoration: none; }' +
-'.pick-brand { font-size: 11px; color: #888; }' +
 '.pick-why { font-size: 12.5px; line-height: 1.5; color: #444; }' +
 '.pick-meta { font-size: 12px; color: #555; margin-top: auto; }' +
 '.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +

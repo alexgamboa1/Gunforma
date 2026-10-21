@@ -882,6 +882,32 @@ Three rules that look like decoration:
   the wording. The guide page keeps its first sentence about prices and
   applies the rule to the second.
 
+### A product's name on a page is `displayProductName()`
+
+`products.name` carries the brand only when the maker writes it that way:
+204 of the 277 live names do ("Holosun 507K X2"), 73 do not — every
+magazine ("AMAG 15 SG9 P365 9mm 15rd Magazine" is Magpul's, "P365 9mm 17rd
+Magazine (All 9mm Models)" is Sig's), every Olight, Streamlight and
+SureFire light, and short forms like "Faxon Exos" and "TTI SIG X-MACRO".
+A hub row printing the bare name told a reader nothing. So every
+server-rendered product row prints **`displayProductName({ brand, name })`**
+from `netlify/functions/_display-name.mjs`: "{brand} {name}", unless the
+name already carries the brand — as a full-name prefix, the first word of
+a multi-word brand ("SIG", "Radian"), its initials ("TTI", "PMM"), a
+listed alias (`BRAND_ALIASES`: "MPI"), or the full name anywhere in it.
+Whole words only, and never a write: the stored name is untouched. It is
+used by `gun-hub.mjs` (rows, the "doesn't fit" line, the ItemList),
+`guide-page.mjs` (table, picks, the two prose takeaways, JSON-LD —
+the separate `.t-brand` / `.pick-brand` sub-lines went with it),
+`field-note.mjs` (the `::price` part cell and the `::fit` question) and
+`build-og.mjs` (the build title, which held its own shorter copy).
+`product-page.mjs` is deliberately NOT on that list: its H1 is the stored
+name with a linked "by <maker>" line beneath, a different shape. Sorting
+stays on the stored name everywhere, so no order changed.
+`scripts/display-name.test.mjs` pins the rule; `scripts/check-routes.mjs`
+asserts on the wire that every hub magazine row opens with a brand from
+`manufacturers` and doubles none, and that row counts match the header.
+
 **Not in the JSON-LD.** A maker link with a hand-typed MSRP is not an offer
 we can stand behind in rich results; `product-page.mjs` filters maker rows
 out of `offers` explicitly.
@@ -995,6 +1021,7 @@ Registered today:
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` or `profile-og.mjs` replacing a literal its page no longer contains, or a page carrying a noindex or canonical its function never strips |
 | `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
 | `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
+| `scripts/display-name.test.mjs` | `_display-name.mjs` printing a product without its brand ("AMAG 15 SG9") or with it twice ("Magpul Magpul AMAG", "Sig Sauer SIG P365", "Radian Weapons Radian Ramjet") — pins every live name shape: full-brand prefix, first-word and initials short forms, a listed alias, a brand mid-name, another maker's name inside the name |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose; a hub `<title>` at 60 characters or over, or off the "`<model>`: Which Mags … Fit \| Gunforma" shape |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
@@ -1054,6 +1081,15 @@ catch that by construction: the thing under test is what Netlify puts on the
 wire. Only a request Netlify actually routed can answer it.
 
 ## Verifying changes
+
+**Removing or restructuring a visible UI element requires asking first.** A
+brand sub-line, a badge, a column, a button: if a reader could see it before
+and not after, or in a different place, that is a decision for Alex, not a
+side effect of the change you were asked for. Open the PR with the element
+intact and the question stated, or stop and ask — never remove it and
+report it afterwards. (#187 removed the brand sub-lines under guide and
+Field Notes rows while prefixing brands; the prefix was asked for, the
+removal was not.)
 
 Anything that touches the database must be verified **signed in, on the deploy preview**,
 before merging. RLS means a query can behave completely differently for an anonymous
