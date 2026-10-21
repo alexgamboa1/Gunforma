@@ -69,6 +69,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .card-type-badge { position: absolute; top: 8px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 3px; }
 .card-type-badge.review { background: #eaf4fc; color: #1d6fb8; border: 0.5px solid #a7cdec; }
 .card-type-badge.comparison { background: #fff5e6; color: #b45309; border: 0.5px solid #f8d5a0; }
+.card-type-badge.guide { background: #e3f3e8; color: #1d6b43; border: 0.5px solid #a9d8b8; }
 
 /* CARD BODY */
 .card-body { padding: 14px; flex: 1; display: flex; flex-direction: column; }
@@ -183,6 +184,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <button class="filter-tab active" data-filter="all">All</button>
         <button class="filter-tab" data-filter="type:review">Reviews</button>
         <button class="filter-tab" data-filter="type:comparison">Comparisons</button>
+        <button class="filter-tab" data-filter="type:guide">Guides</button>
         <button class="filter-tab" data-filter="category:Optics">Optics</button>
         <button class="filter-tab" data-filter="category:Lights">Lights</button>
         <button class="filter-tab" data-filter="category:Triggers">Triggers</button>
@@ -212,51 +214,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
-// ── Static article data — replace with Supabase fetch once field_notes_posts table exists ──
-const STATIC_POSTS = [
-  {
-    slug:             'holosun-507c-x2-review',
-    href:             'holosun-507c-x2-review.html',
-    type:             'review',
-    category:         'Optics',
-    title:            'Holosun 507C X2 — The Red Dot Everyone\'s Running For Good Reason',
-    excerpt:          'After 2,000 rounds across three hosts, here\'s exactly when the 507C X2 earns its reputation — and where it falls short.',
-    author_name:      'Marcus Webb',
-    publish_date:     '2026-06-18',
-    rating:           9.1,
-    comparison_label: null,
-    cover_image_url:  null,
-    coming_soon:      false
-  },
-  {
-    slug:             'holosun-507c-vs-trijicon-rmr-comparison',
-    href:             'holosun-507c-vs-trijicon-rmr-comparison.html',
-    type:             'comparison',
-    category:         'Optics',
-    title:            'Holosun 507C X2 vs Trijicon RMR Type 2 — Which One Actually Wins?',
-    excerpt:          'Six months, 3,000 rounds, back-to-back on the same Glock 17 MOS. The complete spec-by-spec breakdown.',
-    author_name:      'Marcus Webb',
-    publish_date:     '2026-06-10',
-    rating:           null,
-    comparison_label: '507C X2 vs RMR',
-    cover_image_url:  null,
-    coming_soon:      false
-  },
-  {
-    slug:             'streamlight-tlr-7-sub-review',
-    href:             null,
-    type:             'review',
-    category:         'Lights',
-    title:            'Streamlight TLR-7 Sub Review',
-    excerpt:          null,
-    author_name:      null,
-    publish_date:     null,
-    rating:           null,
-    comparison_label: null,
-    cover_image_url:  null,
-    coming_soon:      true
-  }
-];
+// ── Articles: the LIVE set from netlify/functions/_field-notes-meta.mjs ──
+// This page ships as a file and cannot import the registry, so it holds a
+// copy, the way index.html holds a copy of GUN_HUBS. scripts/check-field-notes.mjs
+// refuses the deploy when the copy drifts: one card per live (non-draft)
+// article, none for a draft, and title / excerpt / author / type / category /
+// date byte-for-byte the article's own front matter and registry row. Flipping
+// an article live is therefore two edits: `draft` in the registry, and its
+// card here — the guard prints the exact literal to paste.
+//
+// A JSON array literal between the two markers, which the guard parses. Each
+// card: slug, href, type, category, title, excerpt, author_name, publish_date.
+// Empty means no live article yet, and the page shows its empty state. The two
+// Holosun mockups and the "coming soon" Streamlight card that used to sit here
+// linked to pages that never existed (2026-10-21).
+const FIELD_NOTE_POSTS = /* field-notes-index:start */ [] /* field-notes-index:end */;
 
 const POSTS_PER_PAGE = 12;
 
@@ -337,9 +309,10 @@ function cardHTML(post) {
 
   const isReview     = post.type === 'review';
   const isComparison = post.type === 'comparison';
+  const isGuide      = post.type === 'guide';
 
-  const badgeClass = isReview ? 'review' : isComparison ? 'comparison' : '';
-  const badgeLabel = isReview ? 'Review'  : isComparison ? 'Comparison'  : (post.type || '');
+  const badgeClass = isReview ? 'review' : isComparison ? 'comparison' : isGuide ? 'guide' : '';
+  const badgeLabel = isReview ? 'Review'  : isComparison ? 'Comparison'  : isGuide ? 'Guide' : (post.type || '');
 
   const imgStyle = post.cover_image_url
     ? `style="background-image:url('${post.cover_image_url}');background-size:cover;background-position:center;"`
@@ -472,10 +445,10 @@ nextBtn.addEventListener('click', () => {
   if (currentPage < pages) { currentPage++; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 });
 
-// ── Load static data ──────────────────────────────────────
+// ── Load the card list ────────────────────────────────────
 function loadPosts() {
-  allPosts      = STATIC_POSTS;
-  filteredPosts = STATIC_POSTS;
+  allPosts      = FIELD_NOTE_POSTS;
+  filteredPosts = FIELD_NOTE_POSTS;
   renderPage();
 }
 

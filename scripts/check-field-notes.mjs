@@ -22,6 +22,12 @@
 //   - a title, description or author that is missing or out of bounds, a
 //     type outside the three the index page knows, a bad slug, a malformed
 //     or inverted date pair
+//   - the index page's card list (field-notes.html, FIELD_NOTE_POSTS)
+//     drifting from the registry: a live article with no card, a card for
+//     a draft or an undeclared slug, a card whose title, excerpt, author,
+//     type, category or date is not the article's own. The page ships as a
+//     file and cannot import the registry, so it holds a copy, and this is
+//     what lets the copy exist (same shape as check-home-picker.mjs)
 // No network: this is tree-dependent, not time-dependent. The live half —
 // that every slug in a block exists in the catalog — is check-routes.mjs,
 // which reads x-field-note-products / x-field-note-fits off the wire.
@@ -30,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-const { FIELD_NOTES, FIELD_NOTES_DIR, fieldNoteFile } = await import(join(ROOT, 'netlify/functions/_field-notes-meta.mjs'));
+const { FIELD_NOTES, FIELD_NOTES_DIR, fieldNoteFile, fieldNotePath, liveFieldNotes } = await import(join(ROOT, 'netlify/functions/_field-notes-meta.mjs'));
 const { parseFrontMatter, renderMarkdown, isDirectiveLine, parseDirective } = await import(join(ROOT, 'netlify/functions/_markdown.mjs'));
 const { GUN_META } = await import(join(ROOT, 'netlify/functions/_guide-meta.mjs'));
 
@@ -67,12 +73,14 @@ for (const f of files) {
 }
 
 // ── each declared article ────────────────────────────────────────────────
+const META = {};
 for (const a of FIELD_NOTES) {
   const id = a.slug;
   const file = join(ROOT, fieldNoteFile(a.slug));
   try { await access(file); } catch { fail(id + ': declared but ' + fieldNoteFile(a.slug) + ' does not exist'); continue; }
   const src = await readFile(file, 'utf8');
   const { meta, body } = parseFrontMatter(src);
+  META[a.slug] = meta;
   const before = failures;
 
   if (!meta.title) fail(id + ': front matter has no title');
@@ -114,6 +122,36 @@ for (const a of FIELD_NOTES) {
   try { r = renderMarkdown(body); } catch (e) { fail(id + ': renderMarkdown threw: ' + (e && e.message)); continue; }
   if (!r.blocks.length && !a.draft) console.log('      ' + id + ': no live-data block (fine for an article that needs none)');
   if (failures === before) pass(id + (a.draft ? ' (draft)' : '') + ' — ' + r.blocks.length + ' block(s)');
+}
+
+// ── the index page's copy of the live set ────────────────────────────────
+// field-notes.html renders its cards from FIELD_NOTE_POSTS, a JSON array
+// literal between two markers. Expected: one card per LIVE article, newest
+// published first, every field the article's own. The guard prints the
+// exact literal on a mismatch, so fixing it is a paste.
+{
+  const INDEX_FILE = 'field-notes.html';
+  const html = await readFile(join(ROOT, INDEX_FILE), 'utf8');
+  const m = html.match(/\/\* field-notes-index:start \*\/\s*([\s\S]*?)\s*\/\* field-notes-index:end \*\//);
+  let have = null;
+  if (!m) fail(INDEX_FILE + ': no /* field-notes-index:start */ … /* field-notes-index:end */ markers around FIELD_NOTE_POSTS');
+  else {
+    try { have = JSON.parse(m[1]); } catch (e) { fail(INDEX_FILE + ': the list between the markers is not a JSON array literal: ' + (e && e.message)); }
+  }
+  const want = liveFieldNotes()
+    .slice()
+    .sort((a, b) => (b.published < a.published ? -1 : b.published > a.published ? 1 : a.slug < b.slug ? -1 : 1))
+    .map((a) => {
+      const meta = META[a.slug] || {};
+      return { slug: a.slug, href: fieldNotePath(a.slug), type: meta.type, category: meta.category, title: meta.title,
+               excerpt: meta.description, author_name: meta.author, publish_date: a.published };
+    });
+  if (have !== null) {
+    if (!Array.isArray(have)) fail(INDEX_FILE + ': FIELD_NOTE_POSTS must be an array');
+    else if (JSON.stringify(have) !== JSON.stringify(want)) {
+      fail(INDEX_FILE + ': FIELD_NOTE_POSTS does not match the live registry — it must read exactly:\n' + JSON.stringify(want, null, 2));
+    } else pass(INDEX_FILE + ': ' + want.length + ' card(s) match the live registry' + (want.length ? '' : ' (no live article yet; drafts stay off the index)'));
+  }
 }
 
 console.log(failures === 0

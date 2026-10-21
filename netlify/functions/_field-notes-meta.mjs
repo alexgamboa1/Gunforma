@@ -36,6 +36,12 @@ export const FIELD_NOTES = [
   // it: it is what proves the plumbing before any article exists, and it
   // is a 404 on gunforma.com.
   { slug: 'renderer-check', published: '2026-10-20', updated: '2026-10-20', draft: true },
+  // Article 1. DRAFT until Alex clears the cache/routing P0 and has the
+  // Reddit post ready; flipping it is the one-line change here (and the
+  // matching card in field-notes.html, which check-field-notes.mjs holds
+  // to the live set). Every fit verdict is a ::fit block over
+  // magazine_housing_fit; every price a ::price block. Nothing typed.
+  { slug: 'p365-magazine-fit', published: '2026-10-21', updated: '2026-10-21', draft: true },
 ];
 
 export const FIELD_NOTES_INDEX_PATH = '/field-notes.html';
