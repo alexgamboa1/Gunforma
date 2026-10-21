@@ -53,8 +53,11 @@ const CASES = [
   ['Sig Sauer',      'SIG SAUER P365 17rd',                     'P365 17rd',                               'Sig Sauer P365 17rd'],
   ['True Precision', 'True Precision Axiom P365',               'Axiom P365',                              'True Precision Axiom P365'],
   ['ECM/LWS',        'ECM/LWS Collab Ported Barrel',            'Collab Ported Barrel',                    'ECM/LWS Collab Ported Barrel'],
-  // … the first word of a multi-word brand …
+  // … a shorter run of its leading words (ONE strip takes the longest
+  //    form that fits: "Timber Creek", not "Timber" leaving "Creek …") …
   ['Sig Sauer',      'SIG P365 17rd',                           'P365 17rd',                               'Sig Sauer P365 17rd'],
+  ['Timber Creek Outdoors', 'Timber Creek Sig Sauer P365 Extended Magazine Release', 'Sig Sauer P365 Extended Magazine Release', 'Timber Creek Outdoors Sig Sauer P365 Extended Magazine Release'],
+  ['Timber Creek Outdoors', 'Timber Sig Sauer P365 Extended Magazine Release', 'Sig Sauer P365 Extended Magazine Release', 'Timber Creek Outdoors Sig Sauer P365 Extended Magazine Release'],
   ['Radian Weapons', 'Radian Ramjet + Afterburner Compensator P365', 'Ramjet + Afterburner Compensator P365', 'Radian Weapons Ramjet + Afterburner Compensator P365'],
   ['DMP Springs',    'DMP Soft RSA',                            'Soft RSA',                                'DMP Springs Soft RSA'],
   // … its initials …
@@ -100,9 +103,10 @@ test('both helpers tolerate a missing object', () => {
   assert.deepEqual(displayProductParts({}), { brand: '', model: '' });
 });
 
-test('brandForms: full brand, first word, initials, aliases — longest first, lower case', () => {
+test('brandForms: full brand, leading-word runs, initials, aliases — longest first, lower case', () => {
   assert.deepEqual(brandForms('Sig Sauer'), ['sig sauer', 'sig', 'ss']);
-  assert.deepEqual(brandForms('Taran Tactical Innovations'), ['taran tactical innovations', 'taran', 'tti']);
+  assert.deepEqual(brandForms('Taran Tactical Innovations'), ['taran tactical innovations', 'taran tactical', 'taran', 'tti']);
+  assert.deepEqual(brandForms('Timber Creek Outdoors'), ['timber creek outdoors', 'timber creek', 'timber', 'tco']);
   assert.deepEqual(brandForms('MASKAS Precision'), ['maskas precision', 'maskas', 'mpi', 'mp']);
   assert.deepEqual(brandForms('Holosun'), ['holosun'], 'a one-word brand has no short forms');
   assert.deepEqual(brandForms(''), []);

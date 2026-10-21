@@ -26,7 +26,9 @@
   var squash = function (s) { return (s == null ? '' : String(s)).replace(/\s+/g, ' ').trim(); };
   var escapeRe = function (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); };
 
-  // The forms a frozen name may open with, lower case, longest first.
+  // The forms a frozen name may open with, lower case, longest first: the
+  // full brand, every shorter run of its leading words ("Timber Creek" and
+  // "Timber" for Timber Creek Outdoors), its initials, and a listed alias.
   // Empty for an empty brand.
   function brandForms(brand) {
     var b = squash(brand).toLowerCase();
@@ -35,7 +37,10 @@
     var add = function (f) { if (forms.indexOf(f) === -1) forms.push(f); };
     var words = b.split(' ').filter(Boolean);
     if (words.length >= 2) {
-      if (words[0].length >= 2) add(words[0]);
+      for (var n = words.length - 1; n >= 1; n--) {
+        var lead = words.slice(0, n).join(' ');
+        if (lead.length >= 2) add(lead);
+      }
       var initials = words.map(function (w) { return w[0]; }).join('');
       if (/^[a-z0-9]{2,}$/.test(initials)) add(initials);
     }

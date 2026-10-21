@@ -23,8 +23,9 @@
 // opened with their brand ("Sig Sauer Romeo-X Enclosed Compact", "Radian
 // Ramjet …" for Radian Weapons), and a builder typing a part by hand may
 // write the brand in both fields. So displayProductParts() strips ONE
-// leading form of the brand — the full name, the first word of a multi-word
-// brand, its initials, or a listed alias (BRAND_ALIASES) — when the name
+// leading form of the brand — the full name, a shorter run of its leading
+// words, its initials, or a listed alias (BRAND_ALIASES); the longest that
+// fits — when the name
 // opens with it and a space (or nothing) follows. A hyphen does not count:
 // True Precision's "True-Lock Compensator" keeps its "True-". A brand that
 // appears only mid-name is left alone, and a name that IS the brand keeps
@@ -42,15 +43,21 @@ export const BRAND_ALIASES = {
 const squash = (s) => (s == null ? '' : String(s)).replace(/\s+/g, ' ').trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// The forms a frozen name may open with, lower case, longest first. Empty
-// for an empty brand.
+// The forms a frozen name may open with, lower case, longest first: the
+// full brand, every shorter run of its leading words ("Timber Creek" and
+// "Timber" for Timber Creek Outdoors — the two-word form is what the maker
+// writes, and stripping only "Timber" would leave "Creek …"), its
+// initials, and a listed alias. Empty for an empty brand.
 export function brandForms(brand) {
   const b = squash(brand).toLowerCase();
   if (!b) return [];
   const forms = new Set([b]);
   const words = b.split(' ').filter(Boolean);
   if (words.length >= 2) {
-    if (words[0].length >= 2) forms.add(words[0]);
+    for (let n = words.length - 1; n >= 1; n--) {
+      const lead = words.slice(0, n).join(' ');
+      if (lead.length >= 2) forms.add(lead);
+    }
     const initials = words.map((w) => w[0]).join('');
     if (/^[a-z0-9]{2,}$/.test(initials)) forms.add(initials);
   }

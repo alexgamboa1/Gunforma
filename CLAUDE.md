@@ -944,8 +944,9 @@ the build — on 2026-10-21, 47 of the 86 parts in approved builds opened
 with their brand ("Sig Sauer Romeo-X Enclosed Compact", "Radian Ramjet …"
 for Radian Weapons) — and a builder typing a part may write the brand in
 both fields. So `displayProductParts()` strips ONE leading form of the
-brand (the full name, the first word of a multi-word brand, its initials,
-or a listed alias in `BRAND_ALIASES`) when the name opens with it and a
+brand (the full name, a shorter run of its leading words — "Timber Creek"
+for Timber Creek Outdoors — its initials, or a listed alias in
+`BRAND_ALIASES`; the longest that fits) when the name opens with it and a
 space follows. A hyphen does not count ("True-Lock" keeps its "True-"), a
 brand mid-name is left alone, a name that is only the brand keeps it, and
 nothing else is edited: the helper never introduces a doubled brand, and a
