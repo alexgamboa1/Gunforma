@@ -1082,6 +1082,15 @@ wire. Only a request Netlify actually routed can answer it.
 
 ## Verifying changes
 
+**Removing or restructuring a visible UI element requires asking first.** A
+brand sub-line, a badge, a column, a button: if a reader could see it before
+and not after, or in a different place, that is a decision for Alex, not a
+side effect of the change you were asked for. Open the PR with the element
+intact and the question stated, or stop and ask — never remove it and
+report it afterwards. (#187 removed the brand sub-lines under guide and
+Field Notes rows while prefixing brands; the prefix was asked for, the
+removal was not.)
+
 Anything that touches the database must be verified **signed in, on the deploy preview**,
 before merging. RLS means a query can behave completely differently for an anonymous
 visitor than for its owner, and an anon-only smoke test proves very little.
