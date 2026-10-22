@@ -370,8 +370,9 @@ INSERT INTO "public"."platform_skus" ("gun_id", "gun_db_platform_id") VALUES ('f
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('c-port', 'C-Port', 10, NULL);
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('e-port', 'E-Port', 20, NULL);
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('slide-matched', 'Slide-Matched', 30, 'Barrel port matches whatever slide it is fitted to');
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('chunk-port', 'Chunk Port', 40, 'Large single cut at the front of the slide top, paired with a top-and-chunk ported barrel (Fdez Werx 365RS).');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('chunk-port', 'Chunk Port', 40, 'Chunk port only, no top port (Fdez Werx Chunk Port 4.3" barrel).');
 INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('top-and-chunk', 'Top & Chunk', 50, 'Top port plus a chunk port (Fdez Werx FUSE slides and their Top & Chunk ported barrel).');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('v-port', 'V-Port', 60, 'V-shaped port pattern (Fdez Werx XL 3.0 V-Ported 3.7" barrel). Fit is set by barrel locks, not this label.');
 
 --
 -- Data for Name: rail_types; Type: TABLE DATA; Schema: public; Owner: postgres
