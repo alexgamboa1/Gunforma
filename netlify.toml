@@ -433,6 +433,16 @@
   status = 301
   force = true
 
+# Icarus Precision "311 FUSE SL" describes a product Icarus does not sell
+# (its 311 line is the 311, 311 SL and 311 FUSE). Discontinued 2026-10-22,
+# never deleted; its path lands on the real product it described. Same
+# placement rule, same RETIRED entry and check-routes pair.
+[[redirects]]
+  from = "/parts/frames/icarus-precision-311-fuse-sl"
+  to = "/parts/frames/icarus-precision-311-fuse"
+  status = 301
+  force = true
+
 # Per-product pages, server-rendered so crawlers see real content instead of
 # the "Loading parts…" shell the client-side catalog shows before Supabase
 # resolves. :splat carries "category/slug" (or just "slug" — the function

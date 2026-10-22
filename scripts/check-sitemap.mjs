@@ -175,6 +175,11 @@ const RETIRED = new Set([
   // /parts/safety-selectors/sig-sauer-manual-safety-kit-p365 (netlify.toml;
   // the pair is asserted in check-routes.mjs).
   '/parts/safety-selectors/sig-sauer-manual-safety-parts-kit-black-p365',
+  // Icarus's "311 FUSE SL" was never a product Icarus sold (created here in
+  // the 2026-10-01 bulk load, after this baseline, so this line documents).
+  // Discontinued 2026-10-22 and 301s to /parts/frames/icarus-precision-311-fuse
+  // (netlify.toml; the pair is asserted in check-routes.mjs).
+  '/parts/frames/icarus-precision-311-fuse-sl',
 ]);
 
 const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.json'), 'utf8'))
