@@ -14,9 +14,13 @@
 //   - only parts with is_approved === true and not discontinued are listed;
 //   - a slide page groups Ported, Threaded, Flush, in that order;
 //   - a locked barrel says "Only these slides …"; an open one does not;
+//   - a locked barrel ALWAYS shows the heading and the warning — with no
+//     slide listed (all unapproved, or the fit read failed) it says "Only
+//     for specific <brand> slides …". The lock is read with the barrel's own
+//     spec row, so it cannot vanish with the fit rows;
 //   - "From $X" follows the headline rule: fresh prices only;
-//   - nothing renders when nothing is listed, when the read fails, or when
-//     the page's own spec row is missing — and the page is still a 200;
+//   - otherwise nothing renders when nothing is listed, when the read fails,
+//     or when the page's own spec row is missing — and the page is a 200;
 //   - x-fit-section reports which of those happened.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -55,10 +59,13 @@ function part(name, brand, { approved = true, discontinued = false, links = [], 
   return p;
 }
 
+// barrel_specs.locks as the spec query returns it: one row per locked slide.
+const locks = (...brands) => brands.map((b) => ({ slide_specs: { products: { manufacturers: { name: b } } } }));
+
 // Run the handler. `fitAnswer` is what the view query returns (an array, or
 // a Response for a failure); `specRow` is the page's own spec row (null = none).
 async function render(category, { specRow, fitAnswer = [] } = {}) {
-  const seen = { fitUrls: [] };
+  const seen = { fitUrls: [], specUrls: [] };
   const realFetch = globalThis.fetch;
   const realErr = console.error;
   console.error = () => {};
@@ -70,7 +77,7 @@ async function render(category, { specRow, fitAnswer = [] } = {}) {
       return fitAnswer instanceof Response ? fitAnswer : json(fitAnswer);
     }
     if (u.includes('/products?slug=eq.')) return json([product(category, 'test-' + category)]);
-    if (u.includes('/slide_specs?') || u.includes('/barrel_specs?') || u.includes('_specs?')) return json(specRow ? [specRow] : []);
+    if (u.includes('_specs?')) { seen.specUrls.push(decodeURIComponent(u)); return json(specRow ? [specRow] : []); }
     if (u.includes('/products?id=eq.')) return json([{ restricted_states: null }]);
     return json([]);
   };
@@ -140,12 +147,11 @@ test('slide with threaded_barrel_ok NULL: threaded barrels listed, with the not-
 });
 
 test('locked threaded barrel: lock line, query drops slides that say no, NULL slides carry a note', async () => {
-  const lock = [{ count: 2 }];
   const r = await render('barrel', {
-    specRow: { barrel_type: 'threaded' },
+    specRow: { barrel_type: 'threaded', locks: locks('Acme', 'Acme') },
     fitAnswer: [
-      { locks: lock, part: part('Slide Yes', 'Acme', { threaded: true }) },
-      { locks: lock, part: part('Slide Unknown', 'Acme', { threaded: null }) },
+      { part: part('Slide Yes', 'Acme', { threaded: true }) },
+      { part: part('Slide Unknown', 'Acme', { threaded: null }) },
     ],
   });
   assert.equal(r.header, 'listed:2;locked');
@@ -154,14 +160,16 @@ test('locked threaded barrel: lock line, query drops slides that say no, NULL sl
   assert.match(sec, /Acme Slide Unknown<\/a><span class="fit-note">Maker doesn&rsquo;t state threaded fit<\/span>/);
   assert.doesNotMatch(sec, /Acme Slide Yes<\/a><span class="fit-note">/);
   assert.match(r.fitUrls[0], /&part\.slide_specs\.threaded_barrel_ok=not\.is\.false/);
-  assert.match(r.fitUrls[0], /barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey\(count\)/);
+  assert.match(r.specUrls[0], /^.*\/barrel_specs\?.*locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey\(slide_specs!barrel_slide_requirements_slide_product_id_fkey\(products!slide_specs_product_id_fkey\(manufacturers!products_brand_id_fkey\(name\)\)\)\)/,
+    'the lock rows ride in the barrel\'s own spec query, FKs named');
+  assert.doesNotMatch(r.fitUrls[0], /barrel_slide_requirements/, 'not on the fit rows, which can be empty');
   assert.match(r.fitUrls[0], /products!slide_specs_product_id_fkey!inner\(/);
 });
 
 test('open flush barrel: no lock line, no thread filter, no notes', async () => {
   const r = await render('barrel', {
-    specRow: { barrel_type: 'standard' },
-    fitAnswer: [{ locks: [{ count: 0 }], part: part('Any Slide', 'Acme', { threaded: false }) }],
+    specRow: { barrel_type: 'standard', locks: [] },
+    fitAnswer: [{ part: part('Any Slide', 'Acme', { threaded: false }) }],
   });
   assert.equal(r.header, 'listed:1');
   const sec = sectionOf(r.html, 'Slides this barrel fits');
@@ -171,17 +179,54 @@ test('open flush barrel: no lock line, no thread filter, no notes', async () => 
   assert.doesNotMatch(r.fitUrls[0], /threaded_barrel_ok=not/);
 });
 
-test('nothing listed after filtering: no heading at all', async () => {
+test('open barrel with nothing listed: no heading at all', async () => {
   const r = await render('barrel', {
-    specRow: { barrel_type: 'ported' },
-    fitAnswer: [{ locks: [{ count: 1 }], part: part('Unapproved Slide', 'Acme', { approved: false }) }],
+    specRow: { barrel_type: 'ported', locks: [] },
+    fitAnswer: [{ part: part('Unapproved Slide', 'Acme', { approved: false }) }],
   });
-  assert.equal(r.header, 'listed:0;locked', 'the header still says the barrel is locked');
+  assert.equal(r.header, 'listed:0');
   assert.equal(sectionOf(r.html, 'Slides this barrel fits'), null);
-  assert.doesNotMatch(r.html, /class="fit-lock"/, 'the lock line never stands alone');
+  assert.doesNotMatch(r.html, /class="fit-lock"/);
 });
 
-test('the fit read fails (e.g. is_approved not there yet): page is a 200 without the section', async () => {
+const LOCK_NONE_LISTED = (brand) => '<div class="section-title">Slides this barrel fits</div>' +
+  '<div class="fit-lock">Only for specific ' + brand + 'slides &mdash; the maker says this barrel should not be used in any other slide.</div>';
+
+test('locked barrel whose slides are all unapproved: heading and the maker-named warning, no list', async () => {
+  const r = await render('barrel', {
+    specRow: { barrel_type: 'ported', locks: locks('Zaffiri Precision') },
+    fitAnswer: [{ part: part('Unapproved Slide', 'Zaffiri Precision', { approved: false }) }],
+  });
+  assert.equal(r.header, 'listed:0;locked');
+  assert.ok(r.html.includes(LOCK_NONE_LISTED('Zaffiri Precision ')), 'warning names the maker of the locked slides');
+  assert.doesNotMatch(r.html, /class="fit-list"/, 'no list under it');
+  assert.doesNotMatch(r.html, /Only these slides/, 'not the wording that points at a list');
+});
+
+test('locked barrel with no fit rows at all (e.g. its slide discontinued): still warns', async () => {
+  const r = await render('barrel', { specRow: { barrel_type: 'ported', locks: locks('Fdez Werx') }, fitAnswer: [] });
+  assert.equal(r.header, 'listed:0;locked');
+  assert.ok(r.html.includes(LOCK_NONE_LISTED('Fdez Werx ')));
+});
+
+test('locked barrel whose fit read fails: still warns, page still a 200', async () => {
+  const r = await render('barrel', {
+    specRow: { barrel_type: 'ported', locks: locks('Norsso') },
+    fitAnswer: new Response(JSON.stringify({ code: '42703', message: 'column products_1.is_approved does not exist' }), { status: 400 }),
+  });
+  assert.equal(r.res.status, 200);
+  assert.equal(r.header, 'failed;locked');
+  assert.ok(r.html.includes(LOCK_NONE_LISTED('Norsso ')));
+});
+
+test('locked to several makers, or a maker the row does not name: the wording holds', async () => {
+  const two = await render('barrel', { specRow: { barrel_type: 'ported', locks: locks('Norsso', 'Acme', 'Norsso') }, fitAnswer: [] });
+  assert.ok(two.html.includes(LOCK_NONE_LISTED('Acme or Norsso ')), 'distinct, sorted, joined with "or"');
+  const none = await render('barrel', { specRow: { barrel_type: 'ported', locks: [{ slide_specs: null }] }, fitAnswer: [] });
+  assert.ok(none.html.includes(LOCK_NONE_LISTED('')), '"Only for specific slides" when no brand is known');
+});
+
+test('the fit read fails on a slide (e.g. is_approved not there yet): page is a 200 without the section', async () => {
   const r = await render('slide', {
     specRow: { threaded_barrel_ok: true },
     fitAnswer: new Response(JSON.stringify({ code: '42703', message: 'column products_1.is_approved does not exist' }), { status: 400 }),

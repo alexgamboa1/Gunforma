@@ -325,7 +325,8 @@ async function fetchSpecs(category, productId) {
   const table = SPEC_TABLES[category];
   if (!table) return { rows: [], raw: null };
   const [tableName, fields] = table;
-  const cols = Array.from(new Set(fields.map((f) => f[0]))).join(',');
+  const cols = Array.from(new Set(fields.map((f) => f[0]))).join(',') +
+    (category === 'barrel' ? ',' + BARREL_LOCKS_EMBED : '');
   const rows = await pgGet(tableName + '?product_id=eq.' + productId + '&select=' + encodeURIComponent(cols) + '&limit=1');
   const row = Array.isArray(rows) && rows.length ? rows[0] : null;
   if (!row) return { rows: [], raw: null };
@@ -385,6 +386,26 @@ const FIT_PART_FILTERS = '&part.is_discontinued=is.false' +
   '&part.product_variants.retired_at=is.null' +
   '&part.product_variants.affiliate_links.retired_at=is.null';
 
+// A barrel's lock rows, with each locked slide's brand, read IN THE SPEC
+// QUERY the page already makes (barrel_slide_requirements hangs off
+// barrel_specs), never off the fit rows. The fit rows can be empty — every
+// locked slide unapproved, discontinued or of another length — or the fit
+// read can fail, and the warning must not go with them: a locked barrel
+// always says so. No extra query.
+const BARREL_LOCKS_EMBED = 'locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey(' +
+  'slide_specs!barrel_slide_requirements_slide_product_id_fkey(products!slide_specs_product_id_fkey(manufacturers!products_brand_id_fkey(name))))';
+
+// What the spec row says about locks: null when the row carries no lock
+// list (not a barrel), else { locked, brands } — brands of the locked
+// slides, distinct, sorted.
+function lockInfo(raw) {
+  if (!raw || !Array.isArray(raw.locks)) return null;
+  const brands = [...new Set(raw.locks
+    .map((l) => (((l.slide_specs || {}).products || {}).manufacturers || {}).name)
+    .filter(Boolean))].sort();
+  return { locked: raw.locks.length > 0, brands };
+}
+
 // The query path, exported for the test. `raw` is this part's own spec row.
 export function fitQueryPath(category, productId, raw) {
   if (category === 'slide') {
@@ -394,8 +415,7 @@ export function fitQueryPath(category, productId, raw) {
       (raw.threaded_barrel_ok === false ? '&barrel_type=not.in.(' + THREADED_TYPES.join(',') + ')' : '');
   }
   if (category === 'barrel') {
-    const sel = 'locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey(count),' +
-      'part:products!slide_specs_product_id_fkey!inner(' + FIT_PART_COLS +
+    const sel = 'part:products!slide_specs_product_id_fkey!inner(' + FIT_PART_COLS +
         ',slide_specs!slide_specs_product_id_fkey!inner(threaded_barrel_ok))';
     return 'v_barrel_slide_fit?barrel_product_id=eq.' + productId + '&fit_status=eq.fits' +
       '&select=' + encodeURIComponent(sel) + FIT_PART_FILTERS +
@@ -439,11 +459,12 @@ async function fetchFitSection(category, productId, raw) {
     });
   }
   items.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
-  const lockRow = rows.length && Array.isArray(rows[0].locks) ? rows[0].locks[0] : null;
+  const lock = category === 'barrel' ? lockInfo(raw) : null;
   return {
     kind: category,
     items,
-    locked: category === 'barrel' && !!lockRow && Number(lockRow.count) > 0,
+    locked: !!(lock && lock.locked),
+    lockBrands: lock ? lock.brands : [],
     threadedNotStated: category === 'slide' && raw.threaded_barrel_ok == null,
   };
 }
@@ -578,7 +599,16 @@ async function fetchBuildsUsing(productId) {
 // barrel whose slides are all unlisted the lock line alone would be a claim
 // with nothing under it.
 function fitSectionHtml(fit) {
-  if (!fit || !fit.items.length) return '';
+  if (!fit) return '';
+  // A locked barrel ALWAYS warns, listed slides or not. With none listed
+  // (unapproved, discontinued, or the fit read failed) the line names the
+  // locked slides' maker instead of pointing at a list.
+  if (fit.kind === 'barrel' && fit.locked && !fit.items.length) {
+    const who = fit.lockBrands.length ? esc(fit.lockBrands.join(' or ')) + ' ' : '';
+    return '<div class="section-title">Slides this barrel fits</div>' +
+      '<div class="fit-lock">Only for specific ' + who + 'slides &mdash; the maker says this barrel should not be used in any other slide.</div>';
+  }
+  if (!fit.items.length) return '';
   const row = (it, note) => '<li class="fit-row"><span><a href="' + esc(it.href) + '">' + esc(it.name) + '</a>' +
       (note ? '<span class="fit-note">' + note + '</span>' : '') + '</span>' +
     (it.priceFrom != null ? '<span class="fit-price">From $' + it.priceFrom.toFixed(2) + '</span>' : '') + '</li>';
@@ -1123,7 +1153,8 @@ export default async (req) => {
   // page with or without it. It needs this part's own spec row for the
   // thread rule, so a failed spec read skips it rather than guess.
   // x-fit-section says which happened, so it is observable from outside:
-  // n/a (not a slide or barrel) | no-spec | failed | listed:<n> (n may be 0).
+  // n/a (not a slide or barrel) | no-spec | failed | listed:<n> (n may be 0),
+  // either of the last two with ;locked for a barrel the maker locks.
   let fit = null;
   let fitState = 'n/a';
   if (product.category === 'slide' || product.category === 'barrel') {
@@ -1134,10 +1165,12 @@ export default async (req) => {
         fit = await fetchFitSection(product.category, product.id, specRaw);
         fitState = 'listed:' + (fit ? fit.items.length : 0) + (fit && fit.locked ? ';locked' : '');
       } catch (err) {
-        fitState = 'failed';
-        // Expected until supabase/migrations/*_products_is_approved.sql is
-        // applied: is_approved is not a column yet and PostgREST answers 400.
         console.error('[product-page] barrel/slide fit lookup failed', err);
+        // The list is unknown, but a lock is known from the spec row, and a
+        // locked barrel's warning never depends on the fit read.
+        const lock = product.category === 'barrel' ? lockInfo(specRaw) : null;
+        if (lock && lock.locked) fit = { kind: 'barrel', items: [], locked: true, lockBrands: lock.brands, threadedNotStated: false };
+        fitState = 'failed' + (fit ? ';locked' : '');
       }
     }
   }

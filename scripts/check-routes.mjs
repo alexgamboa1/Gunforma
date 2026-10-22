@@ -965,27 +965,34 @@ for (const [label, path, want] of [
   const rest = async (q) => { const r = await fetch(`${SB_URL}/rest/v1/${q}`, H); return r.ok ? r.json() : null; };
   const listed = (body, segment) => [...new Set([...body.matchAll(new RegExp('<li class="fit-row"><span><a href="/parts/' + segment + '/([a-z0-9-]+)"', 'g'))].map((m) => m[1]))];
 
-  // A locked barrel that fits at least one live slide.
-  const pairs = await rest('v_barrel_slide_fit?fit_status=eq.fits&select=' + encodeURIComponent(
-    'barrel_product_id,locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey(count),' +
-    'barrel:products!barrel_specs_product_id_fkey!inner(slug,is_discontinued),slide:products!slide_specs_product_id_fkey!inner(slug,is_discontinued)') +
-    '&barrel.is_discontinued=is.false&slide.is_discontinued=is.false');
-  ok(Array.isArray(pairs) && pairs.length > 0, 'fit pairs readable with the public key', pairs ? pairs.length + ' pairs' : 'no answer');
-  const locked = (pairs || []).find((r) => r.locks && r.locks[0] && r.locks[0].count > 0);
-  ok(!!locked, 'a locked barrel with a live slide exists to check');
-  if (locked) {
-    const slug = locked.barrel.slug;
-    const fitsFor = new Set((pairs || []).filter((r) => r.barrel_product_id === locked.barrel_product_id).map((r) => r.slide.slug));
+  // EVERY live locked barrel: the heading and a lock line are always
+  // served — "Only these slides …" over the slides it lists, or "Only for
+  // specific <brand> slides …" when none is listed — and every slide it
+  // lists is a 'fits' pair, never a blocked one. Locks are read the way the
+  // page reads them, through barrel_specs.
+  const lockedBarrels = await rest('barrel_specs?select=' + encodeURIComponent(
+    'product_id,p:products!barrel_specs_product_id_fkey!inner(slug,is_discontinued),' +
+    'locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey!inner(slide_product_id)') +
+    '&p.is_discontinued=is.false');
+  ok(Array.isArray(lockedBarrels) && lockedBarrels.length > 0, 'live locked barrels readable with the public key',
+    lockedBarrels ? lockedBarrels.length + ' locked barrels' : 'no answer');
+  const fitPairs = await rest('v_barrel_slide_fit?fit_status=eq.fits&select=barrel_product_id,' + encodeURIComponent(
+    'slide:products!slide_specs_product_id_fkey!inner(slug)'));
+  ok(Array.isArray(fitPairs), 'fit pairs readable with the public key', fitPairs ? fitPairs.length + ' pairs' : 'no answer');
+  for (const b of lockedBarrels || []) {
+    const slug = b.p.slug;
+    const fitsFor = new Set((fitPairs || []).filter((r) => r.barrel_product_id === b.product_id).map((r) => r.slide.slug));
     const r = await get('/parts/barrels/' + slug);
     note('x-fit-section on /parts/barrels/' + slug, r.fitSection);
-    ok(r.status === 200 && /^listed:\d+;locked$/.test(r.fitSection || ''), 'locked barrel: the fit section was read and says locked', r.fitSection);
+    ok(r.status === 200 && /;locked$/.test(r.fitSection || ''), 'locked barrel ' + slug + ': the page knows it is locked', r.fitSection);
+    const hasHeading = r.body.includes('<div class="section-title">Slides this barrel fits</div>');
+    const listedLine = r.body.includes('<div class="fit-lock">Only these slides &mdash; the maker says this barrel should not be used in any other slide.</div>');
+    const noneLine = /<div class="fit-lock">Only for specific [^<]*slides &mdash; the maker says this barrel should not be used in any other slide\.<\/div>/.test(r.body);
     const shown = listed(r.body, 'slides');
-    if (/^listed:[1-9]/.test(r.fitSection || '')) {
-      ok(r.body.includes('<div class="section-title">Slides this barrel fits</div>') && r.body.includes('<div class="fit-lock">Only these slides'),
-        'locked barrel: heading and the "Only these slides" line are served', slug);
-      ok(shown.length > 0 && shown.every((s) => fitsFor.has(s)), 'locked barrel: every slide listed is a "fits" pair, none blocked',
-        shown.filter((s) => !fitsFor.has(s)).join(', ') || shown.length + ' listed');
-    }
+    ok(hasHeading && (shown.length ? listedLine : noneLine), 'locked barrel ' + slug + ': heading and warning always served',
+      shown.length ? shown.length + ' listed' : 'none listed');
+    ok(shown.every((s) => fitsFor.has(s)), 'locked barrel ' + slug + ': every slide listed is a "fits" pair, none blocked',
+      shown.filter((s) => !fitsFor.has(s)).join(', ') || 'ok');
   }
 
   // A live slide whose maker says no to threaded barrels lists none.
