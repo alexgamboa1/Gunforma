@@ -308,6 +308,11 @@ async function fetchProduct(slug) {
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
+// Returns { rows, raw }: the formatted spec rows the page prints, and the raw
+// spec row they came from (null for a category without a spec table, or a
+// part without a row). The fit section reads two raw facts from it —
+// slide_specs.threaded_barrel_ok and barrel_specs.barrel_type — so it costs
+// no query of its own.
 async function fetchSpecs(category, productId) {
   // An Other Part's one extra fact is products.part_type. Asked for here,
   // for that category only, never in fetchProduct's select: a column named
@@ -315,23 +320,162 @@ async function fetchSpecs(category, productId) {
   if (category === 'other') {
     const rows = await pgGet('products?id=eq.' + productId + '&select=part_type&limit=1');
     const t = Array.isArray(rows) && rows.length ? rows[0].part_type : null;
-    return t ? [{ label: 'Part Type', value: t, partType: t }] : [];
+    return { rows: t ? [{ label: 'Part Type', value: t, partType: t }] : [], raw: null };
   }
   const table = SPEC_TABLES[category];
-  if (!table) return null;
+  if (!table) return { rows: [], raw: null };
   const [tableName, fields] = table;
-  const cols = Array.from(new Set(fields.map((f) => f[0]))).join(',');
+  const cols = Array.from(new Set(fields.map((f) => f[0]))).join(',') +
+    (category === 'barrel' ? ',' + BARREL_LOCKS_EMBED : '');
   const rows = await pgGet(tableName + '?product_id=eq.' + productId + '&select=' + encodeURIComponent(cols) + '&limit=1');
   const row = Array.isArray(rows) && rows.length ? rows[0] : null;
-  if (!row) return [];
-  return fields
-    .map(([col, label, fmt]) => {
-      const raw = row[col.split('(')[0]];
-      if (raw === null || raw === undefined || raw === '') return null;
-      const val = fmt ? fmt(raw) : String(raw);
-      return val === null ? null : { label, value: val };
-    })
-    .filter(Boolean);
+  if (!row) return { rows: [], raw: null };
+  return {
+    raw: row,
+    rows: fields
+      .map(([col, label, fmt]) => {
+        const raw = row[col.split('(')[0]];
+        if (raw === null || raw === undefined || raw === '') return null;
+        const val = fmt ? fmt(raw) : String(raw);
+        return val === null ? null : { label, value: val };
+      })
+      .filter(Boolean),
+  };
+}
+
+// ---- Barrel <-> slide fit ---------------------------------------------------
+//
+// "Will this barrel fit my slide?" answered on both product pages, from
+// v_barrel_slide_fit: a barrel fits a slide when their barrel lengths match
+// and, if the barrel's maker locks it to named slides
+// (barrel_slide_requirements), the slide is one of them. Only 'fits' pairs
+// are listed; 'blocked' (locked to other slides), 'length-mismatch' and
+// 'unknown' never are.
+//
+// One query per page: the view, filtered to this part and to 'fits', with
+// the OTHER side's product embedded (name, brand, live listings for the
+// price, approval) — and on a barrel page the count of its lock rows, so the
+// "only these slides" line needs no second read. The view and the products
+// both reference products through their spec tables, so each embed NAMES its
+// FK (CLAUDE.md, PGRST201).
+//
+// Threads, applied in this query rather than in the view:
+//   - a slide whose threaded_barrel_ok is false lists no threaded barrel, and
+//     a threaded barrel lists no slide whose threaded_barrel_ok is false;
+//   - NULL means the maker does not say, so the pair is listed with a note.
+//
+// Listed parts are approved (products.is_approved, the computed field over
+// product_data_status() — supabase/migrations/*_products_is_approved.sql)
+// and not discontinued. The page's own part may be either: a discontinued
+// slide still answers what fits it.
+const THREADED_TYPES = ['threaded', 'threaded-and-ported'];
+const isThreadedType = (t) => THREADED_TYPES.includes(t);
+// barrel_type -> the group a slide page lists it under, in this order.
+// 'standard' is the catalog's word for a plain crown; readers say "flush".
+const BARREL_GROUPS = [
+  { key: 'ported',   label: 'Ported',   types: ['ported'] },
+  { key: 'threaded', label: 'Threaded', types: THREADED_TYPES },
+  { key: 'flush',    label: 'Flush',    types: ['standard'] },
+];
+// The other side's product, as both pages need it. Live variants and live
+// listings only (the same embed filters fetchProduct uses), for the price.
+const FIT_PART_COLS = 'id,slug,name,category,is_discontinued,is_approved,' +
+  'manufacturers!products_brand_id_fkey(name),' +
+  'product_variants!product_variants_product_id_fkey(affiliate_links(street_price,in_stock,last_checked,op_last_matched_by))';
+const FIT_PART_FILTERS = '&part.is_discontinued=is.false' +
+  '&part.product_variants.retired_at=is.null' +
+  '&part.product_variants.affiliate_links.retired_at=is.null';
+
+// A barrel's lock rows, with each locked slide's brand, read IN THE SPEC
+// QUERY the page already makes (barrel_slide_requirements hangs off
+// barrel_specs), never off the fit rows. The fit rows can be empty — every
+// locked slide unapproved, discontinued or of another length — or the fit
+// read can fail, and the warning must not go with them: a locked barrel
+// always says so. No extra query.
+const BARREL_LOCKS_EMBED = 'locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey(' +
+  'slide_specs!barrel_slide_requirements_slide_product_id_fkey(products!slide_specs_product_id_fkey(manufacturers!products_brand_id_fkey(name))))';
+
+// What the spec row says about locks: null when the row carries no lock
+// list (not a barrel), else { locked, brands } — brands of the locked
+// slides, distinct, sorted.
+function lockInfo(raw) {
+  if (!raw || !Array.isArray(raw.locks)) return null;
+  const brands = [...new Set(raw.locks
+    .map((l) => (((l.slide_specs || {}).products || {}).manufacturers || {}).name)
+    .filter(Boolean))].sort();
+  return { locked: raw.locks.length > 0, brands };
+}
+
+// The query path, exported for the test. `raw` is this part's own spec row.
+export function fitQueryPath(category, productId, raw) {
+  if (category === 'slide') {
+    const sel = 'barrel_type,part:products!barrel_specs_product_id_fkey!inner(' + FIT_PART_COLS + ')';
+    return 'v_barrel_slide_fit?slide_product_id=eq.' + productId + '&fit_status=eq.fits' +
+      '&select=' + encodeURIComponent(sel) + FIT_PART_FILTERS +
+      (raw.threaded_barrel_ok === false ? '&barrel_type=not.in.(' + THREADED_TYPES.join(',') + ')' : '');
+  }
+  if (category === 'barrel') {
+    const sel = 'part:products!slide_specs_product_id_fkey!inner(' + FIT_PART_COLS +
+        ',slide_specs!slide_specs_product_id_fkey!inner(threaded_barrel_ok))';
+    return 'v_barrel_slide_fit?barrel_product_id=eq.' + productId + '&fit_status=eq.fits' +
+      '&select=' + encodeURIComponent(sel) + FIT_PART_FILTERS +
+      (isThreadedType(raw.barrel_type) ? '&part.slide_specs.threaded_barrel_ok=not.is.false' : '');
+  }
+  return null;
+}
+
+// null = this page has no fit section to ask about (not a slide or barrel,
+// or no spec row, so the thread rule cannot be applied). Otherwise
+// { kind, items, locked, threadedNotStated }, items possibly empty.
+async function fetchFitSection(category, productId, raw) {
+  if (!raw) return null;
+  const path = fitQueryPath(category, productId, raw);
+  if (!path) return null;
+  const rows = await pgGet(path);
+  const otherSegment = (CATEGORY_META[category === 'slide' ? 'barrel' : 'slide'] || [])[0];
+  const items = [];
+  const seen = new Set();
+  for (const r of rows) {
+    const p = r.part;
+    // is_approved === true, never truthy-ish: a missing field is not approval.
+    if (!p || p.is_approved !== true || p.is_discontinued || seen.has(p.id)) continue;
+    seen.add(p.id);
+    const listings = [];
+    for (const v of p.product_variants || []) {
+      for (const l of v.affiliate_links || []) {
+        listings.push({ price: l.street_price != null ? Number(l.street_price) : null, stale: isStalePrice(l), in_stock: l.in_stock });
+      }
+    }
+    const set = freshPriceSet(listings);
+    const brandName = (p.manufacturers || {}).name;
+    items.push({
+      href: '/parts/' + otherSegment + '/' + p.slug,
+      name: displayProductName({ name: p.name, brand: brandName }),
+      priceFrom: set.length ? Math.min(...set) : null,
+      barrelType: r.barrel_type || null,
+      // barrel page, threaded barrel: the slide's maker does not say
+      threadNotStated: category === 'barrel' && isThreadedType(raw.barrel_type) &&
+        !!p.slide_specs && p.slide_specs.threaded_barrel_ok == null,
+    });
+  }
+  items.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  const lock = category === 'barrel' ? lockInfo(raw) : null;
+  return {
+    kind: category,
+    items,
+    locked: !!(lock && lock.locked),
+    lockBrands: lock ? lock.brands : [],
+    threadedNotStated: category === 'slide' && raw.threaded_barrel_ok == null,
+  };
+}
+
+// Stale prices are excluded from a "from" price, and in-stock listings win
+// when there are any — the rule the headline price line uses, shared so a
+// row on another page can never quote a number this page would not.
+function freshPriceSet(rows) {
+  const pricedInStock = rows.filter((r) => r.price != null && !r.stale && r.in_stock === true);
+  const priced = rows.filter((r) => r.price != null && !r.stale);
+  return (pricedInStock.length ? pricedInStock : priced).map((r) => r.price);
 }
 
 // Capacity-restricted states: products.restricted_states, the two-letter
@@ -449,7 +593,45 @@ async function fetchBuildsUsing(productId) {
   return out;
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs }) {
+// The fit section. `fit` is fetchFitSection()'s answer, or null when it was
+// not asked or failed. Nothing renders unless at least one part is listed —
+// an empty heading is the thin-content problem restated, and for a locked
+// barrel whose slides are all unlisted the lock line alone would be a claim
+// with nothing under it.
+function fitSectionHtml(fit) {
+  if (!fit) return '';
+  // A locked barrel ALWAYS warns, listed slides or not. With none listed
+  // (unapproved, discontinued, or the fit read failed) the line names the
+  // locked slides' maker instead of pointing at a list.
+  if (fit.kind === 'barrel' && fit.locked && !fit.items.length) {
+    const who = fit.lockBrands.length ? esc(fit.lockBrands.join(' or ')) + ' ' : '';
+    return '<div class="section-title">Slides this barrel fits</div>' +
+      '<div class="fit-lock">Only for specific ' + who + 'slides &mdash; the maker says this barrel should not be used in any other slide.</div>';
+  }
+  if (!fit.items.length) return '';
+  const row = (it, note) => '<li class="fit-row"><span><a href="' + esc(it.href) + '">' + esc(it.name) + '</a>' +
+      (note ? '<span class="fit-note">' + note + '</span>' : '') + '</span>' +
+    (it.priceFrom != null ? '<span class="fit-price">From $' + it.priceFrom.toFixed(2) + '</span>' : '') + '</li>';
+  const NOT_STATED = 'Maker doesn&rsquo;t state threaded fit';
+  const foot = '<div class="fitguide-note">Matched on barrel length and each maker&rsquo;s own slide pairings.</div>';
+  if (fit.kind === 'slide') {
+    const groups = BARREL_GROUPS
+      .map((g) => ({ g, items: fit.items.filter((it) => g.types.includes(it.barrelType)) }))
+      .filter((x) => x.items.length);
+    return '<div class="section-title">Barrels that fit this slide</div>' +
+      groups.map((x) => '<div class="fit-group">' + esc(x.g.label) + '</div>' +
+        (x.g.key === 'threaded' && fit.threadedNotStated
+          ? '<div class="fitguide-note">' + NOT_STATED + ' for this slide.</div>' : '') +
+        '<ul class="fit-list">' + x.items.map((it) => row(it, null)).join('') + '</ul>').join('') +
+      foot;
+  }
+  return '<div class="section-title">Slides this barrel fits</div>' +
+    (fit.locked ? '<div class="fit-lock">Only these slides &mdash; the maker says this barrel should not be used in any other slide.</div>' : '') +
+    '<ul class="fit-list">' + fit.items.map((it) => row(it, it.threadNotStated ? NOT_STATED : null)).join('') + '</ul>' +
+    foot;
+}
+
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -506,9 +688,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
   // be anchored on a number no feed has confirmed.
-  const pricedInStock = rows.filter((r) => r.price != null && !r.stale && r.in_stock === true);
-  const priced = rows.filter((r) => r.price != null && !r.stale);
-  const priceSet = (pricedInStock.length ? pricedInStock : priced).map((r) => r.price);
+  const priceSet = freshPriceSet(rows);
   const minPrice = priceSet.length ? Math.min(...priceSet) : null;
   const maxPrice = priceSet.length ? Math.max(...priceSet) : null;
   const anyInStock = rows.some((r) => r.in_stock === true);
@@ -689,6 +869,8 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     ? '<div class="chips">' + product.best_for.map((b) => '<span class="chip">' + esc(String(b).replace(/-/g, ' ')) + '</span>').join('') + '</div>'
     : '';
 
+  const fitHtml = fitSectionHtml(fit);
+
   // Same card guide-page.mjs draws for its "Used in these builds" row.
   // Nothing renders for a product no approved build runs — an empty heading
   // would be the thin-content problem restated.
@@ -777,6 +959,13 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.fg-go { font-size: 11px; color: #4a9edd; text-decoration: none; }' +
 'a.fg-gun:hover { color: #4a9edd; } a.fg-go:hover { text-decoration: underline; }' +
 '.fitguide-note { font-size: 11.5px; color: #888; margin: 6px 0 2px; }' +
+'.fit-lock { font-size: 13px; color: #8a4b00; background: #fff6e8; border: 0.5px solid #f0d3a6; border-radius: 6px; padding: 8px 11px; margin: 0 0 8px; }' +
+'.fit-group { font-size: 12px; font-weight: 700; color: #333; margin: 12px 0 4px; }' +
+'.fit-list { list-style: none; margin: 0; padding: 0; }' +
+'.fit-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; border-bottom: 0.5px solid #ececec; font-size: 13px; }' +
+'.fit-row a { color: #1a1a1a; text-decoration: none; font-weight: 600; } .fit-row a:hover { color: #1d6fb8; }' +
+'.fit-price { color: #555; white-space: nowrap; }' +
+'.fit-note { display: block; font-size: 11.5px; font-weight: 400; color: #888; margin-top: 2px; }' +
 '.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +
 '.build-card { display: flex; flex-direction: column; gap: 4px; width: 160px; text-decoration: none; color: #1a1a1a; }' +
 '.build-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; border: 0.5px solid #e5e5e5; }' +
@@ -853,6 +1042,9 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     // Says what is true of the links above it: partner-only, maker-only,
     // both — or nothing at all when there is no link to disclose.
     (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
+    // What fits this part, after the buy rows so a long list never pushes
+    // them down. Nothing renders when nothing is listed.
+    fitHtml +
     buildsHtml +
   '</div>' +
 '</div>' +
@@ -903,9 +1095,14 @@ export default async (req) => {
   let categorySingular = meta[2];
 
   let specs = [];
+  let specRaw = null;
+  let specFailed = false;
   try {
-    specs = await fetchSpecs(product.category, product.id) || [];
+    const got = await fetchSpecs(product.category, product.id);
+    specs = got.rows;
+    specRaw = got.raw;
   } catch (err) {
+    specFailed = true;
     console.error('[product-page] spec lookup failed for ' + product.category, err);
     // Non-fatal — page still renders with common specs only.
   }
@@ -952,12 +1149,39 @@ export default async (req) => {
     console.error('[product-page] magazine-hub lookup failed', err);
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs });
+  // Barrel <-> slide fit. Non-fatal like the reads above: the page is the
+  // page with or without it. It needs this part's own spec row for the
+  // thread rule, so a failed spec read skips it rather than guess.
+  // x-fit-section says which happened, so it is observable from outside:
+  // n/a (not a slide or barrel) | no-spec | failed | listed:<n> (n may be 0),
+  // either of the last two with ;locked for a barrel the maker locks.
+  let fit = null;
+  let fitState = 'n/a';
+  if (product.category === 'slide' || product.category === 'barrel') {
+    if (specFailed || !specRaw) {
+      fitState = 'no-spec';
+    } else {
+      try {
+        fit = await fetchFitSection(product.category, product.id, specRaw);
+        fitState = 'listed:' + (fit ? fit.items.length : 0) + (fit && fit.locked ? ';locked' : '');
+      } catch (err) {
+        console.error('[product-page] barrel/slide fit lookup failed', err);
+        // The list is unknown, but a lock is known from the spec row, and a
+        // locked barrel's warning never depends on the fit read.
+        const lock = product.category === 'barrel' ? lockInfo(specRaw) : null;
+        if (lock && lock.locked) fit = { kind: 'barrel', items: [], locked: true, lockBrands: lock.brands, threadedNotStated: false };
+        fitState = 'failed' + (fit ? ';locked' : '');
+      }
+    }
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit });
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
+      'x-fit-section': fitState,
       // Durable, shared across every edge node — see _cache.mjs for the
       // measurement that put it here.
       'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,
