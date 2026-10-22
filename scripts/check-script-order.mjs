@@ -72,6 +72,12 @@ const RULES = [
   // render or a save, so a wrong ORDER survives today — a missing tag does
   // not: the queue and the build page would throw while rendering a part
   // list, and a builder page would throw on Save.
+  // FrameFit is an object read as a member (FrameFit.verdict), so a pattern
+  // like BuildCategories. The catalog reads it at call time inside
+  // frameOk(), subModelCompat() and the badge, so a missing tag throws the
+  // first time a sub-model is chosen and the grip list goes empty.
+  { global: 'FrameFit', defines: 'js/frame-fit.js', consumers: [],
+    pattern: /\bFrameFit\s*\./ },
   { global: 'PartIds', defines: 'js/part-ids.js', consumers: [],
     pattern: /\bPartIds\s*\./ },
   // GunModel is an object read as a member, so it needs a pattern too. The
