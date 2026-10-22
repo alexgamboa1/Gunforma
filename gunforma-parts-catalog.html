@@ -186,6 +186,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .detail-compat-badge { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 4px; font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em; margin-top: 6px; }
 .detail-compat-badge.ok  { background: #eaf5ee; color: #166534; border: 0.5px solid #86cfad; }
 .detail-compat-badge.no  { background: #fde8e2; color: #9b1c1c; border: 0.5px solid #f5b4a1; }
+.detail-compat-badge.unjudged { background: #f4f3ee; color: #555; border: 0.5px solid #d5d3ca; }
 
 /* Horizontal category selector — primary way to narrow by category, above
    the grid. Single-select (contrast with the sidebar's other multi-select
@@ -624,6 +625,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- Before affiliate.js: it calls window.makerLink and window.buyDisclosure
      at render time, for the parts with no partner listing. -->
 <script src="js/maker-link.js"></script>
+<!-- frame-fit: the grip-module fit rule — class equality, plus the FUSE
+     exception where the maker states it. Read by frameOk(), subModelCompat()
+     and the badge below; the rule lives there and nowhere else. -->
+<script src="js/frame-fit.js"></script>
 <script src="js/display-name.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
@@ -1272,12 +1277,13 @@ function frameOk(frame, sel) {
     var wl = MFR_BY_MAGWELL[sel.magwell.id] || [];
     if (!wl.length || !wl.some(function (r) { return r.frame_product_id === frame.id; })) return false;
   }
-  // Sub-model constraint: housing_class must match. Frames without a
-  // spec fail closed — frames are one of the most fitment-critical
-  // categories, so a missing spec is treated as unknown-not-safe.
+  // Sub-model constraint: the one rule in js/frame-fit.js — class equality,
+  // plus the FUSE exception where the maker states it. The filter shows
+  // CONFIRMED fits only: a maker silent on the FUSE is 'unjudged' and stays
+  // out, as does a frame with no spec (fail closed — frames are one of the
+  // most fitment-critical categories, so a missing spec is unknown-not-safe).
   if (SELECTED_SUBMODEL && SELECTED_SUBMODEL.housing_class) {
-    var fs = frame.frame_specs;
-    if (!fs || fs.housing_class !== SELECTED_SUBMODEL.housing_class) return false;
+    if (window.FrameFit.verdict(frame, SELECTED_SUBMODEL, GUNS) !== 'fits') return false;
   }
   return true;
 }
@@ -1301,8 +1307,9 @@ function subModelCompat(product, gun) {
   if (cat === 'compensator') return !gun.integrated_comp;
   if (cat === 'frame') {
     if (!gun.housing_class) return true;
-    var fs = product.frame_specs;
-    return !!(fs && fs.housing_class === gun.housing_class);
+    // js/frame-fit.js; 'unjudged' reads as not-ok here and the badge below
+    // tells the two apart before it draws anything.
+    return window.FrameFit.verdict(product, gun, GUNS) === 'fits';
   }
   if (cat === 'slide') {
     var s = product.slide_specs;
@@ -1936,11 +1943,18 @@ function renderDetail(p) {
       // - a grip whose housing class no gun in the database has (fuse-xl,
       //   xmacro-sub today) is "no" for every gun by construction, not because
       //   anything was compared.
+      // - a grip the maker has not placed on this gun either way — an
+      //   xmacro-class module on the FUSE with no maker statement — which
+      //   js/frame-fit.js answers 'unjudged' WITH words, so the badge says
+      //   what is true ("FUSE fit not stated by the maker") instead of the
+      //   ✗ that class equality used to draw.
+      var frameVerdict = p.category === 'frame' ? window.FrameFit.verdict(p, SELECTED_SUBMODEL, GUNS) : null;
       var unjudged =
         (p.category === 'compensator' && ok) ||
-        (p.category === 'frame' && p.frame_specs && p.frame_specs.housing_class &&
-         !GUNS.some(function (g) { return g.housing_class === p.frame_specs.housing_class; }));
-      compatWrap.innerHTML = unjudged ? ''
+        (p.category === 'frame' && frameVerdict === 'unjudged');
+      var unjudgedWords = unjudged && p.category === 'frame' ? window.FrameFit.unjudgedText(p, SELECTED_SUBMODEL) : '';
+      compatWrap.innerHTML = unjudged
+        ? (unjudgedWords ? '<div class="detail-compat-badge unjudged">' + esc(unjudgedWords) + '</div>' : '')
         : ok
         ? '<div class="detail-compat-badge ok">✓ Compatible with ' + esc(SELECTED_SUBMODEL.name) + '</div>'
         : '<div class="detail-compat-badge no">✗ May not fit '   + esc(SELECTED_SUBMODEL.name) + '</div>';

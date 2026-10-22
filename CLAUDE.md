@@ -1103,6 +1103,7 @@ Registered today:
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
 | `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose; a directive that does not parse or names an unknown gun; an image under `/field-notes/`, which the forced rewrite swallows |
 | `scripts/field-notes.test.mjs` | `field-note.mjs` answering 404 when PostgREST failed, serving a draft on the apex, serving raw HTML or a `javascript:` link as markup, stating a stale price, or getting a fit verdict wrong — runs the handler over the `renderer-check` fixture against a stubbed catalog and pins every verdict shape |
+| `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -1618,6 +1619,35 @@ missing for Alex to fill. None of the old values map cleanly: `completed-mag`
 is what the category now says, `17rd-xmacro` is a magazine family rather
 than the maker's model list, and `capacity_change 3` is a delta, not a
 capacity.
+
+### Grip-module fit in the catalog: `js/frame-fit.js`
+
+**One rule, one file, read by the catalog's grip filter (`frameOk()`),
+`subModelCompat()` and the detail panel's badge.** Base: a grip module fits
+a gun when `frame_specs.housing_class` equals `guns.housing_class`. **The
+one exception is the FUSE:** Sig ships the XMacro-size module on the P365
+FUSE (its own listing says "Factory grip module of the P365-FUSE"), so a
+`fuse`-class gun also takes an `xmacro`-class module — **but only when the
+maker states FUSE fit**, which is `MAKER_STATES_FUSE_FIT` in that file,
+slug by slug, each with the page that says it (four on 2026-10-22: both
+Sig OEM modules, Armory Craft, Mischief Machine's Commander G2 X-Macro).
+
+- **A maker that is silent is `unjudged`, not ✗ and not ✓.** The badge says
+  "FUSE fit not stated by the maker" in a neutral grey pill; the filter
+  still hides the part, because it shows confirmed fits only. No maker
+  says no; sixteen of twenty were silent when the list was read.
+- **The other direction does not bend:** an `xmacro`-class gun on a
+  `fuse`-class module is ✗ — the FUSE sizes want a FUSE slide, or an XL
+  slide with a comp, which this rule cannot see.
+- **The list in code is temporary.** It is a maker's fitment claim with a
+  source — exactly what `magazine_housing_fit` holds for magazines. A
+  `frame_housing_fit` table (module, housing class, fit, source)
+  **replaces it in a follow-up**, so add-a-part records the claim and
+  nothing in code changes when a maker publishes one. Until then a slug
+  goes in only with the maker's own sentence behind its URL.
+- Browser-only: no server function judges frame fit (the hubs and guides
+  read `magazine_housing_fit` and optic cuts), so there is no server copy
+  and no parity test. `scripts/frame-fit.test.mjs` pins the verdicts.
 
 ### Pending build parts → the catalog, and the needs-data page
 
