@@ -240,6 +240,16 @@ const BOOL_FIELDS = {
   safety_selector: ['is_ambidextrous', 'includes_detent_spring'],
   recoil_spring: ['captured'],
 };
+// Yes/no facts a maker often does not state. Drawn as Yes / No / Not stated
+// by maker, and the admin must pick one before Save; "Not stated" is sent as
+// no key at all, so the column stays NULL. Their rule row is 'optional', so
+// product_data_status() reports a NULL under optional_blank (findable later)
+// instead of missing: an honest "not stated" never holds up approval, and a
+// "No" is never typed to get past the form. Each is in BOOL_FIELDS as well.
+const NOT_STATED_FIELDS = {
+  slide: ['threaded_barrel_ok'],
+};
+function allowsNotStated(field) { return (NOT_STATED_FIELDS[S.category] || []).indexOf(field) !== -1; }
 // true = whole number
 const NUMBER_FIELDS = {
   light: { length_in: false, lumens_max: true, candela_max: true },
@@ -397,7 +407,7 @@ function fieldKind(field) {
   const key = S.category + '.' + field;
   if (DERIVED_FIELDS[key]) return { kind: 'derived', what: DERIVED_FIELDS[key] };
   if (LOOKUP_FIELDS[key]) return { kind: 'lookup', lookup: LOOKUP_FIELDS[key] };
-  if ((BOOL_FIELDS[S.category] || []).indexOf(field) !== -1) return { kind: 'bool' };
+  if ((BOOL_FIELDS[S.category] || []).indexOf(field) !== -1) return { kind: 'bool', notStated: allowsNotStated(field) };
   const nums = NUMBER_FIELDS[S.category] || {};
   if (field in nums) return { kind: 'number', integer: nums[field] };
   return { kind: 'text' };
@@ -1020,7 +1030,10 @@ function specFieldHtml(r) {
   } else if (fk.kind === 'bool') {
     const nm = 'spec-' + r.field;
     ctl = '<div class="yn"><label><input type="radio" name="' + nm + '" data-spec="' + r.field + '" value="true"' + (val === 'true' ? ' checked' : '') + '> Yes</label>' +
-          '<label><input type="radio" name="' + nm + '" data-spec="' + r.field + '" value="false"' + (val === 'false' ? ' checked' : '') + '> No</label></div>';
+          '<label><input type="radio" name="' + nm + '" data-spec="' + r.field + '" value="false"' + (val === 'false' ? ' checked' : '') + '> No</label>' +
+          (fk.notStated ? '<label><input type="radio" name="' + nm + '" data-spec="' + r.field + '" value="not_stated"' + (val === 'not_stated' ? ' checked' : '') + '> Not stated by maker</label>' : '') +
+          '</div>' +
+          (fk.notStated ? '<div class="field-note">Pick one. Choose No only when the maker says it does not fit; "Not stated" saves as unknown and does not hold up approval.</div>' : '');
   } else if (fk.kind === 'lookup') {
     ctl = '<select class="field-select" data-spec="' + r.field + '"><option value="">Choose…</option>' +
       lookupOptions(fk.lookup).map(function (o) { return '<option value="' + esc(o[0]) + '"' + (String(val) === String(o[0]) ? ' selected' : '') + '>' + esc(o[1]) + '</option>'; }).join('') +
@@ -1040,8 +1053,10 @@ function renderSpec() {
   const head = '<div class="card-head"><div class="card-title"><span class="card-step">3</span>Spec sheet</div><div class="card-hint">* needed for approval</div></div>';
   if (!rules.length) { el.innerHTML = head + '<div class="field-note">' + (S.category === 'other' ? 'An Other Part has no spec sheet: its part type, under Product, says what it is.' : 'A ' + esc(CATEGORY_SINGULAR[S.category].toLowerCase()) + ' has no spec sheet.') + '</div>'; return; }
   const applicable = rules.filter(ruleApplies);
-  const req = applicable.filter(function (r) { return r.requirement === 'required'; });
-  const opt = applicable.filter(function (r) { return r.requirement === 'optional'; });
+  // A not-stated field must be answered, so it sits in the main grid whatever
+  // its rule says, never folded away under Optional.
+  const req = applicable.filter(function (r) { return r.requirement === 'required' || allowsNotStated(r.field); });
+  const opt = applicable.filter(function (r) { return r.requirement === 'optional' && !allowsNotStated(r.field); });
   const anyOptFilled = opt.some(function (r) { return !blank(S.specs[r.field]); });
   el.innerHTML = head + '<div class="grid2">' + req.map(specFieldHtml).join('') + '</div>' +
     (opt.length ? '<details class="optional"' + (anyOptFilled ? ' open' : '') + '><summary>Optional (' + opt.length + ')</summary><div class="grid2">' + opt.map(specFieldHtml).join('') + '</div></details>' : '');
@@ -1056,6 +1071,7 @@ function specPayload() {
     if (fk.kind === 'derived') return;   // the function fills platform and material
     const v = S.specs[r.field];
     if (blank(v)) return;
+    if (fk.kind === 'bool' && v === 'not_stated') return;   // stored as NULL: not stated by the maker
     if (fk.kind === 'bool') out[r.field] = v === 'true';
     else if (fk.kind === 'number' || (fk.kind === 'lookup' && fk.lookup.indexOf('len:') === 0)) out[r.field] = Number(v);
     else out[r.field] = String(v).trim();
@@ -1471,6 +1487,10 @@ function progress() {
     if (fk.kind === 'number' && !blank(v) && !isFinite(Number(v))) add(save, false, r.label + ' must be a number');
     if (fk.kind === 'number' && fk.integer && !blank(v) && !Number.isInteger(Number(v))) add(save, false, r.label + ' must be a whole number');
   });
+  // a not-stated field needs one of its three answers before Save
+  rules.filter(function (r) { return allowsNotStated(r.field); }).forEach(function (r) {
+    add(save, !blank(S.specs[r.field]), r.label + ': Yes, No or Not stated by maker');
+  });
   // a required only-when field whose condition holds must come with the sheet
   rules.filter(function (r) { return r.only_when_field && r.requirement === 'required'; }).forEach(function (r) {
     add(save, !blank(S.specs[r.field]), r.label + ' (applies because of ' + ruleLabel(r.only_when_field) + ')');
@@ -1500,6 +1520,9 @@ function progress() {
   rules.filter(function (r) { return r.requirement === 'required' && !r.only_when_field; }).forEach(function (r) {
     const fk = fieldKind(r.field);
     if (fk.kind === 'derived') { if (fk.what === 'material') add(approve, !blank(p.material), r.label); return; }
+    // "Not stated" is stored as NULL, which only an 'optional' rule approves;
+    // while the rule still reads 'required' this says what the server will say
+    if (fk.notStated) { add(approve, S.specs[r.field] === 'true' || S.specs[r.field] === 'false', r.label); return; }
     add(approve, !blank(S.specs[r.field]), r.label);
   });
   add(approve, S.variants.every(function (v) { return v.photo === 'ok'; }), 'Every variant: photo that loads');
@@ -1512,7 +1535,7 @@ function progress() {
   if (blank(p.material)) notes.push('Material wording is blank (optional).');
   if (p.material_family === 'Unspecified') notes.push('Material family is Unspecified. Approves anyway, and stays findable for later.');
   if (blank(p.weight_oz)) notes.push('Weight is blank (optional).');
-  const optBlank = rules.filter(function (r) { return r.requirement === 'optional' && blank(S.specs[r.field]) && fieldKind(r.field).kind !== 'derived'; }).length;
+  const optBlank = rules.filter(function (r) { return r.requirement === 'optional' && blank(S.specs[r.field]) && fieldKind(r.field).kind !== 'derived' && !allowsNotStated(r.field); }).length;
   if (optBlank) notes.push(optBlank + ' optional spec field' + (optBlank > 1 ? 's' : '') + ' blank.');
   if (chosenPlatforms().some(function (x) { return !x.is_live; })) notes.push('A chosen platform is not live yet. The part saves and appears when it launches.');
   return { save: save, approve: approve, notes: notes };

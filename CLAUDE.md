@@ -1362,6 +1362,17 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   and the dry run says nothing is missing, the column's default would be
   stored silently, so Save waits until it is answered. That is the page
   honouring the defaults rule above.
+- **A yes/no the maker may not state has a third answer.**
+  `NOT_STATED_FIELDS` (today only `slide.threaded_barrel_ok`) draws Yes / No
+  / Not stated by maker, and Save waits for one of the three. "Not stated"
+  is sent as no key, so the column is NULL. Its rule row is `optional`, so
+  `product_data_status()` lists a NULL under `optional_blank`, where it stays
+  findable, not under `missing`. The product page drops a NULL spec row, as
+  it does every unknown. Pick No only when the maker says no: before
+  2026-10-22 the form had no third answer, and 14 slides said "Fits Threaded
+  Barrel: No" on nothing (`*_threaded_barrel_ok_not_stated.sql` names them).
+  To give another field the third answer, add it to that list and make its
+  rule row `optional` in one change.
 - **Check, then Save.** Check calls `create_product(…, p_dry_run => true)`,
   which answers **HTTP 500 with `error.code === 'P0DRY'`** and the result in
   `error.details`. The page branches on the code and never on the status.
