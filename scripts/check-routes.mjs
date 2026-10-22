@@ -70,6 +70,7 @@ async function get(path, headers) {
     fnSource: res.headers.get('x-field-note-source'),
     fnProducts: res.headers.get('x-field-note-products'),
     fnFits: res.headers.get('x-field-note-fits'),
+    fitSection: res.headers.get('x-fit-section'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -949,6 +950,55 @@ for (const [label, path, want] of [
       }
     }
     ok(shared === 0, 'no two variants of different colour or finish share a primary_image_url', shared + ' shared photo(s) over ' + byProduct.size + ' products, ' + allowed + ' allowlisted');
+  }
+}
+
+// ── barrels and slides say which fit each other ─────────────────────────────
+// product-page.mjs lists, on a slide, the barrels that fit it and, on a
+// barrel, the slides it fits (v_barrel_slide_fit, fit_status 'fits').
+// Asserted on the wire because the one thing that must never happen — a
+// barrel the maker locks to other slides listed under one it is not locked
+// to — renders as an ordinary row. Parts are picked through PostgREST, not
+// typed here, so a part leaving the catalog does not turn this red.
+{
+  const H = { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } };
+  const rest = async (q) => { const r = await fetch(`${SB_URL}/rest/v1/${q}`, H); return r.ok ? r.json() : null; };
+  const listed = (body, segment) => [...new Set([...body.matchAll(new RegExp('<li class="fit-row"><span><a href="/parts/' + segment + '/([a-z0-9-]+)"', 'g'))].map((m) => m[1]))];
+
+  // A locked barrel that fits at least one live slide.
+  const pairs = await rest('v_barrel_slide_fit?fit_status=eq.fits&select=' + encodeURIComponent(
+    'barrel_product_id,locks:barrel_slide_requirements!barrel_slide_requirements_barrel_product_id_fkey(count),' +
+    'barrel:products!barrel_specs_product_id_fkey!inner(slug,is_discontinued),slide:products!slide_specs_product_id_fkey!inner(slug,is_discontinued)') +
+    '&barrel.is_discontinued=is.false&slide.is_discontinued=is.false');
+  ok(Array.isArray(pairs) && pairs.length > 0, 'fit pairs readable with the public key', pairs ? pairs.length + ' pairs' : 'no answer');
+  const locked = (pairs || []).find((r) => r.locks && r.locks[0] && r.locks[0].count > 0);
+  ok(!!locked, 'a locked barrel with a live slide exists to check');
+  if (locked) {
+    const slug = locked.barrel.slug;
+    const fitsFor = new Set((pairs || []).filter((r) => r.barrel_product_id === locked.barrel_product_id).map((r) => r.slide.slug));
+    const r = await get('/parts/barrels/' + slug);
+    note('x-fit-section on /parts/barrels/' + slug, r.fitSection);
+    ok(r.status === 200 && /^listed:\d+;locked$/.test(r.fitSection || ''), 'locked barrel: the fit section was read and says locked', r.fitSection);
+    const shown = listed(r.body, 'slides');
+    if (/^listed:[1-9]/.test(r.fitSection || '')) {
+      ok(r.body.includes('<div class="section-title">Slides this barrel fits</div>') && r.body.includes('<div class="fit-lock">Only these slides'),
+        'locked barrel: heading and the "Only these slides" line are served', slug);
+      ok(shown.length > 0 && shown.every((s) => fitsFor.has(s)), 'locked barrel: every slide listed is a "fits" pair, none blocked',
+        shown.filter((s) => !fitsFor.has(s)).join(', ') || shown.length + ' listed');
+    }
+  }
+
+  // A live slide whose maker says no to threaded barrels lists none.
+  const noThread = await rest('slide_specs?threaded_barrel_ok=is.false&select=' +
+    encodeURIComponent('p:products!slide_specs_product_id_fkey!inner(slug,is_discontinued)') + '&p.is_discontinued=is.false&limit=1');
+  if (Array.isArray(noThread) && noThread.length) {
+    const slug = noThread[0].p.slug;
+    const r = await get('/parts/slides/' + slug);
+    note('x-fit-section on /parts/slides/' + slug, r.fitSection);
+    ok(r.status === 200 && /^listed:\d+$/.test(r.fitSection || ''), 'slide that takes no threaded barrel: the fit section was read', r.fitSection);
+    ok(!r.body.includes('<div class="fit-group">Threaded</div>'), 'slide that takes no threaded barrel: lists no threaded barrel', slug);
+  } else {
+    note('no live slide with threaded_barrel_ok false; thread exclusion not exercised');
   }
 }
 

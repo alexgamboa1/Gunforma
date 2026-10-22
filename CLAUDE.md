@@ -305,6 +305,50 @@ apart with `x-nf-original-path`, which that route does not carry. See
 **Netlify redirects** below; it is the second instance of the same class of
 mistake.
 
+### Which barrels fit which slides, on both product pages
+
+`product-page.mjs` lists **"Barrels that fit this slide"** on a slide page
+(grouped Ported / Threaded / Flush — `barrel_type` `standard` reads
+"Flush") and **"Slides this barrel fits"** on a barrel page, from
+`v_barrel_slide_fit` where `fit_status = 'fits'`: matching barrel length,
+and for a barrel its maker locks to named slides
+(`barrel_slide_requirements`), one of those. `blocked`,
+`length-mismatch` and `unknown` pairs are never listed. A locked barrel
+says "Only these slides — the maker says this barrel should not be used in
+any other slide." The pages link both ways in served HTML, like builds and
+parts.
+
+- **One query per page** (`fitQueryPath()`): the view, the other side's
+  product embedded with its brand, live listings and approval, and on a
+  barrel page the lock count. Every embed names its FK — the view's two
+  product columns come through `barrel_specs` and `slide_specs`, both
+  ambiguous to `products`.
+- **Threads are decided in that query, not in the view.** A slide whose
+  `threaded_barrel_ok` is false asks for no threaded barrel; a threaded
+  barrel asks for no slide that says false. NULL ("not stated by maker")
+  is listed with "Maker doesn't state threaded fit". The page's own spec
+  row, already read for the spec table, supplies its side; without one the
+  section is skipped rather than guessed.
+- **Listed parts are approved and not discontinued.** Approval is
+  `products.is_approved`, a PostgREST computed field
+  (`supabase/migrations/*_products_is_approved.sql`): the boolean from
+  `product_data_status()` and nothing else from it, SECURITY DEFINER
+  because anon cannot run `product_data_status()`. A row without
+  `is_approved === true` is dropped, so a missing field never reads as
+  approval.
+- **"From $X" is the headline rule** — fresh prices only, in-stock first —
+  through the same `freshPriceSet()`; no fresh price, no number.
+- **Nothing renders when nothing is listed**, including a locked barrel
+  whose slides are all unlisted (today: Zaffiri's P365XL ported barrel,
+  whose one slide is unapproved). The lock line never stands alone.
+- **Observable**: `x-fit-section` is `n/a`, `no-spec`, `failed`, or
+  `listed:<n>` with `;locked`. `failed` is what every slide and barrel page
+  answers between this code deploying and the `is_approved` migration
+  being applied. `scripts/fit-sections.test.mjs` pins the query and the
+  HTML on every deploy; `scripts/check-routes.mjs` asserts on the wire that
+  a locked barrel's listed slides are all `fits` pairs and that a slide
+  saying no lists no threaded barrel.
+
 ## Netlify redirects
 
 Rules are **first-match-wins**, and `netlify.toml` takes precedence over `_redirects`. A
@@ -1103,6 +1147,7 @@ Registered today:
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
 | `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose; a directive that does not parse or names an unknown gun; an image under `/field-notes/`, which the forced rewrite swallows |
 | `scripts/field-notes.test.mjs` | `field-note.mjs` answering 404 when PostgREST failed, serving a draft on the apex, serving raw HTML or a `javascript:` link as markup, stating a stale price, or getting a fit verdict wrong — runs the handler over the `renderer-check` fixture against a stubbed catalog and pins every verdict shape |
+| `scripts/fit-sections.test.mjs` | a product page's barrel/slide fit section listing a threaded barrel on a slide whose maker says no (or the reverse), an unapproved or discontinued part, a locked barrel without its "Only these slides" line, a stale "From" price, or a heading over nothing — runs `product-page.mjs` against a stubbed fetch and pins both the one query it sends and the HTML |
 | `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
 
 This table is the full registry, not a sample. It read "Registered today:"
