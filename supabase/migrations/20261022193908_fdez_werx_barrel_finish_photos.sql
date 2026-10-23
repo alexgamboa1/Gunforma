@@ -1,8 +1,12 @@
 -- Fdez Werx barrels: each finish carries the maker's own photo of that
 -- finish. Ruled by Alex on 2026-10-22: the maker's per-finish photo for
 -- each variant wherever Fdez shows one; the group shot only as a fallback
--- for a finish Fdez never photographs, and those listed for Alex before any
--- SHARED_PHOTO_ALLOWED entry is added.
+-- for a finish Fdez never photographs. After the list below went to him,
+-- Alex ruled on the three cases flagged (same day): the XL ported Gold and
+-- Copper keep the group shot and are allowlisted in scripts/check-routes.mjs
+-- (it shows all four finishes, so neither is misleading); the XL ported
+-- Stainless takes gallery image 4461; the FUSE flush Black DLC and XL flush
+-- High Polished Stainless keep Fdez's own option photos.
 --
 -- Four products were created with one group shot on every finish, which is
 -- what scripts/check-routes.mjs ("no two variants of different colour or
@@ -28,14 +32,13 @@
 --     the gallery holds only two five-barrel group shots. Keeps the group
 --     shot; it is the only variant left on it, so nothing is shared.
 --   P365 XL 3.0 / ACCS 3.7" ported (837), two of four:
---     Black DLC 7440 (single barrel), Stainless 7441 (two barrels side by
---     side; the gallery also has a single stainless barrel, 4461, should
---     Alex prefer it).
+--     Black DLC 7440 (single barrel). Stainless: gallery image 4461, a
+--     single stainless barrel, by Alex's ruling — the option image (7441)
+--     shows two barrels side by side.
 --     Gold and Copper: no option image, and no gallery photo shows either
---     alone. Both keep the four-barrel group shot, so they still share it:
---     check-routes stays red on this product until Alex rules on an
---     allowlist entry (Copper is the default variant, which the allowlist
---     requires).
+--     alone. Both keep the four-barrel group shot and share it, which
+--     scripts/check-routes.mjs allowlists (Copper is the default variant,
+--     which the allowlist requires).
 --
 -- 15 variants change; Satin Stainless, ported Gold and ported Copper do
 -- not. Every row refuses unless the variant currently carries its product's
@@ -75,7 +78,8 @@ begin
       ('fdez-werx-p365-xl-flush-barrel-blue-satin-blue',                           g_xlf,  rule || '7062_source_1715789851.jpg'),
       ('fdez-werx-p365-xl-flush-barrel-stainless-steel-high-polished-stainless',   g_xlf,  rule || '7275_source_1715789851.jpg'),
       ('fdez-werx-p365-xl-ported-barrel-black-high-polished-black-dlc',            g_xlp,  rule || '7440_source_1753745430.jpg'),
-      ('fdez-werx-p365-xl-ported-barrel-stainless-steel-high-polished-stainless',  g_xlp,  rule || '7441_source_1728324226.jpg')
+      ('fdez-werx-p365-xl-ported-barrel-stainless-steel-high-polished-stainless',  g_xlp,
+       'https://cdn11.bigcommerce.com/s-1nh4386ub1/images/stencil/1280x1280/products/837/4461/FDEZ-Werx-P365-XL-30-ACCS-Non-LCI-Ported-37-Barrel_3573__30436.1787282597.jpg?c=1')
     ) as t (slug, from_url, to_url)
   loop
     update public.product_variants v
