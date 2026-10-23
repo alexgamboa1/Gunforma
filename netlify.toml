@@ -16,6 +16,19 @@
   # the build floats on whatever the Noble image happens to default to.
   NODE_VERSION = "20"
 
+# Post-processing: Pretty URLs OFF. Read off the site 2026-10-22
+# (processing_settings.html.pretty_urls = true): Netlify was rewriting every
+# href="x.html" in the STATIC pages to href='/x' on the wire — single quotes
+# and all — so the homepage served /gunforma-builds while every function-
+# rendered page served /gunforma-builds.html, and since the one-URL-per-page
+# rules below made the bare form a 301, every nav link on a static page was
+# a redirect hop. The repo has said .html everywhere since #182; this is
+# what makes the wire say it too. scripts/check-routes.mjs asserts it.
+[build.processing]
+  skip_processing = false
+[build.processing.html]
+  pretty_urls = false
+
 # Netlify Image CDN. Only reason it is on: a shared build link rendered as a
 # ~160px square thumbnail instead of the full-width card, because Facebook,
 # iMessage, Slack and LinkedIn pick the layout from the image's ACTUAL pixels
@@ -44,6 +57,16 @@
 # previews correctly but costs the reader an extra hop.
 [functions."build-og"]
   included_files = ["gunforma-build-detail.html"]
+
+# home-page and builds-page serve the static homepage and gallery with the
+# newest approved builds rendered into them (the served HTML held no /b/
+# link at all before 2026-10-22). Same shape as build-og above: the page
+# itself must be in the bundle.
+[functions."home-page"]
+  included_files = ["index.html"]
+
+[functions."builds-page"]
+  included_files = ["gunforma-builds.html"]
 
 # field-note reads the article's Markdown from disk at request time, so the
 # whole directory ships inside the function. A declared article whose file
@@ -302,6 +325,25 @@
 # are unchanged. /builds, /build and /field-notes did point at indexable
 # content and are 301s now (/builds and /build in _redirects).
 # ---------------------------------------------------------------------------
+# The homepage and the gallery, server-rendered with the newest approved
+# builds as /b/ cards (home-page.mjs, builds-page.mjs — see the included_files
+# note at the top). status = 200 rewrites, so the address and the canonical
+# stay what they were; force = true because a real file sits at each path and
+# an unforced rule would never run. Exact paths, so neither can shadow
+# anything; they sit above the /index.html → / rule so that 301 lands on the
+# function-served page.
+[[redirects]]
+  from = "/"
+  to = "/.netlify/functions/home-page"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/gunforma-builds.html"
+  to = "/.netlify/functions/builds-page"
+  status = 200
+  force = true
+
 [[redirects]]
   from = "/index.html"
   to = "/"

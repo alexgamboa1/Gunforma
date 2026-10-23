@@ -22,8 +22,14 @@
 // registry. _guide-meta.mjs's "do not create a browser mirror" note still
 // holds, and this is what keeps it true.
 import {
-  GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH, HUB_MAGAZINE_COPY,
+  GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH, HUB_MAGAZINE_COPY, HUB_BUILDS_COPY,
   hubPath, isLiveGunHub, guidePagesForGun, guidePath, hubTitle, APPLIES_TO_LABEL } from './_guide-meta.mjs';
+// "Owner builds on the <model>": the approved builds recorded as this
+// model, as /b/ cards — the hub is the page a build page's breadcrumb links
+// UP to, and this is the link back DOWN (CLAUDE.md, "gun_id is provenance,
+// never fitment": browse links only).
+import { fetchBuilds, miniCardHtml, miniCardsCss } from './_build-cards.mjs';
+import { buildUrl } from './_build-url.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 // The magazine rows' buy buttons: the same hero-listing rules and the same
 // unpaid "Buy from <maker>" fallback the fit guides and product pages use,
@@ -284,9 +290,22 @@ function magazineSectionHtml(name, mags) {
 }
 
 
+// ── owner builds on this model ────────────────────────────────────────────
+// Nothing renders when no approved build names the model: a heading over
+// nothing is the thing CLAUDE.md's fit sections refuse too.
+function buildsSectionHtml(name, builds) {
+  if (!builds.length) return '';
+  const C = HUB_BUILDS_COPY;
+  return '<h2 id="builds">' + esc(C.heading.replace('{model}', name)) + '</h2>' +
+    '<p class="desc">' + esc(C.intro) + '</p>' +
+    '<div class="bcard-grid">' + builds.map(miniCardHtml).join('') + '</div>' +
+    '<div class="links"><a href="/gunforma-builds.html">' + esc(C.all) + ' &rarr;</a></div>';
+}
+
 // ── the model hub ─────────────────────────────────────────────────────────
-function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount }) {
+function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount, builds }) {
   mags = mags || [];
+  builds = builds || [];
   const fittingMags = mags.filter(fitsIt);
   const name = gun.name;
   const canonical = SITE + hubPath(gun.slug);
@@ -365,12 +384,22 @@ function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount }) {
         item: SITE + m.href,
       })),
     }] : []),
+    // The owner builds, each pointing at its /b/ page — the same shape.
+    ...(builds.length ? [{
+      '@context': 'https://schema.org', '@type': 'ItemList',
+      name: HUB_BUILDS_COPY.heading.replace('{model}', 'Sig ' + name),
+      itemListElement: builds.map((b, i) => ({
+        '@type': 'ListItem', position: i + 1,
+        name: b.name || 'Untitled build',
+        item: buildUrl(b.id, b.name),
+      })),
+    }] : []),
   ];
 
   return '<!DOCTYPE html><html lang="en"><head>' +
     headTags({ title, description, canonical, jsonLd, ogType: 'website',
                ogImage: SITE + '/og-default.png' }) +
-    '<style>' + chromeCss() + layoutCss() + hubCss() + '</style>' +
+    '<style>' + chromeCss() + layoutCss() + hubCss() + miniCardsCss() + '</style>' +
     '</head><body>' +
     navHtml({ active: 'p365' }) +
     '<div class="breadcrumb"><a href="/">Home</a> / <a href="' + esc(HUB_INDEX_PATH) + '">P365 models</a> / ' + esc(name) + '</div>' +
@@ -397,6 +426,9 @@ function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount }) {
       // Below the fit guides, above the links out: the magazine question,
       // answered only from maker-stated rows. Empty when the model has none.
       magazineSectionHtml(name, mags) +
+
+      // Then the builds owners posted on this model. Empty when none has.
+      buildsSectionHtml(name, builds) +
 
       '<h2>Browse parts</h2>' +
       '<div class="links">' +
@@ -569,7 +601,16 @@ export default async (req) => {
     console.error('[gun-hub] optic count failed', err);
   }
 
-  const html = renderHub({ hub, gun, cuts: cutsRes.cuts, vocab: cutsRes.vocab, guides, mags, opticCount });
+  let builds = [];
+  try {
+    builds = await fetchBuilds({ gunId: gun.id, limit: 24 });
+  } catch (err) {
+    // Non-fatal, same as the magazines: the hub is the hub without the
+    // section, and x-gun-hub-builds says 0 so the wire check can tell.
+    console.error('[gun-hub] owner builds lookup failed', err);
+  }
+
+  const html = renderHub({ hub, gun, cuts: cutsRes.cuts, vocab: cutsRes.vocab, guides, mags, opticCount, builds });
   return new Response(html, {
     status: 200,
     headers: {
@@ -587,6 +628,9 @@ export default async (req) => {
       // asserts the section against this so an empty section cannot pass
       // as "nothing to show".
       'x-gun-hub-mags': String(mags.filter(fitsIt).length) + '/' + String(mags.length - mags.filter(fitsIt).length),
+      // Owner builds served (cards with /b/ links); check-routes.mjs holds
+      // the section to this number.
+      'x-gun-hub-builds': String(builds.length),
     },
   });
 };

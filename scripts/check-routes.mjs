@@ -1018,5 +1018,228 @@ for (const [label, path, want] of [
   }
 }
 
+// ── every build and every hub the sitemap submits is served whole ────────
+// Cheap insurance (2026-10-22): on 2026-10-20 cloud fetches saw 404s on
+// /p365/ hubs and an empty shell on one /b/ page. That was the durable
+// edge cache from #182 warming, not a routing bug — but a crawler that
+// is handed a sitemap URL and gets a "—" H1 or a 404 is the exact thing
+// the sitemap exists to prevent, so every URL it lists is fetched here.
+{
+  console.log('\n── every /b/ and /p365/ URL in the sitemap is served whole');
+  const SITE = 'https://gunforma.com';
+  const locsOf = async (child) => {
+    const r = await fetch(origin + child);
+    const xml = r.status === 200 ? await r.text() : '';
+    ok(r.status === 200, `${child}: 200`, r.status);
+    return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).filter((u) => u.startsWith(SITE + '/')).map((u) => u.slice(SITE.length));
+  };
+  const builds = await locsOf('/sitemap-builds.xml');
+  ok(builds.length > 0, '/sitemap-builds.xml lists at least one build', builds.length);
+  // The stored descriptions, read with the public key, so "printed exactly
+  // once" is judged against what the builder wrote and not against what
+  // the page happened to print. Every assertion in this loop runs on the
+  // RAW FETCHED HTML (get() is a fetch, never a DOM): crawlers do not
+  // hydrate, and a fix that only lands after the page's JS runs is not a
+  // fix for them.
+  const DESC_BY_ID = await (async () => {
+    const res = await fetch(`${SB_URL}/rest/v1/builds?select=id,description&status=eq.approved&limit=1000`,
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+    const rows = res.ok ? await res.json() : [];
+    return Object.fromEntries((Array.isArray(rows) ? rows : []).map((b) => [b.id, b.description]));
+  })();
+  const stripTags = (s) => String(s || '').replace(/<[^>]+>/g, '');
+  for (const path of builds) {
+    const r = await get(path);
+
+    // ── one gun, one name: crumb, kicker and chip say the same model ─────
+    // Found on the preview 2026-10-22: a crumb and kicker saying "P365
+    // XMacro Comp" over a chip still saying "SIG P365". The chip is the
+    // first .build-tag.blue in #build-tags; the kicker's model is its first
+    // " · " segment; the crumb's is the span's text with its hub link
+    // stripped. All three from the served bytes.
+    const crumbModel = stripTags((r.body.match(/<span id="breadcrumb-platform">(.*?)<\/span>/) || ['', ''])[1]);
+    const kickerModel = ((r.body.match(/<div class="build-kicker" id="build-kicker">([^<]*)<\/div>/) || ['', ''])[1]).split(' · ')[0];
+    const chipModel = (r.body.match(/<div class="build-tags" id="build-tags"><span class="build-tag blue">([^<]*)<\/span>/) || ['', ''])[1];
+    ok(crumbModel && crumbModel === kickerModel && kickerModel === chipModel,
+       `${path}: crumb, kicker and chip name the same model (served HTML)`,
+       `crumb=${JSON.stringify(crumbModel)} kicker=${JSON.stringify(kickerModel)} chip=${JSON.stringify(chipModel)}`);
+
+    // ── the builder's description prints exactly once ────────────────────
+    // Found on the same walk: the answer block quoted it and the description
+    // line printed it again. Judged against the STORED text (DESC_BY_ID),
+    // escaped the way the server escapes it. A description shorter than 15
+    // characters can legitimately recur as a part's words, so for those
+    // the assertion is "at least once, in its own line" and the count is
+    // noted rather than failed.
+    const id = (path.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i) || [])[1];
+    const stored = (id && DESC_BY_ID[id] ? String(DESC_BY_ID[id]) : '').trim();
+    if (stored) {
+      const needle = escHtml(stored).replace(/\s+/g, ' ');
+      const occurrences = r.body.replace(/\s+/g, ' ').split(needle).length - 1;
+      const inOwnLine = r.body.replace(/\s+/g, ' ').includes('<div class="build-desc" id="build-desc">' + needle + '</div>');
+      if (stored.length >= 15) {
+        ok(occurrences === 1 && inOwnLine, `${path}: the builder's description appears exactly once, in its own line (served HTML)`,
+           `${occurrences} occurrence(s)`);
+      } else {
+        ok(occurrences >= 1 && inOwnLine, `${path}: the builder's short description is in its own line (served HTML)`,
+           `${occurrences} occurrence(s) of ${JSON.stringify(stored)}`);
+      }
+      ok(!r.body.includes('The builder says:'), `${path}: the answer block does not quote the description`);
+    } else {
+      note(`${path}: no description stored — nothing to print once`);
+    }
+    const h1 = (r.body.match(/<h1 class="build-title" id="build-title">([^<]*)<\/h1>/) || [])[1];
+    ok(r.status === 200 && h1 !== undefined && h1 !== '—' && h1.trim() !== '',
+       `${path}: 200 with a real H1`, `${r.status} h1=${JSON.stringify(h1)}`);
+    // The model crumb and the kicker are server-rendered on every build —
+    // not the "—" placeholder, not an empty element — and no photo on the
+    // page ships an empty alt.
+    const crumb = (r.body.match(/<span id="breadcrumb-platform">(.*?)<\/span>/) || [])[1];
+    ok(crumb && crumb !== '—', `${path}: model crumb server-rendered`, crumb);
+    const kicker = (r.body.match(/<div class="build-kicker" id="build-kicker">([^<]*)<\/div>/) || [])[1];
+    ok(kicker && kicker.length > 0, `${path}: kicker server-rendered`, kicker);
+    const answer = (r.body.match(/<p class="build-answer" id="build-answer">([^<]*)<\/p>/) || [])[1];
+    ok(answer && answer.length > 0, `${path}: answer block server-rendered`, (answer || '').slice(0, 60));
+    const photoAlts = [...r.body.matchAll(/<div class="build-hero"[\s\S]*?<\/div>|<div class="build-gallery"[\s\S]*?<\/div>/g)]
+      .flatMap((m) => [...m[0].matchAll(/<img[^>]*alt="([^"]*)"/g)].map((a) => a[1]));
+    ok(photoAlts.every((a) => a.trim().length > 0), `${path}: no build photo with an empty alt`, photoAlts.length + ' photo alt(s)');
+    const title = (r.body.match(/<title>([^<]*)<\/title>/) || [])[1] || '';
+    ok(/ build: | build — by | build \| Gunforma$|FCU build/.test(title), `${path}: title opens with the model`, title.slice(0, 80));
+    ok(r.body.includes('"@type":"BreadcrumbList"'), `${path}: BreadcrumbList in the JSON-LD`);
+  }
+  const hubs = await locsOf('/sitemap-hubs.xml');
+  ok(hubs.length > 0, '/sitemap-hubs.xml lists at least one hub', hubs.length);
+  for (const path of hubs) {
+    const r = await get(path);
+    ok(r.status === 200, `${path}: 200`, r.status);
+  }
+}
+
+// ── builds are linked from the front door: /, the gallery, the hubs ──────
+// Measured 2026-10-22: the homepage's raw HTML held zero /b/ links and the
+// gallery served "Loading builds…"; every build page was an orphan reachable
+// only through the sitemap. home-page.mjs and builds-page.mjs now render
+// the newest approved builds into both, and a hub lists the builds recorded
+// as its model. Each function says what it served in a header; the body is
+// held to it, so a header saying 9 over a page with no card fails.
+{
+  console.log('\n── builds linked from /, the gallery and the hubs');
+  const approvedCount = await (async () => {
+    const res = await fetch(`${SB_URL}/rest/v1/builds?select=id&status=eq.approved&limit=1000`,
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+    const rows = res.ok ? await res.json() : null;
+    return Array.isArray(rows) ? rows.length : null;
+  })();
+  note('approved builds', approvedCount);
+  const bLinks = (body) => [...new Set([...body.matchAll(/href="(\/b\/[^"]+)"/g)].map((m) => m[1]))];
+
+  const home = await fetch(origin + '/');
+  const homeBody = await home.text();
+  const homeServed = home.headers.get('x-home-builds');
+  ok(home.status === 200, '/: 200', home.status);
+  ok(homeServed !== null && homeServed !== 'static', '/: served by home-page.mjs with builds rendered in', homeServed);
+  const homeLinks = bLinks(homeBody);
+  ok(homeLinks.length === Math.min(Number(homeServed) || 0, approvedCount ?? Infinity) && homeLinks.length > 0,
+     '/: one /b/ link per served build', `${homeLinks.length} links, header ${homeServed}`);
+  ok(homeBody.includes('id="featured-builds" data-server="'), '/: the featured row is marked server-rendered');
+  const counts = home.headers.get('x-home-counts');
+  note('x-home-counts', counts);
+  ok(counts && counts !== 'static' && !/<span class="hero-stat-num" id="stat-parts">—<\/span>/.test(homeBody),
+     '/: hero counts server-rendered, not dashes', counts);
+  ok(!homeBody.includes('Platform roadmap') && !/\bGlock\b/.test(homeBody), '/: no platform roadmap');
+  ok(/<meta name="description" content="Real SIG P365 builds from owners, with exact parts, fitment and live prices\." \/>/.test(homeBody),
+     '/: meta description is the owners-builds line');
+
+  const gal = await fetch(origin + '/gunforma-builds.html');
+  const galBody = await gal.text();
+  const galServed = gal.headers.get('x-builds-page');
+  ok(gal.status === 200, '/gunforma-builds.html: 200', gal.status);
+  ok(galServed !== null && galServed !== 'static', '/gunforma-builds.html: served by builds-page.mjs with builds rendered in', galServed);
+  const galLinks = bLinks(galBody);
+  ok(galLinks.length === (Number(galServed) || 0) && galLinks.length > 0,
+     '/gunforma-builds.html: one /b/ link per served build', `${galLinks.length} links, header ${galServed}`);
+  ok(!galBody.includes('<div class="loading">Loading builds…</div>'), '/gunforma-builds.html: no "Loading builds…" shell');
+
+  // ── one build, one total ─────────────────────────────────────────────
+  // The gallery card, the homepage card and the build page's kicker all
+  // print priceTotal() from _build-cards.mjs. Found on the preview
+  // 2026-10-22: the cards summed MSRPs ("~$1176") while the kicker used the
+  // catalog's price rules ("$1,017"), and the same build showed two
+  // figures. Held on the wire: the card's text IS the kicker's figure (or
+  // the card says "—" / parts and the kicker carries no figure).
+  const kickerTotal = (body) => {
+    const k = (body.match(/<div class="build-kicker" id="build-kicker">([^<]*)<\/div>/) || ['', ''])[1];
+    const m = k.match(/(\$[\d,]+\+?) at today/);
+    return m ? m[1] : null;
+  };
+  const galCards = [...galBody.matchAll(/<a class="build-card" href="(\/b\/[^"]+)">[\s\S]*?<div class="build-card-total">([^<]*)<\/div>/g)]
+    .map((m) => ({ path: m[1], total: m[2] === '—' ? null : m[2] }));
+  const homeCards = [...homeBody.matchAll(/<a href="(\/b\/[^"]+)" style="[^"]*"><div class="build-card">[\s\S]*?<span class="build-price">([^<]*)<\/span>/g)]
+    .map((m) => ({ path: m[1], total: (m[2].match(/^(\$[\d,]+\+?) today$/) || [])[1] || null }));
+  ok(galCards.length === galLinks.length, '/gunforma-builds.html: every served card carries a total cell', galCards.length);
+  for (const c of galCards) {
+    const r = await get(c.path);
+    const kt = kickerTotal(r.body);
+    ok(r.status === 200 && kt === c.total, `  ${c.path}: gallery card total equals the page kicker`, `card ${c.total} / kicker ${kt}`);
+    const hc = homeCards.find((h) => h.path === c.path);
+    if (hc) ok(hc.total === kt, `  ${c.path}: homepage card total equals the page kicker`, `card ${hc.total} / kicker ${kt}`);
+  }
+
+  // Every hub: the header's count and the body agree, and each card's
+  // build answers 200.
+  const { GUN_HUBS, hubPath } = await import('../netlify/functions/_guide-meta.mjs');
+  let hubsWithBuilds = 0;
+  for (const h of GUN_HUBS) {
+    const res = await fetch(origin + hubPath(h.gun));
+    const body = await res.text();
+    const n = Number(res.headers.get('x-gun-hub-builds') || 0);
+    const cards = (body.match(/class="bcard"/g) || []).length;
+    ok(res.status === 200 && cards === n, `${hubPath(h.gun)}: owner-build cards match x-gun-hub-builds`, `${cards} cards, header ${n}`);
+    if (n > 0) {
+      hubsWithBuilds++;
+      ok(body.includes('id="builds"'), `${hubPath(h.gun)}: owner builds section served`);
+      const first = bLinks(body.slice(body.indexOf('id="builds"')))[0];
+      const br = await get(first);
+      ok(br.status === 200, `${hubPath(h.gun)}: first owner build ${first} answers 200`, br.status);
+    }
+  }
+  note('hubs with owner builds', hubsWithBuilds);
+}
+
+// ── internal links say .html on the wire, on static pages too ────────────
+// Netlify's Pretty URLs post-processing rewrote every href="x.html" in the
+// STATIC pages to href='/x' on the wire — so the homepage linked
+// /gunforma-builds while the function-rendered pages linked
+// /gunforma-builds.html, and with the one-URL rules above the bare form is
+// a 301 hop on every nav click. netlify.toml turns it off
+// ([build.processing.html] pretty_urls = false); this is the wire half.
+{
+  console.log('\n── static pages serve .html links (Pretty URLs off)');
+  for (const p of ['/', '/gunforma-builds.html', '/gunforma-parts-catalog.html', '/field-notes.html']) {
+    const r = await get(p);
+    const bare = (r.body.match(/href=['"]\/gunforma-(?:builds|parts-catalog|legal|signin|post-build)['"]/g) || []).length;
+    ok(r.status === 200 && bare === 0, `${p}: no bare /gunforma-* link in the served HTML`, bare + ' bare link(s)');
+    ok(r.body.includes('href="gunforma-parts-catalog.html"') || r.body.includes('href="/gunforma-parts-catalog.html"'),
+       `${p}: Parts Catalog link is the .html form`);
+  }
+}
+
+// ── /llms.txt: present, plain text, every URL in it answers 200 ──────────
+{
+  console.log('\n── /llms.txt');
+  const r = await fetch(origin + '/llms.txt');
+  const body = r.status === 200 ? await r.text() : '';
+  ok(r.status === 200, '/llms.txt: 200', r.status);
+  ok(/^text\/plain/.test(r.headers.get('content-type') || ''), '/llms.txt: text/plain', r.headers.get('content-type'));
+  ok(body.startsWith('# Gunforma'), '/llms.txt: opens with the site name');
+  const urls = [...new Set([...body.matchAll(/https:\/\/gunforma\.com[^\s)]*/g)].map((m) => m[0].replace(/[.,]$/, '')))];
+  ok(urls.length >= 10, '/llms.txt: names at least ten site URLs', urls.length);
+  for (const u of urls) {
+    const path = u.slice('https://gunforma.com'.length).split('#')[0];
+    const res = await fetch(origin + path, { redirect: 'manual' });
+    ok(res.status === 200, `  ${path}: 200`, res.status);
+  }
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures ? 1 : 0);

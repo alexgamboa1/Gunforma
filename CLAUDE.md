@@ -216,7 +216,56 @@ load-bearing:
 
 Only approved builds appear (`status=eq.approved`, redundant with RLS on
 purpose, same as `build-og.mjs`), and a profile is listed only if it has one —
-a `/u/` page with nothing on it is a thin page.
+a `/u/` page with nothing on it is a thin page. **The four legal pages are
+not submitted** (since 2026-10-22): `gunforma-legal`, `privacy-policy`,
+`terms-of-service` and `builder-agreement` stay served and indexable, linked
+from every footer, but a sitemap says what we want indexed and nobody
+searches this site for its terms. They are under `RETIRED` in
+`check-sitemap.mjs`, and the static child is asserted to carry none of them.
+
+### The homepage and the gallery are served by functions too
+
+`/` and `/gunforma-builds.html` are forced rewrites to
+`netlify/functions/home-page.mjs` and `builds-page.mjs` (since 2026-10-22).
+Measured before that: the homepage's raw HTML held **zero** `/b/` links and
+the gallery served "Loading builds…" — every build card was drawn in the
+browser, so to a crawler the builds were reachable through the sitemap and
+nothing else, the orphan shape the hubs fixed for `/fit/`. Both functions
+follow `build-og.mjs`: the static page from the bundle (`included_files`),
+exact-string replaces of one-line placeholders held to the page by
+`check-canonical-coupling.mjs` (`keepsCanonical`: neither touches the
+`<head>`), the page's own JS hydrating over identical markup, and
+`CDN_CACHE_PAGE` on the 200. The cards, the query and the MSRP totals live
+once, in `_build-cards.mjs`, which also renders a hub's **"Owner builds on
+the {model}"** (`builds.gun_id`, browse links only) and a build page's
+**"More {model} builds"**. Three things differ from `build-og.mjs`:
+
+- **A failed read serves the static page unchanged at 200, never a 503.**
+  There is no 410 trap here, and the page's JS draws the cards itself,
+  which is exactly what shipped before the function existed. The headers
+  `x-home-builds`, `x-home-counts` and `x-builds-page` say which happened
+  (`static`, or a count); `check-routes.mjs` holds the body to them.
+- **The homepage shows the newest builds, not three random ones.**
+  `loadFeatured()` reshuffled on every load; a crawler needs the links to
+  be there, and a page served with one set of cards must not repaint a
+  different one. The script leaves a row marked `data-server` alone and
+  keeps its random pick only as the fallback for a row that is still the
+  static tile. The hero counts are rendered the same way, under the same
+  definitions as `loadHeroStats()`, which rewrites them with the same
+  numbers.
+- **Netlify's Pretty URLs post-processing is OFF**, in `netlify.toml`
+  (`[build.processing.html] pretty_urls = false`). Read off the site
+  2026-10-22: it was rewriting every `href="x.html"` in the *static* pages
+  to `href='/x'` on the wire, so the served homepage linked
+  `/gunforma-builds` while every function page linked
+  `/gunforma-builds.html`, and the one-URL rules made each of those a 301
+  hop. The repo said `.html` everywhere; the wire did not. A repo sweep
+  cannot see this; `check-routes.mjs` asserts the served links.
+
+`/llms.txt` is a static file at the root, generated once from the registry
+(hubs and fit guides by name) and checked on the wire: every
+`https://gunforma.com` URL it names must answer 200, which is also what
+`check-routes.mjs` asserts on every run. It names no number that can rot.
 
 ### One URL per page
 
@@ -537,7 +586,9 @@ pages and gun hubs, so adding a tenth fit page or a twelfth hub costs nothing
 here. **`product-page.mjs` and `parts-index.mjs` have NOT been folded in** —
 that is a separate change with its own blast radius on the two most crawled
 routes on the site, and it should be its own PR with its own served-HTML
-diff.
+diff. `home-page.mjs` and `builds-page.mjs` are **not** copies either: they
+serve `index.html` and `gunforma-builds.html` themselves, nav included, so
+the count is unchanged by them.
 
 The functions are the ones that get missed. They are Netlify functions, so they
 do not turn up when you sweep `*.html`, and they cannot be checked with
@@ -1134,6 +1185,7 @@ Registered today:
 |---|---|
 | `scripts/check-embeds.sh` | ambiguous PostgREST embeds (PGRST201) |
 | `scripts/build-url.test.mjs` | `js/build-url.js` and `_build-url.mjs` drifting apart |
+| `scripts/build-total.test.mjs` | `js/build-total.js` and `_build-cards.mjs`'s `priceTotal()` drifting apart — a build's total painted by the gallery differing from the one served on its card and its page's kicker; also either copy breaking the price rules (a stale listing falling back to MSRP, an out-of-stock price beating an in-stock one, a 7-day-old check read as stale) |
 | `scripts/variant-label.test.mjs` | the variant-label copies drifting apart |
 | `scripts/check-script-order.mjs` | a page using a shared global without loading its definition first |
 | `scripts/check-snapshot-fields.mjs` | the `parts_snapshot` field whitelists drifting apart |
@@ -1198,7 +1250,12 @@ that introduced the runner.
 `scripts/check-routes.mjs` asserts routing behaviour against a **real deployed
 origin**: status codes, one canonical, the two build URL shapes agreeing, the
 bare legacy path 301ing to the gallery, a hard 410 on every unresolvable
-uuid and a 404 on a request with none. It is listed under `NOT_BUILD_CHECKS`
+uuid and a 404 on a request with none. Since 2026-10-22 it also walks
+**every `/b/` and `/p365/` URL the sitemap submits** (a real H1, the model
+crumb, the kicker, the answer block, no empty photo alt, a 200 on every
+hub), holds `/`, the gallery and the hubs to the build cards their headers
+claim, checks the static pages serve `.html` links (Pretty URLs off), and
+fetches every URL named in `/llms.txt`. It is listed under `NOT_BUILD_CHECKS`
 because the site is not serving
 during its own build, and fetching the previous deploy would grade the wrong
 artifact. `.github/workflows/check-routes.yml` runs it on a schedule against
@@ -1916,6 +1973,22 @@ listing reads differently depending on which page you are on:
   its behaviour to the documented rules on every deploy.
 - `gunforma-build-detail.html` — inline copy for a build's parts list
 
+**What a build costs has its own pair too** (2026-10-22):
+`netlify/functions/_build-cards.mjs` (`priceTotal()`, `priceTotalText()`,
+imported by `build-og.mjs`, `home-page.mjs` and `builds-page.mjs`) and
+`js/build-total.js` (`window.buildPriceTotal`, `window.priceTotalText`,
+loaded by `index.html` and `gunforma-builds.html` — `check-script-order`
+holds the tag). One price per catalog part under the rules above — the
+cheapest fresh partner price in stock first, MSRP only for a part with no
+listing, nothing for a stale one or a typed one — summed, with a `+` when
+the figure is a floor. The homepage and gallery cards used to sum MSRPs
+while the build page's kicker used this rule, so one build read "~$1176"
+on its card and "$1,017" on its page. `scripts/build-total.test.mjs` runs
+both copies over the same rows on every deploy, and `check-routes.mjs`
+asserts on the wire that every gallery and homepage card's total equals
+the kicker of the page it links to. The browser copy carries its own
+`isStalePrice` — the fourth browser copy of that rule.
+
 **The unpaid buy button has its own pair**, split the same way as
 `js/build-url.js` ↔ `_build-url.mjs`: `js/maker-link.js` (browser global,
 loaded by the catalog, the Armory and the build page — `check-script-order`
@@ -2335,13 +2408,33 @@ house order is code first:
 leave every tolerant read alone. Naming the column in one select while the
 probe still guards the rest is the half-state that breaks.
 
-**Not done yet, on purpose:** the public build page and `build-og.mjs` still
-say "SIG P365". They read through a select that would fail before the column
-exists, and the server copy and the page are held byte-for-byte by
-`check-canonical-coupling`, so that change waits for the migration and goes in
-as its own PR. The model will **never** filter the picker: a 3.1" gun is
-offered 3.7" barrels today, and the fact that could narrow that is the slide
-PART in the build, which nothing reads for fit yet either.
+**Done 2026-10-22, now that the column is live:** the public build page and
+`build-og.mjs` read `gun_id`, `fcu_only` and the `guns!builds_gun_fkey`
+embed (the composite FK) and name the build by them — `buildModel()` in
+`_build-cards.mjs`, with `buildModelName()` in the page as the browser copy
+of the name half only. The breadcrumb reads Builds / **{model}** / {title},
+the model linked to its hub when `GUN_HUBS` declares one (the page's JS
+leaves a server-rendered crumb alone: it has no registry); the `<title>` is
+"{Model} build: {parts} — by {builder} | Gunforma" with the model never
+truncated, "SIG P365" only when `gun_id` is null and "P365 FCU build" when
+`fcu_only`; a **kicker** under the H1 ("{Model} · {n} parts · ${total} at
+today's prices · by {builder}", the total under the catalog's own price
+rules and a `+` when a part priced to nothing); the chip under the
+description says the **same model name** as the crumb and the kicker,
+never the platform beside them (one gun, one name, everywhere on the
+page); an **answer block** of two sentences from stored fields only —
+who built it and for what, what it runs — whose first 150 characters are
+the meta description, and which never quotes the builder's description
+(that prints once, in full, in its own line right below); every photo alt
+"{optic} on {model} with {slide or grip} — photo i of n" (thumbnails
+included, none empty); a
+`BreadcrumbList` and the full image array in the JSON-LD; and "More
+{model} builds". `renderBuild()` writes `document.title` only over the
+static placeholder, never over the served one. `x-build-og-model`,
+`-priced` and `-more` report each on the wire. The model will **never**
+filter the picker: a 3.1" gun is offered 3.7" barrels today, and the fact
+that could narrow that is the slide PART in the build, which nothing reads
+for fit yet either.
 
 ### gun_id is provenance, never fitment
 

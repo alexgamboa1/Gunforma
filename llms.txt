@@ -1,0 +1,59 @@
+# Gunforma
+
+> Real SIG P365 builds from owners, with exact parts, fitment and live prices.
+
+Gunforma is a parts catalog and a build gallery for the Sig Sauer P365 family. Owners post their builds with every part listed; each part links to a catalog page with its specs, which P365 models it fits, and retailer prices refreshed from feeds. Only the P365 family is covered today.
+
+Facts about how the site works:
+
+- A build page lives under /b/, as /b/<name>-<uuid>. The uuid is what resolves; the name is decoration, so a renamed build keeps its old link.
+- A build is a parts list posted by its owner and reviewed before it is published. The model it was built on (P365, XL, XMacro, FUSE, and so on) is recorded by the owner, or "FCU build" when it started from a bare fire control unit.
+- A price is shown only when a retailer feed confirmed it within the last 7 days; otherwise the listing says "Check price". A part with no retailer listing shows its MSRP.
+- Buy links go through /go/ on this host and are tracked; some are affiliate links. The disclosure is at https://gunforma.com/gunforma-legal.html#affiliate.
+- Optic fit is decided per SKU from the slide's optic cut, not per model: most P365 models carry two cuts depending on the SKU suffix.
+- Posting a build needs a free account. Browsing needs nothing.
+
+## Builds
+
+- [Community builds](https://gunforma.com/gunforma-builds.html): every published build, newest first, with its parts, photos and the model it was built on.
+- [Post a build](https://gunforma.com/gunforma-post-build.html)
+
+## P365 models
+
+- [All P365 models](https://gunforma.com/p365/)
+- [Sig P365](https://gunforma.com/p365/p365): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 X](https://gunforma.com/p365/p365-x): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 XL](https://gunforma.com/p365/p365-xl): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 XMacro](https://gunforma.com/p365/p365-xmacro): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 AXG Legion](https://gunforma.com/p365/p365-axg): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 XF DH3](https://gunforma.com/p365/p365-xf-dh3): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 XF DH3 AXG](https://gunforma.com/p365/p365-xf-dh3-axg): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 FUSE](https://gunforma.com/p365/p365-fuse): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+- [Sig P365 FUSE Comp](https://gunforma.com/p365/p365-fuse-comp): specs, the optic cut by SKU, magazines verified to fit, owner builds.
+
+## Fit guides
+
+- [Red Dots that fit the Sig P365 XL](https://gunforma.com/fit/p365/red-dots/p365-xl)
+- [Red Dots that fit the Sig P365](https://gunforma.com/fit/p365/red-dots/p365)
+- [Red Dots that fit the Sig P365 X](https://gunforma.com/fit/p365/red-dots/p365-x)
+- [Red Dots that fit the Sig P365 XMacro](https://gunforma.com/fit/p365/red-dots/p365-xmacro)
+- [Red Dots that fit the Sig P365 AXG Legion](https://gunforma.com/fit/p365/red-dots/p365-axg)
+- [Red Dots that fit the Sig P365 XF DH3](https://gunforma.com/fit/p365/red-dots/p365-xf-dh3)
+- [Red Dots that fit the Sig P365 XF DH3 AXG](https://gunforma.com/fit/p365/red-dots/p365-xf-dh3-axg)
+- [Red Dots that fit the Sig P365 FUSE](https://gunforma.com/fit/p365/red-dots/p365-fuse)
+- [Red Dots that fit the Sig P365 FUSE Comp](https://gunforma.com/fit/p365/red-dots/p365-fuse-comp)
+
+## Parts
+
+- [Parts catalog](https://gunforma.com/gunforma-parts-catalog.html): every part, filterable by category and by the P365 model it fits.
+- [Parts by category](https://gunforma.com/parts): the same catalog as a plain list, one page per part under /parts/<category>/<slug>.
+
+## Articles
+
+- [Field Notes](https://gunforma.com/field-notes.html)
+
+## Index
+
+- [Sitemap](https://gunforma.com/sitemap.xml): a sitemap index with one child per page type (static, hubs, fit, builds, profiles, parts).
+- [Legal, affiliate disclosure and contact](https://gunforma.com/gunforma-legal.html)
+

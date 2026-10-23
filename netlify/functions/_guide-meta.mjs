@@ -149,6 +149,17 @@ export const HUB_MAGAZINE_COPY = {
   prices:    'Prices update from retailer feeds; a listing we could not verify in the last 7 days shows \u201cCheck price\u201d.',
 };
 
+// ── the hubs' owner-builds section: every string a reader sees ─────────────
+// Held here for the same reason as HUB_MAGAZINE_COPY: the guard sweeps it
+// for typed prices and counts. The builds listed are the approved builds
+// recorded as this model (builds.gun_id) — browse links, not fitment; a
+// build's parts are what fit, and the build page lists them.
+export const HUB_BUILDS_COPY = {
+  heading: 'Owner builds on the {model}',
+  intro:   'Real builds posted by owners who recorded this model, with every part listed and linked.',
+  all:     'See all builds',
+};
+
 export const HUB_INDEX_PATH = '/p365/';
 
 // ── the hub <title>: the fit question, as people type it ──────────────────

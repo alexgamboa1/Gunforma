@@ -55,6 +55,7 @@ RUN_FILES=()
 # ── the registry ───────────────────────────────────────────────────────────
 check "PostgREST embed ambiguity"  scripts/check-embeds.sh
 check "build URL copies agree"     scripts/build-url.test.mjs
+check "build total copies agree"   scripts/build-total.test.mjs
 check "variant label copies agree" scripts/variant-label.test.mjs
 check "shared globals loaded"      scripts/check-script-order.mjs
 check "snapshot whitelists agree" scripts/check-snapshot-fields.mjs

@@ -101,7 +101,7 @@ for (const dir of fnDirs) {
 }
 console.log(`      ${emitters.length} HTML-emitting functions: ${emitters.map((e) => e.split('/').pop()).join(', ')}`);
 
-// ── 4. Rendered /b/ and /u/ — exactly once ───────────────────────────────
+// ── 4. Rendered /b/, /u/, / and the gallery — exactly once ────────────────
 // The handlers fetch one row from PostgREST, then serve the static page with
 // meta injected. Stub that one fetch and run them for real.
 const realFetch = globalThis.fetch;
@@ -120,6 +120,14 @@ const cases = [
   ['build-og.mjs',   `https://gunforma.com/b/no-such-build-${UUID}`, []],
   ['profile-og.mjs', 'https://gunforma.com/u/fixture', [{ username: 'fixture' }]],
   ['profile-og.mjs', 'https://gunforma.com/u/nosuchuser', []],
+  // The homepage and the gallery, served with build cards rendered in: the
+  // page's own tag must come through exactly once, cards or no cards.
+  ['home-page.mjs',   'https://gunforma.com/',
+    [{ id: UUID, name: 'Fixture build', parts_snapshot: [], platforms: { name: 'SIG P365' }, profiles: { username: 'fixture' }, build_photos: [], build_fires: [{ count: 0 }] }]],
+  ['home-page.mjs',   'https://gunforma.com/', []],
+  ['builds-page.mjs', 'https://gunforma.com/gunforma-builds.html',
+    [{ id: UUID, name: 'Fixture build', parts_snapshot: [], platforms: { name: 'SIG P365' }, profiles: { username: 'fixture' }, build_photos: [], build_fires: [{ count: 0 }] }]],
+  ['builds-page.mjs', 'https://gunforma.com/gunforma-builds.html', []],
 ];
 const quiet = console.error; console.error = () => {};               // handlers log on 404
 try {
