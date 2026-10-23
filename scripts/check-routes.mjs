@@ -1109,6 +1109,31 @@ for (const [label, path, want] of [
      '/gunforma-builds.html: one /b/ link per served build', `${galLinks.length} links, header ${galServed}`);
   ok(!galBody.includes('<div class="loading">Loading builds…</div>'), '/gunforma-builds.html: no "Loading builds…" shell');
 
+  // ── one build, one total ─────────────────────────────────────────────
+  // The gallery card, the homepage card and the build page's kicker all
+  // print priceTotal() from _build-cards.mjs. Found on the preview
+  // 2026-10-22: the cards summed MSRPs ("~$1176") while the kicker used the
+  // catalog's price rules ("$1,017"), and the same build showed two
+  // figures. Held on the wire: the card's text IS the kicker's figure (or
+  // the card says "—" / parts and the kicker carries no figure).
+  const kickerTotal = (body) => {
+    const k = (body.match(/<div class="build-kicker" id="build-kicker">([^<]*)<\/div>/) || ['', ''])[1];
+    const m = k.match(/(\$[\d,]+\+?) at today/);
+    return m ? m[1] : null;
+  };
+  const galCards = [...galBody.matchAll(/<a class="build-card" href="(\/b\/[^"]+)">[\s\S]*?<div class="build-card-total">([^<]*)<\/div>/g)]
+    .map((m) => ({ path: m[1], total: m[2] === '—' ? null : m[2] }));
+  const homeCards = [...homeBody.matchAll(/<a href="(\/b\/[^"]+)" style="[^"]*"><div class="build-card">[\s\S]*?<span class="build-price">([^<]*)<\/span>/g)]
+    .map((m) => ({ path: m[1], total: (m[2].match(/^(\$[\d,]+\+?) today$/) || [])[1] || null }));
+  ok(galCards.length === galLinks.length, '/gunforma-builds.html: every served card carries a total cell', galCards.length);
+  for (const c of galCards) {
+    const r = await get(c.path);
+    const kt = kickerTotal(r.body);
+    ok(r.status === 200 && kt === c.total, `  ${c.path}: gallery card total equals the page kicker`, `card ${c.total} / kicker ${kt}`);
+    const hc = homeCards.find((h) => h.path === c.path);
+    if (hc) ok(hc.total === kt, `  ${c.path}: homepage card total equals the page kicker`, `card ${hc.total} / kicker ${kt}`);
+  }
+
   // Every hub: the header's count and the body agree, and each card's
   // build answers 200.
   const { GUN_HUBS, hubPath } = await import('../netlify/functions/_guide-meta.mjs');

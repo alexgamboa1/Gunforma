@@ -59,11 +59,7 @@ import { pgRows, unavailable } from './_pg.mjs';
 // What the build is CALLED (its factory model, FCU, or the bare platform),
 // the "More <model> builds" cards and their CSS — shared with the hubs,
 // the homepage and the gallery so one build is named one way everywhere.
-import { buildModel, modelBuildPhrase, fetchBuilds, miniCardHtml, miniCardsCss, orderedPhotos } from './_build-cards.mjs';
-// The stale-price rule for the kicker's "at today's prices" total: the
-// same copy product-page.mjs and guide-page.mjs read, so a price this page
-// adds up is one the catalog would state.
-import { isStalePrice } from './_listing-rules.mjs';
+import { buildModel, modelBuildPhrase, fetchBuilds, fetchPriceTotals, priceTotalText, miniCardHtml, miniCardsCss, orderedPhotos } from './_build-cards.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 
@@ -237,12 +233,14 @@ function list(items) {
 }
 
 // ── The answer block ──────────────────────────────────────────────────────
-// Two or three sentences a crawler or a model can lift as the answer to
-// "what is this build": who built it and for what, what it runs, and what
-// the builder said. EVERY sentence is a template over stored fields, and a
-// sentence whose field is empty is dropped — nothing is inferred, nothing
-// is padded. The model name comes from gun_id / fcu_only / the platform
-// (buildModel), never from the parts.
+// Two sentences a crawler or a model can lift as the answer to "what is
+// this build": who built it and for what, and what it runs. EVERY sentence
+// is a template over stored fields, and a sentence whose field is empty is
+// dropped — nothing is inferred, nothing is padded. The model name comes
+// from gun_id / fcu_only / the platform (buildModel), never from the parts.
+// The builder's own words are NOT quoted here: they print once, in full,
+// in the description line right below (a quoted copy printed the same text
+// twice on the preview, 2026-10-22).
 function answerSentences(build) {
   const model = buildModel(build);
   const by    = build.profiles && build.profiles.username;
@@ -250,7 +248,6 @@ function answerSentences(build) {
     .filter((a) => typeof a === 'string' && a.trim()).map((a) => a.trim().toLowerCase());
   const parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
   const names = headlineParts(build, 3, 60);   // a sentence has room a title does not
-  const own   = clamp(build.description, 140);
 
   const out = [];
   out.push((by ? by + ' built this ' + model.name : 'This ' + model.name + ' was built') +
@@ -259,7 +256,6 @@ function answerSentences(build) {
     out.push('It runs ' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') +
              (names.length ? ', including ' + list(names) : '') + '.');
   }
-  if (own) out.push('The builder says: “' + own + '”');
   return out;
 }
 
@@ -276,15 +272,10 @@ function buildDescription(build) {
 
 // ── The kicker ────────────────────────────────────────────────────────────
 // "P365 XMacro · 14 parts · $1,284 at today's prices · by Wraythe", under
-// the H1. The total is the sum of a price per catalog part under the
-// catalog's own rules (fetchPriceTotal): a fresh partner price when the
-// part has a listing, its MSRP when it has none, nothing when its only
-// listings are stale. A typed part prices to nothing. When some part priced
-// to nothing the figure carries a "+" — it is a floor, and says so — and
-// when none did the figure is left out rather than guessed.
-function fmtDollars(n) {
-  return '$' + Math.round(n).toLocaleString('en-US');
-}
+// the H1. The total is priceTotal() in _build-cards.mjs — the ONE rule the
+// homepage and gallery cards print too, so a build never shows two
+// figures. priceTotalText() prints a "+" when the figure is a floor and
+// null when nothing priced, in which case the segment is left out.
 
 function kickerText(build, priced) {
   const model = buildModel(build);
@@ -292,66 +283,10 @@ function kickerText(build, priced) {
   const parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
   const bits  = [model.name];
   if (parts.length) bits.push(parts.length + ' part' + (parts.length !== 1 ? 's' : ''));
-  if (priced && priced.count > 0 && priced.total > 0) {
-    bits.push(fmtDollars(priced.total) + (priced.count < priced.of ? '+' : '') + ' at today’s prices');
-  }
+  const totalText = priceTotalText(priced);
+  if (totalText) bits.push(totalText + ' at today’s prices');
   if (by) bits.push('by ' + by);
   return bits.join(' · ');
-}
-
-// One query for every catalog part's live variants and their live
-// listings. Returns { total, count (parts that priced), of (parts in the
-// build) }; on any failure { total: null, count: 0, of } so the kicker
-// drops its figure and x-build-og-priced says 0/<n>.
-async function fetchPriceTotal(build) {
-  const parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
-  const of = parts.length;
-  const ids = [...new Set(parts.map((p) => p && p.refId)
-    .filter((id) => typeof id === 'string' && UUID_ONLY_RE.test(id)))];
-  if (!ids.length) return { total: null, count: 0, of };
-  let rows;
-  try {
-    rows = await pgRows('product_variants?select=' +
-      encodeURIComponent('product_id,msrp,is_default,affiliate_links(street_price,in_stock,last_checked,op_last_matched_by)') +
-      '&retired_at=is.null&affiliate_links.retired_at=is.null&product_id=in.(' + ids.join(',') + ')');
-  } catch (err) {
-    console.error('[build-og] price lookup failed', err);
-    return { total: null, count: 0, of };
-  }
-  // Per product: every live listing across its live variants, and the
-  // default variant's MSRP for when there is no listing at all.
-  const byProduct = {};
-  for (const v of rows) {
-    if (!v || typeof v.product_id !== 'string') continue;
-    const acc = byProduct[v.product_id] || (byProduct[v.product_id] = { listings: [], msrp: null, hasDefault: false });
-    for (const l of (Array.isArray(v.affiliate_links) ? v.affiliate_links : [])) {
-      if (l) acc.listings.push({ price: l.street_price != null ? Number(l.street_price) : null, stale: isStalePrice(l), in_stock: l.in_stock });
-    }
-    if (v.msrp != null && (v.is_default || !acc.hasDefault)) {
-      if (v.is_default) acc.hasDefault = true;
-      if (v.is_default || acc.msrp == null) acc.msrp = Number(v.msrp);
-    }
-  }
-  const priceFor = (acc) => {
-    if (!acc) return null;
-    if (acc.listings.length) {
-      // Fresh prices only, in stock first — freshPriceSet() in
-      // product-page.mjs, the headline rule. A stale listing is not MSRP.
-      const fresh = acc.listings.filter((l) => l.price != null && !l.stale && Number.isFinite(l.price));
-      const set = fresh.filter((l) => l.in_stock === true);
-      const use = set.length ? set : fresh;
-      return use.length ? Math.min(...use.map((l) => l.price)) : null;
-    }
-    return acc.msrp != null && Number.isFinite(acc.msrp) ? acc.msrp : null;
-  };
-  let total = 0, count = 0;
-  for (const p of parts) {
-    const price = p && p.refId ? priceFor(byProduct[p.refId]) : null;
-    if (price == null) continue;
-    total += price;
-    count++;
-  }
-  return { total: count ? total : null, count, of };
 }
 
 // Hero photo, full size — a preview card wants the big image, not the thumb.
@@ -678,7 +613,7 @@ function injectBody(page, build, productsById, { priced, more } = {}) {
   html = html.replace('<span id="breadcrumb-name">—</span>',
     () => '<span id="breadcrumb-name">' + esc(name) + '</span>');
   html = html.replace('<div class="build-eyebrow" id="build-eyebrow">—</div>',
-    () => '<div class="build-eyebrow" id="build-eyebrow">' + esc(activities.join(' · ') || platform || 'Build') + '</div>');
+    () => '<div class="build-eyebrow" id="build-eyebrow">' + esc(activities.join(' · ') || model.name) + '</div>');
   html = html.replace('<h1 class="build-title" id="build-title">—</h1>',
     () => '<h1 class="build-title" id="build-title">' + esc(name) + '</h1>');
 
@@ -705,13 +640,14 @@ function injectBody(page, build, productsById, { priced, more } = {}) {
       () => '<div class="build-desc" id="build-desc">' + esc(desc) + '</div>');
   }
 
-  if (platform || activities.length) {
-    html = html.replace('<div class="build-tags" id="build-tags"></div>',
-      () => '<div class="build-tags" id="build-tags">' +
-        (platform ? '<span class="build-tag blue">' + esc(platform) + '</span>' : '') +
-        activities.map((a) => '<span class="build-tag">' + esc(a) + '</span>').join('') +
-      '</div>');
-  }
+  // The chip says the same name the crumb and the kicker say — one gun,
+  // one name, everywhere on the page. It said the platform ("SIG P365")
+  // under a crumb that said "P365 XMacro Comp" until 2026-10-22.
+  html = html.replace('<div class="build-tags" id="build-tags"></div>',
+    () => '<div class="build-tags" id="build-tags">' +
+      '<span class="build-tag blue">' + esc(model.name) + '</span>' +
+      activities.map((a) => '<span class="build-tag">' + esc(a) + '</span>').join('') +
+    '</div>');
 
   html = html.replace('<div class="build-total-num" id="build-tier-label">—</div>',
     () => '<div class="build-total-num" id="build-tier-label">' +
@@ -956,7 +892,8 @@ export default async (req) => {
   const model = buildModel(build);
   const [productsById, priced, more] = await Promise.all([
     fetchLinkedProducts(build),
-    fetchPriceTotal(build),
+    fetchPriceTotals([build]).then((m) => m[build.id])
+      .catch((err) => { console.error('[build-og] price lookup failed', err); return { total: null, count: 0, of: (build.parts_snapshot || []).length }; }),
     (model.kind === 'gun' || model.kind === 'fcu')
       ? fetchBuilds({ gunId: model.kind === 'gun' ? build.gun_id : null, fcuOnly: model.kind === 'fcu',
                       excludeId: build.id, limit: 6 })

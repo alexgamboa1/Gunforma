@@ -1185,6 +1185,7 @@ Registered today:
 |---|---|
 | `scripts/check-embeds.sh` | ambiguous PostgREST embeds (PGRST201) |
 | `scripts/build-url.test.mjs` | `js/build-url.js` and `_build-url.mjs` drifting apart |
+| `scripts/build-total.test.mjs` | `js/build-total.js` and `_build-cards.mjs`'s `priceTotal()` drifting apart — a build's total painted by the gallery differing from the one served on its card and its page's kicker; also either copy breaking the price rules (a stale listing falling back to MSRP, an out-of-stock price beating an in-stock one, a 7-day-old check read as stale) |
 | `scripts/variant-label.test.mjs` | the variant-label copies drifting apart |
 | `scripts/check-script-order.mjs` | a page using a shared global without loading its definition first |
 | `scripts/check-snapshot-fields.mjs` | the `parts_snapshot` field whitelists drifting apart |
@@ -1972,6 +1973,22 @@ listing reads differently depending on which page you are on:
   its behaviour to the documented rules on every deploy.
 - `gunforma-build-detail.html` — inline copy for a build's parts list
 
+**What a build costs has its own pair too** (2026-10-22):
+`netlify/functions/_build-cards.mjs` (`priceTotal()`, `priceTotalText()`,
+imported by `build-og.mjs`, `home-page.mjs` and `builds-page.mjs`) and
+`js/build-total.js` (`window.buildPriceTotal`, `window.priceTotalText`,
+loaded by `index.html` and `gunforma-builds.html` — `check-script-order`
+holds the tag). One price per catalog part under the rules above — the
+cheapest fresh partner price in stock first, MSRP only for a part with no
+listing, nothing for a stale one or a typed one — summed, with a `+` when
+the figure is a floor. The homepage and gallery cards used to sum MSRPs
+while the build page's kicker used this rule, so one build read "~$1176"
+on its card and "$1,017" on its page. `scripts/build-total.test.mjs` runs
+both copies over the same rows on every deploy, and `check-routes.mjs`
+asserts on the wire that every gallery and homepage card's total equals
+the kicker of the page it links to. The browser copy carries its own
+`isStalePrice` — the fourth browser copy of that rule.
+
 **The unpaid buy button has its own pair**, split the same way as
 `js/build-url.js` ↔ `_build-url.mjs`: `js/maker-link.js` (browser global,
 loaded by the catalog, the Armory and the build page — `check-script-order`
@@ -2402,10 +2419,15 @@ leaves a server-rendered crumb alone: it has no registry); the `<title>` is
 truncated, "SIG P365" only when `gun_id` is null and "P365 FCU build" when
 `fcu_only`; a **kicker** under the H1 ("{Model} · {n} parts · ${total} at
 today's prices · by {builder}", the total under the catalog's own price
-rules and a `+` when a part priced to nothing); an **answer block** of two
-or three sentences from stored fields only, whose first 150 characters are
-the meta description; every photo alt "{optic} on {model} with {slide or
-grip} — photo i of n" (thumbnails included, none empty); a
+rules and a `+` when a part priced to nothing); the chip under the
+description says the **same model name** as the crumb and the kicker,
+never the platform beside them (one gun, one name, everywhere on the
+page); an **answer block** of two sentences from stored fields only —
+who built it and for what, what it runs — whose first 150 characters are
+the meta description, and which never quotes the builder's description
+(that prints once, in full, in its own line right below); every photo alt
+"{optic} on {model} with {slide or grip} — photo i of n" (thumbnails
+included, none empty); a
 `BreadcrumbList` and the full image array in the JSON-LD; and "More
 {model} builds". `renderBuild()` writes `document.title` only over the
 static placeholder, never over the served one. `x-build-og-model`,

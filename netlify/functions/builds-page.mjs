@@ -16,7 +16,7 @@
 import { readFile } from 'node:fs/promises';
 import { CDN_CACHE_PAGE } from './_cache.mjs';
 import { unavailable } from './_pg.mjs';
-import { fetchBuilds, fetchMsrpTotals, galleryCardHtml, CARD_LIMIT } from './_build-cards.mjs';
+import { fetchBuilds, fetchPriceTotals, galleryCardHtml, CARD_LIMIT } from './_build-cards.mjs';
 
 const PAGE_CANDIDATES = [
   'gunforma-builds.html',
@@ -66,7 +66,7 @@ export default async () => {
   let builds = [], totals = {}, failed = false;
   try {
     builds = await fetchBuilds({ limit: CARD_LIMIT });
-    totals = await fetchMsrpTotals(builds);
+    totals = await fetchPriceTotals(builds);
   } catch (err) {
     console.error('[builds-page] builds lookup failed', err);
     failed = true;

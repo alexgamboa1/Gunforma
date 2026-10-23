@@ -22,6 +22,7 @@
 // (CLAUDE.md): the model is a label and a link to the hub, nothing more.
 import { pgRows } from './_pg.mjs';
 import { buildPath } from './_build-url.mjs';
+import { isStalePrice } from './_listing-rules.mjs';
 import { GUN_META, hubPath, isLiveGunHub } from './_guide-meta.mjs';
 
 export const PHOTO_BASE = 'https://lagjjcpclvzrjlrswojt.supabase.co/storage/v1/object/public/build-photos/';
@@ -71,38 +72,85 @@ export async function fetchBuilds({ gunId = null, fcuOnly = false, excludeId = n
   return rows.filter((b) => b && typeof b.id === 'string' && UUID_RE.test(b.id) && b.id !== excludeId);
 }
 
-// Sum of default-variant MSRPs for every catalog part in each build — the
-// gallery's and homepage's own rule (loadTotals / loadFeatured), copied so
-// the server card and the hydrated card show one number. Live variants
-// only; is_default is preferred in code rather than filtered server-side,
-// because a product whose default variant is retired would otherwise drop
-// out of the total silently. Returns { [buildId]: total }, with 0 for a
-// build whose parts price to nothing.
-export async function fetchMsrpTotals(builds) {
+// ── what a build costs: ONE rule, every surface ──────────────────────────
+// A build's total is the sum of one price per catalog part, under the
+// catalog's own rules (CLAUDE.md, "Prices we can stand behind"):
+//   - a part with live listings: the cheapest FRESH price, in stock first
+//     (freshPriceSet() in product-page.mjs); every listing stale → nothing
+//   - a part with no listing at all: its default variant's MSRP
+//   - a typed part, or one priced to nothing: nothing
+// The result is { total, count (parts that priced), of (parts in the
+// build) }; `count < of` means the figure is a floor and priceTotalText()
+// prints it with a "+". Before 2026-10-22 the homepage and gallery cards
+// summed MSRPs while the build page's kicker used this rule, and one build
+// showed two totals ("~$1176" on the card, "$1,017" on its page). The
+// cards use this now, served and hydrated: js/build-total.js is the
+// browser copy, scripts/build-total.test.mjs runs both over the same rows.
+//
+// `rows` is product_variants rows for the parts' products, live variants
+// with their live affiliate_links (PRICE_TOTAL_SELECT); the function is
+// pure so the test can feed it.
+export const PRICE_TOTAL_SELECT = 'product_id,msrp,is_default,affiliate_links(street_price,in_stock,last_checked,op_last_matched_by)';
+
+export function priceTotal(parts, rows) {
+  const list = Array.isArray(parts) ? parts : [];
+  const of = list.length;
+  const byProduct = {};
+  for (const v of (Array.isArray(rows) ? rows : [])) {
+    if (!v || typeof v.product_id !== 'string') continue;
+    const acc = byProduct[v.product_id] || (byProduct[v.product_id] = { listings: [], msrp: null, hasDefault: false });
+    for (const l of (Array.isArray(v.affiliate_links) ? v.affiliate_links : [])) {
+      if (l) acc.listings.push({ price: l.street_price != null ? Number(l.street_price) : null, stale: isStalePrice(l), in_stock: l.in_stock });
+    }
+    if (v.msrp != null && (v.is_default || !acc.hasDefault)) {
+      if (v.is_default) acc.hasDefault = true;
+      if (v.is_default || acc.msrp == null) acc.msrp = Number(v.msrp);
+    }
+  }
+  const priceFor = (acc) => {
+    if (!acc) return null;
+    if (acc.listings.length) {
+      const fresh = acc.listings.filter((l) => l.price != null && !l.stale && Number.isFinite(l.price));
+      const inStock = fresh.filter((l) => l.in_stock === true);
+      const use = inStock.length ? inStock : fresh;
+      return use.length ? Math.min(...use.map((l) => l.price)) : null;
+    }
+    return acc.msrp != null && Number.isFinite(acc.msrp) ? acc.msrp : null;
+  };
+  let total = 0, count = 0;
+  for (const p of list) {
+    const price = p && typeof p.refId === 'string' ? priceFor(byProduct[p.refId]) : null;
+    if (price == null) continue;
+    total += price;
+    count++;
+  }
+  return { total: count ? total : null, count, of };
+}
+
+// "$1,017", "$1,017+" (a floor: some part priced to nothing), or null when
+// nothing priced. Whole dollars; the same string on every surface.
+export function priceTotalText(priced) {
+  if (!priced || !priced.count || !(priced.total > 0)) return null;
+  return '$' + Math.round(priced.total).toLocaleString('en-US') + (priced.count < priced.of ? '+' : '');
+}
+
+// One query for every catalog part across the builds, then priceTotal()
+// per build. Returns { [buildId]: priced }. Throws like pgRows; a caller
+// that can live without totals catches and renders none.
+export async function fetchPriceTotals(builds) {
   const refIds = new Set();
   for (const b of builds) {
     for (const p of (Array.isArray(b.parts_snapshot) ? b.parts_snapshot : [])) {
       if (p && typeof p.refId === 'string' && UUID_RE.test(p.refId)) refIds.add(p.refId);
     }
   }
-  const msrpByProduct = {};
-  if (refIds.size) {
-    const rows = await pgRows('product_variants?select=product_id,msrp,is_default&retired_at=is.null' +
-      '&product_id=in.(' + [...refIds].join(',') + ')');
-    for (const v of rows) {
-      if (!v || !v.product_id) continue;
-      if (msrpByProduct[v.product_id] === undefined || v.is_default) msrpByProduct[v.product_id] = Number(v.msrp || 0);
-    }
-  }
-  const totals = {};
-  for (const b of builds) {
-    let sum = 0;
-    for (const p of (Array.isArray(b.parts_snapshot) ? b.parts_snapshot : [])) {
-      if (p && p.refId && msrpByProduct[p.refId] != null) sum += msrpByProduct[p.refId];
-    }
-    totals[b.id] = sum;
-  }
-  return totals;
+  const rows = refIds.size
+    ? await pgRows('product_variants?select=' + encodeURIComponent(PRICE_TOTAL_SELECT) +
+        '&retired_at=is.null&affiliate_links.retired_at=is.null&product_id=in.(' + [...refIds].join(',') + ')')
+    : [];
+  const out = {};
+  for (const b of builds) out[b.id] = priceTotal(b.parts_snapshot, rows);
+  return out;
 }
 
 // Hero first, then the rest by position with id as the tiebreak — the order
@@ -175,7 +223,7 @@ function cardAlt(b) {
 // ── the homepage card ─────────────────────────────────────────────────────
 // Byte-for-byte the markup index.html's loadFeatured() writes, so the page
 // does not change when its script runs over it. Change the two together.
-export function homeCardHtml(b, total) {
+export function homeCardHtml(b, priced) {
   const hero = orderedPhotos(b)[0];
   const photoHtml = hero
     ? '<img src="' + esc(thumbUrl(hero)) + '" alt="' + cardAlt(b) + '" loading="lazy"/>'
@@ -185,7 +233,8 @@ export function homeCardHtml(b, total) {
   const acts = Array.isArray(b.activities) ? b.activities.filter(Boolean) : [];
   const activity = acts[0] || '';
   const otherTags = acts.slice(1, 3);
-  const totalHtml = total > 0 ? '~$' + total.toFixed(0) + ' total' : partsCount(b) + ' parts';
+  const totalText = priceTotalText(priced);
+  const totalHtml = totalText ? totalText + ' today' : partsCount(b) + ' parts';
   return '<a href="' + esc(buildPath(b.id, b.name)) + '" style="text-decoration:none;color:inherit;display:block;"><div class="build-card">' +
     '<div class="build-img">' + photoHtml + '</div>' +
     '<div class="build-body">' +
@@ -207,7 +256,7 @@ export function homeCardHtml(b, total) {
 // gunforma-builds.html's renderCard(), served. The like button renders with
 // its count and no "fired" state — whether THIS reader liked it needs a
 // session, which is the page's job once it loads.
-export function galleryCardHtml(b, total) {
+export function galleryCardHtml(b, priced) {
   const hero = orderedPhotos(b)[0];
   const photoHtml = hero
     ? '<img src="' + esc(thumbUrl(hero)) + '" alt="' + cardAlt(b) + '" loading="lazy"/>'
@@ -216,7 +265,7 @@ export function galleryCardHtml(b, total) {
   const author = b.profiles ? b.profiles.username : 'unknown';
   const tags = (Array.isArray(b.activities) ? b.activities : []).filter(Boolean).slice(0, 3)
     .map((a) => '<span class="build-card-tag">' + esc(a) + '</span>').join('');
-  const totalTxt = total != null && total > 0 ? '$' + Number(total).toFixed(0) : '—';
+  const totalTxt = priceTotalText(priced) || '—';
   const n = partsCount(b);
   const parts = n + ' part' + (n !== 1 ? 's' : '');
   const fireBtn =

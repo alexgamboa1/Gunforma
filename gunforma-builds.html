@@ -224,6 +224,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="toast" id="toast"></div>
 
 <script src="js/build-url.js"></script>
+<script src="js/build-total.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
@@ -304,7 +305,7 @@ async function loadBuilds() {
       _hero: hero,
       _fireCount: fireCount,
       _partsCount: Array.isArray(b.parts_snapshot) ? b.parts_snapshot.length : 0,
-      _msrpTotal: null,   // filled in by loadTotals
+      _priced: null,      // { total, count, of } from loadTotals — the ONE price rule
     });
   });
 
@@ -313,40 +314,31 @@ async function loadBuilds() {
   renderGrid();
 }
 
-// Sum default-variant MSRPs for every catalog-picked part in visible builds.
-// One batched query for all products across all visible builds.
+// What each build costs, under the ONE price rule — js/build-total.js, the
+// browser copy of priceTotal() in _build-cards.mjs, which is what served
+// this grid's cards: a fresh partner price per part, MSRP only for a part
+// with no listing, nothing for a stale one. It used to sum MSRPs here and
+// print a different number than the build page's kicker. One batched query
+// for every product across the visible builds — the live variants with
+// their live listings (the embed filter keeps the variant, drops the dead
+// listing).
 async function loadTotals() {
   const refIds = new Set();
   BUILDS.forEach(function(b) {
     (b.parts_snapshot || []).forEach(function(p) { if (p.refId) refIds.add(p.refId); });
   });
-  if (!refIds.size) { BUILDS.forEach(function(b){ b._msrpTotal = 0; }); return; }
+  if (!refIds.size) { BUILDS.forEach(function(b){ b._priced = window.buildPriceTotal(b.parts_snapshot, []); }); return; }
 
   const { data, error } = await sb
-    // Live variants only. is_default is NOT filtered server-side: a product
-    // whose default variant is retired would return no row and drop out of
-    // the total silently. Prefer the default in JS, else the first live one.
     .from('product_variants')
-    .select('product_id,msrp,is_default')
+    .select('product_id,msrp,is_default,affiliate_links(street_price,in_stock,last_checked,op_last_matched_by)')
     .is('retired_at', null)
+    .is('affiliate_links.retired_at', null)
     .in('product_id', Array.from(refIds));
 
   if (error) { console.error('loadTotals', error); return; }
 
-  const msrpByProduct = {};
-  (data || []).forEach(function(v) {
-    if (msrpByProduct[v.product_id] === undefined || v.is_default) {
-      msrpByProduct[v.product_id] = Number(v.msrp || 0);
-    }
-  });
-
-  BUILDS.forEach(function(b) {
-    let sum = 0;
-    (b.parts_snapshot || []).forEach(function(p) {
-      if (p.refId && msrpByProduct[p.refId] != null) sum += msrpByProduct[p.refId];
-    });
-    b._msrpTotal = sum;
-  });
+  BUILDS.forEach(function(b) { b._priced = window.buildPriceTotal(b.parts_snapshot, data || []); });
 }
 
 async function loadUserFires() {
@@ -402,12 +394,14 @@ function filteredBuilds() {
 
   switch (sort) {
     case 'fires':      out.sort(function(a,b){ return b._fireCount - a._fireCount; }); break;
-    case 'price-high': out.sort(function(a,b){ return (b._msrpTotal || 0) - (a._msrpTotal || 0); }); break;
-    case 'price-low':  out.sort(function(a,b){ return (a._msrpTotal || 0) - (b._msrpTotal || 0); }); break;
+    case 'price-high': out.sort(function(a,b){ return priceOf(b) - priceOf(a); }); break;
+    case 'price-low':  out.sort(function(a,b){ return priceOf(a) - priceOf(b); }); break;
     default:           out.sort(function(a,b){ return new Date(b.created_at) - new Date(a.created_at); });
   }
   return out;
 }
+
+function priceOf(b) { return b._priced && b._priced.total != null ? b._priced.total : 0; }
 
 function renderGrid() {
   const container = document.getElementById('grid-container');
@@ -457,9 +451,8 @@ function renderCard(b) {
   const tags = (b.activities || []).slice(0, 3).map(function(a) {
     return '<span class="build-card-tag">'+escH(a)+'</span>';
   }).join('');
-  const total = b._msrpTotal != null && b._msrpTotal > 0
-    ? '$'+Number(b._msrpTotal).toFixed(0)
-    : '—';
+  // The same string builds-page.mjs served for this card (priceTotalText).
+  const total = window.priceTotalText(b._priced) || '—';
   const parts = b._partsCount+' part'+(b._partsCount!==1?'s':'');
   const fired = USER_FIRES.has(b.id);
 

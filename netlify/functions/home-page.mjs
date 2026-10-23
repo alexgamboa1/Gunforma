@@ -41,7 +41,7 @@
 import { readFile } from 'node:fs/promises';
 import { CDN_CACHE_PAGE } from './_cache.mjs';
 import { pgRows, unavailable } from './_pg.mjs';
-import { fetchBuilds, fetchMsrpTotals, homeCardHtml, CARD_LIMIT } from './_build-cards.mjs';
+import { fetchBuilds, fetchPriceTotals, homeCardHtml, CARD_LIMIT } from './_build-cards.mjs';
 
 const PAGE_CANDIDATES = [
   'index.html',
@@ -95,7 +95,7 @@ function inject(page, builds, totals, counts) {
       '</a>';
     html = html.replace('<div class="builds-row" id="featured-builds"><a class="build-cta" href="gunforma-post-build.html"><span class="build-cta-title">Post your build</span><span class="build-cta-sub">Your parts, your photos — on the record.</span></a></div>',
       () => '<div class="builds-row" id="featured-builds" data-server="' + builds.length + '">' +
-        builds.map((b) => homeCardHtml(b, totals[b.id] || 0)).join('') +
+        builds.map((b) => homeCardHtml(b, totals[b.id])).join('') +
         (builds.length < 3 ? CTA_TILE : '') +
       '</div>');
   }
@@ -147,7 +147,7 @@ export default async () => {
   const errors = [];
   try {
     builds = await fetchBuilds({ limit: CARD_LIMIT });
-    totals = await fetchMsrpTotals(builds);
+    totals = await fetchPriceTotals(builds);
   } catch (err) {
     console.error('[home-page] builds lookup failed', err);
     errors.push('builds');

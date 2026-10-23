@@ -39,6 +39,11 @@ const RULES = [
   // addPartWithVariant(), and the build page in resolveVariant().
   { global: 'variantSpecs', defines: 'js/variant-label.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
+  // What a build costs: the homepage and the gallery call
+  // window.buildPriceTotal / window.priceTotalText inline from their card
+  // renderers (the server copy is in _build-cards.mjs). A missing tag
+  // throws inside the render and the grid stays empty.
+  { global: 'buildPriceTotal', defines: 'js/build-total.js', consumers: [] },
   // The maker-link label and the disclosure wording. affiliate.js reads
   // window.makerLink / window.buyDisclosure / window.MAKER_REL at call time;
   // gunforma-build-detail.html calls window.makerLink inline from

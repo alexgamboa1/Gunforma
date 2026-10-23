@@ -1004,9 +1004,10 @@ function photoAlt(i) {
 }
 
 // The answer block, for the legacy path only — the browser copy of
-// answerSentences() in build-og.mjs: who built it and for what, what it
-// runs, what the builder said. Every sentence is a template over stored
-// fields and is dropped when its field is empty. Change the two together.
+// answerSentences() in build-og.mjs: who built it and for what, and what
+// it runs. Every sentence is a template over stored fields and is dropped
+// when its field is empty; the builder's words print once, in the
+// description line below, never quoted here. Change the two together.
 var ANSWER_PRIORITY = ['optics', 'optic', 'slides', 'slide', 'barrels', 'barrel', 'compensator',
                        'grips', 'frame', 'lights', 'light', 'triggers', 'trigger'];
 function answerBlockText(b) {
@@ -1029,11 +1030,9 @@ function answerBlockText(b) {
     .sort(function (x, y) { return rank(x.p) - rank(y.p) || x.i - y.i; })
     .slice(0, 3)
     .map(function (x) { return clip(window.displayProductName({ brand: x.p.brand, name: x.p.name }), 60); });
-  var own = clip(b.description, 140);
   var out = [];
   out.push((by ? by + ' built this ' + model : 'This ' + model + ' was built') + (acts.length ? ' for ' + listOf(acts) : '') + '.');
   if (parts.length) out.push('It runs ' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') + (names.length ? ', including ' + listOf(names) : '') + '.');
-  if (own) out.push('The builder says: “' + own + '”');
   return out.join(' ');
 }
 
@@ -1166,7 +1165,6 @@ function renderBuild(b) {
   if (document.title === 'Gunforma build') document.title = b.name + ' — Gunforma';
   setCanonical(b);            // the slug needs the name; this is the first point we have it
 
-  var platformName = b.platforms ? b.platforms.name : 'Unknown pistol';
   var username = b.profiles ? b.profiles.username : 'unknown';
   var photos = b.build_photos || [];
   var hero = photos.find(function(p){ return p.is_hero; }) || photos[0];
@@ -1205,7 +1203,7 @@ function renderBuild(b) {
   var answer = document.getElementById('build-answer');
   if (answer && !answer.textContent) answer.textContent = answerBlockText(b);
 
-  document.getElementById('build-eyebrow').textContent = (b.activities||[]).join(' · ') || platformName;
+  document.getElementById('build-eyebrow').textContent = (b.activities||[]).join(' · ') || buildModelName(b);
   document.getElementById('build-title').textContent = b.name;
   document.getElementById('build-author-row').innerHTML = 'Built by <strong>'+escH(username)+'</strong> · Posted '+formatDate(b.created_at);
 
@@ -1224,8 +1222,10 @@ function renderBuild(b) {
     }
   }
 
+  // The chip says what the crumb and the kicker say: the model, never the
+  // platform beside it.
   document.getElementById('build-tags').innerHTML =
-    '<span class="build-tag blue">'+escH(platformName)+'</span>'+
+    '<span class="build-tag blue">'+escH(buildModelName(b))+'</span>'+
     (b.activities||[]).map(function(a){ return '<span class="build-tag">'+escH(a)+'</span>'; }).join('');
 
   var partsCount = (b.parts_snapshot||[]).length;
