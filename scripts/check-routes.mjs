@@ -919,6 +919,11 @@ for (const [label, path, want] of [
 {
   console.log('\n── variant photos: one colour, one photo');
   const SHARED_PHOTO_ALLOWED = {
+    // Fdez's group shot of all four finishes (image 4458). Gold and Copper
+    // (the default) keep it: Fdez photographs neither on its own, and the
+    // shot shows every finish, so neither is misleading. Black DLC and
+    // Stainless have their own photos. Alex's ruling, 2026-10-22.
+    'fdez-werx-p365-xl-ported-barrel': 'four-finish group shot kept on Gold and Copper (default), which Fdez never photographs alone (Alex, 2026-10-22)',
     // OpticsPlanet's one five-plate composite; the product's only photo, so
     // it stays on Black (the default) and the other four show the swatch.
     'anarchy-outdoors-slide-plate-p365': 'five-colour composite kept on the default variant only (audit 2026-10-21, item 3)',
