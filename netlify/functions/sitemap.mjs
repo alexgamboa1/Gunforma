@@ -84,19 +84,19 @@ const SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsIn
 
 const SITE = 'https://gunforma.com';
 
-// The pages that are pages, not rows. Copied verbatim from the static file
-// this replaces, in its order — these are what is indexed today and none of
-// them may drop out.
+// The pages that are pages, not rows: the content pages. The four legal
+// pages (gunforma-legal, privacy-policy, terms-of-service,
+// builder-agreement) were listed until 2026-10-22 and are not any more —
+// they are reachable from every footer, they are not what anyone searches
+// this site for, and a sitemap is a statement of what we want indexed, not
+// of what exists. They stay indexable (no noindex, no 301); they are simply
+// not submitted. scripts/check-sitemap.mjs lists them under RETIRED.
 const STATIC_PATHS = [
   '/',
   '/gunforma-builds.html',
   '/gunforma-parts-catalog.html',
   '/parts',
   '/field-notes.html',
-  '/gunforma-legal.html',
-  '/privacy-policy.html',
-  '/terms-of-service.html',
-  '/builder-agreement.html',
 ];
 
 // The children, in the order the index lists them. The key is the path

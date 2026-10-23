@@ -11,7 +11,7 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Gunforma — Your pistol. Your loadout.</title>
 <link rel="canonical" href="https://gunforma.com/" />
-<meta name="description" content="Gunforma — real pistol builds from real owners. Browse custom P365 and P320 loadouts, see exact parts and costs, and post your own build." />
+<meta name="description" content="Real SIG P365 builds from owners, with exact parts, fitment and live prices." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -130,35 +130,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .btn-outline-light:hover { border-color: #4a9edd; color: #4a9edd; }
 .btn-solid-blue { font-size: 12px; color: #fff; background: #4a9edd; border: none; padding: 9px 18px; border-radius: 4px; font-weight: 600; cursor: pointer; letter-spacing: 0.04em; text-decoration: none; display: inline-block; }
 .btn-solid-blue:hover { background: #2a7bbd; }
-
-/* ── ROADMAP ── */
-.roadmap-section { padding-top: 12px; }
-.roadmap { list-style: none; padding: 0; margin: 22px 0 0; display: grid; grid-template-columns: repeat(6, 1fr); gap: 0; position: relative; }
-/* Connecting line runs from the center of the first dot to the center of the last dot */
-.roadmap::before { content: ''; position: absolute; top: 12px; left: 8.33%; right: 8.33%; height: 2px; background: #e5e5e5; z-index: 0; }
-.roadmap-item { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; padding: 0 10px; position: relative; z-index: 1; }
-.roadmap-dot { width: 26px; height: 26px; border-radius: 50%; background: #fff; border: 3px solid #d9d6cc; box-shadow: 0 0 0 4px #fff; flex-shrink: 0; }
-.roadmap-item.live .roadmap-dot     { border-color: #22a06b; background: #22a06b; }
-.roadmap-item.building .roadmap-dot { border-color: #f9b860; background: #fff8ea; }
-.roadmap-item.next .roadmap-dot     { border-color: #4a9edd; background: #eaf4fc; }
-.roadmap-item.later .roadmap-dot    { border-color: #d9d6cc; background: #fafaf8; }
-.roadmap-status { font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #888; }
-.roadmap-item.live .roadmap-status     { color: #166534; }
-.roadmap-item.building .roadmap-status { color: #7a4f1c; }
-.roadmap-item.next .roadmap-status     { color: #1d6fb8; }
-.roadmap-date { font-size: 10.5px; color: #999; font-weight: 600; letter-spacing: 0.02em; }
-.roadmap-title { font-size: 14px; font-weight: 700; color: #1a1a1a; line-height: 1.25; }
-.roadmap-item.later .roadmap-title { color: #666; }
-.roadmap-note { font-size: 10.5px; color: #888; line-height: 1.45; }
-
-@media (max-width: 900px) {
-  /* Stack vertically with a left rail; each row = dot + labels */
-  .roadmap { grid-template-columns: 1fr; gap: 18px; padding-left: 32px; }
-  .roadmap::before { top: 12px; bottom: 12px; left: 12px; right: auto; width: 2px; height: auto; }
-  .roadmap-item { flex-direction: row; align-items: flex-start; text-align: left; gap: 12px; padding: 0; flex-wrap: wrap; }
-  .roadmap-item .roadmap-dot { margin-left: -32px; margin-top: 2px; }
-  .roadmap-status { flex-basis: 100%; margin-bottom: -4px; }
-}
 
 /* ── FOOTER ── */
 .footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafaf8; flex-wrap: wrap; gap: 8px; }
@@ -287,15 +258,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <a href="gunforma-post-build.html" class="section-link muted">+ Post yours</a>
       </div>
     </div>
-    <div class="builds-row" id="featured-builds">
-      <!-- Pre-JS and no-JS state. Not "Loading…": a crawler, or a reader
-           with scripts off, gets the call to action, and loadFeatured()
-           replaces this cell the moment it has builds. -->
-      <a class="build-cta" href="gunforma-post-build.html">
-        <span class="build-cta-title">Post your build</span>
-        <span class="build-cta-sub">Your parts, your photos — on the record.</span>
-      </a>
-    </div>
+    <!-- Served at / by netlify/functions/home-page.mjs, which replaces this
+         exact line with the newest approved builds as cards (and marks the
+         row data-server). The line is the no-JS / fallback state: the call
+         to action, which loadFeatured() below replaces only when the row is
+         still this tile. One line on purpose — it is matched byte-for-byte
+         by the function (scripts/check-canonical-coupling.mjs). -->
+    <div class="builds-row" id="featured-builds"><a class="build-cta" href="gunforma-post-build.html"><span class="build-cta-title">Post your build</span><span class="build-cta-sub">Your parts, your photos — on the record.</span></a></div>
   </div>
 
   <!-- ══════════════════════════════════════════
@@ -311,62 +280,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <a href="gunforma-post-build.html" class="btn-outline-light">Post a build</a>
       <a href="gunforma-signup.html" class="btn-solid-blue">Create free account</a>
     </div>
-  </div>
-
-  <!-- ══════════════════════════════════════════
-       ROADMAP — platform coverage timeline.
-       Shown right after the CTA so new visitors understand what's
-       already live vs. what's coming (currently P365 only at launch).
-       ══════════════════════════════════════════ -->
-  <div class="section roadmap-section">
-    <div class="section-header">
-      <div>
-        <span class="section-title">Platform roadmap</span>
-        <div class="section-sub">Where we are, where we're headed. Launching <strong>October 2026</strong>.</div>
-      </div>
-    </div>
-    <ol class="roadmap">
-      <li class="roadmap-item live">
-        <div class="roadmap-dot"></div>
-        <div class="roadmap-status">Live at launch</div>
-        <div class="roadmap-date">October 2026</div>
-        <div class="roadmap-title">Sig Sauer P365</div>
-        <div class="roadmap-note">Full parts catalog + community builds</div>
-      </li>
-      <li class="roadmap-item building">
-        <div class="roadmap-dot"></div>
-        <div class="roadmap-status">In progress</div>
-        <div class="roadmap-date">October 2026</div>
-        <div class="roadmap-title">Sig Sauer P320</div>
-        <div class="roadmap-note">Parts catalog wiring up</div>
-      </li>
-      <li class="roadmap-item next">
-        <div class="roadmap-dot"></div>
-        <div class="roadmap-status">Next up</div>
-        <div class="roadmap-date">November 2026</div>
-        <div class="roadmap-title">Glock</div>
-        <div class="roadmap-note">G17 / G19 / G26 / G34 platforms</div>
-      </li>
-      <li class="roadmap-item later">
-        <div class="roadmap-dot"></div>
-        <div class="roadmap-status">Then</div>
-        <div class="roadmap-date">Winter 2026</div>
-        <div class="roadmap-title">Shadow Systems</div>
-      </li>
-      <li class="roadmap-item later">
-        <div class="roadmap-dot"></div>
-        <div class="roadmap-status">Then</div>
-        <div class="roadmap-date">Winter 2026</div>
-        <div class="roadmap-title">Springfield Armory</div>
-      </li>
-      <li class="roadmap-item later">
-        <div class="roadmap-dot"></div>
-        <div class="roadmap-status">On deck</div>
-        <div class="roadmap-date">Q2 2027</div>
-        <div class="roadmap-title">More platforms</div>
-        <div class="roadmap-note">Vote for what you want next</div>
-      </li>
-    </ol>
   </div>
 
   <!-- ── FOOTER ── static -->
@@ -408,6 +321,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   // move the pick server-side (an RPC with ORDER BY random() LIMIT 3).
   async function loadFeatured() {
     const container = document.getElementById('featured-builds');
+    // Served at / by home-page.mjs with the newest builds already in the
+    // row (data-server). Those are the cards a crawler was given; drawing
+    // three random ones over them would show readers a different set than
+    // the one served. The random pick below is the fallback for a row that
+    // is still the static tile — the file served directly, or the function
+    // serving the page unchanged after a failed read.
+    if (container && container.dataset.server) return;
     const { data: pool, error: poolErr } = await sb
       .from('builds')
       .select('id,build_photos(id)')
@@ -505,7 +425,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   loadFeatured();
 
   // Hero stats — counted live on every load, never typed into the HTML, so
-  // the numbers cannot go stale. A count that fails to load takes its own
+  // the numbers cannot go stale. At / home-page.mjs has already written the
+  // same three counts into the row; this rewrites them with the same
+  // numbers and still removes a stat it cannot count. A count that fails to load takes its own
   // stat out of the row (the grid rebalances); a dash is never left standing
   // and no fallback number is shown. If all three fail the row goes.
   //

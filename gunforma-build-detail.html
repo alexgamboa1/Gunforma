@@ -123,6 +123,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .build-title { font-size: 24px; font-weight: 700; line-height: 1.2; letter-spacing: -0.01em; }
 .build-author-row { font-size: 12px; color: #888; }
 .build-author-row strong { color: #1a1a1a; font-weight: 600; }
+/* The kicker ("P365 XMacro · 14 parts · $1,284 at today's prices · by
+   Wraythe") and the answer block (two or three sentences from stored fields
+   only). build-og.mjs renders both into these exact elements at /b/…; the
+   page's JS fills them only when they arrive empty — change the markup and
+   the matching literal in build-og.mjs together (the guard will say so). */
+.build-kicker { font-size: 12.5px; font-weight: 600; color: #1a1a1a; letter-spacing: 0.01em; }
+.build-kicker:empty { display: none; }
+.build-answer { font-size: 13px; line-height: 1.6; color: #444; margin: 0; }
+.build-answer:empty { display: none; }
 /* The builder's own words. pre-line keeps their paragraph breaks without
    letting arbitrary whitespace lay the page out. Hidden until there is text:
    renderBuild() shows it, and build-og.mjs replaces the hidden div outright
@@ -420,6 +429,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <h1 class="build-title" id="build-title">—</h1>
       </div>
       <div class="build-author-row" id="build-author-row">—</div>
+      <div class="build-kicker" id="build-kicker"></div>
+      <p class="build-answer" id="build-answer"></p>
       <!-- The builder's description. This exact line is replaced byte-for-byte
            by build-og.mjs when the build has one (same coupling as the
            canonical above — change the two together; the guard will say so). -->
@@ -466,6 +477,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div id="build-changes" class="build-changes" hidden></div>
 
   <div id="parts-container"></div>
+
+  <!-- "More <model> builds": server-rendered by build-og.mjs at /b/… and
+       never touched by this page's JS. Empty on the legacy ?id= path. -->
+  <div id="more-builds"></div>
 
   <!-- COMMENTS — hydrated by loadComments() once the build resolves. Hidden
        until then so a 404 page doesn't carry an empty comments box. -->
@@ -658,7 +673,10 @@ async function loadBuild() {
   // approved, so a not-yet-approved build correctly 404s instead of leaking.
   const { data, error } = await sb
     .from('builds')
-    .select('id,user_id,status,name,tier,activities,description,created_at,parts_snapshot,edit_history,platforms(name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
+    // gun_id / fcu_only and the guns embed (the composite FK
+    // builds_gun_fkey) are what the build is CALLED in the breadcrumb and
+    // the kicker; the column was applied 2026-10, so naming it here is safe.
+    .select('id,user_id,status,name,tier,activities,description,created_at,parts_snapshot,edit_history,gun_id,fcu_only,platforms(name),guns!builds_gun_fkey(slug,name),profiles!builds_user_id_fkey(username),build_photos(id,storage_path,thumb_path,is_hero,position)')
     .eq('id', id)
     .maybeSingle();
 
@@ -949,12 +967,74 @@ function renderNotFound() {
 // change the strip already looks like it makes.
 var PHOTOS = [];          // strip order: hero first, then the rest by position
 var PHOTO_INDEX = 0;      // which one the big image is showing
-var PHOTO_SUBJECT = '';   // "<name>, a <platform> build" — same shape as og:image:alt
+var PHOTO_SUBJECT = '';   // "<optic> on <model> with <slide>" — photoSubject()
 var GALLERY_BOUND = false;
+
+// What the build is CALLED: the factory model it was recorded as, "P365
+// FCU build" for one that started from a bare fire control unit, else the
+// platform. The browser copy of buildModel() in _build-cards.mjs — the
+// name only; which models have a hub is the server's registry to decide.
+function buildModelName(b) {
+  if (b.gun_id && b.guns && b.guns.name) return b.guns.name;
+  if (b.fcu_only === true) return 'P365 FCU build';
+  return b.platforms && b.platforms.name ? b.platforms.name : 'Custom';
+}
+
+// "<optic> on <model> with <slide|grip module>" — the browser copy of
+// photoSubject() in build-og.mjs: what a photo of this build shows, from
+// its parts and its model. Change the two together.
+function firstPartIn(b, keys) {
+  var p = (b.parts_snapshot || []).find(function (x) { return x && keys.indexOf(x.category) !== -1 && (x.name || x.brand); });
+  if (!p) return '';
+  var s = window.displayProductName({ brand: p.brand, name: p.name }).replace(/\s+/g, ' ').trim();
+  return s.length > 48 ? s.slice(0, 47).replace(/\s+\S*$/, '') + '…' : s;
+}
+function photoSubject(b) {
+  var optic = firstPartIn(b, ['optics', 'optic']);
+  var slide = firstPartIn(b, ['slides', 'slide']);
+  var grip  = slide ? '' : firstPartIn(b, ['grips', 'frame']);
+  return (optic ? optic + ' on ' : '') + buildModelName(b) +
+    (slide ? ' with ' + (/\bslide\b/i.test(slide) ? slide : slide + ' slide')
+     : grip ? ' with ' + (/\b(grip|frame|module)\b/i.test(grip) ? grip : grip + ' grip module') : '');
+}
 
 function photoAlt(i) {
   var n = PHOTOS.length;
-  return (n > 1 ? 'photo ' + (i + 1) + ' of ' + n + ' — ' : 'photo of ') + PHOTO_SUBJECT;
+  return PHOTO_SUBJECT + (n > 1 ? ' — photo ' + (i + 1) + ' of ' + n : '');
+}
+
+// The answer block, for the legacy path only — the browser copy of
+// answerSentences() in build-og.mjs: who built it and for what, what it
+// runs, what the builder said. Every sentence is a template over stored
+// fields and is dropped when its field is empty. Change the two together.
+var ANSWER_PRIORITY = ['optics', 'optic', 'slides', 'slide', 'barrels', 'barrel', 'compensator',
+                       'grips', 'frame', 'lights', 'light', 'triggers', 'trigger'];
+function answerBlockText(b) {
+  function listOf(items) {
+    var a = items.filter(Boolean);
+    return a.length <= 1 ? a.join('') : a.slice(0, -1).join(', ') + ' and ' + a[a.length - 1];
+  }
+  function clip(s, max) {
+    var t = String(s || '').replace(/\s+/g, ' ').trim();
+    return t.length <= max ? t : t.slice(0, max - 1).replace(/\s+\S*$/, '') + '…';
+  }
+  var model = buildModelName(b);
+  var by = b.profiles && b.profiles.username;
+  var acts = (b.activities || []).filter(function (a) { return typeof a === 'string' && a.trim(); })
+    .map(function (a) { return a.trim().toLowerCase(); });
+  var parts = b.parts_snapshot || [];
+  var rank = function (p) { var i = ANSWER_PRIORITY.indexOf(p && p.category); return i === -1 ? ANSWER_PRIORITY.length : i; };
+  var names = parts.map(function (p, i) { return { p: p, i: i }; })
+    .filter(function (x) { return x.p && (x.p.name || x.p.brand); })
+    .sort(function (x, y) { return rank(x.p) - rank(y.p) || x.i - y.i; })
+    .slice(0, 3)
+    .map(function (x) { return clip(window.displayProductName({ brand: x.p.brand, name: x.p.name }), 60); });
+  var own = clip(b.description, 140);
+  var out = [];
+  out.push((by ? by + ' built this ' + model : 'This ' + model + ' was built') + (acts.length ? ' for ' + listOf(acts) : '') + '.');
+  if (parts.length) out.push('It runs ' + parts.length + ' part' + (parts.length !== 1 ? 's' : '') + (names.length ? ', including ' + listOf(names) : '') + '.');
+  if (own) out.push('The builder says: “' + own + '”');
+  return out.join(' ');
 }
 
 // ── part photo lightbox ───────────────────────────────────────────────────
@@ -1079,7 +1159,11 @@ function showPhoto(i) {
 }
 
 function renderBuild(b) {
-  document.title = b.name + ' — Gunforma';
+  // At /b/… build-og.mjs has already written the title ("P365 XMacro build:
+  // Holosun 507K X2, … — by Wraythe | Gunforma"); writing the caption over
+  // it would hand a crawler that runs JS a second, weaker title. Only the
+  // static placeholder is replaced — the legacy path, and a fallback serve.
+  if (document.title === 'Gunforma build') document.title = b.name + ' — Gunforma';
   setCanonical(b);            // the slug needs the name; this is the first point we have it
 
   var platformName = b.platforms ? b.platforms.name : 'Unknown pistol';
@@ -1099,10 +1183,27 @@ function renderBuild(b) {
   });
   PHOTOS = hero ? [hero].concat(others) : [];
   PHOTO_INDEX = 0;
-  PHOTO_SUBJECT = b.name + (b.platforms && b.platforms.name ? ', a ' + b.platforms.name + ' build' : '');
+  PHOTO_SUBJECT = photoSubject(b);
 
-  document.getElementById('breadcrumb-platform').textContent = platformName;
+  // The model crumb: build-og.mjs renders it linked to the model's hub when
+  // the registry declares one, and this page has no registry to decide
+  // that — so a server-rendered crumb (anything but the placeholder) is
+  // left alone, and the name alone is written only on the legacy path.
+  var crumb = document.getElementById('breadcrumb-platform');
+  if (crumb.textContent === '—') crumb.textContent = buildModelName(b);
   document.getElementById('breadcrumb-name').textContent = b.name;
+
+  // The kicker and the answer block: server-rendered at /b/… (with the
+  // price total, which needs the catalog); filled here only when empty,
+  // without a figure — this page reads prices per part, not as a total.
+  var kicker = document.getElementById('build-kicker');
+  if (kicker && !kicker.textContent) {
+    var nParts = (b.parts_snapshot || []).length;
+    kicker.textContent = [buildModelName(b), nParts ? nParts + ' part' + (nParts !== 1 ? 's' : '') : '',
+                          b.profiles && b.profiles.username ? 'by ' + b.profiles.username : ''].filter(Boolean).join(' · ');
+  }
+  var answer = document.getElementById('build-answer');
+  if (answer && !answer.textContent) answer.textContent = answerBlockText(b);
 
   document.getElementById('build-eyebrow').textContent = (b.activities||[]).join(' · ') || platformName;
   document.getElementById('build-title').textContent = b.name;
@@ -1140,13 +1241,12 @@ function renderBuild(b) {
   if (PHOTOS.length > 1) {
     galleryEl.style.display = 'flex';
     galleryEl.innerHTML = PHOTOS.map(function(p, i){
-      // The button carries the accessible name, so the img inside is
-      // decorative and takes alt="" — otherwise a screen reader announces
-      // the same description twice for one control.
+      // The img's alt IS the button's accessible name — one description per
+      // control, and no image on the page with an empty alt. Same markup
+      // build-og.mjs serves, so hydration changes nothing.
       return '<button type="button" class="gallery-thumb" data-i="'+i+'"'+
-             (i === 0 ? ' aria-current="true"' : '')+
-             ' aria-label="'+escH('Show ' + photoAlt(i))+'">'+
-               '<img src="'+photoUrl(p.thumb_path || p.storage_path)+'" alt="" />'+
+             (i === 0 ? ' aria-current="true"' : '')+'>'+
+               '<img src="'+photoUrl(p.thumb_path || p.storage_path)+'" alt="'+escH(photoAlt(i))+'" />'+
              '</button>';
     }).join('');
     bindGallery();

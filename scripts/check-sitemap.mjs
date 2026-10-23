@@ -124,6 +124,10 @@ for (const key of SITEMAP_CHILDREN) {
      cr.headers.get('x-sitemap-urls'));
   const stray = cl.filter((u) => !u.startsWith(SITE + '/') || !CHILD_RULE[key](u.slice(SITE.length)));
   ok(stray.length === 0, `${path}: every URL is a ${key} URL`, stray.slice(0, 3).join(', ') || 'all');
+  if (key === 'static') {
+    const legal = cl.filter((u) => /\/(gunforma-legal|privacy-policy|terms-of-service|builder-agreement)\.html$/.test(u));
+    ok(legal.length === 0, `${path}: no legal or app page is submitted`, legal.join(', ') || 'none');
+  }
   if (key === 'parts' || key === 'builds' || key === 'profiles') {
     const withMod = (cx.match(/<lastmod>/g) || []).length;
     ok(withMod === cl.length, `${path}: every row-backed URL carries its row's lastmod`, `${withMod} of ${cl.length}`);
@@ -150,6 +154,13 @@ ok(locs.every((u) => u.startsWith(SITE + '/')), 'every URL is an apex https://gu
 // is what should happen when the Armory is un-parked (see claude/loadouts-spec.md).
 const RETIRED = new Set([
   '/gunforma-armory.html',  // PR #88 — Armory parked: no nav, noindex, out of the sitemap
+  // 2026-10-22 — the legal pages are deliberately not submitted: a sitemap
+  // says what we want indexed, and nobody searches this site for its terms
+  // of service. Still served, still indexable, linked from every footer.
+  '/gunforma-legal.html',
+  '/privacy-policy.html',
+  '/terms-of-service.html',
+  '/builder-agreement.html',
   // RAMM merged its comp and non-comp P365 Leverage kits into one product.
   // Both are discontinued and 301 to ramm-tactical-leverage-trigger-p365.
   '/parts/triggers/ramm-tactical-leverage-c-p365',

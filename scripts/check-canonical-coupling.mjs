@@ -41,15 +41,23 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // "my profile" app screen) and /u/<username> had to strip that line as it
 // already stripped the static canonical — a noindex that survives the
 // strip deindexes every public profile and renders perfectly.
+//
+// home-page.mjs and builds-page.mjs joined on 2026-10-22: they render the
+// newest builds into the homepage featured row and the gallery grid by the
+// same exact-string replace. Neither touches the page <head>, so the page
+// canonical is the right one and stays — keepsCanonical says so, and the
+// "never strips" rule below is skipped for them.
 const PAIRS = [
   { fn: 'netlify/functions/build-og.mjs',    page: 'gunforma-build-detail.html', route: '/b/…' },
   { fn: 'netlify/functions/profile-og.mjs',  page: 'gunforma-profile.html',      route: '/u/…' },
+  { fn: 'netlify/functions/home-page.mjs',   page: 'index.html',                 route: '/',                     keepsCanonical: true },
+  { fn: 'netlify/functions/builds-page.mjs', page: 'gunforma-builds.html',       route: '/gunforma-builds.html', keepsCanonical: true },
 ];
 
 const problems = [];
 let checked = 0;
 
-for (const { fn: FN, page: PAGE, route } of PAIRS) {
+for (const { fn: FN, page: PAGE, route, keepsCanonical } of PAIRS) {
 const fnSrc   = await readFile(join(ROOT, FN), 'utf8');
 const pageSrc = await readFile(join(ROOT, PAGE), 'utf8');
 
@@ -128,6 +136,10 @@ if (canonicals.length !== 1) {
 for (const [what, re] of [['noindex', /<meta[^>]+name=["']robots["'][^>]*>/gi],
                           ['canonical', /<link[^>]+rel=["']canonical["'][^>]*>/gi]]) {
   const tags = pageSrc.match(re) || [];
+  // A function that injects no <head> of its own keeps the page's
+  // canonical; a noindex on such a page would still be served, so that
+  // half of the rule stays.
+  if (keepsCanonical && what === 'canonical') continue;
   if (tags.length && !literals.some((l) => tags.some((t) => l.includes(t)))) {
     problems.push(
       `${PAGE} carries a ${what} tag that ${FN} never strips:\n` +

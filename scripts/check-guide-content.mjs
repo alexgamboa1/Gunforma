@@ -15,7 +15,7 @@
 //   - a malformed updated date, an overlong title, or a FAQ that is not a
 //     question.
 // No network: this is tree-dependent, not time-dependent.
-import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS, HUB_MAGAZINE_COPY, hubTitle, HUB_TITLE_MAX } from '../netlify/functions/_guide-meta.mjs';
+import { GUN_META, GUIDE_FAMILIES, GUIDE_PAGES, GUN_HUBS, HUB_MAGAZINE_COPY, HUB_BUILDS_COPY, hubTitle, HUB_TITLE_MAX } from '../netlify/functions/_guide-meta.mjs';
 import { GUIDE_CONTENT } from '../netlify/functions/_guide-content.mjs';
 
 let failures = 0;
@@ -122,6 +122,7 @@ for (const h of GUN_HUBS) {
 const flat = (o, where) => Object.entries(o).forEach(([k, v]) =>
   typeof v === 'string' ? checkProse(where + '.' + k, v) : flat(v, where + '.' + k));
 flat(HUB_MAGAZINE_COPY, 'HUB_MAGAZINE_COPY');
+flat(HUB_BUILDS_COPY, 'HUB_BUILDS_COPY');
 for (const fit of ['flush', 'extended', 'with_included_baseplate', 'not_compatible']) {
   if (!HUB_MAGAZINE_COPY.verdict[fit]) fail('HUB_MAGAZINE_COPY.verdict: no wording for fit "' + fit + '" — a row would render its raw key');
 }

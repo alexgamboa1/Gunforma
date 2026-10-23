@@ -211,9 +211,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <button class="filter-clear" id="filter-clear" onclick="clearFilters()">Clear</button>
   </div>
 
-  <div id="grid-container">
-    <div class="loading">Loading builds…</div>
-  </div>
+  <!-- Served at /gunforma-builds.html by netlify/functions/builds-page.mjs,
+       which replaces this exact line with the newest approved builds as
+       cards, and renderGrid() redraws over them with live like-state. One
+       line on purpose — matched byte-for-byte by the function
+       (scripts/check-canonical-coupling.mjs). -->
+  <div id="grid-container"><div class="loading">Loading builds…</div></div>
 </div>
 
 <div class="footer-bar"><span class="footer-txt">© 2026 Gunforma · All rights reserved</span><span class="footer-txt"><a href="gunforma-legal.html#legal">Legal</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="gunforma-legal.html#contact">Contact</a></span></div>
@@ -278,8 +281,11 @@ async function loadBuilds() {
   const { data, error } = await sb
     .from('builds')
     .select(
-      'id,name,tier,activities,description,created_at,parts_snapshot,'+
+      'id,name,tier,activities,description,created_at,parts_snapshot,gun_id,fcu_only,'+
       'platforms(id,name,slug),'+
+      // The model the build was recorded as, for the card's alt text. The
+      // FK is the composite builds_gun_fkey, so the embed names it.
+      'guns!builds_gun_fkey(slug,name),'+
       // Two FKs to profiles exist (user_id + reviewed_by via role escalation trigger etc.).
       // Name the author FK explicitly so PostgREST doesn't complain.
       'profiles!builds_user_id_fkey(id,username),'+
@@ -441,11 +447,13 @@ function renderGrid() {
 
 function renderCard(b) {
   const hero = b._hero;
-  const photoHtml = hero
-    ? '<img src="'+escH(photoUrl(hero.thumb_path || hero.storage_path))+'" alt=""/>'
-    : '<div class="build-card-nophoto">No photo</div>';
   const platform = b.platforms ? b.platforms.name : '';
   const author   = b.profiles ? b.profiles.username : 'unknown';
+  // The same alt builds-page.mjs serves: the build, its model, its builder.
+  const model = b.gun_id && b.guns && b.guns.name ? b.guns.name : (b.fcu_only === true ? 'P365 FCU build' : (platform || 'Custom'));
+  const photoHtml = hero
+    ? '<img src="'+escH(photoUrl(hero.thumb_path || hero.storage_path))+'" alt="'+escH(b.name+' — '+model+(b.profiles ? ' by '+author : ''))+'" loading="lazy"/>'
+    : '<div class="build-card-nophoto">No photo</div>';
   const tags = (b.activities || []).slice(0, 3).map(function(a) {
     return '<span class="build-card-tag">'+escH(a)+'</span>';
   }).join('');

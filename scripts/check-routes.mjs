@@ -1018,5 +1018,152 @@ for (const [label, path, want] of [
   }
 }
 
+// ── every build and every hub the sitemap submits is served whole ────────
+// Cheap insurance (2026-10-22): on 2026-10-20 cloud fetches saw 404s on
+// /p365/ hubs and an empty shell on one /b/ page. That was the durable
+// edge cache from #182 warming, not a routing bug — but a crawler that
+// is handed a sitemap URL and gets a "—" H1 or a 404 is the exact thing
+// the sitemap exists to prevent, so every URL it lists is fetched here.
+{
+  console.log('\n── every /b/ and /p365/ URL in the sitemap is served whole');
+  const SITE = 'https://gunforma.com';
+  const locsOf = async (child) => {
+    const r = await fetch(origin + child);
+    const xml = r.status === 200 ? await r.text() : '';
+    ok(r.status === 200, `${child}: 200`, r.status);
+    return [...xml.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]).filter((u) => u.startsWith(SITE + '/')).map((u) => u.slice(SITE.length));
+  };
+  const builds = await locsOf('/sitemap-builds.xml');
+  ok(builds.length > 0, '/sitemap-builds.xml lists at least one build', builds.length);
+  for (const path of builds) {
+    const r = await get(path);
+    const h1 = (r.body.match(/<h1 class="build-title" id="build-title">([^<]*)<\/h1>/) || [])[1];
+    ok(r.status === 200 && h1 !== undefined && h1 !== '—' && h1.trim() !== '',
+       `${path}: 200 with a real H1`, `${r.status} h1=${JSON.stringify(h1)}`);
+    // The model crumb and the kicker are server-rendered on every build —
+    // not the "—" placeholder, not an empty element — and no photo on the
+    // page ships an empty alt.
+    const crumb = (r.body.match(/<span id="breadcrumb-platform">(.*?)<\/span>/) || [])[1];
+    ok(crumb && crumb !== '—', `${path}: model crumb server-rendered`, crumb);
+    const kicker = (r.body.match(/<div class="build-kicker" id="build-kicker">([^<]*)<\/div>/) || [])[1];
+    ok(kicker && kicker.length > 0, `${path}: kicker server-rendered`, kicker);
+    const answer = (r.body.match(/<p class="build-answer" id="build-answer">([^<]*)<\/p>/) || [])[1];
+    ok(answer && answer.length > 0, `${path}: answer block server-rendered`, (answer || '').slice(0, 60));
+    const photoAlts = [...r.body.matchAll(/<div class="build-hero"[\s\S]*?<\/div>|<div class="build-gallery"[\s\S]*?<\/div>/g)]
+      .flatMap((m) => [...m[0].matchAll(/<img[^>]*alt="([^"]*)"/g)].map((a) => a[1]));
+    ok(photoAlts.every((a) => a.trim().length > 0), `${path}: no build photo with an empty alt`, photoAlts.length + ' photo alt(s)');
+    const title = (r.body.match(/<title>([^<]*)<\/title>/) || [])[1] || '';
+    ok(/ build: | build — by | build \| Gunforma$|FCU build/.test(title), `${path}: title opens with the model`, title.slice(0, 80));
+    ok(r.body.includes('"@type":"BreadcrumbList"'), `${path}: BreadcrumbList in the JSON-LD`);
+  }
+  const hubs = await locsOf('/sitemap-hubs.xml');
+  ok(hubs.length > 0, '/sitemap-hubs.xml lists at least one hub', hubs.length);
+  for (const path of hubs) {
+    const r = await get(path);
+    ok(r.status === 200, `${path}: 200`, r.status);
+  }
+}
+
+// ── builds are linked from the front door: /, the gallery, the hubs ──────
+// Measured 2026-10-22: the homepage's raw HTML held zero /b/ links and the
+// gallery served "Loading builds…"; every build page was an orphan reachable
+// only through the sitemap. home-page.mjs and builds-page.mjs now render
+// the newest approved builds into both, and a hub lists the builds recorded
+// as its model. Each function says what it served in a header; the body is
+// held to it, so a header saying 9 over a page with no card fails.
+{
+  console.log('\n── builds linked from /, the gallery and the hubs');
+  const approvedCount = await (async () => {
+    const res = await fetch(`${SB_URL}/rest/v1/builds?select=id&status=eq.approved&limit=1000`,
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+    const rows = res.ok ? await res.json() : null;
+    return Array.isArray(rows) ? rows.length : null;
+  })();
+  note('approved builds', approvedCount);
+  const bLinks = (body) => [...new Set([...body.matchAll(/href="(\/b\/[^"]+)"/g)].map((m) => m[1]))];
+
+  const home = await fetch(origin + '/');
+  const homeBody = await home.text();
+  const homeServed = home.headers.get('x-home-builds');
+  ok(home.status === 200, '/: 200', home.status);
+  ok(homeServed !== null && homeServed !== 'static', '/: served by home-page.mjs with builds rendered in', homeServed);
+  const homeLinks = bLinks(homeBody);
+  ok(homeLinks.length === Math.min(Number(homeServed) || 0, approvedCount ?? Infinity) && homeLinks.length > 0,
+     '/: one /b/ link per served build', `${homeLinks.length} links, header ${homeServed}`);
+  ok(homeBody.includes('id="featured-builds" data-server="'), '/: the featured row is marked server-rendered');
+  const counts = home.headers.get('x-home-counts');
+  note('x-home-counts', counts);
+  ok(counts && counts !== 'static' && !/<span class="hero-stat-num" id="stat-parts">—<\/span>/.test(homeBody),
+     '/: hero counts server-rendered, not dashes', counts);
+  ok(!homeBody.includes('Platform roadmap') && !/\bGlock\b/.test(homeBody), '/: no platform roadmap');
+  ok(/<meta name="description" content="Real SIG P365 builds from owners, with exact parts, fitment and live prices\." \/>/.test(homeBody),
+     '/: meta description is the owners-builds line');
+
+  const gal = await fetch(origin + '/gunforma-builds.html');
+  const galBody = await gal.text();
+  const galServed = gal.headers.get('x-builds-page');
+  ok(gal.status === 200, '/gunforma-builds.html: 200', gal.status);
+  ok(galServed !== null && galServed !== 'static', '/gunforma-builds.html: served by builds-page.mjs with builds rendered in', galServed);
+  const galLinks = bLinks(galBody);
+  ok(galLinks.length === (Number(galServed) || 0) && galLinks.length > 0,
+     '/gunforma-builds.html: one /b/ link per served build', `${galLinks.length} links, header ${galServed}`);
+  ok(!galBody.includes('<div class="loading">Loading builds…</div>'), '/gunforma-builds.html: no "Loading builds…" shell');
+
+  // Every hub: the header's count and the body agree, and each card's
+  // build answers 200.
+  const { GUN_HUBS, hubPath } = await import('../netlify/functions/_guide-meta.mjs');
+  let hubsWithBuilds = 0;
+  for (const h of GUN_HUBS) {
+    const res = await fetch(origin + hubPath(h.gun));
+    const body = await res.text();
+    const n = Number(res.headers.get('x-gun-hub-builds') || 0);
+    const cards = (body.match(/class="bcard"/g) || []).length;
+    ok(res.status === 200 && cards === n, `${hubPath(h.gun)}: owner-build cards match x-gun-hub-builds`, `${cards} cards, header ${n}`);
+    if (n > 0) {
+      hubsWithBuilds++;
+      ok(body.includes('id="builds"'), `${hubPath(h.gun)}: owner builds section served`);
+      const first = bLinks(body.slice(body.indexOf('id="builds"')))[0];
+      const br = await get(first);
+      ok(br.status === 200, `${hubPath(h.gun)}: first owner build ${first} answers 200`, br.status);
+    }
+  }
+  note('hubs with owner builds', hubsWithBuilds);
+}
+
+// ── internal links say .html on the wire, on static pages too ────────────
+// Netlify's Pretty URLs post-processing rewrote every href="x.html" in the
+// STATIC pages to href='/x' on the wire — so the homepage linked
+// /gunforma-builds while the function-rendered pages linked
+// /gunforma-builds.html, and with the one-URL rules above the bare form is
+// a 301 hop on every nav click. netlify.toml turns it off
+// ([build.processing.html] pretty_urls = false); this is the wire half.
+{
+  console.log('\n── static pages serve .html links (Pretty URLs off)');
+  for (const p of ['/', '/gunforma-builds.html', '/gunforma-parts-catalog.html', '/field-notes.html']) {
+    const r = await get(p);
+    const bare = (r.body.match(/href=['"]\/gunforma-(?:builds|parts-catalog|legal|signin|post-build)['"]/g) || []).length;
+    ok(r.status === 200 && bare === 0, `${p}: no bare /gunforma-* link in the served HTML`, bare + ' bare link(s)');
+    ok(r.body.includes('href="gunforma-parts-catalog.html"') || r.body.includes('href="/gunforma-parts-catalog.html"'),
+       `${p}: Parts Catalog link is the .html form`);
+  }
+}
+
+// ── /llms.txt: present, plain text, every URL in it answers 200 ──────────
+{
+  console.log('\n── /llms.txt');
+  const r = await fetch(origin + '/llms.txt');
+  const body = r.status === 200 ? await r.text() : '';
+  ok(r.status === 200, '/llms.txt: 200', r.status);
+  ok(/^text\/plain/.test(r.headers.get('content-type') || ''), '/llms.txt: text/plain', r.headers.get('content-type'));
+  ok(body.startsWith('# Gunforma'), '/llms.txt: opens with the site name');
+  const urls = [...new Set([...body.matchAll(/https:\/\/gunforma\.com[^\s)]*/g)].map((m) => m[0].replace(/[.,]$/, '')))];
+  ok(urls.length >= 10, '/llms.txt: names at least ten site URLs', urls.length);
+  for (const u of urls) {
+    const path = u.slice('https://gunforma.com'.length).split('#')[0];
+    const res = await fetch(origin + path, { redirect: 'manual' });
+    ok(res.status === 200, `  ${path}: 200`, res.status);
+  }
+}
+
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);
 process.exit(failures ? 1 : 0);
