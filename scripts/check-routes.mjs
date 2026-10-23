@@ -1035,8 +1035,59 @@ for (const [label, path, want] of [
   };
   const builds = await locsOf('/sitemap-builds.xml');
   ok(builds.length > 0, '/sitemap-builds.xml lists at least one build', builds.length);
+  // The stored descriptions, read with the public key, so "printed exactly
+  // once" is judged against what the builder wrote and not against what
+  // the page happened to print. Every assertion in this loop runs on the
+  // RAW FETCHED HTML (get() is a fetch, never a DOM): crawlers do not
+  // hydrate, and a fix that only lands after the page's JS runs is not a
+  // fix for them.
+  const DESC_BY_ID = await (async () => {
+    const res = await fetch(`${SB_URL}/rest/v1/builds?select=id,description&status=eq.approved&limit=1000`,
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+    const rows = res.ok ? await res.json() : [];
+    return Object.fromEntries((Array.isArray(rows) ? rows : []).map((b) => [b.id, b.description]));
+  })();
+  const stripTags = (s) => String(s || '').replace(/<[^>]+>/g, '');
   for (const path of builds) {
     const r = await get(path);
+
+    // ── one gun, one name: crumb, kicker and chip say the same model ─────
+    // Found on the preview 2026-10-22: a crumb and kicker saying "P365
+    // XMacro Comp" over a chip still saying "SIG P365". The chip is the
+    // first .build-tag.blue in #build-tags; the kicker's model is its first
+    // " · " segment; the crumb's is the span's text with its hub link
+    // stripped. All three from the served bytes.
+    const crumbModel = stripTags((r.body.match(/<span id="breadcrumb-platform">(.*?)<\/span>/) || ['', ''])[1]);
+    const kickerModel = ((r.body.match(/<div class="build-kicker" id="build-kicker">([^<]*)<\/div>/) || ['', ''])[1]).split(' · ')[0];
+    const chipModel = (r.body.match(/<div class="build-tags" id="build-tags"><span class="build-tag blue">([^<]*)<\/span>/) || ['', ''])[1];
+    ok(crumbModel && crumbModel === kickerModel && kickerModel === chipModel,
+       `${path}: crumb, kicker and chip name the same model (served HTML)`,
+       `crumb=${JSON.stringify(crumbModel)} kicker=${JSON.stringify(kickerModel)} chip=${JSON.stringify(chipModel)}`);
+
+    // ── the builder's description prints exactly once ────────────────────
+    // Found on the same walk: the answer block quoted it and the description
+    // line printed it again. Judged against the STORED text (DESC_BY_ID),
+    // escaped the way the server escapes it. A description shorter than 15
+    // characters can legitimately recur as a part's words, so for those
+    // the assertion is "at least once, in its own line" and the count is
+    // noted rather than failed.
+    const id = (path.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i) || [])[1];
+    const stored = (id && DESC_BY_ID[id] ? String(DESC_BY_ID[id]) : '').trim();
+    if (stored) {
+      const needle = escHtml(stored).replace(/\s+/g, ' ');
+      const occurrences = r.body.replace(/\s+/g, ' ').split(needle).length - 1;
+      const inOwnLine = r.body.replace(/\s+/g, ' ').includes('<div class="build-desc" id="build-desc">' + needle + '</div>');
+      if (stored.length >= 15) {
+        ok(occurrences === 1 && inOwnLine, `${path}: the builder's description appears exactly once, in its own line (served HTML)`,
+           `${occurrences} occurrence(s)`);
+      } else {
+        ok(occurrences >= 1 && inOwnLine, `${path}: the builder's short description is in its own line (served HTML)`,
+           `${occurrences} occurrence(s) of ${JSON.stringify(stored)}`);
+      }
+      ok(!r.body.includes('The builder says:'), `${path}: the answer block does not quote the description`);
+    } else {
+      note(`${path}: no description stored — nothing to print once`);
+    }
     const h1 = (r.body.match(/<h1 class="build-title" id="build-title">([^<]*)<\/h1>/) || [])[1];
     ok(r.status === 200 && h1 !== undefined && h1 !== '—' && h1.trim() !== '',
        `${path}: 200 with a real H1`, `${r.status} h1=${JSON.stringify(h1)}`);
