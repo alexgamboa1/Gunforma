@@ -927,6 +927,10 @@ for (const [label, path, want] of [
     // OpticsPlanet's one five-plate composite; the product's only photo, so
     // it stays on Black (the default) and the other four show the swatch.
     'anarchy-outdoors-slide-plate-p365': 'five-colour composite kept on the default variant only (audit 2026-10-21, item 3)',
+    // Fdez's group photo of all four finishes (image 4496: copper, gold,
+    // stainless, black). Black DLC, Copper (the default) and Stainless
+    // share it; Gold keeps its own photo (4500). Alex's choice, 2026-10-22.
+    'fdez-werx-p365-fuse-ported-barrel': 'four-finish group photo shared by Black DLC, Copper (default) and Stainless; Gold has its own (Alex, 2026-10-22)',
   };
   const res = await fetch(`${SB_URL}/rest/v1/product_variants?select=slug,color,finish,is_default,primary_image_url,products!product_variants_product_id_fkey(slug,is_discontinued)&retired_at=is.null&primary_image_url=not.is.null&limit=3000`,
     { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
