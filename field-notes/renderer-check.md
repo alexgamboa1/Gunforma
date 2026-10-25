@@ -42,6 +42,49 @@ last seven days reads "Check price" — never a number we cannot stand behind.
 
 ::price holosun-507k-x2, holosun-507c-x2, sig-sauer-p365-17rd-mag
 
+## The guide blocks
+
+The top-picks box. Each row jumps to its ranked card below, and the price is
+the hero listing's fresh price or nothing at all.
+
+::picks
+holosun-507k-x2 | Best overall
+holosun-507c-x2 | Best enclosed budget
+sig-sauer-p365-17rd-mag | Best factory magazine
+::
+
+The ranked cards the box jumps to. Pros and cons are authored lines, each
+derivable from a spec column, a fitment row, or the maker's own wording.
+
+::rank holosun-507k-x2 best="Best overall" rank=1 code="GUNFORMA10"
++ Holosun K footprint — the cut most current P365 slides carry
++ Multi-reticle: dot, circle, or both
+- Side-loading battery tray costs a few ounces of window
+::
+
+::rank holosun-507c-x2 best="Best enclosed budget" rank=2
++ Larger window than the K-series optics
+- RMR footprint — needs a plate on an RMSc-cut slide
+::
+
+::rank sig-sauer-p365-17rd-mag best="Best factory magazine" rank=3
++ Sig's own magazine for the XMacro grip length
+- Restricted in some states
+::
+
+The spec-comparison table, columns declared in the shared module.
+
+::compare optic cols=dot_size_moa,window_size,battery_life slugs=holosun-507k-x2,holosun-507c-x2
+
+And the FAQ, served as details/summary with FAQPage JSON-LD behind it.
+
+::faq
+Q: Does the Holosun 507K X2 fit the P365 XL without a plate?
+A: Yes on the current RMSc-cut slides; the block above reads the live cut tables on every request.
+Q: Where do the prices on this page come from?
+A: From retailer feeds, nightly; a price no feed has verified in the last seven days is never stated.
+::
+
 ## Every construct the renderer supports
 
 Inline: **bold**, *italic*, _also italic_, `code`, a [site link](/p365/) and an

@@ -23,9 +23,18 @@
 // request URL (CLAUDE.md, "Netlify redirects") — the same thing
 // canonical-host.js and js/site-url.js branch on.
 //
-// `updated` is the editorial review date: it drives dateModified and the
-// sitemap lastmod, so bump it when the PROSE changes. Live prices and fit
-// verdicts need no bump; they are live on every fetch.
+// `updated` is the editorial review date: it drives dateModified, the
+// sitemap lastmod AND the "Last reviewed <Month YYYY>" line in the page
+// header, so bump it when the PROSE changes. Live prices and fit verdicts
+// need no bump; they are live on every fetch. (This IS the "reviewed" date
+// of the trust layer — one date, not a second copy in the front matter,
+// which the guard refuses.)
+//
+// `changelog` is optional: an array of "YYYY-MM-DD: what changed" strings,
+// rendered as the article's "Latest updates" section, newest first — the
+// freshness signal a reader (and a crawler) can hold against `updated`.
+// Dollar figures are banned here as everywhere; the guard checks each
+// entry's shape.
 //
 // URL shape: /field-notes/<slug>. The index stays /field-notes.html.
 
@@ -35,7 +44,11 @@ export const FIELD_NOTES = [
   // handler over it, and the preview walk-through is done against it. Keep
   // it: it is what proves the plumbing before any article exists, and it
   // is a 404 on gunforma.com.
-  { slug: 'renderer-check', published: '2026-10-20', updated: '2026-10-20', draft: true },
+  { slug: 'renderer-check', published: '2026-10-20', updated: '2026-10-25', draft: true,
+    changelog: [
+      '2026-10-25: Added the four guide blocks — picks, rank, compare, faq — and this changelog.',
+      '2026-10-20: First version of the fixture.',
+    ] },
 ];
 
 export const FIELD_NOTES_INDEX_PATH = '/field-notes.html';

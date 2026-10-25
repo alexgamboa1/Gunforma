@@ -143,6 +143,19 @@ const inList = (path, key) => { const m = path.match(new RegExp(key + '=in\\.\\(
 function catalog(n, path) {
   if (path.startsWith('products?')) return json(inList(path, 'slug').map((s) => PRODUCTS[s]).filter(Boolean));
   if (path.startsWith('guns?')) return json(inList(path, 'slug').map((s) => GUNS[s]).filter(Boolean));
+  // The guide blocks' reads: spec rows per table (in.(…) with product_id in
+  // the select), and the one approved-builds read behind "Used in N builds".
+  if (path.startsWith('optic_specs?product_id=in.')) return json([
+    { product_id: 'P1', dot_size_moa: 2, reticle: '2 MOA dot', window_size: '0.58x0.77 in', battery_type: 'CR1632', battery_life: '50,000 hours', enclosed_emitter: false, housing_material: '7075 Aluminum' },
+    { product_id: 'P2', dot_size_moa: 2, reticle: null, window_size: '0.63x0.91 in', battery_type: 'CR1632', battery_life: null, enclosed_emitter: false, housing_material: null },
+  ]);
+  if (path.startsWith('magazine_specs?product_id=in.')) return json([
+    { product_id: 'P3', capacity: 17, caliber: '9mm', mag_style: 'Extended', body_material: null },
+  ]);
+  if (path.startsWith('builds?')) return json([
+    { parts_snapshot: [{ refId: 'P1' }, { refId: 'P3' }] },
+    { parts_snapshot: [{ refId: 'P1' }, { refId: 'P1' }] },   // the same part twice counts once
+  ]);
   if (path.startsWith('optic_specs?product_id=eq.P1')) return json([{ footprint_id: FP.K, footprints: { slug: 'holosun-k', common_name: 'Holosun K-Series / Modified RMSc' } }]);
   if (path.startsWith('optic_specs?product_id=eq.P2')) return json([{ footprint_id: FP.RMR, footprints: { slug: 'rmr', common_name: 'Trijicon RMR' } }]);
   if (path.startsWith('optic_adapter_footprints?')) return json([]);
@@ -186,7 +199,7 @@ test('the fixture renders off the apex: verdicts, prices, chrome, meta', async (
   assert.equal(r.headers.get('x-field-note'), FIXTURE.slug);
   assert.equal(r.headers.get('x-field-note-draft'), '1');
   assert.equal(r.headers.get('x-field-note-source'), 'file');
-  assert.equal(r.headers.get('x-field-note-blocks'), 'price=1 fit=5');
+  assert.equal(r.headers.get('x-field-note-blocks'), 'price=1 fit=5 picks=1 rank=3 compare=1 faq=1');
   assert.equal(r.headers.get('x-field-note-products'), '3/3');
   assert.equal(r.headers.get('x-field-note-fits'), '5/5');
   assert.equal(r.headers.get('cache-control'), 'no-store', 'a draft is never cached');
@@ -225,9 +238,10 @@ test('the fixture renders off the apex: verdicts, prices, chrome, meta', async (
   assert.ok(h.includes('href="/p365/p365-xl"'), 'and up to the hub');
   // the price block: fresh price + partner button, maker button, stale → Check price
   assert.ok(h.includes('<td class="t-price">$329.99</td>'));
-  assert.ok(h.includes('href="/go/L1" target="_blank" rel="noopener sponsored nofollow">Buy at OpticsPlanet'));
+  assert.ok(h.includes('href="/go/L1?s=renderer-check&amp;loc=price" target="_blank" rel="noopener sponsored nofollow">Buy at OpticsPlanet'),
+    'the price block\'s buy link goes through /go/ with the section params');
   assert.ok(h.includes('<td class="t-price">MSRP $309.99</td>'));
-  assert.ok(h.includes('href="/go/part/P2" target="_blank" rel="noopener nofollow">Buy from Holosun'));
+  assert.ok(h.includes('href="/go/part/P2?s=renderer-check&amp;loc=price" target="_blank" rel="noopener nofollow">Buy from Holosun'));
   assert.ok(h.includes('<td class="t-price">Check price</td>'), 'a stale price is never stated');
   assert.ok(!h.includes('$54.99'), 'the stale number does not appear anywhere');
   assert.ok(h.includes('href="/parts/optics/holosun-507k-x2"') && h.includes('href="/parts/magazines/sig-sauer-p365-17rd-mag"'));

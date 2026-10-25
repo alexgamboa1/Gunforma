@@ -47,6 +47,7 @@ import { GUN_META, APPLIES_TO_LABEL, HUB_MAGAZINE_COPY, guidePath, isLiveGuidePa
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
+import { GUIDE_SPECS, PRODUCT_COLS, colMeta, withGoParams, AFFILIATE_DISCLOSURE_HTML } from './_guide-blocks.mjs';
 
 const SITE = 'https://gunforma.com';
 const APEX_HOST = 'gunforma.com';
@@ -116,7 +117,7 @@ async function fetchProducts(slugs) {
   // the FK (CLAUDE.md, PGRST201). affiliate_links and partners have one
   // FK each, so bare is right for them.
   const cols =
-    'id,slug,name,category,url,is_discontinued,restricted_states,' +
+    'id,slug,name,category,url,is_discontinued,restricted_states,material,weight_oz,' +
     'manufacturers!products_brand_id_fkey(name,website_url),' +
     'product_variants!product_variants_product_id_fkey(id,msrp,is_default,primary_image_url,' +
       'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name)))';
@@ -159,7 +160,10 @@ function shapeProduct(p) {
     restricted: Array.isArray(p.restricted_states) ? p.restricted_states.map(String).filter(Boolean) : [],
     photo: photoV ? photoV.primary_image_url : null,
     hero: listings[0] || null,
+    listings,
     msrp: dv && dv.msrp != null ? Number(dv.msrp) : null,
+    material: p.material || null,
+    weight_oz: p.weight_oz != null ? Number(p.weight_oz) : null,
     maker: makerLink(p.url, brand, p.manufacturers ? p.manufacturers.website_url : null),
   };
 }
@@ -177,14 +181,19 @@ function priceText(o) {
   return o.msrp != null ? 'MSRP $' + o.msrp.toFixed(2) : 'Check price';
 }
 
-function buyHtml(o) {
+// Every buy link out of a field note carries the /go/ section params —
+// s=<article slug>, loc=<block kind> — so link_clicks can say which page
+// and which block sent the click (_guide-blocks.mjs). `labelOverride` is
+// the picks/rank rule: with no fresh price the button says "See current
+// price" instead of a number, and never MSRP.
+function buyHtml(o, ctx, loc, labelOverride) {
   if (o.discontinued) return '';
   if (hasPartnerLink(o)) {
-    const label = o.hero.partnerName ? 'Buy at ' + esc(o.hero.partnerName) : 'View listing';
-    return '<a class="buy-btn" href="' + esc(o.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' + label + ' ↗</a>';
+    const label = labelOverride || (o.hero.partnerName ? 'Buy at ' + esc(o.hero.partnerName) : 'View listing');
+    return '<a class="buy-btn" href="' + esc(withGoParams(o.hero.goUrl, ctx.slug, loc)) + '" target="_blank" rel="noopener sponsored nofollow">' + label + ' ↗</a>';
   }
   if (hasMakerLink(o)) {
-    return '<a class="buy-btn" href="/go/part/' + esc(o.id) + '" target="_blank" rel="' + MAKER_REL + '">' + esc(o.maker.label) + ' ↗</a>';
+    return '<a class="buy-btn" href="' + esc(withGoParams('/go/part/' + o.id, ctx.slug, loc)) + '" target="_blank" rel="' + MAKER_REL + '">' + (labelOverride || esc(o.maker.label)) + ' ↗</a>';
   }
   return '<span class="buy-btn disabled">No listing yet</span>';
 }
@@ -193,7 +202,9 @@ function missingLine(what, slug) {
   return '<p class="fn-missing">' + esc(what) + ' <code>' + esc(slug) + '</code> is not in the catalog.</p>';
 }
 
-function priceBlockHtml(block, products) {
+const isFresh = (o) => !!(o.hero && o.hero.price != null && !o.hero.stale);
+
+function priceBlockHtml(block, products, ctx) {
   const found = block.slugs.map((s) => products.get(s)).filter(Boolean);
   const missing = block.slugs.filter((s) => !products.has(s));
   const rows = found.map((o) =>
@@ -204,7 +215,7 @@ function priceBlockHtml(block, products) {
         (o.restricted.length ? '<span class="t-restricted">' + esc(HUB_MAGAZINE_COPY.restricted) + ' ' + esc(o.restricted.join(', ')) + '</span>' : '') +
         '</div></div></td>' +
       '<td class="t-price">' + esc(priceText(o)) + '</td>' +
-      '<td>' + buyHtml(o) + '</td>' +
+      '<td>' + buyHtml(o, ctx, 'price') + '</td>' +
     '</tr>').join('');
   const second = buyDisclosure(found.some(hasPartnerLink), found.some(hasMakerLink));
   return '<div class="fn-block fn-price">' +
@@ -212,6 +223,167 @@ function priceBlockHtml(block, products) {
       '<div class="disclosure">' + esc(HUB_MAGAZINE_COPY.prices) + (second ? ' ' + esc(second) : '') + '</div>' : '') +
     missing.map((s) => missingLine('Part', s)).join('') +
   '</div>';
+}
+
+// ── the guide blocks: picks, rank, compare, faq ──────────────────────────
+// The evidence rules, same as the prose: a price renders only through live
+// listings (never typed, never MSRP in a picks row or rank card), a spec
+// cell renders the column or "—" (never a guess), and "Used in N builds"
+// is a count of approved builds whose parts_snapshot references the
+// product — N = 0 renders nothing, never "0 builds". A slug that is not in
+// the catalog renders a visible missing line; the build guard and
+// check-routes are what keep that from shipping.
+
+// One read per spec table a rank or compare block on this page needs, with
+// every column _guide-blocks.mjs declares for the category — the column
+// sets live there, never per article.
+async function fetchSpecRows(blocks, products) {
+  const byTable = new Map();   // table -> { cols: [..], ids: Set }
+  const want = (category, o) => {
+    const cat = GUIDE_SPECS[category];
+    if (!cat || !o) return;
+    let t = byTable.get(cat.table);
+    if (!t) byTable.set(cat.table, (t = { cols: Object.keys(cat.cols), ids: new Set() }));
+    t.ids.add(o.id);
+  };
+  for (const b of blocks) {
+    if (b.kind === 'rank') { const o = products.get(b.slug); if (o) want(o.category, o); }
+    if (b.kind === 'compare') for (const s of b.slugs) want(b.category, products.get(s));
+  }
+  const specs = new Map();
+  for (const [table, t] of byTable) {
+    const rows = await pgGet(table + '?product_id=in.(' + [...t.ids].map(encodeURIComponent).join(',') + ')' +
+      '&select=' + encodeURIComponent(['product_id', ...t.cols].join(',')));
+    for (const r of rows) if (r && r.product_id) specs.set(r.product_id, r);
+  }
+  return specs;
+}
+
+// Approved builds per product, for "Used in N Gunforma builds". Same
+// fetch-and-filter shape as product-page.mjs's fetchBuildsUsing(): approved
+// builds fit in one page today, so one read for the whole article beats a
+// cs.[] contains-query per rank card — revisit if they outgrow the limit.
+async function fetchBuildCounts() {
+  const rows = await pgGet('builds?status=eq.approved&select=parts_snapshot&limit=100');
+  const counts = new Map();
+  for (const b of rows) {
+    const seen = new Set();
+    for (const p of (Array.isArray(b.parts_snapshot) ? b.parts_snapshot : [])) {
+      if (p && p.refId && !seen.has(p.refId)) { seen.add(p.refId); counts.set(p.refId, (counts.get(p.refId) || 0) + 1); }
+    }
+  }
+  return counts;
+}
+
+// A spec value for one product and one declared column — product-level
+// (products.material, products.weight_oz) or from the category's spec row.
+// Null means "not stated", which renders as "—" in a compare cell and as
+// nothing in a rank card's list.
+function specValue(category, col, o, specRow) {
+  const m = colMeta(category, col);
+  if (!m) return { label: null, value: null };
+  const raw = PRODUCT_COLS[col] ? o[col] : (specRow ? specRow[col] : null);
+  if (raw == null || raw === '') return { label: m.label, value: null };
+  const v = m.fmt ? m.fmt(raw) : raw;
+  return { label: m.label, value: v == null || v === '' ? null : String(v) };
+}
+
+const rankAnchor = (slug) => 'rank-' + slug;
+
+// ::picks — the numbered top-picks box. Each row jumps to its ::rank card's
+// anchor on the same page; the price is the hero listing's fresh price or
+// nothing (the button then reads "See current price").
+function picksBlockHtml(block, products, ctx) {
+  const rows = block.picks.map((p) => {
+    const o = products.get(p.slug);
+    if (!o) return '<li class="pick">' + missingLine('Part', p.slug) + '</li>';
+    const price = isFresh(o)
+      ? '<span class="pick-price">$' + o.hero.price.toFixed(2) + (o.hero.partnerName ? ' at ' + esc(o.hero.partnerName) : '') + '</span>'
+      : '';
+    return '<li class="pick">' +
+      '<div class="pick-main"><a class="pick-name" href="#' + esc(rankAnchor(p.slug)) + '">' + esc(o.displayName) + '</a>' +
+      '<span class="pick-best">' + esc(p.label) + '</span></div>' +
+      '<div class="pick-buy">' + price + buyHtml(o, ctx, 'picks', isFresh(o) ? null : 'See current price') + '</div>' +
+    '</li>';
+  }).join('');
+  return '<div class="fn-block fn-picks"><div class="fn-picks-head">Top picks</div><ol class="picks-list">' + rows + '</ol></div>';
+}
+
+// ::rank — the ranked product card ::picks jumps to.
+function rankBlockHtml(b, products, ctx) {
+  const o = products.get(b.slug);
+  const open = '<div class="fn-block fn-rank" id="' + esc(rankAnchor(b.slug)) + '">';
+  if (!o) return open + missingLine('Part', b.slug) + '</div>';
+  const fresh = isFresh(o);
+  const price = fresh
+    ? '<span class="rank-price">$' + o.hero.price.toFixed(2) + '</span>' +
+      (o.hero.partnerName ? '<span class="rank-partner">at ' + esc(o.hero.partnerName) + '</span>' : '')
+    : '';
+  const chip = b.code ? '<span class="coupon-chip">Code ' + esc(b.code) + ' at checkout</span>' : '';
+  const extras = (o.listings || []).slice(1, 4).map((l) =>
+    '<a class="rank-alt" href="' + esc(withGoParams(l.goUrl, ctx.slug, 'rank')) + '" target="_blank" rel="noopener sponsored nofollow">See price at ' + esc(l.partnerName || 'retailer') + '</a>').join('');
+  const cat = GUIDE_SPECS[o.category];
+  const specRow = ctx.specs.get(o.id);
+  const specList = (cat ? cat.rank : []).map((col) => {
+    const { label, value } = specValue(o.category, col, o, specRow);
+    return value == null ? '' : '<div class="rank-spec"><span>' + esc(label) + '</span><strong>' + esc(value) + '</strong></div>';
+  }).join('');
+  const list = (items, head) => (items.length
+    ? '<div class="rank-pc"><div class="rank-pc-head">' + head + '</div><ul>' + items.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul></div>'
+    : '');
+  const n = ctx.buildCounts.get(o.id) || 0;
+  return open +
+    '<div class="rank-head"><span class="rank-no">' + b.rank + '</span>' +
+      '<span class="rank-best">' + esc(b.best) + '</span></div>' +
+    '<div class="rank-body">' +
+      (o.photo ? '<img class="rank-photo" src="' + esc(o.photo) + '" alt="' + esc(o.displayName) + '" loading="lazy" width="120" height="120"/>' : '') +
+      '<div class="rank-main">' +
+        '<a class="rank-name" href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' +
+        '<div class="rank-buy">' + price + buyHtml(o, ctx, 'rank', fresh ? null : 'See current price') + chip + '</div>' +
+        (extras ? '<div class="rank-alts">' + extras + '</div>' : '') +
+        (specList ? '<div class="rank-specs">' + specList + '</div>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="rank-pcs">' + list(b.pros, 'Pros') + list(b.cons, 'Cons') + '</div>' +
+    (n >= 1 ? '<a class="rank-builds" href="' + esc(o.href) + '">Used in ' + n + ' Gunforma build' + (n === 1 ? '' : 's') + ' &rarr;</a>' : '') +
+  '</div>';
+}
+
+// ::compare — one row per product, one column per declared spec, a final
+// live-price column. "—" is a null cell or a price we cannot stand behind.
+function compareBlockHtml(b, products, ctx) {
+  const cols = b.cols.map((c) => ({ col: c, meta: colMeta(b.category, c) })).filter((x) => x.meta);
+  const missing = b.slugs.filter((s) => !products.has(s));
+  let dash = false;
+  const rows = b.slugs.map((s) => {
+    const o = products.get(s);
+    if (!o) return '';
+    const specRow = ctx.specs.get(o.id);
+    const cells = cols.map(({ col }) => {
+      const { value } = specValue(b.category, col, o, specRow);
+      if (value == null) dash = true;
+      return '<td>' + (value == null ? '&mdash;' : esc(value)) + '</td>';
+    }).join('');
+    let priceCell;
+    if (isFresh(o)) {
+      priceCell = '<td class="t-price"><a href="' + esc(withGoParams(o.hero.goUrl, ctx.slug, 'compare')) + '" target="_blank" rel="noopener sponsored nofollow">$' + o.hero.price.toFixed(2) + '</a></td>';
+    } else { dash = true; priceCell = '<td class="t-price">&mdash;</td>'; }
+    return '<tr><td><a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a></td>' + cells + priceCell + '</tr>';
+  }).join('');
+  return '<div class="fn-block fn-compare">' +
+    (rows ? '<div class="table-wrap"><table><thead><tr><th>Part</th>' +
+      cols.map(({ meta }) => '<th>' + esc(meta.label) + '</th>').join('') +
+      '<th>Price today</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+      (dash ? '<div class="disclosure">&mdash; = no live retailer price, or not stated by the maker.</div>' : '') : '') +
+    missing.map((s) => missingLine('Part', s)).join('') +
+  '</div>';
+}
+
+// ::faq — details/summary pairs, no JS. The FAQPage JSON-LD is emitted by
+// renderPage into the page's one structured-data script.
+function faqBlockHtml(b) {
+  return '<div class="fn-block fn-faq">' + b.qas.map((qa) =>
+    '<details><summary>' + esc(qa.q) + '</summary><p>' + esc(qa.a) + '</p></details>').join('') + '</div>';
 }
 
 // ── guns and the fit chain ───────────────────────────────────────────────
@@ -346,33 +518,56 @@ function fitBlockHtml(f) {
 }
 
 // ── all the blocks of one article, resolved ──────────────────────────────
-async function resolveBlocks(blocks) {
+async function resolveBlocks(blocks, articleSlug) {
   const productSlugs = new Set();
   const gunSlugs = new Set();
   for (const b of blocks) {
     if (b.kind === 'price') b.slugs.forEach((s) => productSlugs.add(s));
     if (b.kind === 'fit') { productSlugs.add(b.slug); gunSlugs.add(b.gun); }
+    if (b.kind === 'picks') b.picks.forEach((p) => productSlugs.add(p.slug));
+    if (b.kind === 'rank') productSlugs.add(b.slug);
+    if (b.kind === 'compare') b.slugs.forEach((s) => productSlugs.add(s));
   }
   const products = new Map((await fetchProducts([...productSlugs])).map((p) => [p.slug, p]));
   const guns = new Map((await fetchGuns([...gunSlugs])).map((g) => [g.slug, g]));
   const caches = { optic: new Map(), cuts: new Map() };
+  const ctx = {
+    slug: articleSlug,
+    specs: await fetchSpecRows(blocks, products),
+    buildCounts: blocks.some((b) => b.kind === 'rank') ? await fetchBuildCounts() : new Map(),
+  };
   const rendered = [];
+  const faqQas = [];
   let fitsOk = 0, fitsAsked = 0;
   for (const b of blocks) {
-    if (b.kind === 'price') rendered.push(priceBlockHtml(b, products));
+    if (b.kind === 'price') rendered.push(priceBlockHtml(b, products, ctx));
     else if (b.kind === 'fit') {
       fitsAsked++;
       const f = await resolveFit(b, products, guns, caches);
       if (f.ok) fitsOk++;
       rendered.push(fitBlockHtml(f));
-    } else rendered.push('');
+    }
+    else if (b.kind === 'picks') rendered.push(picksBlockHtml(b, products, ctx));
+    else if (b.kind === 'rank') rendered.push(rankBlockHtml(b, products, ctx));
+    else if (b.kind === 'compare') rendered.push(compareBlockHtml(b, products, ctx));
+    else if (b.kind === 'faq') { faqQas.push(...b.qas); rendered.push(faqBlockHtml(b)); }
+    else rendered.push('');
   }
+  const kindCount = (k) => blocks.filter((b) => b.kind === k).length;
   return {
     rendered,
     productsAsked: productSlugs.size, productsFound: products.size,
     fitsAsked, fitsOk,
-    priceBlocks: blocks.filter((b) => b.kind === 'price').length,
+    priceBlocks: kindCount('price'),
     fitBlocks: fitsAsked,
+    picksBlocks: kindCount('picks'),
+    rankBlocks: kindCount('rank'),
+    compareBlocks: kindCount('compare'),
+    faqBlocks: kindCount('faq'),
+    faqQas,
+    // The automatic affiliate disclosure near the top: any block whose buy
+    // buttons can earn a commission puts it on the page.
+    hasAffiliate: blocks.some((b) => b.kind === 'price' || b.kind === 'picks' || b.kind === 'rank'),
   };
 }
 
@@ -382,12 +577,34 @@ function fmtDate(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' });
 }
 
+// "Last reviewed October 2026" — the registry's `updated` date, which is
+// already what drives dateModified and the sitemap lastmod. One date, three
+// readers, no second copy.
+function fmtMonth(iso) {
+  const d = new Date(iso + 'T00:00:00Z');
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', timeZone: 'UTC' });
+}
+
+// The registry's changelog — "YYYY-MM-DD: what changed" strings — rendered
+// newest first. The guard holds every entry to that shape, so an entry that
+// does not match renders as nothing rather than half a sentence.
+function changelogHtml(entries) {
+  if (!Array.isArray(entries) || !entries.length) return '';
+  const items = entries.slice().sort((a, b) => (String(a) < String(b) ? 1 : -1)).map((e) => {
+    const m = String(e).match(/^(\d{4}-\d{2}-\d{2}):\s*(.+)$/);
+    return m ? '<li><strong>' + esc(fmtDate(m[1])) + '</strong> &mdash; ' + esc(m[2]) + '</li>' : '';
+  }).join('');
+  return items ? '<div class="changelog"><div class="section-title">Latest updates</div><ul>' + items + '</ul></div>' : '';
+}
+
 function renderPage({ article, meta, bodyHtml, data }) {
   const slug = article.slug;
   const canonical = SITE + fieldNotePath(slug);
   const title = meta.title || slug;
   const description = meta.description || textOf(bodyHtml).slice(0, 155);
-  const author = meta.author || 'Gunforma';
+  // No author means NO byline — never a placeholder name. The JSON-LD then
+  // credits the Organization instead of inventing a Person.
+  const author = meta.author || null;
   const cover = meta.cover ? (/^https?:\/\//i.test(meta.cover) ? meta.cover : SITE + (meta.cover.startsWith('/') ? '' : '/') + meta.cover) : null;
   const ogImage = cover || SITE + '/og-default.png';
   const typeLabel = meta.type === 'review' ? 'Review' : meta.type === 'comparison' ? 'Comparison' : 'Guide';
@@ -399,7 +616,7 @@ function renderPage({ article, meta, bodyHtml, data }) {
     {
       '@context': 'https://schema.org', '@type': 'Article',
       headline: title, description,
-      author: { '@type': 'Person', name: author },
+      author: author ? { '@type': 'Person', name: author } : { '@type': 'Organization', name: 'Gunforma' },
       publisher: { '@type': 'Organization', name: 'Gunforma', logo: { '@type': 'ImageObject', url: SITE + '/assets/gunforma-logo.png' } },
       datePublished: article.published, dateModified: article.updated || article.published,
       mainEntityOfPage: canonical, image: ogImage,
@@ -413,6 +630,18 @@ function renderPage({ article, meta, bodyHtml, data }) {
       ],
     },
   ];
+  // The ::faq blocks' questions, as FAQPage inside the page's one
+  // structured-data script — an array of top-level entities is valid
+  // JSON-LD, the same shape the Article and BreadcrumbList already share.
+  if (data.faqQas.length) {
+    jsonLd.push({
+      '@context': 'https://schema.org', '@type': 'FAQPage',
+      mainEntity: data.faqQas.map((qa) => ({
+        '@type': 'Question', name: qa.q,
+        acceptedAnswer: { '@type': 'Answer', text: qa.a },
+      })),
+    });
+  }
 
   return '<!DOCTYPE html><html lang="en"><head>' +
   headTags({ title: title + ' | Field Notes | Gunforma', description, canonical, jsonLd, ogImage }) +
@@ -467,6 +696,41 @@ function renderPage({ article, meta, bodyHtml, data }) {
 '.fn-note { font-size: 12.5px; color: #555; margin: 8px 0 0; }' +
 '.fn-fit-links a { display: inline-block; margin: 8px 14px 0 0; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
 '.fn-missing { font-size: 13px; color: #b03a2e; }' +
+'.fn-affiliate-note { font-size: 12px; color: #888; font-style: italic; margin: -10px 0 18px; } .fn-affiliate-note a { color: #1d6fb8; }' +
+'.fn-picks { border: 0.5px solid #dfe5ea; background: #f8fafb; border-radius: 10px; padding: 12px 14px; }' +
+'.fn-picks-head { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin-bottom: 6px; }' +
+'.picks-list { margin: 0 0 0 22px; } .picks-list .pick { margin: 8px 0; }' +
+'.pick-main { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }' +
+'.pick-name { font-weight: 700; color: #1a1a1a; text-decoration: none; } .pick-name:hover { color: #4a9edd; }' +
+'.pick-best { font-size: 11px; font-weight: 700; color: #1d6b43; background: #e3f3e8; padding: 2px 8px; border-radius: 12px; white-space: nowrap; }' +
+'.pick-buy { display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap: wrap; }' +
+'.pick-price { font-size: 13px; font-weight: 700; }' +
+'.fn-rank { border: 0.5px solid #e5e5e5; background: #fff; border-radius: 10px; padding: 14px 16px; scroll-margin-top: 70px; }' +
+'.rank-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }' +
+'.rank-no { width: 26px; height: 26px; border-radius: 50%; background: #0e0f11; color: #f2efe8; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }' +
+'.rank-best { font-size: 11px; font-weight: 700; color: #1d6b43; background: #e3f3e8; padding: 3px 10px; border-radius: 12px; }' +
+'.rank-body { display: flex; gap: 14px; align-items: flex-start; }' +
+'.rank-photo { width: 120px; height: 120px; object-fit: contain; border-radius: 8px; border: 0.5px solid #ececec; background: #fff; flex: none; }' +
+'@media (max-width: 480px) { .rank-photo { width: 84px; height: 84px; } }' +
+'.rank-main { min-width: 0; flex: 1; }' +
+'.rank-name { font-size: 16px; font-weight: 700; color: #1a1a1a; text-decoration: none; display: inline-block; margin-bottom: 6px; } .rank-name:hover { color: #4a9edd; }' +
+'.rank-buy { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }' +
+'.rank-price { font-size: 16px; font-weight: 800; } .rank-partner { font-size: 12px; color: #667; }' +
+'.coupon-chip { font-size: 11px; font-weight: 700; color: #7a4d09; background: #fff5e6; border: 0.5px solid #f8d5a0; padding: 3px 8px; border-radius: 12px; white-space: nowrap; }' +
+'.rank-alts { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }' +
+'.rank-alt { font-size: 12px; color: #1d6fb8; text-decoration: none; }' +
+'.rank-specs { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px 14px; margin-top: 8px; }' +
+'.rank-spec { font-size: 12px; color: #667; display: flex; flex-direction: column; } .rank-spec strong { color: #1a1a1a; font-size: 12.5px; }' +
+'.rank-pcs { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }' +
+'@media (max-width: 480px) { .rank-pcs { grid-template-columns: 1fr; } }' +
+'.rank-pc-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin-bottom: 4px; }' +
+'.rank-pc ul { margin: 0 0 0 18px; } .rank-pc li { font-size: 13px; line-height: 1.55; margin-bottom: 3px; }' +
+'.rank-builds { display: inline-block; margin-top: 10px; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
+'.fn-compare table { min-width: 480px; }' +
+'.fn-faq details { border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; margin: 8px 0; padding: 0 14px; }' +
+'.fn-faq summary { font-size: 14px; font-weight: 700; padding: 10px 0; cursor: pointer; }' +
+'.fn-faq details p { margin: 0 0 12px; }' +
+'.changelog ul { margin: 0 0 12px 22px; } .changelog li { font-size: 13px; }' +
 '.author { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; color: #666; border-top: 0.5px solid #e5e5e5; margin-top: 30px; padding-top: 14px; }' +
 '.related a { display: inline-block; margin-right: 14px; font-size: 13px; color: #4a9edd; text-decoration: none; }' +
 '.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 26px 0 10px; }' +
@@ -478,18 +742,22 @@ function renderPage({ article, meta, bodyHtml, data }) {
   (article.draft ? '<div class="draft-strip"><strong>Draft.</strong> Served on previews only; this address is a 404 on gunforma.com.</div>' : '') +
   '<div class="eyebrow">Field Notes &middot; ' + esc(typeLabel) + (meta.category ? ' &middot; ' + esc(meta.category) : '') + '</div>' +
   '<h1>' + inline(title) + '</h1>' +
-  '<div class="byline">By <strong>' + esc(author) + '</strong> &middot; ' + esc(fmtDate(article.published)) +
-    (article.updated && article.updated !== article.published ? ' &middot; Updated ' + esc(fmtDate(article.updated)) : '') + '</div>' +
+  '<div class="byline">' + (author ? 'By <strong>' + esc(author) + '</strong> &middot; ' : '') + esc(fmtDate(article.published)) +
+    (article.updated ? ' &middot; Last reviewed ' + esc(fmtMonth(article.updated)) : '') + '</div>' +
+  (data.hasAffiliate ? AFFILIATE_DISCLOSURE_HTML : '') +
   html +
+  changelogHtml(article.changelog) +
   '<div class="related"><div class="section-title">Related</div>' +
     '<a href="' + FIELD_NOTES_INDEX_PATH + '">All Field Notes &rarr;</a>' +
     '<a href="/p365/">What fits your P365 &rarr;</a>' +
     '<a href="/parts">Parts by category &rarr;</a>' +
     '<a href="/gunforma-builds.html">Real builds &rarr;</a>' +
   '</div>' +
-  '<div class="author"><strong>' + esc(author) + '</strong>' +
-    (meta.author_credential ? '<span>' + esc(meta.author_credential) + '</span>' : '') +
-    '<span>Last reviewed ' + esc(article.updated || article.published) + '</span></div>' +
+  (author
+    ? '<div class="author"><strong>' + esc(author) + '</strong>' +
+      (meta.author_credential ? '<span>' + esc(meta.author_credential) + '</span>' : '') +
+      '<span>Last reviewed ' + esc(fmtMonth(article.updated || article.published)) + '</span></div>'
+    : '') +
 '</div>' +
   footerHtml() +
   navScript() + ANALYTICS_SNIPPET + '</body></html>';
@@ -510,7 +778,7 @@ export default async (req) => {
 
   let data;
   try {
-    data = await resolveBlocks(blocks);
+    data = await resolveBlocks(blocks, slug);
   } catch (err) {
     console.error('[field-note] lookup failed', err);
     return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
@@ -528,7 +796,9 @@ export default async (req) => {
       'x-field-note': slug,
       'x-field-note-draft': article.draft ? '1' : '0',
       'x-field-note-source': 'file',
-      'x-field-note-blocks': 'price=' + data.priceBlocks + ' fit=' + data.fitBlocks,
+      'x-field-note-blocks': 'price=' + data.priceBlocks + ' fit=' + data.fitBlocks +
+        ' picks=' + data.picksBlocks + ' rank=' + data.rankBlocks +
+        ' compare=' + data.compareBlocks + ' faq=' + data.faqBlocks,
       'x-field-note-products': data.productsFound + '/' + data.productsAsked,
       'x-field-note-fits': data.fitsOk + '/' + data.fitsAsked,
     },

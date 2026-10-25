@@ -18,7 +18,9 @@
 //   ![alt](src)    an image; alone on a line it becomes a <figure>
 //   **b** *i* `c`  bold, italic, code spans
 //   [t](url)       links — http(s), site-relative, #anchor, mailto only
-//   ::kind args    a BLOCK DIRECTIVE, one per line, resolved by the caller
+//   ::kind args    a BLOCK DIRECTIVE, resolved by the caller. price, fit and
+//                  compare are one line; picks, rank and faq carry a body of
+//                  lines closed by a lone `::` (BODY_DIRECTIVE_KINDS)
 //
 // EVERYTHING IS ESCAPED. Raw HTML in the source is text, not markup: an
 // article is reviewed prose, but a renderer that passes `<script>` through
@@ -61,12 +63,48 @@ export function parseFrontMatter(src) {
 }
 
 // ── directives ───────────────────────────────────────────────────────────
+// Single-line:
 // `::price <slug>[, <slug>…]`              the current price + buy row
 // `::fit optic=<slug> gun=<gun-slug>`      does this optic fit this gun
 // `::fit magazine=<slug> gun=<gun-slug>`   does this magazine fit this gun
+// `::compare <category> [gun=<slug>] cols=<col,…> slugs=<slug,…>`
+//                                          the spec-comparison table
+// Block-bodied (BODY_DIRECTIVE_KINDS), body lines until a lone `::`:
+// `::picks`                                `<slug> | <best-for label>` per line
+// `::rank <slug> best="…" rank=N [code="…"]`
+//                                          `+ pro` / `- con` per line
+// `::faq`                                  `Q: …` / `A: …` pairs, alternating
 // Null for anything else, and the caller decides what a bad line means
 // (the build guard refuses it; at request time it renders as nothing).
-export function parseDirective(line) {
+export const BODY_DIRECTIVE_KINDS = ['picks', 'rank', 'faq'];
+
+// Gathers a block directive's body: lines from `from` until a line that is
+// exactly `::`. `closed: false` means EOF arrived first — the renderer
+// tolerates that, the build guard refuses it.
+export function collectDirectiveBody(lines, from) {
+  const body = [];
+  let j = from;
+  while (j < lines.length && lines[j].trim() !== '::') body.push(lines[j++]);
+  return { body, next: j < lines.length ? j + 1 : j, closed: j < lines.length };
+}
+
+// `key="value"` or `key=value` pairs after the leading tokens. Null on
+// anything that is not one.
+function parseArgs(rest) {
+  const args = {};
+  const re = /([a-z_]+)=("([^"]*)"|[^\s"]+)/g;
+  let consumed = '';
+  for (const m of rest.matchAll(re)) {
+    args[m[1]] = m[3] != null ? m[3] : m[2];
+    consumed += m[0] + ' ';
+  }
+  // Anything left over that is not whitespace means a token that parsed as
+  // neither a pair nor a quoted value — refuse the line rather than guess.
+  const leftover = rest.replace(re, '').trim();
+  return leftover ? null : args;
+}
+
+export function parseDirective(line, bodyLines) {
   const m = String(line).match(/^::([a-z]+)\s*(.*?)\s*$/);
   if (!m) return null;
   const kind = m[1], rest = m[2];
@@ -88,6 +126,71 @@ export function parseDirective(line) {
     if (keys.length) return null;
     if (!SLUG_RE.test(args[part]) || !SLUG_RE.test(args.gun)) return null;
     return { kind, part, slug: args[part], gun: args.gun };
+  }
+  if (kind === 'compare') {
+    // ::compare <category> [gun=<slug>] cols=<col,…> slugs=<slug,…>
+    const first = rest.match(/^([a-z_]+)\s+(.*)$/);
+    if (!first) return null;
+    const args = parseArgs(first[2]);
+    if (!args) return null;
+    for (const k of Object.keys(args)) if (!['gun', 'cols', 'slugs'].includes(k)) return null;
+    const cols = (args.cols || '').split(',').map((c) => c.trim()).filter(Boolean);
+    const slugs = (args.slugs || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!cols.length || !slugs.length || !slugs.every((s) => SLUG_RE.test(s))) return null;
+    if (!cols.every((c) => /^[a-z0-9_]+$/.test(c))) return null;
+    if (args.gun && !SLUG_RE.test(args.gun)) return null;
+    return { kind, category: first[1], gun: args.gun || null, cols, slugs: [...new Set(slugs)] };
+  }
+  if (kind === 'picks') {
+    // No args on the line; one `<slug> | <label>` per body line.
+    if (rest) return null;
+    const picks = [];
+    for (const raw of bodyLines || []) {
+      if (/^\s*$/.test(raw)) continue;
+      const p = raw.match(/^\s*([a-z0-9-]+)\s*\|\s*(.+?)\s*$/);
+      if (!p || !SLUG_RE.test(p[1])) return null;
+      picks.push({ slug: p[1], label: p[2] });
+    }
+    if (!picks.length) return null;
+    if (new Set(picks.map((p) => p.slug)).size !== picks.length) return null;
+    return { kind, picks };
+  }
+  if (kind === 'rank') {
+    // ::rank <slug> best="…" rank=N [code="…"]; body is `+ pro` / `- con`.
+    const first = rest.match(/^([a-z0-9-]+)\s+(.*)$/);
+    if (!first || !SLUG_RE.test(first[1])) return null;
+    const args = parseArgs(first[2]);
+    if (!args) return null;
+    for (const k of Object.keys(args)) if (!['best', 'rank', 'code'].includes(k)) return null;
+    const rank = Number(args.rank);
+    if (!args.best || !Number.isInteger(rank) || rank < 1 || rank > 9) return null;
+    if (args.code != null && !/^[A-Za-z0-9-]{2,32}$/.test(args.code)) return null;
+    const pros = [], cons = [];
+    for (const raw of bodyLines || []) {
+      if (/^\s*$/.test(raw)) continue;
+      const pm = raw.match(/^\s*([+-])\s+(.+?)\s*$/);
+      if (!pm) return null;
+      (pm[1] === '+' ? pros : cons).push(pm[2]);
+    }
+    return { kind, slug: first[1], best: args.best, rank, code: args.code || null, pros, cons };
+  }
+  if (kind === 'faq') {
+    // Q:/A: pairs, strictly alternating, one line each — answers are one or
+    // two sentences by the authoring rules, and a strict shape is what the
+    // guard can hold.
+    if (rest) return null;
+    const qas = [];
+    let q = null;
+    for (const raw of bodyLines || []) {
+      if (/^\s*$/.test(raw)) continue;
+      const qm = raw.match(/^\s*Q:\s+(.+?)\s*$/);
+      const am = raw.match(/^\s*A:\s+(.+?)\s*$/);
+      if (qm) { if (q != null) return null; q = qm[1]; continue; }
+      if (am) { if (q == null) return null; qas.push({ q, a: am[1] }); q = null; continue; }
+      return null;
+    }
+    if (q != null || !qas.length) return null;
+    return { kind, qas };
   }
   return null;
 }
@@ -158,12 +261,18 @@ export function renderMarkdown(body) {
     const line = lines[i];
     if (isBlank(line)) { i++; continue; }
 
-    // directive
+    // directive — a body-bearing kind consumes its lines up to a lone `::`
     if (isDirectiveLine(line)) {
-      const d = parseDirective(line);
+      const kind = (line.match(/^::([a-z]+)/) || [])[1];
+      let body;
+      if (BODY_DIRECTIVE_KINDS.includes(kind)) {
+        const c = collectDirectiveBody(lines, i + 1);
+        body = c.body; i = c.next;
+      } else i++;
+      const d = parseDirective(line, body);
       if (d) { blocks.push(d); out.push('<!--fn-block-' + (blocks.length - 1) + '-->'); }
       else out.push('<!-- unparseable directive dropped -->');
-      i++; continue;
+      continue;
     }
 
     // fenced code
