@@ -180,7 +180,10 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
   // the picks box: three rows, each jumping to its rank card's anchor
   assert.equal((h.match(/class="pick"/g) || []).length, 3);
   for (const s of ['holosun-507k-x2', 'holosun-507c-x2', 'sig-sauer-p365-17rd-mag']) {
-    assert.ok(h.includes('href="#rank-' + s + '"'), 'picks jumps to #rank-' + s);
+    // Page-absolute, never a bare #fragment: the chrome's <base href="/"/>
+    // would resolve that against the homepage (found on deploy preview 204).
+    assert.ok(h.includes('href="/field-notes/renderer-check#rank-' + s + '"'), 'picks jumps to the rank anchor for ' + s);
+    assert.ok(!h.includes('href="#rank-' + s + '"'), 'no bare fragment href — <base> would send it to the homepage');
     assert.ok(h.includes('id="rank-' + s + '"'), 'the rank card carries the anchor ' + s);
   }
   // fresh price with its retailer; a part with no fresh price shows NO

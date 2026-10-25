@@ -289,6 +289,11 @@ function specValue(category, col, o, specRow) {
 }
 
 const rankAnchor = (slug) => 'rank-' + slug;
+// The page's shared chrome carries <base href="/"/>, so a bare "#fragment"
+// href resolves against the BASE — the homepage — not this page. Caught on
+// deploy preview 204 by clicking one: every same-page anchor link must be
+// page-absolute.
+const rankHref = (ctx, slug) => fieldNotePath(ctx.slug) + '#' + rankAnchor(slug);
 
 // ::picks — the numbered top-picks box. Each row jumps to its ::rank card's
 // anchor on the same page; the price is the hero listing's fresh price or
@@ -301,7 +306,7 @@ function picksBlockHtml(block, products, ctx) {
       ? '<span class="pick-price">$' + o.hero.price.toFixed(2) + (o.hero.partnerName ? ' at ' + esc(o.hero.partnerName) : '') + '</span>'
       : '';
     return '<li class="pick">' +
-      '<div class="pick-main"><a class="pick-name" href="#' + esc(rankAnchor(p.slug)) + '">' + esc(o.displayName) + '</a>' +
+      '<div class="pick-main"><a class="pick-name" href="' + esc(rankHref(ctx, p.slug)) + '">' + esc(o.displayName) + '</a>' +
       '<span class="pick-best">' + esc(p.label) + '</span></div>' +
       '<div class="pick-buy">' + price + buyHtml(o, ctx, 'picks', isFresh(o) ? null : 'See current price') + '</div>' +
     '</li>';
