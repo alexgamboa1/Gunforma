@@ -1181,7 +1181,11 @@ table is mostly bot traffic, and partnership decisions are made off it.
 `source` and `section` identify the page and block that sent a tracked
 click (the Field Notes guide blocks' `?s=`/`&loc=` params, whitelisted and
 written by `go.js`; null on every untracked click) — report them from
-`link_clicks_real` only, like everything else here.
+`link_clicks_real` only, like everything else here. **Reporting also
+excludes rows where `source = 'renderer-check'`**: that page is the
+renderer's fixture, served on previews only and a 404 on production, so
+its rows are test traffic by definition. No report script exists yet to
+encode that filter — the rule lives here until one does.
 
 Queried 2026-10-15: 1,047 of its rows landed on 2026-10-12 with referrer
 "/" on every one — a page that has no `/go/` links — at 20–40 a minute for
