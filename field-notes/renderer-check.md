@@ -64,7 +64,7 @@ derivable from a spec column, a fitment row, or the maker's own wording.
 
 ::rank holosun-507c-x2 best="Best enclosed budget" rank=2
 + Larger window than the K-series optics
-- RMR footprint — needs a plate on an RMSc-cut slide
+- RMR footprint — doesn't mount on the RMSc-cut P365 slides
 ::
 
 ::rank sig-sauer-p365-17rd-mag best="Best factory magazine" rank=3

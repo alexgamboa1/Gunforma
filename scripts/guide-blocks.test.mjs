@@ -110,6 +110,9 @@ const PRODUCTS = {
       affiliate_links: [
         { id: 'L1', url: 'https://www.opticsplanet.com/x', affiliate_url: 'https://www.awin1.com/x', street_price: 329.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } },
         { id: 'L2', url: 'https://www.brownells.com/x', affiliate_url: null, street_price: 339.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'Brownells' } },
+        // A SECOND OpticsPlanet listing (the live catalog has these): the
+        // rank card's extras must not repeat the hero's retailer.
+        { id: 'L4', url: 'https://www.opticsplanet.com/x2', affiliate_url: 'https://www.awin1.com/x2', street_price: 349.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } },
       ] }] },
   'holosun-507c-x2': { id: 'P2', slug: 'holosun-507c-x2', name: 'Holosun 507C X2', category: 'optic', url: 'https://holosun.com/507c', is_discontinued: false, restricted_states: null,
     material: null, weight_oz: 1.5,
@@ -210,6 +213,15 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
   assert.ok(h.includes('<span class="coupon-chip">Code GUNFORMA10 at checkout</span>'));
   assert.equal((h.match(/coupon-chip/g) || []).length, 1 + 1, 'one chip (plus its CSS rule) — only the card that declared a code');
   assert.ok(h.includes('>See price at Brownells</a>'), 'the second listing, same sort as the buy rows');
+  // One link per retailer per card, hero's retailer taken: P1's hero is
+  // OpticsPlanet and the stub carries a second OpticsPlanet listing — the
+  // extras show Brownells and nothing else, and never the hero listing.
+  const rankP1 = h.slice(h.indexOf('id="rank-holosun-507k-x2"'), h.indexOf('id="rank-holosun-507c-x2"'));
+  assert.equal((rankP1.match(/class="rank-alt"/g) || []).length, 1, 'exactly one extra on the 507K card');
+  assert.ok(!rankP1.includes('>See price at OpticsPlanet</a>'), 'the hero’s retailer never repeats as an extra');
+  assert.equal((rankP1.match(/href="\/go\/L1\?/g) || []).length, 1, 'the hero listing itself appears once — its buy button, never an extra');
+  const rankP3 = h.slice(h.indexOf('id="rank-sig-sauer-p365-17rd-mag"'), h.indexOf('The spec-comparison'));
+  assert.ok(!rankP3.includes('class="rank-alts"'), 'a single-listing product renders no extras row at all');
   assert.ok(h.includes('<span>Dot Size</span><strong>2 MOA</strong>'));
   assert.ok(h.includes('<span>Capacity</span><strong>17 rounds</strong>'));
   assert.ok(h.includes('<div class="rank-pc-head">Pros</div>'));
@@ -249,6 +261,40 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
   assert.ok(h.includes('Last reviewed October 2026'));
   assert.ok(h.includes('<div class="section-title">Latest updates</div>'));
   assert.ok(h.indexOf('Added the four guide blocks') < h.indexOf('First version of the fixture'), 'newest first');
+});
+
+test('an authored con may not contradict a fit verdict on the same page', async () => {
+  // The rule the fixture itself once broke: its 507C card claimed "needs a
+  // plate" while the ::fit block above rendered "Doesn't fit" — and the fit
+  // tables had no plate row (checked read-only, 2026-10-26: the rmsc cut
+  // mounts only the RMSc and Holosun-K footprints, both direct, and the
+  // 507C has no adapter rows). The verdict is live data, so
+  // check-field-notes (offline by design) cannot see it; this test holds
+  // the permanent fixture to it against the stub, which mirrors the live
+  // tables. For articles the rule is editorial (CLAUDE.md, the evidence
+  // rule).
+  stubFetch(catalog);
+  const r = await run(PREVIEW + fieldNotePath(FIXTURE.slug));
+  const h = r.html;
+  // every product with a "No" overall fit verdict on the page…
+  const noFit = new Set();
+  for (const m of h.matchAll(/<div class="fn-fit-q">Does the <a href="\/parts\/[^/"]+\/([a-z0-9-]+)">[\s\S]*?<div class="fn-verdict (yes|no|depends|unknown)"/g)) {
+    if (m[2] === 'no') noFit.add(m[1]);
+  }
+  assert.ok(noFit.has('holosun-507c-x2'), 'the stub still renders the 507C as a no — the premise of this test');
+  // …whose rank card cons then claim a plate is a contradiction
+  const anchors = [...h.matchAll(/id="rank-([a-z0-9-]+)"/g)].map((m) => m[1]);
+  for (const slug of anchors) {
+    if (!noFit.has(slug)) continue;
+    const start = h.indexOf('id="rank-' + slug + '"');
+    // the card ends where the next block begins — a rank anchor alone would
+    // let the LAST card run to the end of the page and read the FAQ's own
+    // "without a plate?" as its con
+    const end = h.indexOf('<div class="fn-block', start + 1);
+    const card = h.slice(start, end === -1 ? undefined : end);
+    const cons = card.includes('>Cons</div>') ? card.slice(card.indexOf('>Cons</div>')) : '';
+    assert.ok(!/plate/i.test(cons), slug + ': a con line claims a plate while the fit block says it doesn’t fit');
+  }
 });
 
 test('a product PostgREST does not return is a visible gap, never a silent skip', async () => {

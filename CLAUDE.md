@@ -567,7 +567,13 @@ directives. What is new:
   rule:** every line must be derivable from a spec column, a fitment row,
   the maker's stated wording, or a dated verification note. No "feels
   great", no reliability opinions — a line the catalog cannot back does
-  not ship.
+  not ship. **And an authored line may never disagree with what a
+  live-data block on the same page renders** — a ::fit verdict outranks a
+  sentence (the fixture shipped a con claiming "needs a plate" over a
+  verdict of "Doesn't fit"; the fit tables had no such plate row).
+  `guide-blocks.test.mjs` pins the fixture against that contradiction;
+  check-field-notes cannot (no network, and the verdict is live), so for
+  an article the rule is editorial.
 - **Every slug a picks/rank/compare block names must resolve to a live
   product.** A miss is a visible "not in the catalog" line at request time
   — never a silently skipped card — and the build fails first:

@@ -325,8 +325,19 @@ function rankBlockHtml(b, products, ctx) {
       (o.hero.partnerName ? '<span class="rank-partner">at ' + esc(o.hero.partnerName) + '</span>' : '')
     : '';
   const chip = b.code ? '<span class="coupon-chip">Code ' + esc(b.code) + ' at checkout</span>' : '';
-  const extras = (o.listings || []).slice(1, 4).map((l) =>
-    '<a class="rank-alt" href="' + esc(withGoParams(l.goUrl, ctx.slug, 'rank')) + '" target="_blank" rel="noopener sponsored nofollow">See price at ' + esc(l.partnerName || 'retailer') + '</a>').join('');
+  // The extra listings never repeat a retailer: the hero's retailer counts
+  // as taken (its button is already on the card — "Buy at X" over "See
+  // price at X" reads as link padding), and one link per remaining
+  // retailer, up to 3. A single-listing product renders no extras row.
+  const taken = new Set(o.hero ? [o.hero.partnerName || ''] : []);
+  const extras = [];
+  for (const l of (o.listings || []).slice(1)) {
+    if (extras.length === 3) break;
+    const name = l.partnerName || '';
+    if (taken.has(name)) continue;
+    taken.add(name);
+    extras.push('<a class="rank-alt" href="' + esc(withGoParams(l.goUrl, ctx.slug, 'rank')) + '" target="_blank" rel="noopener sponsored nofollow">See price at ' + esc(l.partnerName || 'retailer') + '</a>');
+  }
   const cat = GUIDE_SPECS[o.category];
   const specRow = ctx.specs.get(o.id);
   const specList = (cat ? cat.rank : []).map((col) => {
@@ -345,7 +356,7 @@ function rankBlockHtml(b, products, ctx) {
       '<div class="rank-main">' +
         '<a class="rank-name" href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' +
         '<div class="rank-buy">' + price + buyHtml(o, ctx, 'rank', fresh ? null : 'See current price') + chip + '</div>' +
-        (extras ? '<div class="rank-alts">' + extras + '</div>' : '') +
+        (extras.length ? '<div class="rank-alts">' + extras.join('') + '</div>' : '') +
         (specList ? '<div class="rank-specs">' + specList + '</div>' : '') +
       '</div>' +
     '</div>' +
