@@ -574,6 +574,20 @@ directives. What is new:
   `guide-blocks.test.mjs` pins the fixture against that contradiction;
   check-field-notes cannot (no network, and the verdict is live), so for
   an article the rule is editorial.
+  **Gunforma guides rank aftermarket parts only** (Alex, 2026-10-26, on
+  the XMacro grip guide): an OEM / factory part is never ranked, picked,
+  or given a ::rank card in a buyer's guide. It may still appear as fit
+  and compatibility information (::fit blocks, the magazine sections) and
+  as the stated factory baseline in prose or a pros/cons line ("2.40 oz
+  against the factory module's 2.50"). `check-field-notes.mjs` enforces
+  the half the data can carry — a ::picks/::rank slug whose brand is an
+  OEM's (`OEM_BRANDS` there) and whose stored name carries the standalone
+  word "OEM" fails the build; "OEM Style" and "for … OEM Grip" aftermarket
+  names pass. A factory part the naming convention does not mark (the
+  factory magazines, the manual-safety kit) is carried by this rule, not
+  the guard — the catalog has no per-product OEM flag, and
+  `manufacturers.is_oem` is too broad (Sig also sells rankable
+  accessories).
 - **Every slug a picks/rank/compare block names must resolve to a live
   product.** A miss is a visible "not in the catalog" line at request time
   — never a silently skipped card — and the build fails first:

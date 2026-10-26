@@ -55,6 +55,20 @@ const { GUIDE_SPECS, colMeta } = await import(join(ROOT, 'netlify/functions/_gui
 const CATALOG = JSON.parse(await readFile(join(ROOT, 'scripts/fixtures/product-names.json'), 'utf8')).products;
 const CATALOG_CATEGORY = new Map(CATALOG.map((p) => [p.slug, p.category]));
 
+// Gunforma guides rank aftermarket parts only (CLAUDE.md, Field Notes
+// evidence rules; Alex, 2026-10-26, on the XMacro grip guide). The catalog
+// has no per-product OEM flag — manufacturers.is_oem marks the brand, which
+// also sells rankable accessories — so this enforces the half the naming
+// convention carries: a ::picks/::rank slug whose brand is an OEM's AND
+// whose stored name holds the standalone word "OEM" is a factory part.
+// Aftermarket names that merely mention OEM ("… OEM Style Mag Release",
+// "… for SIG P365 OEM Grip") belong to other brands and pass. A factory
+// part the convention does not mark (the factory magazines, the
+// manual-safety kit) is carried by the doc rule, not this check.
+const OEM_BRANDS = ['Sig Sauer'];
+const CATALOG_FACTORY = new Map(CATALOG.map((p) => [p.slug,
+  OEM_BRANDS.includes(p.brand) && /\bOEM\b/.test(p.name || '')]));
+
 let failures = 0;
 const fail = (msg) => { console.error('FAIL  ' + msg); failures++; };
 const pass = (msg) => console.log('ok    ' + msg);
@@ -174,17 +188,25 @@ for (const a of FIELD_NOTES) {
   const mustResolve = (slug, what) => {
     if (!CATALOG_CATEGORY.has(slug)) fail(id + ': ' + what + ' names a slug not in the live catalog (fixture): ' + slug);
   };
+  // Ranked and picked means recommended, and Gunforma never recommends the
+  // factory part over the aftermarket field it baselines — see the comment
+  // on CATALOG_FACTORY above for what this can and cannot see.
+  const mustBeAftermarket = (slug, what) => {
+    if (CATALOG_FACTORY.get(slug)) fail(id + ': ' + what + ' names a factory part (' + slug + ') — Gunforma guides rank aftermarket parts only; an OEM part may appear in ::fit blocks and as baseline prose');
+  };
   const rankSlugs = new Set(r.blocks.filter((b) => b.kind === 'rank').map((b) => b.slug));
   for (const b of r.blocks) {
     if (b.kind === 'picks') {
       if (b.picks.length < 3 || b.picks.length > 7) fail(id + ': ::picks has ' + b.picks.length + ' pick(s) — it takes 3–7');
       for (const p of b.picks) {
         mustResolve(p.slug, '::picks');
+        mustBeAftermarket(p.slug, '::picks');
         if (!rankSlugs.has(p.slug)) fail(id + ': ::picks names ' + p.slug + ' with no ::rank card for it on the page — the jump link would land nowhere');
       }
     }
     if (b.kind === 'rank') {
       mustResolve(b.slug, '::rank');
+      mustBeAftermarket(b.slug, '::rank');
       const cat = CATALOG_CATEGORY.get(b.slug);
       if (cat && !GUIDE_SPECS[cat]) fail(id + ': ::rank ' + b.slug + ' is a ' + cat + ', a category _guide-blocks.mjs declares no spec columns for — add its entry there');
     }

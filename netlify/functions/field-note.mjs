@@ -355,7 +355,7 @@ function rankBlockHtml(b, products, ctx) {
     '<div class="rank-head"><span class="rank-no">' + b.rank + '</span>' +
       '<span class="rank-best">' + esc(b.best) + '</span></div>' +
     '<div class="rank-body">' +
-      (o.photo ? '<img class="rank-photo" src="' + esc(o.photo) + '" alt="' + esc(o.displayName) + '" loading="lazy" width="120" height="120"/>' : '') +
+      (o.photo ? '<div class="rank-photo-frame"><img class="rank-photo" src="' + esc(o.photo) + '" alt="' + esc(o.displayName) + '" loading="lazy"/></div>' : '') +
       '<div class="rank-main">' +
         '<a class="rank-name" href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' +
         '<div class="rank-buy">' + price + buyHtml(o, ctx, 'rank', fresh ? null : 'See current price') + chip + '</div>' +
@@ -728,9 +728,16 @@ function renderPage({ article, meta, bodyHtml, data }) {
 '.rank-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }' +
 '.rank-no { width: 26px; height: 26px; border-radius: 50%; background: #0e0f11; color: #f2efe8; font-size: 13px; font-weight: 800; display: inline-flex; align-items: center; justify-content: center; flex: none; }' +
 '.rank-best { font-size: 11px; font-weight: 700; color: #1d6b43; background: #e3f3e8; padding: 3px 10px; border-radius: 12px; }' +
-'.rank-body { display: flex; gap: 14px; align-items: flex-start; }' +
-'.rank-photo { width: 120px; height: 120px; object-fit: contain; border-radius: 8px; border: 0.5px solid #ececec; background: #fff; flex: none; }' +
-'@media (max-width: 480px) { .rank-photo { width: 84px; height: 84px; } }' +
+// The showcase frame (Alex, 2026-10-26): ONE frame shape on every card —
+// 4:3, capped at 280px tall, the image centered and contained, never
+// cropped, never stretched, and never upscaled past its source pixels
+// (max-width/max-height with auto sizing, not width/height). White behind
+// it so a white-background product JPEG reads seamless and a transparent
+// PNG stays clean. A card with no photo renders no frame at all (the test
+// pins that), exactly as the 120px thumbnail this replaces did.
+'.rank-body { display: flex; flex-direction: column; gap: 12px; }' +
+'.rank-photo-frame { width: 100%; aspect-ratio: 4 / 3; max-height: 280px; display: flex; align-items: center; justify-content: center; background: #fff; border: 0.5px solid #ececec; border-radius: 8px; overflow: hidden; }' +
+'.rank-photo { max-width: 94%; max-height: 94%; width: auto; height: auto; object-fit: contain; }' +
 '.rank-main { min-width: 0; flex: 1; }' +
 '.rank-name { font-size: 16px; font-weight: 700; color: #1a1a1a; text-decoration: none; display: inline-block; margin-bottom: 6px; } .rank-name:hover { color: #4a9edd; }' +
 '.rank-buy { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }' +
