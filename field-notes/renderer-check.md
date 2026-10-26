@@ -110,7 +110,7 @@ Inline: **bold**, *italic*, _also italic_, `code`, a [site link](/p365/) and an
 a fenced code block, rendered verbatim
 ```
 
-![A caption under the figure](/assets/gunforma-logo.png)
+![A figure with a caption, using a catalog image.](https://cdn.prod.website-files.com/68f92fcb2648b8aa5dc55d79/69a1ea5cacc4e06677fe6b1d_holosun-hs507k-rd-x2_04.webp)
 
 ---
 
