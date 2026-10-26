@@ -146,8 +146,10 @@ function catalog(n, path) {
   // The guide blocks' reads: spec rows per table (in.(…) with product_id in
   // the select), and the one approved-builds read behind "Used in N builds".
   if (path.startsWith('optic_specs?product_id=in.')) return json([
-    { product_id: 'P1', dot_size_moa: 2, reticle: '2 MOA dot', window_size: '0.58x0.77 in', battery_type: 'CR1632', battery_life: '50,000 hours', enclosed_emitter: false, housing_material: '7075 Aluminum' },
-    { product_id: 'P2', dot_size_moa: 2, reticle: null, window_size: '0.63x0.91 in', battery_type: 'CR1632', battery_life: null, enclosed_emitter: false, housing_material: null },
+    { product_id: 'P1', dot_size_moa: 2, reticle: '2 MOA dot', window_size: '0.58x0.77 in', battery_type: 'CR1632', battery_life: '50,000 hours', enclosed_emitter: false, housing_material: '7075 Aluminum',
+      footprint: { common_name: 'Holosun K-Series / Modified RMSc', slug: 'holosun-k' } },
+    { product_id: 'P2', dot_size_moa: 2, reticle: null, window_size: '0.63x0.91 in', battery_type: 'CR1632', battery_life: null, enclosed_emitter: false, housing_material: null,
+      footprint: { common_name: 'Trijicon RMR', slug: 'rmr' } },
   ]);
   if (path.startsWith('magazine_specs?product_id=in.')) return json([
     { product_id: 'P3', capacity: 17, caliber: '9mm', mag_style: 'Extended', body_material: null },

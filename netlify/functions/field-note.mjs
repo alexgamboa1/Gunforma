@@ -238,12 +238,15 @@ function priceBlockHtml(block, products, ctx) {
 // every column _guide-blocks.mjs declares for the category — the column
 // sets live there, never per article.
 async function fetchSpecRows(blocks, products) {
-  const byTable = new Map();   // table -> { cols: [..], ids: Set }
+  const byTable = new Map();   // table -> { cols: [..select fragments..], ids: Set }
   const want = (category, o) => {
     const cat = GUIDE_SPECS[category];
     if (!cat || !o) return;
     let t = byTable.get(cat.table);
-    if (!t) byTable.set(cat.table, (t = { cols: Object.keys(cat.cols), ids: new Set() }));
+    // A column is its name, unless it declares its own select fragment (a
+    // lookup such as optic footprint) — aliased to the key, so the row
+    // reads the same either way.
+    if (!t) byTable.set(cat.table, (t = { cols: Object.entries(cat.cols).map(([k, m]) => m.select || k), ids: new Set() }));
     t.ids.add(o.id);
   };
   for (const b of blocks) {

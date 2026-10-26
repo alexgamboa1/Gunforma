@@ -11,9 +11,12 @@
 //
 // Labels match the product page's spec sheet (SPEC_TABLES in
 // product-page.mjs) where the column appears there, so one column never has
-// two names on the site. Scalar columns only, on purpose: an embedded
-// select (housing_classes(...)) would drag the PGRST201 FK-naming rules
-// into every compare query for one row of decoration.
+// two names on the site. Scalar columns by default; a column may instead
+// declare its own `select` fragment for a lookup the raw value cannot
+// render (a uuid FK) — the fragment is aliased to the column's key and
+// MUST name its FK where the pair is ambiguous (CLAUDE.md, PGRST201),
+// which `footprint` below is: optic_specs → footprints is the
+// direct-FK-plus-many-to-many trap.
 //
 // PRODUCT_COLS are columns on `products` itself (every category may use
 // them); each category's `cols` are on its spec table. The fetch in
@@ -55,6 +58,13 @@ export const GUIDE_SPECS = {
       battery_life:     { label: 'Battery Life' },
       enclosed_emitter: { label: 'Enclosed Emitter', fmt: YESNO },
       housing_material: { label: 'Housing Material' },
+      // The optic's mounting footprint, through the named FK (never bare —
+      // the adapter many-to-many makes a bare embed PGRST201). Approved
+      // into the compare-also list 2026-10-26; slide_specs has no optic-cut
+      // column, so the slide side of that approval was skipped, not built.
+      footprint: { label: 'Footprint',
+        select: 'footprint:footprints!optic_specs_footprint_id_fkey(common_name,slug)',
+        fmt: (v) => (v && (v.common_name || v.slug)) || null },
     },
     rank: ['dot_size_moa', 'window_size', 'battery_life', 'enclosed_emitter', 'weight_oz'],
   },

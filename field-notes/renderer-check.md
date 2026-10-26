@@ -74,7 +74,7 @@ derivable from a spec column, a fitment row, or the maker's own wording.
 
 The spec-comparison table, columns declared in the shared module.
 
-::compare optic cols=dot_size_moa,window_size,battery_life slugs=holosun-507k-x2,holosun-507c-x2
+::compare optic cols=dot_size_moa,window_size,battery_life,footprint slugs=holosun-507k-x2,holosun-507c-x2
 
 And the FAQ, served as details/summary with FAQPage JSON-LD behind it.
 
