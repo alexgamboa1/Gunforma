@@ -212,6 +212,7 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
   assert.ok(h.includes('<span class="rank-best">Best overall</span>'));
   assert.ok(h.includes('class="rank-photo" src="https://img/507k.jpg"'));
   assert.equal((h.match(/class="rank-photo"/g) || []).length, 1, 'no placeholder image area on the photo-less cards');
+  assert.equal((h.match(/class="rank-photo-frame"/g) || []).length, 1, 'the showcase frame exists only around a photo — never as an empty placeholder');
   assert.ok(h.includes('<span class="coupon-chip">Code GUNFORMA10 at checkout</span>'));
   assert.equal((h.match(/coupon-chip/g) || []).length, 1 + 1, 'one chip (plus its CSS rule) — only the card that declared a code');
   assert.ok(h.includes('>See price at Brownells</a>'), 'the second listing, same sort as the buy rows');
