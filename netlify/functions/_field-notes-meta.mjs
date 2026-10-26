@@ -49,6 +49,13 @@ export const FIELD_NOTES = [
       '2026-10-25: Added the four guide blocks — picks, rank, compare, faq — and this changelog.',
       '2026-10-20: First version of the fixture.',
     ] },
+  // The first real article: the XMacro grip-module buyer's guide. DRAFT —
+  // served on previews only, a 404 on gunforma.com until Alex's explicit
+  // "publish" flips this flag in its own commit.
+  { slug: 'best-p365-xmacro-grip-modules', published: '2026-10-26', updated: '2026-10-26', draft: true,
+    changelog: [
+      '2026-10-26: First published.',
+    ] },
 ];
 
 export const FIELD_NOTES_INDEX_PATH = '/field-notes.html';
