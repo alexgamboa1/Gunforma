@@ -81,6 +81,8 @@ check "DB failure is 503, not 404"  scripts/upstream-failure.test.mjs
 check "click bot classifier"       scripts/go-bot.test.mjs
 check "field notes registry+files" scripts/check-field-notes.mjs
 check "field note renderer"        scripts/field-notes.test.mjs
+check "field note guide blocks"    scripts/guide-blocks.test.mjs
+check "go section tracking"        scripts/go-redirect.test.mjs
 check "barrel/slide fit sections"  scripts/fit-sections.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────

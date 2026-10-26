@@ -519,18 +519,89 @@ directives. What is new:
   on. `renderer-check` is the permanent draft fixture — every construct
   and both blocks on real catalog slugs — and `scripts/field-notes.test.mjs`
   and the preview walk-through both run over it. Keep it.
-- **Two block directives, one per line, are where the live data goes.**
-  `::price <slug>[, <slug>…]` renders each part's hero listing under the
-  shared stale-price and sort rules (`_listing-rules.mjs`), the partner
-  button through `/go/<link>` or the maker button through
-  `/go/part/<id>`, and the three-way disclosure. `::fit optic=<slug>
-  gun=<gun-slug>` walks the optic's footprint (and its adapter plates)
-  against the gun's cuts by SKU — one verdict per `applies_to` row, with
-  the *likely* marker — and `::fit magazine=<slug> gun=<gun-slug>` renders
-  the maker's own `magazine_housing_fit` claim, or says there is none.
-  Thread pitch and magwell rules are not block kinds yet. **A typed dollar
-  figure in the prose fails the build**; so does a prose link to a
-  retailer, which would bypass `/go/`.
+- **Six block directives are where the live data goes** — and a typed
+  dollar figure ANYWHERE (prose, a directive's args, a pros/cons line, an
+  FAQ answer, a changelog entry) fails the build, as does a prose link to
+  a retailer, which would bypass `/go/`. Three are one line:
+  - `::price <slug>[, <slug>…]` renders each part's hero listing under the
+    shared stale-price and sort rules (`_listing-rules.mjs`), the partner
+    button through `/go/<link>` or the maker button through
+    `/go/part/<id>`, and the three-way disclosure.
+  - `::fit optic=<slug> gun=<gun-slug>` walks the optic's footprint (and
+    its adapter plates) against the gun's cuts by SKU — one verdict per
+    `applies_to` row, with the *likely* marker — and
+    `::fit magazine=<slug> gun=<gun-slug>` renders the maker's own
+    `magazine_housing_fit` claim, or says there is none. Thread pitch and
+    magwell rules are not block kinds yet.
+  - `::compare <category> [gun=<slug>] cols=<col,…> slugs=<slug,…>` is the
+    spec table: one row per part, one column per named spec plus a live
+    "Price today" column (a stale or absent price is "—", never MSRP), a
+    null cell "—", never a guess. **The columns an article may name, their
+    labels, and each category's rank-card spec set live ONCE, in
+    `_guide-blocks.mjs`** — the guard refuses a column, a category, or a
+    cross-category slug that module does not declare, and a comparison of
+    fewer than two parts.
+  The other three carry a body of lines closed by a lone `::`:
+  - `::picks` (3–7 lines of `<slug> | <best-for label>`) is the top-picks
+    box: rank, display name, label, the hero listing's fresh price (no
+    fresh price → no number and the button reads "See current price" —
+    never MSRP here), a `/go/` buy button, and a jump link to that part's
+    `::rank` anchor (`#rank-<slug>`). Every pick must have its `::rank`
+    card on the same page, or the build fails.
+  - `::rank <slug> best="…" rank=N [code="…"]` with `+ pro` / `- con` body
+    lines is the ranked card: anchor, badge, hero photo (none → no image
+    area, no placeholder), price + buy button under the picks rule, up to
+    3 more listings as "See price at <retailer>" (same sort as the buy
+    rows), the category's declared spec set, pros/cons, and — only when
+    N ≥ 1 — "Used in N Gunforma builds", a count of approved builds whose
+    `parts_snapshot` carries the product's `refId`, linking the product
+    page; **N = 0 renders nothing, never "0 builds"**. `code=` draws a
+    "Code X at checkout" chip beside the buy button, for maker deals; no
+    codes exist yet.
+  - `::faq` (`Q: …` / `A: …` pairs, strictly alternating, one line each)
+    renders details/summary pairs — no JS — and emits FAQPage JSON-LD
+    merged into the page's ONE structured-data script beside the Article
+    and BreadcrumbList. FAQ answers follow the same evidence rules as
+    prose, one or two sentences.
+  **Pros/cons and best-for labels are authored text under an evidence
+  rule:** every line must be derivable from a spec column, a fitment row,
+  the maker's stated wording, or a dated verification note. No "feels
+  great", no reliability opinions — a line the catalog cannot back does
+  not ship. **And an authored line may never disagree with what a
+  live-data block on the same page renders** — a ::fit verdict outranks a
+  sentence (the fixture shipped a con claiming "needs a plate" over a
+  verdict of "Doesn't fit"; the fit tables had no such plate row).
+  `guide-blocks.test.mjs` pins the fixture against that contradiction;
+  check-field-notes cannot (no network, and the verdict is live), so for
+  an article the rule is editorial.
+- **Every slug a picks/rank/compare block names must resolve to a live
+  product.** A miss is a visible "not in the catalog" line at request time
+  — never a silently skipped card — and the build fails first:
+  `check-field-notes.mjs` resolves offline against
+  `scripts/fixtures/product-names.json` (refresh with `node
+  scripts/display-name.test.mjs --refresh-fixture` after adding a part),
+  and `check-routes.mjs` holds the live half on the wire.
+- **The trust layer.** `author` in the front matter is optional: absent
+  means NO byline — never a placeholder — and the Article JSON-LD credits
+  the Organization instead; `author_credential` is its one-line
+  plain-facts companion (refused without an author). The registry's
+  `updated` IS the reviewed date: it renders "Last reviewed <Month YYYY>"
+  in the byline and the author box, drives `dateModified`, and is the
+  sitemap lastmod — there is no `reviewed` front-matter key, and the guard
+  still refuses any date in the front matter. An optional registry
+  `changelog` (an array of `"YYYY-MM-DD: what changed"` strings) renders
+  as "Latest updates" at the end, newest first. **The affiliate disclosure
+  is automatic**: any article with a `::price`, `::picks` or `::rank`
+  block gets the standard line near the top, linking
+  `gunforma-legal.html#affiliate` — one implementation
+  (`AFFILIATE_DISCLOSURE_HTML` in `_guide-blocks.mjs`), never per-article
+  text.
+- **Every `/go/` link out of a block carries `?s=<article slug>&loc=<block
+  kind>`** (`withGoParams()` in `_guide-blocks.mjs`), so
+  `link_clicks.source` / `.section` record which page and which block
+  earned the click — see **Which clicks are real**. The product page and
+  the other buy-row copies are untouched; they already log
+  `referrer_path`.
 - **The rewrite is forced.** `publish = "."` would otherwise serve
   `field-notes/<slug>.md` as a static file at the same prefix. The
   function 404s anything that is not a declared slug (a `.md` suffix fails
@@ -1107,6 +1178,10 @@ shape to keep: logging must never be able to break buying. The legacy
 
 **Report clicks from `link_clicks_real`, never from `link_clicks`.** The
 table is mostly bot traffic, and partnership decisions are made off it.
+`source` and `section` identify the page and block that sent a tracked
+click (the Field Notes guide blocks' `?s=`/`&loc=` params, whitelisted and
+written by `go.js`; null on every untracked click) — report them from
+`link_clicks_real` only, like everything else here.
 
 Queried 2026-10-15: 1,047 of its rows landed on 2026-10-12 with referrer
 "/" on every one — a page that has no `/go/` links — at 20–40 a minute for
@@ -1207,8 +1282,10 @@ Registered today:
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
-| `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose; a directive that does not parse or names an unknown gun; an image under `/field-notes/`, which the forced rewrite swallows |
+| `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose — or in a directive's args or body (a best-for label, a pros/cons line, an FAQ answer, a changelog entry); a directive that does not parse, an unclosed picks/rank/faq block, or one naming an unknown gun; a picks/rank/compare slug that is not a live catalog product (against `scripts/fixtures/product-names.json`); ::picks outside 3–7 entries or naming a part with no ::rank card on the page; a ::compare column or category `_guide-blocks.mjs` does not declare, a compare of one part, or one mixing categories; a malformed registry changelog entry; an image under `/field-notes/`, which the forced rewrite swallows |
 | `scripts/field-notes.test.mjs` | `field-note.mjs` answering 404 when PostgREST failed, serving a draft on the apex, serving raw HTML or a `javascript:` link as markup, stating a stale price, or getting a fit verdict wrong — runs the handler over the `renderer-check` fixture against a stubbed catalog and pins every verdict shape |
+| `scripts/guide-blocks.test.mjs` | a guide block degrading dishonestly: a picks row or rank card stating MSRP or a stale price as the number (no fresh price must read "See current price"), "Used in 0 builds" (N = 0 renders nothing), a compare cell guessing instead of "—", a missing product silently skipped instead of a visible gap, a /go/ link out of a block without its `s`/`loc` params, FAQPage JSON-LD missing or in a second script, the automatic disclosure absent, the changelog out of order, or a malformed directive parsing — runs `field-note.mjs` over the fixture against a stubbed catalog |
+| `scripts/go-redirect.test.mjs` | `go.js` leaking `s`/`loc` into the outbound retailer URL, storing an unwhitelisted `loc`, not truncating `s` at 128, breaking the redirect over a refused insert, logging a `x-go-no-log` request, or losing the PGRST204 ladder (full → bot → legacy, descending only on PGRST204) — runs the edge function under Node with a stubbed Deno and fetch |
 | `scripts/fit-sections.test.mjs` | a product page's barrel/slide fit section listing a threaded barrel on a slide whose maker says no (or the reverse), an unapproved or discontinued part, a locked barrel without its heading and warning ("Only these slides", or "Only for specific <brand> slides" when none is listed or the fit read fails), a stale "From" price, or a heading over nothing — runs `product-page.mjs` against a stubbed fetch and pins both the one query it sends and the HTML |
 | `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
 

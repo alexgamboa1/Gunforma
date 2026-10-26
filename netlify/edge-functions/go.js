@@ -44,6 +44,17 @@
 // No cookie, no user id, no IP, no full referrer — a path only, so it cannot
 // carry a search term or a token. privacy-policy.html says so.
 //
+// SECTION TRACKING (since 2026-10-25): the Field Notes guide blocks append
+// ?s=<article slug>&loc=<picks|rank|compare|price> to their /go/ URLs, and
+// the logged path stores them as `source` and `section` — which page and
+// which block earned the click, the number a maker-deal conversation runs
+// on. Only OUR pages put these params on a link; they are read on the
+// logged path only, `s` is cut to 128 characters, `loc` is whitelisted (and
+// null otherwise), and NEITHER ever reaches the outbound retailer URL — the
+// destination comes from the database, never the request, unchanged.
+// Until the …_link_clicks_section.sql migration is applied the columns do
+// not exist, and the PGRST204 ladder below retries without them.
+//
 // WHY THE CLIENT IS RECORDED. On 2026-10-12, 1,047 rows landed over several
 // hours, 20–40 a minute, every one with referrer "/" — a page that has no
 // /go/ links on it — across 599 different targets. On 10-09 and 10-10 a
@@ -266,8 +277,22 @@ export default async (request, context) => {
   // guarded anyway — the rule is that nothing about logging may break the
   // redirect, and a rule with one exception is not one. The fallback is the
   // old shape: a click with no client fields, never no click.
-  let fullRow = legacyRow;
-  try { fullRow = { ...legacyRow, ...clickMeta(request.headers) }; } catch { /* legacy shape */ }
+  let botRow = legacyRow;
+  try { botRow = { ...legacyRow, ...clickMeta(request.headers) }; } catch { /* legacy shape */ }
+  // Section tracking, logged path only. `s` says which page built the link
+  // (a field note's slug), `loc` which block; anything outside the
+  // whitelist is null, not stored as sent. Neither touches the redirect.
+  const GO_LOCATIONS = ["picks", "rank", "compare", "price"];
+  let source = null, section = null;
+  try {
+    const s = url.searchParams.get("s");
+    if (s) source = s.slice(0, 128);
+    const loc = url.searchParams.get("loc");
+    if (loc && GO_LOCATIONS.includes(loc)) section = loc;
+  } catch { /* never block the redirect over a query string */ }
+  const fullRow = (source || section)
+    ? { ...botRow, ...(source ? { source } : {}), ...(section ? { section } : {}) }
+    : botRow;
 
   const post = (row) => fetch(`${SB_URL}/rest/v1/link_clicks`, {
     method: "POST",
@@ -283,24 +308,30 @@ export default async (request, context) => {
   // Resolves to { status, ok, body, shape } and never rejects on a PostgREST
   // answer — only on a network failure, which the callers catch.
   //
-  // THE FALLBACK. Until the migration adds user_agent / sec_fetch / is_bot,
-  // PostgREST refuses the full row with PGRST204 ("could not find the column
-  // … in the schema cache") — and for a while after it is applied too, until
-  // the schema cache reloads. Either way the click is retried ONCE in the
-  // shape the table has always taken, so the gap between deploy and
-  // migration costs nothing but the three new fields on those rows. Only
-  // PGRST204 triggers it: any other refusal (a bad id, a constraint) would
-  // fail the legacy shape identically and is reported as what it is.
+  // THE FALLBACK IS A LADDER. PGRST204 ("could not find the column … in the
+  // schema cache") means the row named a column the table (or PostgREST's
+  // cache) does not have, and each rung retries with the newest columns
+  // dropped: full (everything, source/section included) → bot (the #176
+  // client columns, no source/section — the shape every non-field-note
+  // click sends, since fullRow only differs when s/loc arrived) → legacy
+  // (target + referrer, the shape the table has always taken). A rung is
+  // skipped when its row would be identical to the one that just failed, so
+  // an ordinary click still makes at most two attempts, exactly as before.
+  // Only PGRST204 descends: any other refusal (a bad id, a constraint)
+  // would fail every shape identically and is reported as what it is.
   const insert = async () => {
-    const first = await post(fullRow);
-    if (first.ok) return { status: first.status, ok: true, body: "", shape: "full" };
-    const firstBody = (await first.text()).slice(0, 220);
-    if (!firstBody.includes("PGRST204")) {
-      return { status: first.status, ok: false, body: firstBody, shape: "full" };
+    const attempts = [["full", fullRow]];
+    if (fullRow !== botRow) attempts.push(["bot", botRow]);
+    if (botRow !== legacyRow) attempts.push(["legacy", legacyRow]);
+    let last = { status: 0, ok: false, body: "no attempt", shape: "none" };
+    for (const [shape, row] of attempts) {
+      const res = await post(row);
+      if (res.ok) return { status: res.status, ok: true, body: "", shape };
+      const body = (await res.text()).slice(0, 220);
+      last = { status: res.status, ok: false, body, shape };
+      if (!body.includes("PGRST204")) return last;
     }
-    const second = await post(legacyRow);
-    const body = second.ok ? "" : (await second.text()).slice(0, 220);
-    return { status: second.status, ok: second.ok, body, shape: "legacy" };
+    return last;
   };
 
   // DEBUG PATH, request-header gated so no normal click can reach it.
@@ -326,9 +357,11 @@ export default async (request, context) => {
     }
     headers.set("x-go-log", "debug");
     headers.set("x-go-insert-status", status);
-    // full = the three client columns were written; legacy = the table does
-    // not have them yet (or PostgREST's cache does not), and the click was
-    // written without them; none = no insert got as far as an answer.
+    // full = every column was written, source/section included when sent;
+    // bot = the section columns do not exist yet (or PostgREST's cache does
+    // not know them) and the click was written with the client columns
+    // only; legacy = the client columns are missing too; none = no insert
+    // got as far as an answer.
     headers.set("x-go-insert-shape", shape);
     if (body) headers.set("x-go-insert-body", body.replace(/[\r\n]+/g, " "));
     headers.set("x-go-key-len", String(serviceKey.length));
