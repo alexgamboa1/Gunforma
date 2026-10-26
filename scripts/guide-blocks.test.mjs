@@ -134,8 +134,10 @@ function catalog(n, path) {
   if (path.startsWith('products?')) return json(inList(path, 'slug').map((s) => PRODUCTS[s]).filter(Boolean));
   if (path.startsWith('guns?')) return json(inList(path, 'slug').map((s) => GUNS[s]).filter(Boolean));
   if (path.startsWith('optic_specs?product_id=in.')) return json([
-    { product_id: 'P1', dot_size_moa: 2, reticle: '2 MOA dot', window_size: '0.58x0.77 in', battery_type: 'CR1632', battery_life: '50,000 hours', enclosed_emitter: false, housing_material: '7075 Aluminum' },
-    { product_id: 'P2', dot_size_moa: 2, reticle: null, window_size: '0.63x0.91 in', battery_type: 'CR1632', battery_life: null, enclosed_emitter: false, housing_material: null },
+    { product_id: 'P1', dot_size_moa: 2, reticle: '2 MOA dot', window_size: '0.58x0.77 in', battery_type: 'CR1632', battery_life: '50,000 hours', enclosed_emitter: false, housing_material: '7075 Aluminum',
+      footprint: { common_name: 'Holosun K-Series / Modified RMSc', slug: 'holosun-k' } },
+    { product_id: 'P2', dot_size_moa: 2, reticle: null, window_size: '0.63x0.91 in', battery_type: 'CR1632', battery_life: null, enclosed_emitter: false, housing_material: null,
+      footprint: { common_name: 'Trijicon RMR', slug: 'rmr' } },
   ]);
   if (path.startsWith('magazine_specs?product_id=in.')) return json([
     { product_id: 'P3', capacity: 17, caliber: '9mm', mag_style: 'Extended', body_material: null },
@@ -237,7 +239,9 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
 
   // the compare table: declared columns, — for null and for a missing
   // price, the footnote, the price linked through /go/
-  assert.ok(h.includes('<th>Part</th><th>Dot Size</th><th>Window Size</th><th>Battery Life</th><th>Price today</th>'));
+  assert.ok(h.includes('<th>Part</th><th>Dot Size</th><th>Window Size</th><th>Battery Life</th><th>Footprint</th><th>Price today</th>'));
+  assert.ok(h.includes('<td>Trijicon RMR</td>') && h.includes('<td>Holosun K-Series / Modified RMSc</td>'),
+    'the footprint lookup renders its common name, never the uuid');
   assert.ok(h.includes('<td>&mdash;</td>'), 'a null cell is —');
   assert.ok(h.includes('<td class="t-price">&mdash;</td>'), 'no live price is —, never MSRP');
   assert.ok(h.includes('&mdash; = no live retailer price'));
