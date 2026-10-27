@@ -50,8 +50,10 @@ NOTHING until the creator signs in themselves.
 
 4. **They open `gunforma-creator.html?t=…`** and see their page: handle,
    bio, links, builds with photos and parts. Three ways out:
-   - **Claim** — they sign in (Google on the page, or an email account made
-     on the signup page) and accept the terms. One database transaction
+   - **Claim** — they sign in on the page itself (Google one-click, or the
+     inline email form: create an account or sign in, Turnstile-gated; the
+     confirmation link lands back on the invite page, signed in) and accept
+     the terms. One database transaction
      (`claim_creator_invite`) gives their profile the handle + bio + links
      (never overwriting anything they already set), stamps their consent on
      the builds, and flips the builds to `approved` under their account.
@@ -94,9 +96,16 @@ NOTHING until the creator signs in themselves.
 - A **declined** invite keeps the handle held forever (anti-impersonation).
   Releasing it is a deliberate act: `--revoke <handle>`.
 - `--new-link` **refuses a declined invite.** They said no.
-- The email-and-password path is two steps (create account on the signup
-  page, reopen the invite link). Google is the one-click path. If creators
-  stumble here, inline email signup on the creator page is the next change.
+- The email-and-password path lives on the invite page itself since #214/
+  #215 (the signup-page detour silently lost the founder's own claim in
+  rehearsal): inline signup whose confirmation link returns to the page,
+  inline sign-in for an existing account, the token in localStorage so a
+  new tab still has it, and an explicit "nothing is claimed yet" state.
+  An existing confirmed email that tries to sign UP is detected by the
+  empty-identities fake success and routed to sign-in (#215); a stale
+  "confirm your email" banner offers a sign-in exit, and the resend button
+  never claims mail it cannot prove (#216). Google remains the one-click
+  path.
 
 ## Deploy / config (one-time)
 
