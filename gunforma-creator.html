@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Your page on Gunforma</title>
+<meta name="description" content="A Gunforma creator page, waiting to be claimed." />
+<meta name="robots" content="noindex, nofollow" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* Private creator preview + claim page. Styling follows gunforma-claim.html:
+   dark hero strip, white card, same tokens. No shared nav (viewer is usually
+   anonymous and this page should feel like a private letter, not the site). */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
+.nav-note { font-size: 11px; color: #888780; letter-spacing: 0.08em; text-transform: uppercase; }
+
+.hero-strip { background: #0e0f11; padding: 40px 28px 48px; text-align: center; }
+.hero-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 10px; }
+.hero-title { font-size: 26px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; margin-bottom: 8px; }
+.hero-sub { font-size: 13px; color: #888780; line-height: 1.6; max-width: 480px; margin: 0 auto; }
+
+.card-wrap { display: flex; justify-content: center; padding: 0 20px 60px; margin-top: -24px; flex: 1; }
+.card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; padding: 28px; width: 100%; max-width: 560px; box-shadow: 0 4px 24px rgba(0,0,0,0.06); }
+
+.gate { display: flex; align-items: center; justify-content: center; min-height: 200px; font-size: 12px; color: #888; }
+
+/* Profile header inside the card */
+.cr-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+.cr-avatar { width: 52px; height: 52px; border-radius: 50%; background: #0e0f11; color: #e8e6e1; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 20px; flex-shrink: 0; }
+.cr-handle { font-size: 18px; font-weight: 700; }
+.cr-name { font-size: 12px; color: #666; margin-top: 2px; }
+.cr-bio { font-size: 13px; color: #444; line-height: 1.6; margin-bottom: 12px; }
+.cr-links { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+.cr-link { font-size: 11px; font-weight: 700; color: #2a7bbd; text-decoration: none; border: 0.5px solid #a7cdec; border-radius: 999px; padding: 5px 12px; }
+.cr-link:hover { background: #2a7bbd; color: #fff; border-color: #2a7bbd; }
+
+.cr-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #999; margin: 0 0 10px; }
+
+.build-preview { border: 0.5px solid #e5e5e5; border-radius: 8px; overflow: hidden; margin-bottom: 14px; background: #fafaf8; }
+.build-preview-photo { aspect-ratio: 16 / 10; background: #efece5; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.build-preview-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.build-preview-photo-fallback { font-size: 10px; color: #b8b5ac; letter-spacing: 0.08em; text-transform: uppercase; }
+.build-preview-body { padding: 14px 16px 16px; }
+.build-preview-name { font-size: 15px; font-weight: 700; line-height: 1.25; }
+.build-preview-platform { font-size: 11px; color: #666; margin-top: 2px; }
+.build-preview-parts { font-size: 11px; color: #666; line-height: 1.7; margin-top: 8px; }
+.build-preview-parts strong { color: #444; }
+
+.note-box { background: #fafaf8; border: 0.5px solid #e5e2d8; border-radius: 6px; padding: 11px 14px; font-size: 12px; color: #666; line-height: 1.6; margin: 18px 0; }
+.note-box strong { color: #1a1a1a; }
+
+.checkbox-row { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+.checkbox-row input { margin-top: 3px; accent-color: #4a9edd; flex-shrink: 0; cursor: pointer; }
+.checkbox-row label { font-size: 12px; color: #666; line-height: 1.6; cursor: pointer; }
+.checkbox-row a { color: #2a7bbd; text-decoration: none; }
+.checkbox-row a:hover { text-decoration: underline; }
+
+.btn-submit { width: 100%; font-size: 13px; font-weight: 700; background: #4a9edd; color: #fff; border: none; padding: 14px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; letter-spacing: 0.04em; transition: background .15s ease; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.btn-submit:hover:not(:disabled) { background: #2a7bbd; }
+.btn-submit:disabled { background: #d9e6f2; color: #6a97be; cursor: not-allowed; }
+.btn-google { width: 100%; font-size: 13px; font-weight: 700; background: #fff; color: #1a1a1a; border: 0.5px solid #d5d5d5; padding: 13px 16px; border-radius: 6px; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 10px; }
+.btn-google:hover { background: #fafaf8; }
+.btn-decline { width: 100%; font-size: 12px; font-weight: 600; background: none; color: #888; border: none; padding: 12px; cursor: pointer; font-family: inherit; margin-top: 6px; }
+.btn-decline:hover { color: #e25c3a; text-decoration: underline; }
+
+.spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; display: none; }
+.spinner.show { display: block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.global-error { background: #fde8e2; border: 0.5px solid #f9c4b6; border-radius: 6px; padding: 11px 14px; font-size: 12px; color: #9b1c1c; margin-bottom: 16px; line-height: 1.5; display: none; }
+.global-error.show { display: block; }
+
+.signed-in-as { font-size: 11px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; line-height: 1.5; }
+.signed-in-as strong { color: #1a1a1a; font-weight: 700; }
+.signed-in-as button { color: #2a7bbd; font-weight: 600; background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; font-size: 11px; }
+
+.state-center { text-align: center; padding: 12px 0; }
+.state-icon { font-size: 32px; margin-bottom: 12px; color: #999; }
+.state-icon.ok { color: #22a06b; }
+.state-title { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+.state-sub { font-size: 13px; color: #666; line-height: 1.7; margin-bottom: 16px; }
+
+.card-footer { text-align: center; font-size: 12px; color: #888; margin-top: 18px; line-height: 1.6; }
+.card-footer a { color: #2a7bbd; font-weight: 600; text-decoration: none; }
+.card-footer a:hover { text-decoration: underline; }
+
+@media (max-width: 480px) {
+  .card { padding: 22px 18px; }
+  .hero-strip { padding: 32px 20px 40px; }
+  .hero-title { font-size: 22px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
+  <span class="nav-note">Private preview</span>
+</nav>
+
+<div class="hero-strip">
+  <div class="hero-eyebrow" id="hero-eyebrow">Only you can see this</div>
+  <div class="hero-title" id="hero-title">Your page on Gunforma</div>
+  <p class="hero-sub" id="hero-sub">We built it. It goes live only if you want it to.</p>
+</div>
+
+<div class="card-wrap">
+  <div class="card" id="card">
+    <div class="gate" id="gate">Opening your preview…</div>
+  </div>
+</div>
+
+<script src="js/site-url.js"></script>
+<script src="js/supabase-client.js"></script>
+<script>
+// gunforma-creator.html — the private preview + claim page for creator invites.
+// -----------------------------------------------------------------------------
+// Reached ONLY from a DM'd link: ?t=<raw 30-day token>. The token is the
+// credential; everything renders through the creator-claim Edge Function,
+// which is the only reader of the hidden drafts. No token, wrong token,
+// expired token: a generic dead end that confirms nothing.
+//
+// Sign-in for the claim happens ON this page (Google OAuth, redirecting back
+// here). The token survives the OAuth round trip in sessionStorage, because
+// the Supabase redirect allowlist carries the bare page URL, not every
+// token-bearing variant. The shared client's detectSessionInUrl picks the
+// returned hash session up automatically.
+//
+// This page deliberately has NO analytics tag (the invite token is in the
+// query string — same grounds as gunforma-claim.html) and NO session
+// watchdog redirect (an anonymous viewer is the normal case).
+// -----------------------------------------------------------------------------
+var sb = window.sb;
+var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+// The version of the agreement the Claim button accepts — keep in step with
+// builder-agreement.html's AGREEMENT_VERSION.
+var AGREEMENT_VERSION = 'v1-2026-01';
+var TOKEN_KEY = 'gf_creator_token';   // sessionStorage, for the OAuth round trip
+
+var TOKEN = null;
+var PREVIEW = null;        // the creator_invite_preview payload
+var SESSION_EMAIL = null;  // set when a session exists
+
+function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+
+// ============================================================
+// INIT — recover the token (URL first, sessionStorage after OAuth),
+// scrub it from the address bar, preview it.
+// ============================================================
+(async function init() {
+  var search = new URLSearchParams(window.location.search || '');
+  TOKEN = (search.get('t') || '').trim() || null;
+  if (TOKEN) {
+    try { sessionStorage.setItem(TOKEN_KEY, TOKEN); } catch (e) { /* private mode: the URL keeps working */ }
+  } else {
+    try { TOKEN = sessionStorage.getItem(TOKEN_KEY) || null; } catch (e) { TOKEN = null; }
+  }
+  if (!TOKEN) return showDeadEnd();
+
+  // Don't leave the credential sitting in the address bar / history when
+  // storage can hold it instead. (If storage failed, keep the URL as-is.)
+  var stored = null;
+  try { stored = sessionStorage.getItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  if (stored === TOKEN && search.get('t')) history.replaceState({}, '', window.location.pathname);
+
+  // Who's signed in, if anyone (the OAuth hash session is consumed by the
+  // shared client; getSession waits for it).
+  try {
+    var s = await sb.auth.getSession();
+    if (s && s.data && s.data.session) SESSION_EMAIL = s.data.session.user.email || '(signed in)';
+  } catch (e) { /* anonymous is fine */ }
+
+  var res;
+  try {
+    res = await sb.functions.invoke('creator-claim', { body: { action: 'preview', token: TOKEN } });
+  } catch (e) {
+    return showDeadEnd();
+  }
+  if (res.error) {
+    var code = '';
+    try { var b = await res.error.context.json(); code = (b && b.error) || ''; } catch (e) { /* ignore */ }
+    if (code === 'already_claimed') return showAlreadyClaimed();
+    if (code === 'declined')        return showDeclined(false);
+    if (code === 'expired')         return showExpired();
+    return showDeadEnd();
+  }
+  PREVIEW = res.data;
+  renderPreview();
+})();
+
+// ============================================================
+// RENDER — the preview: their page, exactly as it would look
+// ============================================================
+function renderPreview() {
+  var p = PREVIEW;
+  document.getElementById('hero-eyebrow').textContent = 'Only you can see this';
+  document.getElementById('hero-title').textContent = '@' + p.handle + ' — this page is yours if you want it';
+  document.getElementById('hero-sub').textContent = 'We put your builds on Gunforma so people can see every part without asking. Nothing is public yet — it goes live only if you claim it.';
+
+  var buildsHtml = (p.builds || []).map(function(b) {
+    var hero = (b.photos || []).length ? (b.photos[0].thumb || b.photos[0].path) : null;
+    var parts = (b.parts || []).map(function(x) {
+      return '<strong>' + escH([x.brand, x.name].filter(Boolean).join(' ')) + '</strong>';
+    }).join(' · ');
+    return '<div class="build-preview">' +
+      '<div class="build-preview-photo">' +
+        (hero ? '<img src="' + escH(photoUrl(hero)) + '" alt="' + escH(b.name) + '" loading="lazy"/>'
+              : '<div class="build-preview-photo-fallback">No photo yet</div>') +
+      '</div>' +
+      '<div class="build-preview-body">' +
+        '<div class="build-preview-name">' + escH(b.name) + '</div>' +
+        (b.platform ? '<div class="build-preview-platform">' + escH(b.platform) + '</div>' : '') +
+        (parts ? '<div class="build-preview-parts">' + parts + '</div>' : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  var linksHtml = '';
+  if (p.instagram_url) linksHtml += '<a class="cr-link" href="' + escH(p.instagram_url) + '" target="_blank" rel="noopener">Instagram</a>';
+  if (p.youtube_url)   linksHtml += '<a class="cr-link" href="' + escH(p.youtube_url) + '" target="_blank" rel="noopener">YouTube</a>';
+
+  var authHtml;
+  if (SESSION_EMAIL) {
+    authHtml =
+      '<div class="signed-in-as">Claiming as <strong>' + escH(SESSION_EMAIL) + '</strong> — <button onclick="switchAccount()">not you?</button></div>' +
+      '<div class="checkbox-row">' +
+        '<input type="checkbox" id="consent" onchange="refreshClaimState()"/>' +
+        '<label for="consent">I agree to Gunforma\'s <a href="terms-of-service.html" target="_blank" rel="noopener">Terms of Service</a> and <a href="builder-agreement.html" target="_blank" rel="noopener">Builder Agreement</a>, these are my builds, and they may be displayed publicly under my name.</label>' +
+      '</div>' +
+      '<button class="btn-submit" id="claim-btn" onclick="handleClaim()" disabled>' +
+        '<div class="spinner" id="spinner"></div><span id="claim-btn-text">Claim @' + escH(p.handle) + ' →</span>' +
+      '</button>';
+  } else {
+    authHtml =
+      '<button class="btn-google" onclick="signInWithGoogle()">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.16-3.16A11 11 0 0 0 2.18 7.06L5.84 9.9C6.71 7.31 9.14 5.38 12 5.38z"/></svg>' +
+        'Continue with Google to claim it' +
+      '</button>' +
+      '<div class="card-footer">Prefer email and password? <a href="gunforma-signup.html" target="_blank" rel="noopener">Create an account</a>, then open your invite link again.</div>';
+  }
+
+  document.getElementById('card').innerHTML =
+    '<div class="global-error" id="global-error"></div>' +
+    '<div class="cr-head">' +
+      '<div class="cr-avatar">' + escH((p.handle || '?').charAt(0).toUpperCase()) + '</div>' +
+      '<div><div class="cr-handle">@' + escH(p.handle) + '</div>' +
+      (p.display_name ? '<div class="cr-name">' + escH(p.display_name) + '</div>' : '') + '</div>' +
+    '</div>' +
+    (p.bio ? '<div class="cr-bio">' + escH(p.bio) + '</div>' : '') +
+    (linksHtml ? '<div class="cr-links">' + linksHtml + '</div>' : '') +
+    '<div class="cr-section-label">' + (p.builds || []).length + ' build' + ((p.builds || []).length === 1 ? '' : 's') + ', ready to go live under your name</div>' +
+    buildsHtml +
+    '<div class="note-box"><strong>Nothing is public yet.</strong> Claim it and this becomes gunforma.com/u/' + escH(p.handle) + ' — your builds, every part linked, under your name. Spot a wrong part? Claim it and tell us; we\'ll fix it. Not interested? One click below deletes everything we drafted.</div>' +
+    authHtml +
+    '<button class="btn-decline" onclick="askDecline()">Not interested — delete this page</button>';
+}
+
+// ============================================================
+// CLAIM
+// ============================================================
+function refreshClaimState() {
+  var btn = document.getElementById('claim-btn');
+  if (btn) btn.disabled = !document.getElementById('consent').checked;
+}
+
+async function handleClaim() {
+  showError('');
+  var btn = document.getElementById('claim-btn');
+  var sp  = document.getElementById('spinner');
+  var tx  = document.getElementById('claim-btn-text');
+  btn.disabled = true; sp.classList.add('show'); tx.textContent = 'Claiming…';
+
+  var res;
+  try {
+    res = await sb.functions.invoke('creator-claim', {
+      body: { action: 'claim', token: TOKEN, agreement_version: AGREEMENT_VERSION },
+    });
+  } catch (e) { res = { error: e }; }
+
+  if (res.error) {
+    var code = '';
+    try { var b = await res.error.context.json(); code = (b && b.error) || ''; } catch (e) { /* ignore */ }
+    sp.classList.remove('show'); tx.textContent = 'Claim @' + PREVIEW.handle + ' →'; btn.disabled = false;
+    if (code === 'not_signed_in')   { showError('Your sign-in expired. Sign in again and retry.'); return; }
+    if (code === 'already_claimed') return showAlreadyClaimed();
+    if (code === 'expired')         return showExpired();
+    if (code === 'handle_taken')    { showError('Someone just took this username. Message us and we\'ll sort it out.'); return; }
+    if (code === 'builds_changed')  { showError('Your builds changed on our side since this link was made. Message us and we\'ll send a fresh link.'); return; }
+    showError('That didn\'t go through. Try again, or message us on Instagram.');
+    return;
+  }
+
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  var handle = (res.data && res.data.handle) || PREVIEW.handle;
+  document.getElementById('hero-eyebrow').textContent = 'Live';
+  document.getElementById('hero-title').textContent = 'Welcome to Gunforma, @' + handle;
+  document.getElementById('hero-sub').textContent = '';
+  document.getElementById('card').innerHTML =
+    '<div class="state-center">' +
+      '<div class="state-icon ok">✓</div>' +
+      '<div class="state-title">Your page is live</div>' +
+      '<div class="state-sub">Your builds are public under your name, every part linked. Your profile has your bio and links — change anything from your profile page.</div>' +
+      '<a class="btn-submit" href="/u/' + escH(handle) + '">See your page →</a>' +
+    '</div>';
+}
+
+// ============================================================
+// AUTH — Google round trip, token parked in sessionStorage
+// ============================================================
+async function signInWithGoogle() {
+  showError('');
+  try { sessionStorage.setItem(TOKEN_KEY, TOKEN); } catch (e) {
+    showError('Your browser is blocking storage, which the sign-in round trip needs. Open this link outside private mode, or create an account on the signup page and come back.');
+    return;
+  }
+  var res = await sb.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo: siteBaseUrl() + '/gunforma-creator.html' },
+  });
+  if (res && res.error) showError(res.error.message);
+}
+
+async function switchAccount() {
+  try { sessionStorage.setItem(TOKEN_KEY, TOKEN); } catch (e) { /* ignore */ }
+  await sb.auth.signOut();
+  window.location.reload();
+}
+
+// ============================================================
+// DECLINE — inline confirm, then gone
+// ============================================================
+function askDecline() {
+  document.getElementById('card').innerHTML =
+    '<div class="global-error" id="global-error"></div>' +
+    '<div class="state-center">' +
+      '<div class="state-title">Delete this page?</div>' +
+      '<div class="state-sub">Everything we drafted — the builds, the photos, the bio — is deleted. Your handle stays reserved so nobody else can pose as you here. No account is created, and we won\'t send this link again.</div>' +
+      '<button class="btn-submit" id="decline-btn" onclick="handleDecline()" style="background:#e25c3a;">Yes, delete it</button>' +
+      '<button class="btn-decline" onclick="renderPreview()">Go back</button>' +
+    '</div>';
+}
+
+async function handleDecline() {
+  var btn = document.getElementById('decline-btn');
+  btn.disabled = true; btn.textContent = 'Deleting…';
+  var res;
+  try {
+    res = await sb.functions.invoke('creator-claim', { body: { action: 'decline', token: TOKEN } });
+  } catch (e) { res = { error: e }; }
+  if (res.error) {
+    btn.disabled = false; btn.textContent = 'Yes, delete it';
+    showError('That didn\'t go through. Try again, or just ignore this link — nothing goes live without you.');
+    return;
+  }
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  showDeclined(true);
+}
+
+// ============================================================
+// TERMINAL STATES
+// ============================================================
+function setHero(eyebrow, title, sub) {
+  document.getElementById('hero-eyebrow').textContent = eyebrow;
+  document.getElementById('hero-title').textContent = title;
+  document.getElementById('hero-sub').textContent = sub;
+}
+
+function showDeadEnd() {
+  setHero('Gunforma', 'Nothing here', '');
+  document.getElementById('card').innerHTML =
+    '<div class="state-center">' +
+      '<div class="state-icon">✖</div>' +
+      '<div class="state-title">This link doesn\'t work</div>' +
+      '<div class="state-sub">It may have been mistyped or already used. If someone from Gunforma sent it to you, reply to that message and we\'ll send a fresh one.</div>' +
+      '<a class="btn-submit" href="/">See Gunforma →</a>' +
+    '</div>';
+}
+
+function showExpired() {
+  setHero('Gunforma', 'This invite expired', '');
+  document.getElementById('card').innerHTML =
+    '<div class="state-center">' +
+      '<div class="state-icon">✖</div>' +
+      '<div class="state-title">This invite link has expired</div>' +
+      '<div class="state-sub">Links last 30 days. Nothing was published — your page is still private. Reply to the message that brought you here and we\'ll send a fresh link.</div>' +
+      '<a class="btn-submit" href="/">See Gunforma →</a>' +
+    '</div>';
+}
+
+function showAlreadyClaimed() {
+  setHero('Gunforma', 'Already claimed', '');
+  document.getElementById('card').innerHTML =
+    '<div class="state-center">' +
+      '<div class="state-icon ok">✓</div>' +
+      '<div class="state-title">This page is already claimed</div>' +
+      '<div class="state-sub">If that was you, sign in to manage it. If it wasn\'t, message us on Instagram right away.</div>' +
+      '<a class="btn-submit" href="gunforma-signin.html">Sign in →</a>' +
+    '</div>';
+}
+
+function showDeclined(justNow) {
+  setHero('Gunforma', justNow ? 'Done — it\'s gone' : 'This page was deleted', '');
+  document.getElementById('card').innerHTML =
+    '<div class="state-center">' +
+      '<div class="state-icon ok">✓</div>' +
+      '<div class="state-title">' + (justNow ? 'Everything we drafted is deleted' : 'This page was already deleted') + '</div>' +
+      '<div class="state-sub">No account was created and nothing was published. Your handle stays reserved so nobody can pose as you here. If you ever change your mind, you know where to find us.</div>' +
+      '<a class="btn-submit" href="/">See Gunforma →</a>' +
+    '</div>';
+}
+
+function showError(msg) {
+  var el = document.getElementById('global-error');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.toggle('show', !!msg);
+}
+</script>
+</body>
+</html>

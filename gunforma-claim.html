@@ -437,6 +437,14 @@ function onUsernameInput() {
       .eq('username', val)
       .maybeSingle();
     var takenBySomeoneElse = !!(res.data && res.data.id !== CURRENT_USER.id);
+    // A name HELD for a creator invite reads as taken too — the profiles
+    // trigger would refuse it at submit with the same 23505.
+    if (!takenBySomeoneElse) {
+      try {
+        var held = await sb.rpc('username_is_held', { p_username: val });
+        if (held.data === true) takenBySomeoneElse = true;
+      } catch (e) { /* the trigger still refuses at submit */ }
+    }
     if (takenBySomeoneElse) {
       status.textContent = 'Taken';
       status.className = 'username-status taken';
