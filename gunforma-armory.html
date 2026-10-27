@@ -11,13 +11,11 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Armory — Gunforma</title>
 <link rel="canonical" href="https://gunforma.com/gunforma-armory.html" />
-<!-- Parked, not removed. The page still works and still answers on its own
-     URL — no 404, no redirect, no auth gate — but it is out of the nav and
-     out of sitemap.mjs, so noindex is what drops it from search cleanly
-     rather than leaving orphaned indexed URLs. Remove this line when the
-     Armory returns as Loadouts. See CLAUDE.md, "The Armory is parked". -->
+<!-- Still parked from search until the Gun Guides launch wires the nav back
+     up. Remove this line in the same PR that adds the nav links and the
+     sitemap entries. See CLAUDE.md, "The Armory is parked". -->
 <meta name="robots" content="noindex" />
-<meta name="description" content="Gunforma Armory — assemble a build from the parts catalog, save drafts, and remix curated guides." />
+<meta name="description" content="Gunforma Armory — spec a P365 build from the parts catalog. Pick a platform, then choose compatible parts in every section." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,303 +34,132 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nav-right { display: flex; align-items: center; gap: 14px; }
 .nav-btn { font-size: 11px; color: #ffffff; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
 .nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+.nav-profile { display: none; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; border: 0.5px solid #2a2b2e; color: #e8e6e1; }
+.nav-profile svg { width: 16px; height: 16px; }
+.nav-toggle { display: none; flex-direction: column; justify-content: center; gap: 4px; width: 34px; height: 34px; background: none; border: 0.5px solid #2a2b2e; border-radius: 4px; cursor: pointer; padding: 7px; }
+.nav-toggle span { display: block; height: 1.5px; background: #e8e6e1; border-radius: 2px; }
+.nav-menu { display: none; }
+@media (max-width: 760px) {
+  .nav-links { display: none; }
+  .nav-signin-inline { display: none; }
+  .nav-toggle { display: flex; }
+  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }
+  .nav-menu.open { display: flex; }
+  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
+  .nav-menu a.signout { color: #ffffff; }
+}
 
 /* PAGE HEADER */
-.page-header { max-width: 1400px; margin: 0 auto; padding: 28px 32px 0; }
+.page-header { max-width: 1240px; margin: 0 auto; padding: 28px 32px 0; }
 .page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
-.page-sub { font-size: 12.5px; color: #666; margin-top: 4px; }
-
-/* TABS */
-.tab-row { max-width: 1400px; margin: 18px auto 0; padding: 0 32px; display: flex; gap: 4px; border-bottom: 0.5px solid #e5e5e5; }
-.tab-btn { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-           padding: 10px 14px; background: transparent; border: none; cursor: pointer; color: #888;
-           border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: color 0.15s, border-color 0.15s; }
-.tab-btn:hover { color: #1a1a1a; }
-.tab-btn.active { color: #1a1a1a; border-bottom-color: #4a9edd; }
+.page-sub { font-size: 12.5px; color: #666; margin-top: 4px; max-width: 640px; }
 
 /* LAYOUT */
-.armory { max-width: 1400px; margin: 0 auto; padding: 22px 32px 64px; }
+.armory { max-width: 1240px; margin: 0 auto; padding: 22px 32px 64px; }
 .build-layout { display: grid; grid-template-columns: 1fr 320px; gap: 28px; align-items: start; }
-/* showDraftsList()/showBuilder() swap these two views with the hidden
-   attribute. [hidden] { display: none } is a user-agent rule, so the author
-   `display: grid` above wins and #builder-view stays on screen — "← All
-   builds" rendered the drafts list UNDERNEATH a still-visible builder.
-   #drafts-view has no class setting display, which is why only this half
-   broke. Specificity 0,1,1 beats the 0,1,0 above, including inside the
-   max-width:900px override (which only touches grid-template-columns). */
-.build-layout[hidden] { display: none; }
-.build-main { display: flex; flex-direction: column; gap: 16px; }
+.build-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .build-side { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 14px; }
+@media (max-width: 900px) {
+  .build-layout { grid-template-columns: 1fr; }
+  .build-side { position: static; }
+}
 
 /* CARD SURFACES */
 .card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 18px; }
 .card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #1a1a1a; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .card-hint { font-size: 11px; color: #999; font-weight: 500; letter-spacing: 0; text-transform: none; }
 
-/* PLATFORM PICKER */
+/* PLATFORM + MODEL */
 .platform-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .platform-btn { font-family: inherit; font-size: 13px; font-weight: 600; padding: 10px 14px; border: 0.5px solid #d5d3ca; background: #fff; color: #333; border-radius: 4px; cursor: pointer; transition: all 0.15s; }
 .platform-btn:hover { border-color: #4a9edd; color: #2a7bbd; }
 .platform-btn.active { border-color: #4a9edd; background: #eaf4fc; color: #1d6fb8; }
 .platform-note { font-size: 11.5px; color: #999; margin-top: 8px; }
+.model-row { margin-top: 12px; }
+.model-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+.model-note { font-size: 11.5px; color: #999; margin-top: 6px; }
 
-/* CATEGORY ACCORDION — mirrors parts-builder / post-build pattern */
-.category-block { border: 0.5px solid #e8e8e8; border-radius: 6px; overflow: hidden; background: #fff; transition: box-shadow 0.15s; }
-.category-block.open { box-shadow: 0 4px 16px rgba(0,0,0,0.06); border-color: #4a9edd; }
-.category-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; cursor: pointer; user-select: none; background: #fff; transition: background 0.15s; }
-.category-block.open .category-head { background: #0e0f11; }
-.category-name-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.category-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
-.category-block.open .category-name { color: #e8e6e1; }
-.category-added-count { font-size: 10px; background: #22a06b; color: #fff; padding: 2px 8px; border-radius: 20px; font-weight: 700; }
-.category-toggle { font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
-.category-block.open .category-toggle { color: #6fb4e8; border-color: #3a3b3e; background: rgba(255,255,255,0.06); }
+/* SELECT — one style for every dropdown on the page */
+.gf-select { width: 100%; font-family: inherit; font-size: 13px; color: #1a1a1a; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 9px 10px; cursor: pointer; }
+.gf-select:hover { border-color: #b9b6aa; }
+.gf-select:focus { outline: none; border-color: #4a9edd; }
+.gf-select:disabled { background: #f4f3ee; color: #999; cursor: default; }
 
-/* Parts already added to this category. A card each rather than a text chip:
-   the point of the strip is confirming the right product was picked, and a
-   name alone does not do that when a catalog carries four near-identical
-   compensators. Keeps the green "added" accent the chips had. */
-.selected-parts-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 16px; border-bottom: 0.5px solid #efece3; background: #fafaf8; }
-.selected-part { display: flex; align-items: center; gap: 10px; background: #fff; border: 0.5px solid #86cfad; border-radius: 6px; padding: 6px 8px; }
-/* 72x54 = 4:3, the same ratio as .part-card-photo, so a product shot is
-   framed identically whether it is in the grid or already picked. */
-.selected-part-thumb { flex-shrink: 0; width: 72px; height: 54px; background: #f4f3ee; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.selected-part-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; box-sizing: border-box; background: #fff; display: block; }
-.selected-part-thumb-label { font-size: 9px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; padding: 2px; }
-.selected-part-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.selected-part-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-.selected-part-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
-.selected-part-price { font-size: 12px; font-weight: 700; color: #1a1a1a; }
-.selected-part-variant { width: 100%; margin-top: 3px; font-family: inherit; font-size: 11px; color: #1a1a1a; background: #fff; border: 0.5px solid #e5e2d8; border-radius: 4px; padding: 4px 7px; box-sizing: border-box; }
-.selected-part-variant::placeholder { color: #b8b5ac; }
-.selected-part-variant:hover { border-color: #d5d3ca; }
-.selected-part-variant:focus { outline: none; border-color: #4a9edd; }
-.selected-part-price.na { color: #bbb; font-weight: 500; }
-.selected-part-pending { display: flex; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; color: #8a6d3b; }
-.selected-part-dot { width: 7px; height: 7px; border-radius: 50%; background: #f9b860; flex-shrink: 0; }
-.selected-part-remove { flex-shrink: 0; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; cursor: pointer; color: #888; font-size: 10.5px; font-weight: 700; padding: 5px 10px; font-family: inherit; transition: all 0.15s; }
-.selected-part-remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
+/* GROUP HEADINGS */
+.group-head { margin: 10px 2px 0; }
+.group-head-label { font-size: 11px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #888; }
+.group-head-blurb { font-size: 11.5px; color: #b0ada4; margin-top: 2px; }
 
-.picker-panel { display: none; background: #fafaf8; }
-.category-block.open .picker-panel { display: block; }
-.picker-section-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: #888; padding: 12px 16px 6px; display: flex; align-items: center; gap: 6px; }
-.picker-section-label.favs { color: #b06a1a; }
-.picker-section-label .fav-icon { color: #d85a30; font-size: 12px; }
+/* SECTION CARDS */
+.section-card { background: #fff; border: 0.5px solid #e8e8e8; border-radius: 6px; padding: 14px 16px; }
+.section-card.has-pick { border-color: #86cfad; }
+.section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.section-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
+.section-count { font-size: 11px; color: #999; font-weight: 500; white-space: nowrap; }
+.slot + .slot { margin-top: 12px; padding-top: 12px; border-top: 0.5px solid #f0efe9; }
+.slot-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
 
-.part-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; padding: 8px 16px 16px; }
-.part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s; position: relative; }
-.part-card:hover { border-color: #cfcdc4; }
-.part-card.added { border-color: #22a06b; background: #f6fdf9; }
-.part-card.favorited { border-color: #d85a30; }
-.part-card.favorited.added { border-color: #22a06b; }
-.part-card-photo { position: relative; aspect-ratio: 4/3; background: #f4f3ee; overflow: hidden; }
-/* contain, not cover. These are product shots at the manufacturer's ratio —
-   mostly ~16:9 — and cover in a 4:3 box scales them to fill by height, which
-   pushes the width 33% past the box and slices 12.5% off each end. On a
-   barrel or a compensator that is both ends of the part. contain fits the
-   whole thing; the white keeps it from floating on the grey placeholder
-   colour, which is there for the no-photo state. */
-.part-card-photo img { width: 100%; height: 100%; object-fit: contain; padding: 6px; box-sizing: border-box; background: #fff; display: block; }
-.part-card-nophoto { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 10px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
-.part-card-fav-badge { position: absolute; top: 6px; right: 6px; font-size: 10px; color: #d85a30; background: rgba(255,255,255,0.94); border: 0.5px solid #d85a30; padding: 2px 6px; border-radius: 3px; font-weight: 700; letter-spacing: 0.04em; }
-.part-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; flex: 1; }
-.part-card-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
-.part-card-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
-.part-card-price { font-size: 12.5px; font-weight: 700; color: #1a1a1a; }
-.part-card-price.na { color: #bbb; font-weight: 500; }
-/* Whole-card link — see the matching block in gunforma-parts-catalog.html.
-   The anchor sits on the product name for real anchor text and stretches over
-   the card via ::after. Not an <a> around the card: the affiliate hero emits
-   its own <a>, and nested anchors get split by the HTML parser. Add/Remove
-   and the affiliate row sit above the overlay on z-index. */
-.part-card-link { color: inherit; text-decoration: none; }
-.part-card-link:hover { text-decoration: underline; }
-.part-card-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
-.part-card-aff { position: relative; z-index: 2; }
-.part-card-actions { display: flex; gap: 6px; padding: 8px 12px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; margin-top: auto; position: relative; z-index: 2; }
-.part-card-btn { flex: 1; font-family: inherit; font-size: 11px; font-weight: 700; padding: 6px 8px; border-radius: 4px; cursor: pointer; border: 0.5px solid; text-align: center; text-decoration: none; letter-spacing: 0.02em; transition: all 0.15s; }
-.part-card-btn.add { background: #4a9edd; color: #fff; border-color: #4a9edd; }
-.part-card-btn.add:hover { background: #2a7bbd; }
-.part-card-btn.remove { background: #fff; color: #888; border-color: #d5d3ca; }
-.part-card-btn.remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
-.part-card-btn.buy { background: #fff; color: #333; border-color: #d5d3ca; }
-.part-card-btn.buy:hover { background: #fafaf8; color: #1a1a1a; border-color: #4a9edd; }
+/* PICKED PART */
+.picked { display: flex; align-items: flex-start; gap: 12px; background: #f6fdf9; border: 0.5px solid #86cfad; border-radius: 6px; padding: 10px; }
+.picked-thumb { flex-shrink: 0; width: 84px; height: 63px; background: #fff; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.picked-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; background: #fff; display: block; }
+.picked-thumb .swatch-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.picked-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.picked-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.picked-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
+.picked-price { font-size: 12.5px; font-weight: 700; color: #1a1a1a; }
+.picked-price.na { color: #bbb; font-weight: 500; }
+.picked-variant-row { margin-top: 2px; }
+.picked-variant-row .gf-select { font-size: 12px; padding: 6px 8px; }
+.picked-remove { flex-shrink: 0; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; cursor: pointer; color: #888; font-size: 10.5px; font-weight: 700; padding: 5px 10px; font-family: inherit; transition: all 0.15s; }
+.picked-remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
 
-/* Affiliate row — same class set as build-detail so buy-link markup
-   stays visually consistent across the site. Compact form only on this
-   page — the full expanded variant list lives in parts-catalog's
-   detail panel. */
-.part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 0.5px solid #eee; background: #fafaf8; border-radius: 4px; margin-top: 4px; }
-.part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.part-affiliate-price { font-size: 13px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
-.part-affiliate-partner { font-size: 10.5px; color: #888; }
-.part-affiliate-partner strong { color: #444; font-weight: 600; }
-.part-affiliate-stock { display: inline-block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
-.part-affiliate-stock.in { color: #2f7a3d; background: #eaf5ec; border: 0.5px solid #b7dcbe; }
-.part-affiliate-stock.out { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
-.part-affiliate-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; padding: 6px 10px; border-radius: 4px; text-decoration: none; transition: background 0.15s; letter-spacing: 0.02em; }
-.part-affiliate-btn:hover { background: #1e63a0; }
-.part-affiliate-range { font-size: 11px; color: #666; font-weight: 500; margin-left: 6px; }
-/* Guide-context adjustment — smaller since guide part rows are already dense */
-.guide-parts-list .part-affiliate { padding: 6px 8px; margin-top: 0; }
-.guide-parts-list .part-affiliate-price { font-size: 12px; }
-.guide-parts-list .part-affiliate-btn { font-size: 10px; padding: 5px 9px; }
+/* BANNERS */
+.note-banner { display: flex; gap: 8px; align-items: flex-start; font-size: 11.5px; line-height: 1.45; border-radius: 4px; padding: 8px 10px; margin-top: 8px; }
+.note-banner.info { background: #eaf4fc; border: 0.5px solid #c3def4; color: #1d5f94; }
+.note-banner.warn { background: #fdf3e2; border: 0.5px solid #f3d9a8; color: #8a6d3b; }
+.note-banner.muted { background: #f4f3ee; border: 0.5px solid #e5e2d8; color: #777; }
+.slot-empty { font-size: 12px; color: #999; background: #fafaf8; border: 0.5px dashed #d5d3ca; border-radius: 4px; padding: 10px; }
 
-/* In-card affiliate row — stacked, because the side-by-side layout has no
-   room here. Scoped to .part-card on purpose: .guide-parts-list above and
-   gunforma-build-detail.html both render the same markup in a container wide
-   enough for price-and-button on one line, and neither should change. Same
-   approach gunforma-parts-catalog.html takes with its own
-   `.part-card .part-affiliate-btn` override.
-   
-   Why it is worst on a big monitor, which is the counterintuitive part:
-   .part-grid is auto-fill minmax(200px, 1fr), so a WIDER window packs MORE
-   columns and each one gets NARROWER. The button is flex-shrink: 0 and the
-   label is as long as the partner name ("Buy at OpticsPlanet ↗" = 143.6px),
-   so it takes what it needs and the price lives on the remainder. Measured
-   before this rule, same product throughout: at a 1425px layout viewport,
-   4 columns, 232.5px card, 143.6px button, 32.9px left for the price — which
-   put "From" and "$65.49" on separate lines and made the row 88px tall. At
-   390px, 1 column, the same button leaves 124.4px and the row is 47px.
-   
-   Stacking removes the competition: the price line gets the full inner width
-   at every viewport, so the button length stops being the price's problem. */
-.part-card .part-affiliate { flex-direction: column; align-items: stretch; gap: 6px; }
-/* The range moves up beside the price instead of onto its own line — it is a
-   continuation of the same number, and the row has the width for it now. */
-.part-card .part-affiliate-info { flex-direction: row; align-items: baseline; justify-content: center; flex-wrap: wrap; gap: 0 6px; }
-.part-card .part-affiliate-range { margin-left: 0; }
-/* text-align because this is an <a>, which does not inherit the centring the
-   .part-card-btn siblings get. */
-.part-card .part-affiliate-btn { display: block; width: 100%; text-align: center; padding: 7px 8px; box-sizing: border-box; }
+/* SIDEBAR */
+.summary-row { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 5px 0; font-size: 12px; }
+.summary-label { color: #888; }
+.summary-value { font-weight: 600; color: #1a1a1a; text-align: right; }
+.summary-parts { margin-top: 6px; border-top: 0.5px solid #f0efe9; padding-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow-y: auto; }
+.summary-part { display: flex; justify-content: space-between; gap: 10px; font-size: 11.5px; line-height: 1.35; }
+.summary-part-name { color: #333; min-width: 0; }
+.summary-part-cat { color: #b0ada4; font-size: 10px; letter-spacing: 0.04em; text-transform: uppercase; display: block; }
+.summary-part-price { color: #1a1a1a; font-weight: 600; white-space: nowrap; }
+.summary-total-wrap { margin-top: 10px; border-top: 0.5px solid #e5e5e5; padding-top: 10px; }
+.summary-total-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.summary-total { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-top: 2px; }
+.summary-total-sub { font-size: 10.5px; color: #999; margin-top: 2px; }
+.build-title-input { width: 100%; font-family: inherit; font-size: 13px; color: #1a1a1a; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 10px; margin-top: 10px; }
+.build-title-input:focus { outline: none; border-color: #4a9edd; }
+.btn-block { display: block; width: 100%; font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 10px 12px; border-radius: 4px; cursor: pointer; text-align: center; text-decoration: none; margin-top: 8px; border: 0.5px solid; transition: all 0.15s; }
+.btn-block.primary { background: #4a9edd; color: #fff; border-color: #4a9edd; }
+.btn-block.primary:hover { background: #2a7bbd; }
+.btn-block.primary:disabled { background: #cfd8e0; border-color: #cfd8e0; cursor: default; }
+.btn-block.ghost { background: #fff; color: #333; border-color: #d5d3ca; }
+.btn-block.ghost:hover { border-color: #4a9edd; color: #2a7bbd; }
 
-.picker-empty { padding: 20px 16px; font-size: 12px; color: #888; text-align: center; }
-
-/* SIDEBAR SUMMARY */
-.summary-row { display: flex; justify-content: space-between; align-items: baseline; padding: 8px 0; border-bottom: 0.5px solid #efece3; font-size: 12.5px; }
-.summary-row:last-child { border-bottom: none; }
-.summary-label { color: #888; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-.summary-value { font-weight: 700; color: #1a1a1a; }
-.summary-total { font-size: 18px; font-weight: 700; color: #1a1a1a; }
-.summary-total-label { font-size: 11px; color: #666; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700; }
-.summary-total-wrap { padding: 12px 0; border-top: 0.5px solid #efece3; margin-top: 4px; }
-
-.btn-block { width: 100%; font-family: inherit; font-size: 12px; padding: 11px 16px; border-radius: 4px; cursor: pointer; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border: none; margin-top: 8px; }
-.btn-block:disabled { background: #e5e5e5!important; color: #bbb!important; cursor: not-allowed; }
-.btn-block.primary { background: #4a9edd; color: #fff; }
-.btn-block.primary:hover:not(:disabled) { background: #2a7bbd; }
-.btn-block.ghost { background: #fff; color: #1a1a1a; border: 0.5px solid #d5d3ca; }
-.btn-block.ghost:hover:not(:disabled) { background: #fafaf8; border-color: #4a9edd; color: #2a7bbd; }
-
-/* GUIDES */
-.guide-filter-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
-.guide-chip { font-family: inherit; font-size: 12px; font-weight: 600; padding: 8px 14px; border: 0.5px solid #d5d3ca; background: #fff; color: #333; border-radius: 20px; cursor: pointer; transition: all 0.15s; }
-.guide-chip:hover { border-color: #4a9edd; color: #2a7bbd; }
-.guide-chip.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
-.guides-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 18px; }
-.guide-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
-.guide-hero { aspect-ratio: 16/8; background: linear-gradient(135deg, #1a2432 0%, #0e0f11 100%); position: relative; display: flex; align-items: flex-end; padding: 16px; overflow: hidden; }
-.guide-hero-cat { position: absolute; top: 12px; left: 12px; font-size: 9.5px; color: #4a9edd; background: rgba(74,158,221,0.14); border: 0.5px solid #4a9edd; padding: 3px 9px; border-radius: 3px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
-.guide-hero-title { font-size: 18px; font-weight: 700; color: #e8e6e1; letter-spacing: -0.01em; line-height: 1.25; }
-.guide-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
-.guide-desc { font-size: 12.5px; color: #555; line-height: 1.6; }
-.guide-parts-list { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; background: #fafaf8; border: 0.5px solid #efece3; border-radius: 4px; }
-.guide-part { display: grid; grid-template-columns: 60px 1fr auto auto; gap: 10px; align-items: center; font-size: 11.5px; padding: 4px 0; }
-.guide-part-cat { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-.guide-part-name { color: #1a1a1a; }
-.guide-part-name strong { color: #2a7bbd; font-weight: 700; }
-.guide-part-price { color: #1a1a1a; font-weight: 700; font-size: 12px; text-align: right; }
-.guide-part-price.na { color: #bbb; font-weight: 500; }
-.guide-part-buy { font-size: 10.5px; color: #2a7bbd; text-decoration: none; padding: 3px 8px; border: 0.5px solid #a7cdec; border-radius: 3px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-.guide-part-buy:hover { background: #eaf4fc; }
-.guide-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 4px; }
-.guide-total { font-size: 15px; font-weight: 700; color: #1a1a1a; }
-.guide-total-label { font-size: 10px; color: #888; margin-right: 4px; text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600; }
-.guide-remix-btn { font-family: inherit; font-size: 12px; font-weight: 700; padding: 9px 16px; border-radius: 4px; cursor: pointer; border: none; background: #4a9edd; color: #fff; letter-spacing: 0.04em; text-transform: uppercase; transition: background 0.15s; }
-.guide-remix-btn:hover { background: #2a7bbd; }
-
-.empty { padding: 60px 20px; text-align: center; font-size: 13px; color: #888; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; }
-.empty-title { font-size: 16px; font-weight: 600; color: #1a1a1a; margin-bottom: 6px; }
+/* EMPTY / LOADING */
+.empty { text-align: center; padding: 40px 16px; color: #999; font-size: 12.5px; }
+.empty-title { font-size: 14px; font-weight: 700; color: #555; margin-bottom: 4px; }
 
 /* TOAST */
-.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #1a1a1a; color: #fff; font-size: 12px; padding: 10px 16px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; z-index: 200; pointer-events: none; }
-.toast.show { opacity: 1; pointer-events: auto; }
-.toast a { color: #6fb4e8; margin-left: 6px; text-decoration: underline; }
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #0e0f11; color: #fff; font-size: 12.5px; padding: 11px 18px; border-radius: 6px; opacity: 0; transition: all 0.25s; z-index: 300; max-width: 90vw; display: flex; gap: 10px; align-items: center; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+.toast a { color: #6fb4e8; font-weight: 700; text-decoration: none; white-space: nowrap; }
 
-/* DRAFTS LIST */
-.drafts-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
-.drafts-title { font-size: 13px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #555; }
-.btn-new-build { font-family: inherit; font-size: 12px; font-weight: 700; color: #fff; background: #2a7bbd; border: none; padding: 9px 16px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
-.btn-new-build:hover { background: #1e63a0; }
+/* FOOTER */
+.footer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 1240px; margin: 0 auto; padding: 18px 32px 28px; border-top: 0.5px solid #e5e5e5; }
+.footer-txt { font-size: 11px; color: #999; }
+.footer-txt a { color: #888; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
 
-.draft-row { display: flex; align-items: flex-start; gap: 14px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 14px 16px; margin-bottom: 10px; transition: border-color 0.15s; }
-.draft-row:hover { border-color: #cfcdc4; }
-/* The whole body is the click target — big enough for a thumb. */
-.draft-open { flex: 1; min-width: 0; text-align: left; background: none; border: none; padding: 0; font-family: inherit; cursor: pointer; }
-.draft-name { font-size: 14px; font-weight: 700; color: #1a1a1a; margin-bottom: 3px; word-break: break-word; }
-.draft-meta { font-size: 11.5px; color: #888; margin-bottom: 5px; }
-.draft-parts { font-size: 12px; color: #555; line-height: 1.5; word-break: break-word; }
-.draft-foot { display: flex; align-items: center; gap: 10px; margin-top: 7px; flex-wrap: wrap; }
-.draft-total { font-size: 12.5px; font-weight: 700; color: #2a7bbd; }
-.draft-edited { font-size: 11px; color: #a8a5a0; }
-.draft-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
-.draft-act { font-family: inherit; font-size: 11px; color: #555; background: #fafaf8; border: 0.5px solid #d5d3ca; padding: 6px 11px; border-radius: 4px; cursor: pointer; white-space: nowrap; }
-.draft-act:hover { border-color: #4a9edd; color: #2a7bbd; }
-.draft-act.danger { color: #a25334; border-color: #eec2ae; }
-.draft-act.danger:hover { background: #fde8e2; border-color: #e08a6a; color: #8a3f22; }
-
-.rename-input { font-family: inherit; font-size: 14px; font-weight: 700; padding: 6px 9px; border: 1px solid #4a9edd; border-radius: 4px; width: 100%; max-width: 320px; }
-.rename-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-
-.drafts-empty { background: #fff; border: 0.5px dashed #d5d3ca; border-radius: 6px; padding: 44px 20px; text-align: center; }
-.drafts-empty-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
-.drafts-empty-sub { font-size: 12px; color: #666; line-height: 1.6; max-width: 380px; margin: 0 auto 18px; }
-
-/* BUILDER HEADER */
-.builder-header-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.back-to-list { font-family: inherit; font-size: 12px; color: #555; background: none; border: none; padding: 0; cursor: pointer; white-space: nowrap; }
-.back-to-list:hover { color: #2a7bbd; }
-.builder-name-wrap { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; flex-wrap: wrap; }
-.builder-title-input { flex: 1; min-width: 0; font-family: inherit; font-size: 15px; font-weight: 700; color: #1a1a1a; background: transparent; border: 0.5px solid transparent; border-radius: 4px; padding: 5px 8px; margin: -5px -8px; }
-.builder-title-input::placeholder { color: #b8b5ac; font-weight: 700; }
-.builder-title-input:hover { border-color: #e5e2d8; background: #fafaf8; }
-.builder-title-input:focus { outline: none; border-color: #4a9edd; background: #fff; }
-.builder-dirty { font-size: 11px; color: #b45309; background: #fef3e2; border: 0.5px solid #f9b860; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }
-
-/* MOBILE */
-@media (max-width: 900px) {
-  .armory { padding: 18px 16px 48px; }
-  .page-header { padding: 22px 16px 0; }
-  .tab-row { padding: 0 16px; }
-  .build-layout { grid-template-columns: 1fr; }
-  .build-side { position: static; }
-  .guides-grid { grid-template-columns: 1fr; }
-}
-@media (max-width: 560px) {
-  /* Stack the row so the name gets full width, and put the actions on one
-     line underneath as full-height tap targets rather than a cramped column. */
-  .draft-row { flex-direction: column; gap: 10px; }
-  .draft-actions { flex-direction: row; width: 100%; }
-  .draft-act { flex: 1; text-align: center; padding: 9px 11px; }
-  .drafts-head { flex-direction: column; align-items: stretch; }
-  .btn-new-build { width: 100%; padding: 11px 16px; }
-  .rename-input { max-width: none; }
-}
-.nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
-.nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }
-.nav-toggle span + span { margin-top: 4px; }
-.nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }
-.nav-profile svg { width: 19px; height: 19px; }
-.nav-menu { display: none; }
-@media (max-width: 820px) {
-  .nav-links { display: none; }
-  .nav-signin-inline { display: none; }
-  .nav-profile { display: flex; }
-  .nav-toggle { display: block; }
-  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }
-  .nav-menu.open { display: flex; }
-  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
-  .nav-menu a.signout { color: #ffffff; }
+@media (max-width: 600px) {
+  .page-header, .armory, .footer-bar { padding-left: 16px; padding-right: 16px; }
 }
 </style>
 </head>
@@ -362,72 +189,42 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </nav>
 
 <div class="page-header">
-  <div class="page-title">Armory</div>
-  <div class="page-sub">Assemble a build from the parts catalog, save drafts, or remix a curated guide.</div>
-</div>
-
-<div class="tab-row" role="tablist">
-  <button type="button" class="tab-btn active" id="tab-build"  role="tab" aria-selected="true">My Builds</button>
-  <button type="button" class="tab-btn"        id="tab-guides" role="tab" aria-selected="false">Guides</button>
+  <div class="page-title">The Armory</div>
+  <div class="page-sub">Spec a build before you own the parts. Pick your pistol, then choose from every compatible part in the catalog — the Armory only shows combinations that actually fit together.</div>
 </div>
 
 <div class="armory">
-  <div id="tab-build-panel">
-    <!-- Drafts list. Shown when the tab opens without ?build=; the builder
-         below takes over once a draft is opened or a new one is started. -->
-    <div id="drafts-view" hidden></div>
-
-    <div class="build-layout" id="builder-view">
-      <div class="build-main">
-        <!-- Builder header: which draft is open, rename, and the way back to
-             the list. Hidden until a draft is actually loaded or created. -->
-        <div class="card" id="builder-header" hidden>
-          <div class="builder-header-row">
-            <button type="button" class="back-to-list" id="btn-back-to-list">&larr; All builds</button>
-            <div class="builder-name-wrap">
-              <!-- The title is a plain input, live from the moment a pistol is
-                   picked (that is when #builder-header stops being hidden).
-                   It replaces a "Rename" button that renderBuilderHeader()
-                   hid until STATE.buildId existed — so a build could not be
-                   named until after it had been saved under a generated name.
-                   The placeholder carries defaultBuildName(); leaving the
-                   field empty still saves that generated name. -->
-              <input type="text" class="builder-title-input" id="builder-title"
-                     maxlength="80" aria-label="Build name" autocomplete="off" />
-            </div>
-            <span class="builder-dirty" id="builder-dirty" hidden>Unsaved changes</span>
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-title">Pistol <span class="card-hint" id="platform-note"></span></div>
-          <div class="platform-row" id="platform-row"><span style="font-size:12px;color:#888;">Loading platforms…</span></div>
-        </div>
-        <div id="parts-container">
-          <div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Select a pistol to see compatible parts.</div></div>
+  <div class="build-layout">
+    <div class="build-main">
+      <div class="card">
+        <div class="card-title">Pistol <span class="card-hint" id="platform-note"></span></div>
+        <div class="platform-row" id="platform-row"><span style="font-size:12px;color:#888;">Loading platforms…</span></div>
+        <div class="model-row" id="model-row" hidden>
+          <div class="model-label">Which model?</div>
+          <select class="gf-select" id="model-select" aria-label="Which model"></select>
+          <div class="model-note" id="model-note"></div>
         </div>
       </div>
-      <aside class="build-side">
-        <div class="card">
-          <div class="card-title">Build</div>
-          <div class="summary-row"><span class="summary-label">Pistol</span><span class="summary-value" id="s-platform">—</span></div>
-          <div class="summary-row"><span class="summary-label">Parts</span><span class="summary-value" id="s-parts">0</span></div>
-          <div class="summary-row"><span class="summary-label">Favorited</span><span class="summary-value" id="s-favs">—</span></div>
-          <div class="summary-total-wrap">
-            <div class="summary-total-label">Running total (MSRP)</div>
-            <div class="summary-total" id="s-total">$0</div>
-          </div>
-          <button type="button" class="btn-block primary" id="btn-post"       disabled>Post this build →</button>
-          <button type="button" class="btn-block ghost"   id="btn-save-draft">Save as draft</button>
+      <div id="parts-container">
+        <div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Pick a pistol to see compatible parts.</div></div>
+      </div>
+    </div>
+    <aside class="build-side">
+      <div class="card">
+        <div class="card-title">Your build</div>
+        <div class="summary-row"><span class="summary-label">Pistol</span><span class="summary-value" id="s-platform">—</span></div>
+        <div class="summary-row"><span class="summary-label">Parts picked</span><span class="summary-value" id="s-parts">0</span></div>
+        <div class="summary-parts" id="s-list" hidden></div>
+        <div class="summary-total-wrap">
+          <div class="summary-total-label">Running total (MSRP)</div>
+          <div class="summary-total" id="s-total">$0</div>
+          <div class="summary-total-sub" id="s-total-sub"></div>
         </div>
-      </aside>
-    </div>
-  </div>
-
-  <div id="tab-guides-panel" hidden>
-    <div class="guide-filter-row" id="guide-filter-row"></div>
-    <div id="guides-container">
-      <div class="empty"><div class="empty-title">Loading guides…</div></div>
-    </div>
+        <input type="text" class="build-title-input" id="build-title" maxlength="80" placeholder="Name this build" autocomplete="off" hidden />
+        <button type="button" class="btn-block primary" id="btn-save" disabled>Save to Gun Guides →</button>
+        <a class="btn-block ghost" href="gunforma-gun-guides.html">Browse Gun Guides</a>
+      </div>
+    </aside>
   </div>
 </div>
 
@@ -435,742 +232,272 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="footer-bar"><span class="footer-txt">© 2026 Gunforma · All rights reserved</span><span class="footer-txt"><a href="gunforma-legal.html#legal">Legal</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="gunforma-legal.html#contact">Contact</a></span></div>
 
-<script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/category-map.js"></script>
+<script src="js/build-categories.js"></script>
+<script src="js/display-name.js"></script>
+<script src="js/variant-label.js"></script>
+<script src="js/variant-swatch.js"></script>
+<script src="js/frame-fit.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
-<!-- Before affiliate.js: it calls window.variantLabel at render time. -->
-<script src="js/variant-label.js"></script>
-<!-- Before affiliate.js: it calls window.makerLink at render time. -->
-<script src="js/maker-link.js"></script>
-<script src="js/affiliate.js"></script>
 <script>
-// ============================================================
-// gunforma-armory.html — build-assembly + curated guides.
+// ─── THE ARMORY, rebuilt as pick-and-save ───────────────────────────────────
+// One job: choose a pistol, pick one part per category from dropdowns that
+// only ever list parts compatible with everything already picked, and save
+// the result to Gun Guides (the `gun_guides` table — see
+// supabase/migrations/*gun_guides.sql). It does NOT write draft builds;
+// posting a real build stays gunforma-post-build.html's job.
 //
-// My Build tab: platform picker → category accordions → add parts.
-// Within each category, the user's favorited parts (from part_favorites)
-// are shown FIRST under a "Your favorites" section, then the rest of
-// the compatible catalog. Running MSRP + Save-draft (writes to builds
-// with status='draft') + Post (hands off to gunforma-post-build.html
-// with pre-fill via localStorage).
-//
-// Guides tab: 4 category chips + curated build recipes from the guides
-// table. Each guide's parts_snapshot uses the same shape as
-// builds.parts_snapshot, so rendering piggybacks on the same product
-// lookup. "Remix this build" clones a guide into the My Build state
-// (does not mutate the original) and switches tabs.
-//
-// Buy links: routed through the shared js/affiliate.js module, which
-// pulls tracked listings from affiliate_links → partners (see
-// build-detail for the reference implementation this was extracted from).
-// A product with no partner listing links to its own products.url through
-// /go/part/<id> (a counted, unpaid link — see js/affiliate.js).
-// affiliate.renderHero is called per card and returns '' when the product
-// has no PARTNER listing; a console.warn fires from runBuyUrlAudit when
-// >20% of visible parts lack listings.
-// ============================================================
-var sb = window.sb;
+// The compatibility rules are PARTS_BUILDER_COMPATIBILITY_LOGIC.md, applied
+// client-side over anon-readable tables:
+//   Rule 1/2  barrel ↔ slide: barrel_length_in match + barrel_slide_requirements whitelist
+//   Rule 3    compensator needs a threaded barrel with a matching thread pitch
+//             (unless comes_with_barrel)
+//   Rule 4/5  comp section hidden on integrated-comp slides and ported barrels
+//   Rule 6    frames filtered by the chosen model's housing class (FrameFit,
+//             which carries the FUSE exception)
+//   Rule 7    everything else is platform-universal
+//   Rule 8    magwells filtered by magwell_frame_requirements whitelist
+// plus slide_specs.threaded_barrel_ok === false excludes threaded barrels.
 
-// ─── STATE ────────────────────────────────────────────────
+var sb = window.sb;
+var BC = window.BuildCategories;
+
 var CURRENT_USER = null;
-var PLATFORMS = [];             // [{id,name,slug}]
-var PLATFORMS_BY_ID = {};
-var PRODUCTS = [];              // denormalized flat rows
-var PRODUCTS_BY_ID = {};        // {id: product}
-var PRODUCTS_BY_CATEGORY = {};  // {category: [product, ...]} for the current platform's catalog
-var CATALOG_PLATFORM = null;    // which platform_id PRODUCTS_BY_CATEGORY is scoped to
-var FAVORITES = new Set();      // product_ids
-var GUIDES = [];                // [{id,title,category,platform_id,description,parts_snapshot,...}]
+var PLATFORMS = [], PLATFORMS_BY_ID = {};
+var GUNS = [];                      // all rows; filtered per platform
+var PRODUCTS = [], PRODUCTS_BY_ID = {};
+var SPEC = { slide: {}, barrel: {}, compensator: {}, frame: {} };
+var BARREL_LOCKS = {};              // barrel pid -> [{slide, note}]
+var MAGWELL_FITS = {};              // magwell pid -> [{frame, note}]
+
+// Categories that get a dropdown, in render order, grouped like the builder
+// pages. Derived from BuildCategories so the taxonomy lives once; only
+// catalog-backed sections appear (holsters, paint and knives are typed-in
+// parts on post-build, not catalog picks).
+var SLOT_GROUPS = BC.GROUPED_CATEGORIES.map(function (g) {
+  return {
+    group: g.group,
+    slots: g.categories.reduce(function (list, c) {
+      (c.dbCategory || []).forEach(function (db) {
+        list.push({ cat: db, section: c.key, label: window.categorySingular(db) });
+      });
+      return list;
+    }, []),
+  };
+}).filter(function (g) { return g.slots.length; });
 
 var STATE = {
-  tab: 'build',                 // 'build' | 'guides'
-  platform: null,               // {id,name,slug} or null
-  parts: [],                    // [{uid, refId, category, brand, name, pending, price}]
-  openCategory: null,
-  guideCategory: 'all',         // 'all' | 'home_defense' | 'concealed_carry' | ...
-  // Set when editing an existing draft (?build=<uuid>, or after the first
-  // save of a new one). Non-null makes saveDraft() UPDATE instead of INSERT.
-  buildId: null,
-  // Preserved verbatim across saves. A draft started in post-build has a
-  // user-typed name; the Armory has no rename UI, so overwriting it with the
-  // generated "Armory draft — <date>" would destroy something the user wrote.
-  buildName: null,
+  platform: null,
+  gun: null,              // guns row, or null = "custom / FCU / not sure"
+  picks: {},              // category -> { productId, variantId }
+  title: '',
+  savedId: null,          // gun_guides row id once saved; later saves update it
 };
-var partUid = 1;
 
-// Category names come from js/category-map.js, the one list every surface reads.
-function catLabel(c) { return window.categoryPlural(c); }
+var DRAFT_KEY = 'gf-armory-picks-v1';
 
-var GUIDE_CATEGORIES = [
-  { key: 'all',                label: 'All' },
-  { key: 'concealed_carry',    label: 'Concealed Carry' },
-  { key: 'home_defense',       label: 'Home Defense' },
-  { key: 'range_competition',  label: 'Range / Competition' },
-  { key: 'duty',               label: 'Duty' },
-];
-
-var LS_ARMORY_POST_KEY = 'armory.postDraft';   // handshake to post-build.html
-
-// ─── AUTH ─────────────────────────────────────────────────
+// ─── AUTH ──────────────────────────────────────────────────────────────────
 sb.auth.onAuthStateChange(function (event, session) {
-  var newUser = session ? session.user : null;
-  var flipped = (!newUser) !== (!CURRENT_USER);
-  CURRENT_USER = newUser;
-  if (!newUser) FAVORITES = new Set();
-  if (flipped) loadFavoritesAndRepaint();
+  CURRENT_USER = session && session.user || null;
 });
-
-// ─── INIT ─────────────────────────────────────────────────
-async function init() {
+(async function () {
   var sess = await sb.auth.getSession();
   CURRENT_USER = sess && sess.data && sess.data.session && sess.data.session.user || null;
-  await loadAll();
-  wireControls();
-  renderPlatformRow();
-  renderPartsSection();
-  renderSummary();
-  renderGuidesFilterRow();
-  renderGuides();
-  updateActionButtons();
-  // Handshake: gunforma-parts-catalog.html's "Add to Armory build" button
-  // opens this page with ?prefill=<product_id>. Auto-select the product's
-  // first platform and add the part, then scrub the URL so refresh doesn't
-  // re-add it.
-  applyPrefillFromUrl();
+})();
 
-  // ?build= opens that draft straight into the builder. Otherwise a signed-in
-  // user lands on their drafts list; a signed-out one lands in the builder so
-  // they can still put something together before deciding to sign in.
-  var openedFromUrl = await applyBuildFromUrl();
-  if (!openedFromUrl) {
-    var prefilled = new URLSearchParams(window.location.search).get('prefill');
-    await loadMyDrafts();
-    renderDraftsList();
-    if (CURRENT_USER && !prefilled && !STATE.parts.length) {
-      showDraftsList();
-    } else {
-      showBuilder();
-    }
-  }
-  renderBuilderHeader();
-}
-
-// ─── MY BUILDS: DRAFT LIST ──────────────────────────────────
-// The tab opens on a list of the user's drafts; the builder takes over once
-// one is opened (?build=) or a new one is started. Signed-out visitors skip
-// straight to the builder — they can assemble a build, they just can't save
-// it until they sign in.
-var MY_DRAFTS = [];
-
-function showBuilder() {
-  document.getElementById('drafts-view').hidden = true;
-  document.getElementById('builder-view').hidden = false;
-}
-function showDraftsList() {
-  document.getElementById('drafts-view').hidden = false;
-  document.getElementById('builder-view').hidden = true;
-}
-
-function relTime(iso) {
-  if (!iso) return 'just now';
-  var mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
-  if (mins < 1)  return 'just now';
-  if (mins < 60) return mins + ' min' + (mins !== 1 ? 's' : '') + ' ago';
-  var hrs = Math.round(mins / 60);
-  if (hrs < 24)  return hrs + ' hour' + (hrs !== 1 ? 's' : '') + ' ago';
-  var days = Math.round(hrs / 24);
-  if (days < 30) return days + ' day' + (days !== 1 ? 's' : '') + ' ago';
-  return new Date(iso).toLocaleDateString();
-}
-
-// Same pricing the builder's running total uses — product price off the
-// catalog, nulls skipped. Deliberately not a second calculation: a list that
-// disagreed with the builder about the same build would be worse than no
-// price at all.
-function snapshotTotal(snap) {
-  return (snap || []).reduce(function (sum, p) {
-    var live = p.refId ? PRODUCTS_BY_ID[p.refId] : null;
-    return (live && live.price != null) ? sum + live.price : sum;
-  }, 0);
-}
-
-function snapshotSummary(snap) {
-  var names = (snap || []).map(function (p) {
-    var live = p.refId ? PRODUCTS_BY_ID[p.refId] : null;
-    return p.name || (live ? live.name : '') || 'Unnamed part';
-  });
-  if (!names.length) return 'No parts yet';
-  var head = names.slice(0, 3).join(', ');
-  var rest = names.length - 3;
-  return rest > 0 ? head + ', +' + rest + ' more' : head;
-}
-
-async function loadMyDrafts() {
-  if (!CURRENT_USER) { MY_DRAFTS = []; return; }
-  var res = await sb.from('builds')
-    .select('id,name,platform_id,parts_snapshot,updated_at')
-    .eq('user_id', CURRENT_USER.id)
-    .eq('status', 'draft')
-    .order('updated_at', { ascending: false });
-  if (res.error) { console.error('[armory] draft list failed', res.error); MY_DRAFTS = []; return; }
-  MY_DRAFTS = res.data || [];
-}
-
-function renderDraftsList() {
-  var el = document.getElementById('drafts-view');
-
-  if (!CURRENT_USER) {
-    el.innerHTML =
-      '<div class="drafts-empty">' +
-        '<div class="drafts-empty-title">Sign in to save builds</div>' +
-        '<div class="drafts-empty-sub">You can put a build together right now — signing in lets you save it, come back to it, and post it when it\'s ready.</div>' +
-        '<a class="btn-new-build" style="text-decoration:none;display:inline-block;" href="gunforma-signin.html?next=gunforma-armory.html">Sign in</a>' +
-        '<div style="margin-top:14px;"><button type="button" class="draft-act" id="btn-build-anyway">Keep building without saving</button></div>' +
-      '</div>';
-    document.getElementById('btn-build-anyway').onclick = function () { startNewBuild(true); };
-    return;
-  }
-
-  var head =
-    '<div class="drafts-head">' +
-      '<span class="drafts-title">Your drafts (' + MY_DRAFTS.length + ')</span>' +
-      '<button type="button" class="btn-new-build" id="btn-new-build">+ New build</button>' +
-    '</div>';
-
-  if (!MY_DRAFTS.length) {
-    el.innerHTML = head +
-      '<div class="drafts-empty">' +
-        '<div class="drafts-empty-title">No saved builds yet</div>' +
-        '<div class="drafts-empty-sub">Pick a pistol, add parts, and save — your build will wait here until you\'re ready to post it.</div>' +
-        '<button type="button" class="btn-new-build" id="btn-start-build">Start a build</button>' +
-      '</div>';
-    document.getElementById('btn-new-build').onclick  = function () { startNewBuild(); };
-    document.getElementById('btn-start-build').onclick = function () { startNewBuild(); };
-    return;
-  }
-
-  el.innerHTML = head + MY_DRAFTS.map(renderDraftRow).join('');
-  document.getElementById('btn-new-build').onclick = function () { startNewBuild(); };
-  wireDraftRows();
-}
-
-function renderDraftRow(d) {
-  var plat  = PLATFORMS_BY_ID[d.platform_id];
-  var snap  = Array.isArray(d.parts_snapshot) ? d.parts_snapshot : [];
-  var total = snapshotTotal(snap);
-  return '' +
-    '<div class="draft-row" data-draft="' + escAttr(d.id) + '">' +
-      '<button type="button" class="draft-open" data-open="' + escAttr(d.id) + '">' +
-        '<div class="draft-name">' + esc(d.name || 'Untitled build') + '</div>' +
-        '<div class="draft-meta">' + esc(plat ? plat.name : 'Unknown pistol') + ' &middot; ' +
-          snap.length + ' part' + (snap.length !== 1 ? 's' : '') + '</div>' +
-        '<div class="draft-parts">' + esc(snapshotSummary(snap)) + '</div>' +
-        '<div class="draft-foot">' +
-          (total > 0 ? '<span class="draft-total">~$' + Math.round(total).toLocaleString() + '</span>' : '') +
-          '<span class="draft-edited">Edited ' + esc(relTime(d.updated_at)) + '</span>' +
-        '</div>' +
-      '</button>' +
-      '<div class="draft-actions">' +
-        '<button type="button" class="draft-act" data-rename="' + escAttr(d.id) + '">Rename</button>' +
-        '<button type="button" class="draft-act danger" data-delete="' + escAttr(d.id) + '">Delete</button>' +
-      '</div>' +
-    '</div>';
-}
-
-function wireDraftRows() {
-  document.querySelectorAll('[data-open]').forEach(function (b) {
-    b.onclick = function () { openDraft(b.getAttribute('data-open')); };
-  });
-  document.querySelectorAll('[data-rename]').forEach(function (b) {
-    b.onclick = function () { beginRowRename(b.getAttribute('data-rename')); };
-  });
-  document.querySelectorAll('[data-delete]').forEach(function (b) {
-    b.onclick = function () { confirmDeleteDraft(b.getAttribute('data-delete')); };
-  });
-}
-
-// ─── RENAME (drafts list) ───────────────────────────────────
-// Renaming from a row in the drafts list. No longer the only place the
-// Armory writes builds.name — the builder's title field does too, through
-// saveDraft(), under the nameTouched rule documented there. This path is
-// still an immediate, explicit write of its own.
-//
-// It also sets STATE.buildName when the renamed row is the open build, and
-// deliberately does NOT set nameTouched: the name is already persisted, so
-// the next saveDraft() has nothing to add.
-async function commitRename(buildId, raw) {
-  var name = (raw == null ? '' : String(raw)).trim();
-  if (!name) { toast('Name can\'t be empty'); return false; }
-  var res = await sb.from('builds')
-    .update({ name: name })
-    .eq('id', buildId)
-    .eq('user_id', CURRENT_USER.id)
-    .eq('status', 'draft')
-    .select('id,name')
-    .maybeSingle();
-  if (res.error) { console.error('[armory] rename failed', res.error); toast('Rename failed — try again'); return false; }
-  if (!res.data)  { toast('That draft no longer exists'); return false; }
-  if (STATE.buildId === buildId) {
-    STATE.buildName = res.data.name;
-    renderBuilderHeader();
-  }
-  var row = MY_DRAFTS.find(function (d) { return d.id === buildId; });
-  if (row) row.name = res.data.name;
-  toast('Renamed');
-  return true;
-}
-
-function beginRowRename(buildId) {
-  var row = document.querySelector('.draft-row[data-draft="' + buildId + '"]');
-  var d = MY_DRAFTS.find(function (x) { return x.id === buildId; });
-  if (!row || !d) return;
-  var open = row.querySelector('.draft-open');
-  open.innerHTML =
-    '<div class="rename-row">' +
-      '<input class="rename-input" id="rename-input" type="text" maxlength="80" value="' + escAttr(d.name || '') + '" />' +
-      '<button type="button" class="draft-act" id="rename-save">Save</button>' +
-      '<button type="button" class="draft-act" id="rename-cancel">Cancel</button>' +
-    '</div>';
-  var input = document.getElementById('rename-input');
-  input.focus(); input.select();
-  function finish(ok) {
-    if (!ok) { renderDraftsList(); return; }
-    commitRename(buildId, input.value).then(function () { renderDraftsList(); });
-  }
-  document.getElementById('rename-save').onclick   = function () { finish(true); };
-  document.getElementById('rename-cancel').onclick = function () { finish(false); };
-  input.onkeydown = function (e) {
-    if (e.key === 'Enter')  { e.preventDefault(); finish(true); }
-    if (e.key === 'Escape') { e.preventDefault(); finish(false); }
-  };
-}
-
-// ─── DELETE ─────────────────────────────────────────────────
-// RLS policy "Owners can delete their own draft builds" is
-// (auth.uid() = user_id AND status = 'draft'), so the database refuses to
-// delete anything else regardless of what the client sends. The filters
-// below mirror it rather than replace it.
-async function confirmDeleteDraft(buildId) {
-  var d = MY_DRAFTS.find(function (x) { return x.id === buildId; });
-  if (!d) return;
-  var label = d.name || 'this draft';
-  if (!window.confirm('Delete "' + label + '"?\n\nThis can\'t be undone.')) return;
-
-  var res = await sb.from('builds')
-    .delete()
-    .eq('id', buildId)
-    .eq('user_id', CURRENT_USER.id)
-    .eq('status', 'draft')
-    .select('id')
-    .maybeSingle();
-  if (res.error) { console.error('[armory] delete failed', res.error); toast('Delete failed — try again'); return; }
-  if (!res.data)  { toast('That draft was already gone'); }
-  else            { toast('Deleted "' + label + '"'); }
-
-  // If the open build was the one deleted, drop back to the list rather than
-  // leaving the builder pointed at a row that no longer exists.
-  if (STATE.buildId === buildId) resetBuilderState();
-  await loadMyDrafts();
-  renderDraftsList();
-  showDraftsList();
-  scrubBuildParam();
-}
-
-// ─── UNSAVED CHANGES ────────────────────────────────────────
-// Signature of what saveDraft would persist. Compared against the last
-// saved state so "dirty" means genuinely unsaved work, not just any edit.
-var savedSignature = null;
-
-function buildSignature() {
-  return JSON.stringify({
-    p: STATE.platform ? STATE.platform.id : null,
-    // The title is saveable from this page now, so editing it has to count as
-    // an unsaved change — otherwise renaming and nothing else leaves the
-    // header claiming there is nothing to save.
-    n: STATE.buildName || null,
-    parts: buildPartsSnapshot(),
-  });
-}
-function markClean() { savedSignature = buildSignature(); renderBuilderHeader(); }
-
-function isDirty() {
-  if (!CURRENT_USER) return false;                        // nothing to save to
-  if (!STATE.buildId) return STATE.parts.length > 0;      // unsaved new build
-  return savedSignature !== null && savedSignature !== buildSignature();
-}
-
-// Returns true if it's safe to proceed (either clean, or the user accepted).
-function confirmDiscardIfDirty(action) {
-  if (!isDirty()) return true;
-  return window.confirm('You have unsaved changes to this build.\n\n' + action + ' anyway?');
-}
-
-window.addEventListener('beforeunload', function (e) {
-  if (!isDirty()) return;
-  e.preventDefault();
-  e.returnValue = '';       // required by some browsers to trigger the prompt
-});
-
-// ─── BUILDER CHROME ─────────────────────────────────────────
-function renderBuilderHeader() {
-  var header = document.getElementById('builder-header');
-  if (!header) return;
-  var showing = !!(STATE.buildId || STATE.parts.length || STATE.platform);
-  header.hidden = !showing;
-  if (!showing) return;
-  var titleEl = document.getElementById('builder-title');
-  if (titleEl) {
-    // Placeholder, never value: an untouched field has to stay EMPTY so that
-    // saveDraft() can tell "the user did not name this" from "the user typed
-    // exactly the generated name", and still persist defaultBuildName().
-    titleEl.placeholder = STATE.platform ? defaultBuildName() : 'Untitled build';
-    // Do not overwrite what someone is in the middle of typing. renderBuilderHeader()
-    // is called from every parts mutation, and reassigning .value mid-edit
-    // moves the caret to the end on a re-render the user did not ask for.
-    if (document.activeElement !== titleEl) titleEl.value = STATE.buildName || '';
-  }
-  document.getElementById('builder-dirty').hidden = !isDirty();
-}
-
-// True once the user has typed in the title field for the CURRENTLY LOADED
-// build. Cleared wherever STATE.buildName is assigned from a source that is
-// not the user — a new build, or a draft loaded off the server. saveDraft()
-// reads it to decide whether it may write builds.name; see the rule there.
-var nameTouched = false;
-
-function onTitleInput() {
-  var el = document.getElementById('builder-title');
-  if (!el) return;
-  var v = el.value.trim();
-  STATE.buildName = v || null;
-  nameTouched = true;
-  // Only the dirty badge — a full renderBuilderHeader() here would re-enter
-  // the .value assignment above and fight the caret.
-  var d = document.getElementById('builder-dirty');
-  if (d) d.hidden = !isDirty();
-}
-
-// "<Platform> build" — e.g. "P365 X-Macro build". Replaces the old
-// "Armory draft — <date>", which made every draft look identical in a list.
-function defaultBuildName() {
-  return (STATE.platform ? STATE.platform.name : 'Custom') + ' build';
-}
-
-function scrubBuildParam() {
-  try { history.replaceState({}, '', window.location.pathname); } catch (_) {}
-}
-
-function resetBuilderState() {
-  STATE.buildId = null;
-  STATE.buildName = null;
-  nameTouched = false;
-  STATE.parts = [];
-  STATE.openCategory = null;
-  savedSignature = null;
-}
-
-function startNewBuild(skipDirtyCheck) {
-  if (!skipDirtyCheck && !confirmDiscardIfDirty('Start a new build')) return;
-  resetBuilderState();
-  scrubBuildParam();
-  showBuilder();
-  renderPlatformRow();
-  renderPartsSection();
-  renderSummary();
-  renderBuilderHeader();
-  updateActionButtons();
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-async function openDraft(buildId) {
-  if (!confirmDiscardIfDirty('Open a different build')) return;
-  try { history.replaceState({}, '', window.location.pathname + '?build=' + encodeURIComponent(buildId)); } catch (_) {}
-  var ok = await loadBuildById(buildId);
-  if (ok) { showBuilder(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-}
-
-async function backToList() {
-  if (!confirmDiscardIfDirty('Go back to your builds')) return;
-  scrubBuildParam();
-  await loadMyDrafts();
-  renderDraftsList();
-  showDraftsList();
-}
-
-// ─── OPEN AN EXISTING DRAFT (?build=<uuid>) ─────────────────
-// The profile links parts-only drafts here instead of post-build, so the
-// parts list stays editable without walking back through the publishing
-// form. RLS ("Owners can view their own builds") already scopes the read to
-// the signed-in user; the ownership check below is belt-and-braces.
-var BUILD_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-// Never leave the page blank on a failure — a silent empty Armory looks
-// identical to "your parts vanished", which is the bug class we just fixed.
-function draftLoadError(message, href, linkText) {
-  var el = document.getElementById('parts-container');
-  if (el) {
-    el.innerHTML = '<div class="card"><div style="padding:18px;text-align:center;">' +
-      '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Couldn\'t open that build</div>' +
-      '<div style="font-size:12px;color:#666;line-height:1.6;">' + esc(message) + '</div>' +
-      (href ? '<div style="margin-top:14px;"><a href="' + escAttr(href) + '" style="font-size:12px;font-weight:700;color:#2a7bbd;text-decoration:none;">' + esc(linkText || 'Continue') + ' &rarr;</a></div>' : '') +
-      '</div></div>';
-  }
-  toast(message, href, linkText);
-}
-
-// This page groups parts with `p.category === cat`, where cat comes from
-// PRODUCTS_BY_CATEGORY — raw products.category values ('optic', 'frame').
-// post-build stores its own UI keys ('optics', 'grips'). A draft saved there
-// would load here with categories matching no block: counted in the summary,
-// invisible in the list. Same failure as issue #2, pointed the other way.
-//
-// refId is the authoritative fix — the catalog knows each product's real
-// category, so the stored string doesn't matter. The reverse map only covers
-// custom/pending parts, which have no refId to look up.
-//
-// `other_parts` is deliberately NOT here. It used to map to 'basepad', which
-// relabelled every custom slide plate, safety selector and takedown lever as
-// a basepad — a wrong answer presented as a confident one. The section it
-// came from is now five real sections keyed by the products.category value
-// itself, so nothing needs translating; a leftover `other_parts` from an old
-// snapshot falls through to the warning below and keeps its own key.
-var UI_KEY_TO_DB_CATEGORY = {
-  optics: 'optic', lights: 'light', grips: 'frame', slides: 'slide',
-  barrels: 'barrel', triggers: 'trigger', magwells: 'magwell',
-  mag_release: 'mag_release',
-};
-
-function normalizeSnapshotCategory(part) {
-  var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
-  if (live && live.category) return live.category;          // ground truth
-  var raw = (part.category == null ? '' : String(part.category)).trim();
-  if (!raw) return null;
-  if (window.CATEGORY_URL_SEGMENT[raw] || PRODUCTS_BY_CATEGORY[raw]) return raw;   // already a DB category
-  if (UI_KEY_TO_DB_CATEGORY[raw]) return UI_KEY_TO_DB_CATEGORY[raw];
-  // Kept rather than dropped, so the part still counts and can be removed.
-  console.warn('[armory] unmapped part category ' + JSON.stringify(raw) +
-               ' — it will count toward the build but has no category block to render in');
-  return raw;
-}
-
-async function applyBuildFromUrl() {
-  var params = new URLSearchParams(window.location.search);
-  var buildId = params.get('build');
-  if (!buildId) return false;
-  var ok = await loadBuildById(buildId);
-  if (ok) showBuilder();
-  return ok;
-}
-
-// Split out from applyBuildFromUrl so the drafts list can open a build
-// without a page load. Returns true only when STATE was actually hydrated.
-async function loadBuildById(buildId) {
-  if (!BUILD_ID_RE.test(buildId)) {
-    draftLoadError('That build link isn\'t a valid ID.');
-    return false;
-  }
-  if (!CURRENT_USER) {
-    draftLoadError('Sign in to open your saved build.',
-      'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
-    return false;
-  }
-
-  var res = await sb.from('builds')
-    .select('id,user_id,status,platform_id,name,parts_snapshot')
-    .eq('id', buildId)
-    .maybeSingle();
-
-  if (res.error) {
-    draftLoadError('Something went wrong loading that build — try again.');
-    console.error('[armory] draft load failed', res.error);
-    return false;
-  }
-
-  var b = res.data;
-  // RLS filters other people's builds to zero rows, so "missing" and "not
-  // yours" are indistinguishable here — and saying so would leak whether the
-  // id exists. One message covers both.
-  if (!b || b.user_id !== CURRENT_USER.id) {
-    draftLoadError('That build doesn\'t exist, or it isn\'t yours.',
-      'gunforma-profile.html', 'Your profile');
-    return false;
-  }
-  if (b.status !== 'draft') {
-    draftLoadError('That build has already been submitted, so it can\'t be edited here.',
-      buildPath(b.id, b.name), 'View the build');
-    return false;
-  }
-
-  var plat = PLATFORMS_BY_ID[b.platform_id];
-  if (!plat) {
-    draftLoadError('That build\'s pistol is no longer in the catalog.');
-    return false;
-  }
-
-  STATE.buildId   = b.id;
-  STATE.buildName = b.name;
-  // The name now in STATE is the server's, not the user's. Until they edit
-  // the field, this page must not write it back — see saveDraft().
-  nameTouched     = false;
-  STATE.platform  = plat;
-  rebuildCatalogForPlatform();
-
-  STATE.parts = (Array.isArray(b.parts_snapshot) ? b.parts_snapshot : []).map(function (part) {
-    var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
-    return {
-      uid: 'p' + (partUid++),
-      refId: part.refId || null,
-      category: normalizeSnapshotCategory(part),
-      brand: part.brand || (live ? live.brand : 'Unknown'),
-      name:  part.name  || (live ? live.name  : ''),
-      pending: !!part.pending,
-      // Carried, or they are gone on the next save — see buildPartsSnapshot().
-      // finish is post-build's object; it passes through untouched.
-      finish:  part.finish  || undefined,
-      variant: part.variant || undefined,
-      details: part.details || undefined,
-      // Same pass-through as the two above, and the same trap: dropping a
-      // field here loses it just as completely as dropping it from
-      // buildPartsSnapshot(), because that function reads STATE.parts.
-      variantId:     part.variantId     || undefined,
-      variantLabel:  part.variantLabel  || undefined,
-      variantColor:  part.variantColor  || undefined,
-      variantSpecs:  part.variantSpecs  || undefined,
-      variantFinish: part.variantFinish || undefined,
-      imageUrl:      part.imageUrl      || undefined,
-      partId:        part.partId        || undefined,
-      price: live ? live.price : null,
-    };
-  });
-
-  STATE.openCategory = null;
-  setTab('build');
-  renderPlatformRow();
-  renderPartsSection();
-  renderSummary();
-  updateActionButtons();
-  markClean();
-  renderBuilderHeader();
-  toast('Editing "' + b.name + '" — saving updates this build');
-  return true;
-}
-
-function applyPrefillFromUrl() {
-  var params = new URLSearchParams(window.location.search);
-  var prefillId = params.get('prefill');
-  if (!prefillId) return;
-  // ?build= wins. Prefill calls selectPlatform(), which drops every
-  // non-pending part, and it scrubs the query string afterwards — either
-  // would quietly destroy the draft applyBuildFromUrl is about to load.
-  if (params.get('build')) return;
-  var product = PRODUCTS_BY_ID[prefillId];
-  if (!product) { toast('That part isn\'t in the catalog anymore'); return; }
-  var platformId = (product.platform_ids || [])[0];
-  if (!platformId) { toast('That part has no compatible platform on file'); return; }
-  selectPlatform(platformId);
-  addPartByRefId(product.id, product.category);
-  toast('Added ' + product.brand + ' ' + product.name + ' to your build');
-  // Scrub the query so a refresh doesn't re-add the same part.
-  try { history.replaceState({}, '', window.location.pathname); } catch (_) {}
-}
-
+// ─── LOAD ──────────────────────────────────────────────────────────────────
 async function loadAll() {
-  var platQ = sb.from('platforms').select('id, name, slug').order('name');
-  var prodQ = sb.from('products')
-    .select(
-      'id, slug, name, description, category, brand_id, url, lowest_price,' +
-      'brands:manufacturers(id, name),' +
-      'product_platforms(platform_id),' +
-      'product_variants!product_variants_product_id_fkey(msrp, is_default, primary_image_url)'
-    )
-    .is('product_variants.retired_at', null)
-    .eq('is_discontinued', false);
-  var guideQ = sb.from('guides').select('*').eq('is_published', true).order('title');
+  var queries = [
+    sb.from('platforms').select('id, name, slug, is_live').order('name'),
+    sb.from('guns').select('id, slug, name, housing_class, slide_length_in, integrated_comp, platform_id').order('name'),
+    sb.from('products')
+      .select(
+        'id, slug, name, category, is_approved,' +
+        'brands:manufacturers(id, name),' +
+        'product_platforms(platform_id),' +
+        'product_variants!product_variants_product_id_fkey(id, variant_label, color, finish, msrp, is_default, primary_image_url, retired_at)'
+      )
+      .is('product_variants.retired_at', null)
+      .eq('is_discontinued', false),
+    sb.from('slide_specs').select('product_id, barrel_length_in, integrated_comp, internally_ported, threaded_barrel_ok, port_style'),
+    sb.from('barrel_specs').select('product_id, barrel_length_in, barrel_type, thread_pitch, requires_slide_text, port_style'),
+    sb.from('compensator_specs').select('product_id, mounting_type, requires_threaded_barrel, thread_pitch, comes_with_barrel, barrel_length_in'),
+    sb.from('frame_specs').select('product_id, housing_class'),
+    sb.from('barrel_slide_requirements').select('barrel_product_id, slide_product_id, compatibility_note'),
+    sb.from('magwell_frame_requirements').select('magwell_product_id, frame_product_id, compatibility_note'),
+  ];
+  var r = await Promise.all(queries);
+  var names = ['platforms', 'guns', 'products', 'slide specs', 'barrel specs', 'compensator specs', 'frame specs', 'barrel fit rules', 'magwell fit rules'];
+  for (var i = 0; i < r.length; i++) {
+    if (r[i].error) return fatalErr(names[i], r[i].error);
+  }
 
-  var results = await Promise.all([platQ, prodQ, guideQ]);
-  var platRes = results[0], prodRes = results[1], guideRes = results[2];
-  if (platRes.error)  return fatalErr('platforms', platRes.error);
-  if (prodRes.error)  return fatalErr('products',  prodRes.error);
-  if (guideRes.error) return fatalErr('guides',    guideRes.error);
-
-  PLATFORMS = platRes.data || [];
+  PLATFORMS = r[0].data || [];
   PLATFORMS.forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
+  GUNS = r[1].data || [];
 
-  PRODUCTS = (prodRes.data || []).map(function (r) {
-    var variants = r.product_variants || [];
-    var dv = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
-    var price = dv && dv.msrp != null ? Number(dv.msrp)
-              : (r.lowest_price != null ? Number(r.lowest_price) : null);
+  PRODUCTS = (r[2].data || []).filter(function (row) { return row.is_approved === true; }).map(function (row) {
+    var variants = (row.product_variants || []).slice().sort(function (a, b) {
+      return (b.is_default === true) - (a.is_default === true);
+    });
+    var dv = variants[0] || null;
     return {
-      id: r.id, slug: r.slug || null, name: r.name || '',
-      category: r.category, brand_id: r.brand_id,
-      brand: (r.brands && r.brands.name) || 'Unknown',
-      price: price,
-      image: (dv && dv.primary_image_url) || null,
-      buy_url: r.url || null,
-      platform_ids: (r.product_platforms || []).map(function (pp) { return pp.platform_id; }),
+      id: row.id, slug: row.slug || null, name: row.name || '',
+      category: row.category,
+      brand: (row.brands && row.brands.name) || 'Unknown',
+      variants: variants,
+      defaultVariant: dv,
+      platform_ids: (row.product_platforms || []).map(function (pp) { return pp.platform_id; }),
     };
   });
   PRODUCTS.forEach(function (p) { PRODUCTS_BY_ID[p.id] = p; });
 
-  GUIDES = guideRes.data || [];
+  (r[3].data || []).forEach(function (s) { SPEC.slide[s.product_id] = s; });
+  (r[4].data || []).forEach(function (s) { SPEC.barrel[s.product_id] = s; });
+  (r[5].data || []).forEach(function (s) { SPEC.compensator[s.product_id] = s; });
+  (r[6].data || []).forEach(function (s) { SPEC.frame[s.product_id] = s; });
+  (r[7].data || []).forEach(function (row) {
+    (BARREL_LOCKS[row.barrel_product_id] = BARREL_LOCKS[row.barrel_product_id] || [])
+      .push({ slide: row.slide_product_id, note: row.compatibility_note || '' });
+  });
+  (r[8].data || []).forEach(function (row) {
+    (MAGWELL_FITS[row.magwell_product_id] = MAGWELL_FITS[row.magwell_product_id] || [])
+      .push({ frame: row.frame_product_id, note: row.compatibility_note || '' });
+  });
 
-  await loadFavoritesAndRepaint(/*skipRepaint*/ true);
-
-  // Affiliate listings for every catalog product + any product referenced
-  // by a guide's parts_snapshot. One query, non-fatal on failure.
-  try {
-    if (window.affiliate) {
-      var ids = PRODUCTS.map(function (p) { return p.id; });
-      GUIDES.forEach(function (g) {
-        (g.parts_snapshot || []).forEach(function (part) {
-          if (part.refId) ids.push(part.refId);
-        });
-      });
-      await window.affiliate.loadFor(sb, ids);
-    }
-  } catch (e) { console.warn('[armory] affiliate load failed', e); }
+  renderPlatformRow();
+  restoreDraft();
 }
 
-async function loadFavoritesAndRepaint(skipRepaint) {
-  if (!CURRENT_USER) { FAVORITES = new Set(); }
-  else {
-    var res = await sb.from('part_favorites').select('product_id').eq('user_id', CURRENT_USER.id);
-    if (res.error) { console.error(res.error); }
-    else { FAVORITES = new Set((res.data || []).map(function (r) { return r.product_id; })); }
+// ─── COMPATIBILITY ENGINE ──────────────────────────────────────────────────
+function pickedProduct(cat) {
+  var pick = STATE.picks[cat];
+  return pick ? PRODUCTS_BY_ID[pick.productId] || null : null;
+}
+function pickedSpec(cat) {
+  var p = pickedProduct(cat);
+  return p ? SPEC[cat] && SPEC[cat][p.id] || null : null;
+}
+function isThreadedType(t) { return t === 'threaded' || t === 'threaded-and-ported'; }
+
+function productsForPlatform() {
+  if (!STATE.platform) return [];
+  return PRODUCTS.filter(function (p) { return p.platform_ids.indexOf(STATE.platform.id) !== -1; });
+}
+
+// The compensator category has three states: open, filtered, or hidden with a
+// stated reason (Rules 4 and 5). null reason = show the dropdown.
+function compHiddenReason() {
+  var slideSpec = pickedSpec('slide');
+  if (slideSpec && slideSpec.integrated_comp === true) return 'Your slide has a built-in compensator.';
+  var barrelSpec = pickedSpec('barrel');
+  if (barrelSpec && barrelSpec.barrel_type === 'ported') return 'Ported barrels already reduce muzzle flip — no separate comp needed.';
+  if (STATE.gun && STATE.gun.integrated_comp === true && !pickedProduct('slide')) {
+    return 'The ' + STATE.gun.name + '’s factory slide has a built-in compensator. Pick an aftermarket slide if you want a separate comp.';
   }
-  if (!skipRepaint) {
-    renderPartsSection();
-    renderSummary();
-    updateActionButtons();
+  return null;
+}
+
+// Every part of `cat` compatible with the current picks, Rules 1–8.
+function availableFor(cat) {
+  var all = productsForPlatform().filter(function (p) { return p.category === cat; });
+
+  if (cat === 'barrel') {
+    var slide = pickedProduct('slide'), slideSpec = pickedSpec('slide');
+    var comp = pickedProduct('compensator'), compSpec = comp ? SPEC.compensator[comp.id] : null;
+    return all.filter(function (b) {
+      var bs = SPEC.barrel[b.id];
+      if (!bs) return false;
+      if (slideSpec && bs.barrel_length_in !== slideSpec.barrel_length_in) return false;          // Rule 1
+      var locks = BARREL_LOCKS[b.id];
+      if (slide && locks && !locks.some(function (l) { return l.slide === slide.id; })) return false; // Rule 2
+      if (slideSpec && slideSpec.threaded_barrel_ok === false && isThreadedType(bs.barrel_type)) return false;
+      if (compSpec && !compSpec.comes_with_barrel) {                                              // Rule 3, reversed
+        if (compSpec.requires_threaded_barrel && !isThreadedType(bs.barrel_type)) return false;
+        if (compSpec.thread_pitch && bs.thread_pitch && compSpec.thread_pitch !== bs.thread_pitch) return false;
+      }
+      return true;
+    });
+  }
+
+  if (cat === 'slide') {
+    var barrel = pickedProduct('barrel'), barrelSpec = pickedSpec('barrel');
+    return all.filter(function (s) {
+      var ss = SPEC.slide[s.id];
+      if (!ss) return false;
+      if (barrelSpec) {
+        if (ss.barrel_length_in !== barrelSpec.barrel_length_in) return false;                    // Rule 1
+        var locks = BARREL_LOCKS[barrel.id];
+        if (locks && !locks.some(function (l) { return l.slide === s.id; })) return false;        // Rule 2
+        if (ss.threaded_barrel_ok === false && isThreadedType(barrelSpec.barrel_type)) return false;
+      }
+      return true;
+    });
+  }
+
+  if (cat === 'compensator') {
+    if (compHiddenReason()) return [];
+    var bSpec = pickedSpec('barrel');
+    return all.filter(function (c) {
+      var cs = SPEC.compensator[c.id];
+      if (!cs) return false;
+      if (!bSpec) return true;
+      if (cs.comes_with_barrel) return true;                                                       // brings its own
+      if (isThreadedType(bSpec.barrel_type)) {
+        return !cs.thread_pitch || !bSpec.thread_pitch || cs.thread_pitch === bSpec.thread_pitch;  // Rule 3
+      }
+      return cs.requires_threaded_barrel === false;                                                // Rule 3
+    });
+  }
+
+  if (cat === 'frame') {
+    if (!STATE.gun) return all;                                                                    // Rule 6: no model, no filter
+    var platformGuns = GUNS.filter(function (g) { return g.platform_id === STATE.platform.id; });
+    return all.filter(function (f) {
+      var frame = { slug: f.slug, frame_specs: SPEC.frame[f.id] || null };
+      return window.FrameFit.verdict(frame, STATE.gun, platformGuns) === 'fits';
+    });
+  }
+
+  if (cat === 'magwell') {
+    var pickedFrame = pickedProduct('frame');
+    if (!pickedFrame) return all;
+    return all.filter(function (m) {
+      var fits = MAGWELL_FITS[m.id];
+      if (!fits || !fits.length) return true;                                                      // Rule 8: no rows = universal
+      return fits.some(function (row) { return row.frame === pickedFrame.id; });
+    });
+  }
+
+  return all;                                                                                      // Rule 7
+}
+
+// After any change, drop picks that the new state makes incompatible — and
+// say so. Loops because removing one pick can free or break another.
+function reconcilePicks() {
+  var removed = [];
+  var changed = true;
+  while (changed) {
+    changed = false;
+    Object.keys(STATE.picks).forEach(function (cat) {
+      var p = pickedProduct(cat);
+      if (!p) { delete STATE.picks[cat]; changed = true; return; }
+      var ok = availableFor(cat).some(function (a) { return a.id === p.id; });
+      if (!ok) {
+        removed.push(displayProductName({ brand: p.brand, name: p.name }));
+        delete STATE.picks[cat];
+        changed = true;
+      }
+    });
+  }
+  if (removed.length) {
+    toast('Removed ' + removed.join(', ') + ' — not compatible with your new pick.');
   }
 }
 
-// ─── CONTROLS ─────────────────────────────────────────────
-function wireControls() {
-  document.getElementById('tab-build').onclick  = function () { setTab('build'); };
-  document.getElementById('tab-guides').onclick = function () { setTab('guides'); };
-  document.getElementById('btn-save-draft').onclick = saveDraft;
-  document.getElementById('btn-post').onclick       = postThisBuild;
-  document.getElementById('btn-back-to-list').onclick   = backToList;
-  var titleEl = document.getElementById('builder-title');
-  if (titleEl) titleEl.oninput = onTitleInput;
-}
-
-function setTab(tab) {
-  STATE.tab = tab;
-  var isBuild = tab === 'build';
-  document.getElementById('tab-build').classList.toggle('active', isBuild);
-  document.getElementById('tab-guides').classList.toggle('active', !isBuild);
-  document.getElementById('tab-build').setAttribute('aria-selected', String(isBuild));
-  document.getElementById('tab-guides').setAttribute('aria-selected', String(!isBuild));
-  document.getElementById('tab-build-panel').hidden  = !isBuild;
-  document.getElementById('tab-guides-panel').hidden =  isBuild;
-}
-
-// ─── PLATFORM PICKER ──────────────────────────────────────
+// ─── RENDER ────────────────────────────────────────────────────────────────
 function renderPlatformRow() {
   var row = document.getElementById('platform-row');
   var note = document.getElementById('platform-note');
@@ -1182,803 +509,388 @@ function renderPlatformRow() {
   row.querySelectorAll('.platform-btn').forEach(function (btn) {
     btn.addEventListener('click', function () { selectPlatform(btn.dataset.id); });
   });
-  // Empty-catalog nudge — visible if the selected platform has zero products.
   if (STATE.platform) {
-    var count = productsForPlatform(STATE.platform.id).length;
-    note.textContent = count ? '' : '— catalog coming soon';
-  } else {
-    note.textContent = '';
-  }
+    var count = productsForPlatform().length;
+    note.textContent = count ? count + ' parts in the catalog' : '— catalog coming soon';
+  } else { note.textContent = ''; }
+  renderModelRow();
 }
 
-function productsForPlatform(platformId) {
-  return PRODUCTS.filter(function (p) { return p.platform_ids.indexOf(platformId) !== -1; });
+function renderModelRow() {
+  var wrap = document.getElementById('model-row');
+  var sel = document.getElementById('model-select');
+  var note = document.getElementById('model-note');
+  if (!STATE.platform) { wrap.hidden = true; return; }
+  var models = GUNS.filter(function (g) { return g.platform_id === STATE.platform.id; });
+  if (!models.length) { wrap.hidden = true; return; }
+  wrap.hidden = false;
+  sel.innerHTML =
+    '<option value="">Custom / FCU build — show every grip size</option>' +
+    models.map(function (g) {
+      return '<option value="' + g.id + '"' + (STATE.gun && STATE.gun.id === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>';
+    }).join('');
+  sel.onchange = function () {
+    STATE.gun = models.find(function (g) { return g.id === sel.value; }) || null;
+    reconcilePicks();
+    renderAll();
+  };
+  note.textContent = STATE.gun
+    ? 'Grip modules are filtered to ones that fit the ' + STATE.gun.name + '.'
+    : 'Pick a model to filter grip modules to your gun — or build free-form.';
 }
 
 function selectPlatform(id) {
   var next = PLATFORMS_BY_ID[id];
   if (!next) return;
-  // Changing platform: catalog picks likely don't fit the new one, drop them.
-  // Pending (custom) parts survive since they aren't tied to catalog IDs.
   if (STATE.platform && STATE.platform.id !== id) {
-    var doomed = STATE.parts.filter(function (pt) { return !pt.pending; }).length;
-    // Ask ONLY when something would actually be lost, and say how much. The
-    // pistol row is two buttons side by side, so an unconditional confirm
-    // would fire on almost every click and train people to dismiss it —
-    // at which point it protects nothing.
-    //
-    // NOT confirmDiscardIfDirty(): the condition here is "parts would be
-    // dropped", not "the build is dirty", and they are not the same. A
-    // freshly loaded, perfectly clean draft still loses every catalog part
-    // to a platform switch, and isDirty() is false for it — so the dirty
-    // check would wave through exactly the case where saved work is on the
-    // line. Keep this keyed to the count.
-    if (doomed && !window.confirm(
-          'Switching to ' + next.name + ' will remove ' + doomed +
-          (doomed === 1 ? ' part that doesn\'t' : ' parts that don\'t') +
-          ' fit it.\n\nSwitch anyway?')) return;
-    STATE.parts = STATE.parts.filter(function (pt) { return pt.pending; });
+    STATE.picks = {};
+    STATE.gun = null;
+    STATE.savedId = null;
   }
   STATE.platform = next;
-  STATE.openCategory = null;
-  rebuildCatalogForPlatform();
   renderPlatformRow();
-  renderPartsSection();
-  renderSummary();
-  updateActionButtons();
+  renderAll();
 }
 
-function rebuildCatalogForPlatform() {
-  PRODUCTS_BY_CATEGORY = {};
-  if (!STATE.platform) { CATALOG_PLATFORM = null; return; }
-  var pid = STATE.platform.id;
-  PRODUCTS.forEach(function (p) {
-    if (p.platform_ids.indexOf(pid) === -1) return;
-    (PRODUCTS_BY_CATEGORY[p.category] = PRODUCTS_BY_CATEGORY[p.category] || []).push(p);
-  });
-  CATALOG_PLATFORM = pid;
+function optionLabel(p) {
+  var dv = p.defaultVariant;
+  var price = dv && dv.msrp != null ? ' — ' + money(dv.msrp) : '';
+  return displayProductName({ brand: p.brand, name: p.name }) + price;
 }
 
-// ─── PARTS SECTION (accordion) ────────────────────────────
-function renderPartsSection() {
+function slotHtml(slot) {
+  var cat = slot.cat;
+  var picked = pickedProduct(cat);
+  var html = '<div class="slot" data-cat="' + cat + '">';
+
+  if (cat === 'compensator') {
+    var reason = compHiddenReason();
+    if (reason) {
+      html += '<div class="slot-label">' + esc(slot.label) + '</div>';
+      html += '<div class="note-banner muted">' + esc(reason) + '</div></div>';
+      return html;
+    }
+  }
+
+  var options = availableFor(cat);
+  html += '<div class="slot-label">' + esc(slot.label) + ' <span style="color:#c5c2b8;font-weight:500;">· ' + options.length + ' compatible</span></div>';
+
+  if (picked) {
+    html += pickedHtml(cat, picked);
+  } else if (!options.length) {
+    html += '<div class="slot-empty">' + esc(emptyText(cat)) + '</div>';
+  } else {
+    var article = /^[aeiou]/i.test(slot.label) ? 'an' : 'a';
+    html += '<select class="gf-select" data-pick="' + cat + '" aria-label="Choose ' + article + ' ' + escAttr(slot.label) + '">' +
+      '<option value="">Choose ' + article + ' ' + esc(slot.label.toLowerCase()) + '…</option>' +
+      options.map(function (p) { return '<option value="' + p.id + '">' + esc(optionLabel(p)) + '</option>'; }).join('') +
+      '</select>';
+  }
+
+  html += slotBanners(cat, picked);
+  html += '</div>';
+  return html;
+}
+
+function emptyText(cat) {
+  if (cat === 'magwell') return 'No compatible magwells found for this grip module.';
+  if (cat === 'barrel') return 'No barrels fit this combination — the slide’s length and port cuts decide which barrels work.';
+  if (cat === 'compensator') return 'No comps fit this barrel — most need a threaded barrel with a matching thread pitch.';
+  return 'Nothing in the catalog fits this combination yet.';
+}
+
+function slotBanners(cat, picked) {
+  var html = '';
+  if (cat === 'barrel' && picked) {
+    var bs = SPEC.barrel[picked.id];
+    if (bs && bs.requires_slide_text) html += '<div class="note-banner warn">' + esc(bs.requires_slide_text) + '</div>';
+    var slide = pickedProduct('slide');
+    var locks = BARREL_LOCKS[picked.id];
+    if (slide && locks) {
+      var lock = locks.find(function (l) { return l.slide === slide.id; });
+      if (lock && lock.note) html += '<div class="note-banner info">' + esc(lock.note) + '</div>';
+    }
+  }
+  if (cat === 'compensator' && picked) {
+    var cs = SPEC.compensator[picked.id];
+    if (cs && cs.comes_with_barrel) html += '<div class="note-banner info">This comp comes with its own barrel.</div>';
+    else if (cs && cs.requires_threaded_barrel && !pickedProduct('barrel')) html += '<div class="note-banner warn">Needs a threaded barrel' + (cs.thread_pitch ? ' (' + esc(cs.thread_pitch) + ')' : '') + ' — pick one above.</div>';
+  }
+  if (cat === 'magwell' && picked) {
+    var frame = pickedProduct('frame');
+    var fits = MAGWELL_FITS[picked.id];
+    if (frame && fits) {
+      var fit = fits.find(function (row) { return row.frame === frame.id; });
+      if (fit && fit.note) html += '<div class="note-banner info">' + esc(fit.note) + '</div>';
+    } else if (!frame && fits && fits.length) {
+      html += '<div class="note-banner muted">Fit depends on your grip module — pick one to confirm.</div>';
+    }
+  }
+  if (cat === 'frame' && !STATE.gun && picked) {
+    html += '<div class="note-banner muted">Pick your model above to confirm this grip module fits it.</div>';
+  }
+  return html;
+}
+
+function pickedHtml(cat, p) {
+  var pick = STATE.picks[cat];
+  var variant = p.variants.find(function (v) { return v.id === pick.variantId; }) || p.defaultVariant;
+  var price = variant && variant.msrp != null ? variant.msrp : (p.defaultVariant && p.defaultVariant.msrp);
+  var img = variant && variant.primary_image_url;
+  var thumb = img
+    ? '<img src="' + escAttr(img) + '" alt="' + escAttr(displayProductName({ brand: p.brand, name: p.name })) + '" loading="lazy" />'
+    : '<div class="swatch-wrap">' + (window.variantMediaHtml ? window.variantMediaHtml(variant || {}) : '') + '</div>';
+
+  var variantRow = '';
+  var labelled = p.variants.filter(function (v) { return (window.variantLabel(v) || '').length; });
+  if (p.variants.length > 1 && labelled.length) {
+    variantRow = '<div class="picked-variant-row"><select class="gf-select" data-variant="' + cat + '" aria-label="Color or option">' +
+      p.variants.map(function (v) {
+        var lbl = window.variantLabel(v) || 'Standard';
+        var vp = v.msrp != null ? ' — ' + money(v.msrp) : '';
+        return '<option value="' + v.id + '"' + (variant && variant.id === v.id ? ' selected' : '') + '>' + esc(lbl + vp) + '</option>';
+      }).join('') + '</select></div>';
+  }
+
+  return '<div class="picked">' +
+    '<div class="picked-thumb">' + thumb + '</div>' +
+    '<div class="picked-body">' +
+      '<span class="picked-brand">' + esc(p.brand) + '</span>' +
+      '<span class="picked-name">' + esc(p.name) + '</span>' +
+      variantRow +
+      (price != null ? '<span class="picked-price">' + money(price) + '</span>' : '<span class="picked-price na">Price n/a</span>') +
+    '</div>' +
+    '<button type="button" class="picked-remove" data-remove="' + cat + '">Remove</button>' +
+  '</div>';
+}
+
+function renderParts() {
   var container = document.getElementById('parts-container');
   if (!STATE.platform) {
-    container.innerHTML = '<div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Select a pistol to see compatible parts.</div></div>';
+    container.innerHTML = '<div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Pick a pistol to see compatible parts.</div></div>';
     return;
   }
-  var cats = Object.keys(PRODUCTS_BY_CATEGORY).sort(function (a, b) { return catLabel(a).localeCompare(catLabel(b)); });
-  if (!cats.length) {
-    container.innerHTML = '<div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">No parts in the catalog for ' + esc(STATE.platform.name) + ' yet.</div></div>';
+  if (!productsForPlatform().length) {
+    container.innerHTML = '<div class="card"><div class="empty"><div class="empty-title">Catalog coming soon</div>No ' + esc(STATE.platform.name) + ' parts yet.</div></div>';
     return;
   }
-  container.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
-    cats.map(function (c) { return renderCategoryBlock(c); }).join('') +
-  '</div>';
-  wireCategoryHandlers();
-  runBuyUrlAudit();
+  container.innerHTML = SLOT_GROUPS.map(function (g) {
+    var inner = g.slots.map(slotHtml).join('');
+    if (!inner) return '';
+    return '<div class="group-head"><div class="group-head-label">' + esc(g.group.label) + '</div><div class="group-head-blurb">' + esc(g.group.blurb) + '</div></div>' +
+           '<div class="section-card">' + inner + '</div>';
+  }).join('');
+
+  container.querySelectorAll('select[data-pick]').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      if (!sel.value) return;
+      var p = PRODUCTS_BY_ID[sel.value];
+      if (!p) return;
+      STATE.picks[sel.dataset.pick] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
+      reconcilePicks();
+      renderAll();
+    });
+  });
+  container.querySelectorAll('select[data-variant]').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      var pick = STATE.picks[sel.dataset.variant];
+      if (pick) { pick.variantId = sel.value; renderAll(); }
+    });
+  });
+  container.querySelectorAll('button[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      delete STATE.picks[btn.dataset.remove];
+      reconcilePicks();
+      renderAll();
+    });
+  });
 }
 
-function renderCategoryBlock(cat) {
-  var isOpen = STATE.openCategory === cat;
-  var addedInCat = STATE.parts.filter(function (p) { return p.category === cat; });
-  var allInCat = PRODUCTS_BY_CATEGORY[cat] || [];
-  var favIds = new Set();
-  var favs = [];
-  var rest = [];
-  allInCat.forEach(function (p) {
-    if (FAVORITES.has(p.id)) { favIds.add(p.id); favs.push(p); }
-    else rest.push(p);
+function buildRows() {
+  return Object.keys(STATE.picks).map(function (cat) {
+    var p = pickedProduct(cat);
+    if (!p) return null;
+    var pick = STATE.picks[cat];
+    var v = p.variants.find(function (x) { return x.id === pick.variantId; }) || p.defaultVariant;
+    return { cat: cat, product: p, variant: v, price: v && v.msrp != null ? Number(v.msrp) : null };
+  }).filter(Boolean);
+}
+
+function renderSidebar() {
+  var rows = buildRows();
+  document.getElementById('s-platform').textContent = STATE.gun ? STATE.gun.name : (STATE.platform ? STATE.platform.name : '—');
+  document.getElementById('s-parts').textContent = rows.length;
+
+  var list = document.getElementById('s-list');
+  list.hidden = !rows.length;
+  list.innerHTML = rows.map(function (r) {
+    return '<div class="summary-part"><span class="summary-part-name"><span class="summary-part-cat">' + esc(window.categorySingular(r.cat)) + '</span>' +
+      esc(displayProductName({ brand: r.product.brand, name: r.product.name })) + '</span>' +
+      '<span class="summary-part-price">' + (r.price != null ? money(r.price) : '—') + '</span></div>';
+  }).join('');
+
+  var priced = rows.filter(function (r) { return r.price != null; });
+  var total = priced.reduce(function (sum, r) { return sum + r.price; }, 0);
+  document.getElementById('s-total').textContent = money(total) + (priced.length < rows.length ? '+' : '');
+  document.getElementById('s-total-sub').textContent = priced.length < rows.length
+    ? priced.length + ' of ' + rows.length + ' parts priced' : '';
+
+  var titleEl = document.getElementById('build-title');
+  titleEl.hidden = !rows.length;
+  titleEl.value = STATE.title;
+
+  var btn = document.getElementById('btn-save');
+  btn.disabled = !rows.length;
+  btn.textContent = STATE.savedId ? 'Update your Gun Guide →' : 'Save to Gun Guides →';
+}
+
+function renderAll() {
+  renderParts();
+  renderSidebar();
+  persistDraft();
+}
+
+// ─── DRAFT PERSISTENCE (localStorage) ──────────────────────────────────────
+// Sign-in is an OAuth round trip that leaves the page, so an in-progress
+// build has to survive it. Reads and writes are wrapped: private windows and
+// blocked storage must degrade to "no draft", never to a broken page.
+function persistDraft() {
+  try {
+    if (!STATE.platform) { localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({
+      platformId: STATE.platform.id,
+      gunId: STATE.gun ? STATE.gun.id : null,
+      picks: STATE.picks,
+      title: STATE.title,
+      savedId: STATE.savedId,
+    }));
+  } catch (e) { /* storage unavailable — build just won't survive a reload */ }
+}
+
+function restoreDraft() {
+  var draft = null;
+  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) {}
+  if (!draft || !PLATFORMS_BY_ID[draft.platformId]) return;
+  STATE.platform = PLATFORMS_BY_ID[draft.platformId];
+  STATE.gun = GUNS.find(function (g) { return g.id === draft.gunId; }) || null;
+  STATE.title = draft.title || '';
+  STATE.savedId = draft.savedId || null;
+  STATE.picks = {};
+  Object.keys(draft.picks || {}).forEach(function (cat) {
+    var pick = draft.picks[cat];
+    var p = pick && PRODUCTS_BY_ID[pick.productId];
+    if (!p) return;
+    var v = p.variants.find(function (x) { return x.id === pick.variantId; }) || p.defaultVariant;
+    STATE.picks[cat] = { productId: p.id, variantId: v ? v.id : null };
   });
+  reconcilePicks();
+  renderPlatformRow();
+  renderAll();
+}
 
-  var selectedHtml = addedInCat.length
-    ? '<div class="selected-parts-list">' + addedInCat.map(selectedPartHtml).join('') + '</div>'
-    : '';
+document.getElementById('build-title').addEventListener('input', function (e) {
+  STATE.title = e.target.value;
+  persistDraft();
+});
 
-  var picker = '';
-  if (isOpen) {
-    picker = '<div class="picker-panel">';
-    if (favs.length) {
-      picker +=
-        '<div class="picker-section-label favs"><span class="fav-icon">♥</span> Your favorites in this category</div>' +
-        '<div class="part-grid">' + favs.map(function (p) { return renderPartCard(p, cat, /*isFav*/ true); }).join('') + '</div>';
-    }
-    if (rest.length) {
-      picker +=
-        (favs.length ? '<div class="picker-section-label">All ' + esc(catLabel(cat).toLowerCase()) + '</div>' : '') +
-        '<div class="part-grid">' + rest.map(function (p) { return renderPartCard(p, cat, /*isFav*/ false); }).join('') + '</div>';
-    }
-    if (!favs.length && !rest.length) picker += '<div class="picker-empty">No products in this category for this platform.</div>';
-    picker += '</div>';
+// ─── SAVE ──────────────────────────────────────────────────────────────────
+function defaultBuildName() {
+  var base = STATE.gun ? STATE.gun.name : (STATE.platform ? STATE.platform.name : 'Custom');
+  return base + ' build';
+}
+
+async function saveGuide() {
+  var rows = buildRows();
+  if (!rows.length || !STATE.platform) return;
+
+  if (!CURRENT_USER) {
+    persistDraft();
+    toast('Sign in to save — your picks are kept for when you’re back.',
+      'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
+    return;
   }
 
-  return '<div class="category-block' + (isOpen ? ' open' : '') + '" data-cat="' + cat + '">' +
-    '<div class="category-head" data-cat-head="' + cat + '">' +
-      '<div class="category-name-wrap">' +
-        '<span class="category-name">' + esc(catLabel(cat)) + '</span>' +
-        (addedInCat.length ? '<span class="category-added-count">' + addedInCat.length + '</span>' : '') +
-      '</div>' +
-      '<button class="category-toggle">' + (isOpen ? 'Close ✕' : '+ Add part') + '</button>' +
-    '</div>' +
-    selectedHtml + picker +
-  '</div>';
-}
+  var btn = document.getElementById('btn-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
 
-// One row per part already added to this category: photo, brand, name, price
-// and Remove. Replaces the text chips, which named a part without ever showing
-// it — no use at all when a category holds four near-identical compensators.
-//
-// The image comes from the live catalog rather than from the part, because
-// STATE.parts has no image field and adding one would not help: a part
-// hydrated from a saved draft or a remixed guide is rebuilt from
-// parts_snapshot, which has no image either.
-//
-// Three cases, and the last two are why this does not just read
-// PRODUCTS_BY_ID[p.refId].image directly:
-//   - refId in the catalog        -> the product photo
-//   - refId NOT in the catalog     -> "No photo". Happens for real: the draft
-//     was saved under another platform, or the product has since been
-//     retired or unpublished. rebuildCatalogForPlatform() runs before both
-//     hydration paths, so PRODUCTS_BY_ID holds only the CURRENT platform.
-//   - refId null (pending custom part, authored on gunforma-post-build.html
-//     and carried in on a draft) -> "Pending", with the amber dot below.
-// Price is read from the part, not the catalog, so this agrees with
-// totalMsrp() in the summary — which sums the same p.price.
-function selectedPartHtml(p) {
-  var live = p.refId ? PRODUCTS_BY_ID[p.refId] : null;
-  var thumb = live && live.image
-    ? '<div class="selected-part-thumb"><img src="' + escAttr(live.image) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '" loading="lazy" ' +
-        'onerror="this.parentElement.innerHTML=\'<div class=&quot;selected-part-thumb-label&quot;>No photo</div>\'"/></div>'
-    : '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' + (p.pending ? 'Pending' : 'No photo') + '</div></div>';
-  var priceHtml = p.pending
-    ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
-    : (p.price != null
-        ? '<div class="selected-part-price">$' + p.price.toFixed(p.price < 100 ? 2 : 0) + '</div>'
-        : '<div class="selected-part-price na">Price N/A</div>');
-  return '<div class="selected-part">' + thumb +
-    '<div class="selected-part-body">' +
-      '<div class="selected-part-brand">' + esc(p.brand) + '</div>' +
-      '<div class="selected-part-name">'  + esc(p.name)  + '</div>' +
-      priceHtml +
-      // Free-text variant/colour note, the same field post-build offers. This
-      // page renders its own card rather than js/part-picker.js's — the two
-      // pickers are different implementations — so the input is declared
-      // here too and must stay in step.
-      // Not on pending/custom parts: the builder typed the full name there.
-      (p.pending ? '' :
-        '<input type="text" class="selected-part-variant" maxlength="60"' +
-          ' value="' + escAttr(p.variant || '') + '"' +
-          ' data-variant-uid="' + escAttr(p.uid) + '"' +
-          ' placeholder="Variant / colour (optional) — e.g. FDE, Coyote, 2-tone"' +
-          ' aria-label="Variant or colour for ' + escAttr(p.name) + '" />') +
-    '</div>' +
-    '<button type="button" class="selected-part-remove" data-uid="' + escAttr(p.uid) + '" title="Remove">Remove</button>' +
-  '</div>';
-}
-
-function renderPartCard(p, cat, isFav) {
-  var isAdded = STATE.parts.some(function (pt) { return pt.refId === p.id; });
-  var priceHtml = p.price != null
-    ? '<div class="part-card-price">$' + p.price.toFixed(p.price < 100 ? 2 : 0) + '</div>'
-    : '<div class="part-card-price na">Price N/A</div>';
-  var photoHtml = p.image
-    ? '<img src="' + escAttr(p.image) + '" alt="' + escAttr(p.brand + ' ' + p.name) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-nophoto&quot;>No photo</div>\'"/>'
-    : '<div class="part-card-nophoto">No photo</div>';
-  var addBtn = isAdded
-    ? '<button type="button" class="part-card-btn remove" data-remove-ref="' + p.id + '">Remove</button>'
-    : '<button type="button" class="part-card-btn add"    data-add-ref="'    + p.id + '" data-add-cat="' + cat + '">+ Add</button>';
-  // Compact affiliate hero — real street price + retailer + Buy button.
-  // Renders nothing when the product has no affiliate listings (no
-  // untracked fallback link — products.url is not used as a buy link).
-  var affHtml = (window.affiliate ? window.affiliate.renderHero(p.id) : '') || '';
-  // Product-page link. Null when the row has no slug or its category isn't in
-  // the shared map — render the plain name rather than ship a dead href.
-  var href = window.productPath ? window.productPath(p.category, p.slug) : null;
-  if (!href) {
-    console.warn('[armory] no product-page link for ' + p.id + ' (' + p.brand + ' ' + p.name + ') — ' +
-      (p.slug ? 'category "' + p.category + '" not in CATEGORY_URL_SEGMENT' : 'missing slug'));
-  }
-  var nameHtml = href
-    ? '<a class="part-card-link" href="' + escAttr(href) + '">' + esc(p.name) + '</a>'
-    : esc(p.name);
-  return '<div class="part-card' + (isAdded ? ' added' : '') + (isFav ? ' favorited' : '') + '">' +
-    '<div class="part-card-photo">' + photoHtml +
-      (isFav ? '<div class="part-card-fav-badge">★ FAV</div>' : '') +
-    '</div>' +
-    '<div class="part-card-body">' +
-      '<div class="part-card-brand">' + esc(p.brand) + '</div>' +
-      '<div class="part-card-name">'  + nameHtml     + '</div>' +
-      priceHtml +
-      // Wrapped to match the catalog: stops the click bubbling, and the class
-      // lifts it above the stretched card link so Buy never navigates to the
-      // product page. No preventDefault — the Buy button is an <a> itself.
-      (affHtml ? '<div class="part-card-aff" onclick="event.stopPropagation();">' + affHtml + '</div>' : '') +
-    '</div>' +
-    '<div class="part-card-actions">' + addBtn + '</div>' +
-  '</div>';
-}
-
-function wireCategoryHandlers() {
-  document.querySelectorAll('[data-cat-head]').forEach(function (el) {
-    el.addEventListener('click', function () {
-      var cat = el.dataset.catHead;
-      STATE.openCategory = (STATE.openCategory === cat) ? null : cat;
-      renderPartsSection();
-    });
+  var snapshot = rows.map(function (r) {
+    return {
+      category: r.cat,
+      refId: r.product.id,
+      slug: r.product.slug,
+      brand: r.product.brand,
+      name: r.product.name,
+      pending: false,
+      variantId: r.variant ? r.variant.id : null,
+      variantLabel: r.variant ? (window.variantLabel(r.variant) || null) : null,
+      variantColor: r.variant ? (r.variant.color || null) : null,
+      variantFinish: r.variant ? (r.variant.finish || null) : null,
+      imageUrl: r.variant ? (r.variant.primary_image_url || null) : null,
+      msrp: r.price,
+    };
   });
-  document.querySelectorAll('[data-add-ref]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      addPartByRefId(el.dataset.addRef, el.dataset.addCat);
-    });
-  });
-  document.querySelectorAll('[data-remove-ref]').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.preventDefault();
-      e.stopPropagation();
-      removePartByRefId(el.dataset.removeRef);
-    });
-  });
-  // Variant note. Writes straight to STATE.parts and re-renders NOTHING —
-  // renderPartsSection() rebuilds this whole section's innerHTML, so a
-  // re-render per keystroke would destroy the input being typed into. The
-  // dirty badge is refreshed on its own because buildSignature() includes
-  // the snapshot, and a variant edit IS an unsaved change.
-  document.querySelectorAll('[data-variant-uid]').forEach(function (el) {
-    el.addEventListener('input', function () {
-      var uid = el.getAttribute('data-variant-uid');
-      var v = (el.value || '').trim().slice(0, 60);
-      var part = STATE.parts.find(function (p) { return p.uid === uid; });
-      if (!part) return;
-      part.variant = v || undefined;      // undefined so the key is omitted
-      var d = document.getElementById('builder-dirty');
-      if (d) d.hidden = !isDirty();
-      updateActionButtons();
-    });
-  });
-  // Same data-uid -> removePartByUid contract the chips used; only the class
-  // the button carries changed.
-  document.querySelectorAll('.selected-part-remove').forEach(function (el) {
-    el.addEventListener('click', function (e) {
-      e.stopPropagation();
-      removePartByUid(el.dataset.uid);
-    });
-  });
-}
-
-// renderPartsSection() replaces the whole section, so the block has to be
-// looked up AFTER the re-render — hence the deferred lookup by data-cat.
-function scrollCategoryIntoView(cat) {
-  setTimeout(function () {
-    var el = document.querySelector('[data-cat="' + cat + '"]');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 60);
-}
-
-function addPartByRefId(refId, cat) {
-  var product = PRODUCTS_BY_ID[refId];
-  if (!product) return;
-  // Silently ignore duplicate adds (belt-and-braces — the UI hides Add and
-  // shows Remove when the item is present, but a fast double click could race).
-  if (STATE.parts.some(function (p) { return p.refId === refId; })) return;
-  var addedCat = cat || product.category;
-  STATE.parts.push({
-    uid: 'p' + (partUid++), refId: refId, category: addedCat,
-    brand: product.brand, name: product.name, pending: false, price: product.price,
-  });
-  // Collapse the category now the pick is made. The panel used to stay open
-  // over a grid of forty cards where the one just clicked had flipped to
-  // "Remove" somewhere off-screen — no confirmation the add had landed. The
-  // new selected-part card above the fold is that confirmation, so scroll the
-  // block back to it; collapsing alone drops the page out from under the user.
-  //
-  // Same behaviour as closePickerAfterAdd() in gunforma-post-build.html,
-  // written against this page's own state rather than shared with it — the
-  // two pickers are different implementations (auto-fill grid, favorites,
-  // affiliate rows, delegated handlers) and only the behaviour is common.
-  //
-  // This is the page's ONLY path into STATE.parts.push — there is no custom
-  // or manual add here. Pending parts exist in the data model but arrive
-  // through parts_snapshot hydration, which sets openCategory itself.
-  STATE.openCategory = null;
-  renderPartsSection();
-  renderSummary();
-  updateActionButtons();
-  scrollCategoryIntoView(addedCat);
-}
-function removePartByRefId(refId) {
-  STATE.parts = STATE.parts.filter(function (p) { return p.refId !== refId; });
-  renderPartsSection();
-  renderSummary();
-  updateActionButtons();
-}
-function removePartByUid(uid) {
-  STATE.parts = STATE.parts.filter(function (p) { return p.uid !== uid; });
-  renderPartsSection();
-  renderSummary();
-  updateActionButtons();
-}
-
-// ─── SUMMARY + ACTIONS ─────────────────────────────────────
-function totalMsrp() {
-  return STATE.parts.reduce(function (sum, p) { return p.price != null ? sum + p.price : sum; }, 0);
-}
-function renderSummary() {
-  // Every parts/platform mutation funnels through here, so it's the one
-  // place that reliably reflects the unsaved-changes badge.
-  renderBuilderHeader();
-  document.getElementById('s-platform').textContent = STATE.platform ? STATE.platform.name : '—';
-  document.getElementById('s-parts').textContent    = String(STATE.parts.length);
-  document.getElementById('s-favs').textContent     = CURRENT_USER ? String(FAVORITES.size) : 'Sign in';
-  var t = totalMsrp();
-  document.getElementById('s-total').textContent = '$' + Math.round(t).toLocaleString();
-}
-function updateActionButtons() {
-  var canSubmit = !!STATE.platform && STATE.parts.length > 0;
-  // Save as draft stays ENABLED even when it cannot succeed. A disabled
-  // button is indistinguishable from a broken one — it gives no reason and
-  // no way to ask for one. saveDraft() now toasts which piece is missing.
-  // (btn-post is still gated: posting has a longer list of requirements that
-  // post-build itself enforces, and is a separate question from this.)
-  document.getElementById('btn-save-draft').disabled = false;
-  document.getElementById('btn-post').disabled       = !canSubmit;
-}
-
-// WHITELIST. Every key a part carries has to be named here — and in BOTH
-// STATE.parts mappers below — or this page DELETES it on the next save.
-// Silently: the write succeeds, no error is raised, and the row simply comes
-// back smaller. Nothing surfaces it except noticing the data is gone.
-//
-// This has already cost one field. `finish` (the paint-job / cerakote object
-// authored by post-build's Paint Job & Finish form) was emitted there and
-// carried by no site here, so any finish would have been dropped the first
-// time its draft was saved from the Armory. It was caught while adding
-// `variant` and while 0 builds carried a finish key — which is luck, not
-// design, because that form is live and the next Cerakote entry posted would
-// have been the one to lose it.
-//
-// So: adding a key to a part means three edits in this file, not one. If you
-// are adding a fourth, the list is here, the mapper in loadBuildById(), and
-// the mapper in remixGuide().
-function buildPartsSnapshot() {
-  return STATE.parts.map(function (p) {
-    var row = { category: p.category, refId: p.refId, brand: p.brand, name: p.name, pending: p.pending };
-    // Both omitted when absent, matching post-build, so an untouched part
-    // round trips through this page byte-identical.
-    //
-    // `finish` is an object and is carried through UNTOUCHED — this page has
-    // no finish form and should not grow one. It is post-build's field; the
-    // Armory's only job is not to destroy it.
-    if (p.finish)  row.finish  = p.finish;
-    if (p.variant) row.variant = p.variant;
-    // The builder's own details for this part (js/part-picker.js PART DETAILS).
-    if (p.details) row.details = p.details;
-    // WHICH VARIANT — carried through UNTOUCHED, exactly like `finish` and
-    // `variant` above. This page has no variant picker and should not grow
-    // one; its only job is not to destroy post-build's fields.
-    //
-    // THREE whitelists in this file, not one, and a field has to be in all
-    // of them: this writer, the draft loader in loadBuildById(), and the
-    // guide cloner in remixGuide(). A key none of them names is not "left
-    // alone" — it is DELETED on the next save of any draft carrying it,
-    // silently, which is exactly how `finish` was lost before #86.
-    if (p.variantId)     row.variantId     = p.variantId;
-    if (p.variantLabel)  row.variantLabel  = p.variantLabel;
-    if (p.variantColor)  row.variantColor  = p.variantColor;
-    if (p.variantSpecs)  row.variantSpecs  = p.variantSpecs;
-    if (p.variantFinish) row.variantFinish = p.variantFinish;
-    if (p.imageUrl)      row.imageUrl      = p.imageUrl;
-    // The part's own id (js/part-ids.js). The Armory never makes one — the
-    // database's trg_assign_part_ids does, for a part saved without — but it
-    // must carry one it loaded, or the next save of that draft would re-id
-    // the part out from under any correction addressed to it.
-    if (p.partId)        row.partId        = p.partId;
-    return row;
-  });
-}
-
-// Guards the window between click and response. The button is disabled for
-// the same span, but a double-click can queue a second call before the first
-// paint — which is how the duplicate rows in production got there.
-var draftSaveInFlight = false;
-
-async function saveDraft() {
-  if (!CURRENT_USER) { toast('Sign in to save drafts', 'gunforma-signin.html', 'Sign in'); return false; }
-  // These two used to `return false` with nothing shown. The button is no
-  // longer disabled for them (a disabled button explains nothing either), so
-  // say which one is missing.
-  if (!STATE.platform)          { toast('Pick a pistol first'); return false; }
-  if (STATE.parts.length === 0) { toast('Add at least one part to save'); return false; }
-  // Deliberately silent: this is a double-click racing itself, not something
-  // the user did wrong, and a toast for it would be noise. It is only safe to
-  // stay silent because the finally below always clears it — see the note there.
-  if (draftSaveInFlight) return false;
-  draftSaveInFlight = true;
-
-  var btn = document.getElementById('btn-save-draft');
-  btn.disabled = true; var orig = btn.textContent; btn.textContent = 'Saving…';
-
-  // The name to persist on an INSERT: whatever the title field holds, or the
-  // generated one when it is empty. Computed once so the row and
-  // STATE.buildName below cannot disagree.
-  //
-  // Deliberately NOT gated on nameTouched, unlike the UPDATE branch. That
-  // flag exists to stop a STALE name being written over a row that may have
-  // been renamed elsewhere — an INSERT has no such row, so there is nothing
-  // to clobber and whatever is in STATE.buildName simply IS this build's
-  // name. Gating it here would break remixGuide(), which pre-names the
-  // builder from the guide's title without setting the flag: the field would
-  // read "Sig P365 Concealed Carry" and the row would save as
-  // "SIG P365 build".
-  var newName = STATE.buildName || defaultBuildName();
+  var payload = {
+    title: (STATE.title || '').trim() || defaultBuildName(),
+    platform_id: STATE.platform.id,
+    gun_id: STATE.gun ? STATE.gun.id : null,
+    parts_snapshot: snapshot,
+    user_id: CURRENT_USER.id,
+  };
 
   var res;
-  try {
-  if (STATE.buildId) {
-    // The columns the Armory owns. Everything else is left untouched so a
-    // draft that started in post-build survives a round trip through this
-    // page intact:
-    //   name         — CONDITIONAL; see nameWrite below
-    //   description  — the story; this page has no field for it
-    //   activities   — tags; no UI here. Hardcoding [] would erase them.
-    //   status       — only post-build submits; never change it here
-    //   legal_confirmed / content_license_confirmed / confirmed_at
-    //                — prevent_build_consent_tampering rejects these anyway
-    //   updated_at   — set by the builds_updated_at BEFORE UPDATE trigger;
-    //                  writing it from the client is redundant
-    //   edit_history — prevent_owner_edit_history_change rejects owner writes
-    //
-    // THE NAME RULE: write builds.name only when the user edited the title in
-    // THIS session (nameTouched).
-    //
-    // The old rule was "never", because there was no title field and the only
-    // value to hand was the generated defaultBuildName() — writing that over a
-    // name typed in post-build was the hazard. That hazard is gone: the field
-    // holds the real name now.
-    //
-    // The remaining one is staleness, and it is why this is not simply
-    // "always". When the field is untouched, STATE.buildName is a COPY taken
-    // when the draft loaded. The row may have been renamed since — from the
-    // drafts list in another tab, or in post-build — and writing the copy back
-    // would silently revert that rename with no error and nothing to see. When
-    // the field IS touched, the value is an instruction from the user and is
-    // the newest thing we have, so it wins.
-    var nameWrite = (nameTouched && STATE.buildName) ? { name: STATE.buildName } : {};
-    res = await sb.from('builds')
-      .update(Object.assign({
-        platform_id: STATE.platform.id,
-        parts_snapshot: buildPartsSnapshot(),
-        // Derived from the parts list, not hardcoded — matches post-build's
-        // rule, so a 'minimum' draft that gains parts here becomes 'full'
-        // instead of staying stale.
-        tier: STATE.parts.length ? 'full' : 'minimum',
-      }, nameWrite))
-      .eq('id', STATE.buildId)
-      .eq('user_id', CURRENT_USER.id)   // redundant with RLS, explicit anyway
-      .eq('status', 'draft')            // never silently edit a submitted build
-      .select('id')
-      .maybeSingle();
+  if (STATE.savedId) {
+    // Verify the row came back: an RLS-refused update matches zero rows and
+    // returns no error. (CLAUDE.md, "A green result is not evidence".)
+    res = await sb.from('gun_guides').update(payload).eq('id', STATE.savedId).select('id');
+    if (!res.error && (!res.data || !res.data.length)) {
+      STATE.savedId = null;
+      res = await sb.from('gun_guides').insert(payload).select('id');
+    }
   } else {
-    res = await sb.from('builds')
-      .insert({
-        user_id: CURRENT_USER.id,
-        platform_id: STATE.platform.id,
-        // The title field when the user filled it in, else
-        // "<Platform> build" — which beats the old "Armory draft — <date>",
-        // where every row in a list looked identical.
-        name: newName,
-        tier: 'full',
-        status: 'draft',
-        activities: [],
-        parts_snapshot: buildPartsSnapshot(),
-        // Draft: no consent flags. The stamp_build_consent trigger leaves
-        // confirmed_at null in that case, and the row can be picked up later
-        // in post-build for real submission.
-        legal_confirmed: false,
-        content_license_confirmed: false,
-      })
-      .select('id')
-      .single();
-  }
-  } catch (err) {
-    // try/catch as well as try/finally, on purpose. finally alone unwedges the
-    // button but lets the rejection escape into the onclick handler, where it
-    // surfaces as an unhandled promise rejection in the console and NOTHING
-    // on screen — the same "it just didn't work" this whole change is about.
-    console.error('[armory] draft save threw', err);
-    toast('Save failed — check your connection and try again');
-    return false;
-  } finally {
-    // ALWAYS, including on a throw. supabase-js normally reports failures as
-    // { error } rather than rejecting, but a genuine transport failure —
-    // offline, DNS, CORS, an aborted request — rejects out of the await. When
-    // this reset lived after the await instead of in a finally, one such
-    // throw left draftSaveInFlight stuck true and the button stuck disabled
-    // reading "Saving…", and every later click returned false at the
-    // in-flight guard with no toast and nothing in the console except an
-    // unhandled rejection naming the network, not the save. That wedge is
-    // the reason "Save as draft" could stop working for a whole session with
-    // no way to tell it from a dead button.
-    draftSaveInFlight = false;
-    btn.disabled = false; btn.textContent = orig;
+    res = await sb.from('gun_guides').insert(payload).select('id');
   }
 
   if (res.error) {
-    console.error('[armory] draft save failed', res.error);
-    toast('Save failed — ' + (res.error.message || 'try again'));
-    return false;
+    console.error('[armory] save failed', res.error);
+    var msg = /relation .*gun_guides|schema cache/i.test(res.error.message || '')
+      ? 'Saving isn’t switched on yet — the Gun Guides table hasn’t been created.'
+      : 'Couldn’t save: ' + (res.error.message || 'unknown error');
+    toast(msg);
+  } else {
+    STATE.savedId = (res.data && res.data[0] && res.data[0].id) || STATE.savedId;
+    persistDraft();
+    toast('Saved to Gun Guides.', 'gunforma-gun-guides.html', 'See it there');
   }
-
-  // An UPDATE matching no row comes back with data null and no error — the
-  // build was deleted or submitted in another tab. Say so instead of
-  // reporting a save that did not happen.
-  if (STATE.buildId && !res.data) {
-    toast('That draft no longer exists — reload to start a new one.');
-    return false;
-  }
-
-  var wasNew = !STATE.buildId;
-  if (wasNew) STATE.buildName = newName;
-  if (wasNew && res.data && res.data.id) {
-    // Adopt the new row so the next click updates it. Reflecting the id in
-    // the URL means a refresh reopens the same draft rather than orphaning
-    // it and starting another.
-    STATE.buildId = res.data.id;
-    try {
-      history.replaceState({}, '',
-        window.location.pathname + '?build=' + encodeURIComponent(res.data.id));
-    } catch (_) { /* history blocked — STATE.buildId still prevents a dupe */ }
-  }
-
-  markClean();
-  renderBuilderHeader();
-  toast(wasNew ? 'Draft saved' : 'Draft updated');
-  return true;
+  renderSidebar();
 }
 
-// Save first, then hand the SAME row to post-build as an edit. Previously
-// this passed the parts through localStorage and post-build INSERTed a fresh
-// build — so posting an existing draft left the draft behind as an orphan
-// duplicate. Now the draft becomes the post.
-//
-// post-build's edit mode handles a parts-only draft: it only refuses on
-// not-found, not-yours, or a status other than draft/rejected, and it
-// explicitly tolerates a draft with no photos. Publishing still requires a
-// photo — that gate is the point of sending the user there.
-async function postThisBuild() {
-  if (!CURRENT_USER) { toast('Sign in to post a build', 'gunforma-signin.html', 'Sign in'); return; }
-  if (!STATE.platform || STATE.parts.length === 0) return;
+document.getElementById('btn-save').addEventListener('click', saveGuide);
 
-  // Persist anything unsaved so the row post-build opens is what's on screen.
-  if (!STATE.buildId || isDirty()) {
-    var saved = await saveDraft();
-    if (!saved) return;              // saveDraft already surfaced the reason
-  }
-  if (!STATE.buildId) { toast('Couldn\'t save this build — try again'); return; }
-
-  // Clear the legacy handoff key. If a stale one survived from an older
-  // session, post-build would hydrate from it and clobber the draft we just
-  // pointed it at.
-  try { localStorage.removeItem(LS_ARMORY_POST_KEY); } catch (_) {}
-
-  savedSignature = buildSignature();   // suppress the beforeunload prompt
-  window.location.href = 'gunforma-post-build.html?id=' +
-    encodeURIComponent(STATE.buildId) + '&mode=edit';
-}
-
-// ─── GUIDES TAB ────────────────────────────────────────────
-function renderGuidesFilterRow() {
-  var row = document.getElementById('guide-filter-row');
-  row.innerHTML = GUIDE_CATEGORIES.map(function (c) {
-    return '<button type="button" class="guide-chip' + (STATE.guideCategory === c.key ? ' active' : '') + '" data-cat="' + c.key + '">' + esc(c.label) + '</button>';
-  }).join('');
-  row.querySelectorAll('.guide-chip').forEach(function (el) {
-    el.addEventListener('click', function () {
-      STATE.guideCategory = el.dataset.cat;
-      renderGuidesFilterRow();
-      renderGuides();
-    });
-  });
-}
-
-function renderGuides() {
-  var container = document.getElementById('guides-container');
-  var list = STATE.guideCategory === 'all'
-    ? GUIDES
-    : GUIDES.filter(function (g) { return g.category === STATE.guideCategory; });
-  if (!list.length) {
-    container.innerHTML = '<div class="empty"><div class="empty-title">No guides in this category yet</div><div>Try a different tab, or check back soon.</div></div>';
-    return;
-  }
-  container.innerHTML = '<div class="guides-grid">' + list.map(renderGuideCard).join('') + '</div>';
-  container.querySelectorAll('.guide-remix-btn').forEach(function (el) {
-    el.addEventListener('click', function () { remixGuide(el.dataset.guideId); });
-  });
-  runBuyUrlAudit();
-}
-
-function renderGuideCard(g) {
-  var platName = PLATFORMS_BY_ID[g.platform_id] ? PLATFORMS_BY_ID[g.platform_id].name : '';
-  var snap = Array.isArray(g.parts_snapshot) ? g.parts_snapshot : [];
-  var total = 0;
-  var partsHtml = snap.map(function (part) {
-    var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
-    // Prefer real-world street price from the affiliate hero when we have
-    // it; otherwise fall back to the product's MSRP.
-    var aff = (window.affiliate && part.refId) ? window.affiliate.get(part.refId) : null;
-    var streetPrice = aff && aff.hero && aff.hero.price != null ? aff.hero.price : null;
-    var price = streetPrice != null ? streetPrice : (live && live.price != null ? live.price : null);
-    if (price != null) total += price;
-    var priceCell = price != null
-      ? '<div class="guide-part-price">$' + price.toFixed(price < 100 ? 2 : 0) + '</div>'
-      : '<div class="guide-part-price na">—</div>';
-    // Affiliate buy — the hero row from js/affiliate.js: a partner listing
-    // (sponsored, /go/<link>) or, when the product has none, its own store
-    // (not sponsored, /go/part/<product>). Renders as an empty span when
-    // neither exists so the 4-column grid layout stays intact.
-    //
-    // /go/, like every other buy link — the click layer's whole point is
-    // that no buy button bypasses it. This page is parked (no nav, noindex)
-    // but it still answers on its own URL, and Loadouts inherits this
-    // renderer, so leaving it pointing straight at the retailer would ship
-    // an unlogged buy link into the rebuild.
-    var buyCell = aff && aff.hero
-      ? (aff.hero.maker
-          ? '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="' + escAttr(window.MAKER_REL) + '">' + esc(aff.hero.maker.label) + '</a>'
-          : '<a class="guide-part-buy" href="' + escAttr(aff.hero.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">Buy' + (aff.hero.partnerName ? ' at ' + esc(aff.hero.partnerName) : '') + '</a>')
-      : '<span></span>';
-    return '<div class="guide-part">' +
-      '<span class="guide-part-cat">' + esc(catLabel(part.category)) + '</span>' +
-      '<span class="guide-part-name"><strong>' + esc(part.brand || '') + '</strong> ' + esc(part.name || '') + '</span>' +
-      priceCell + buyCell +
-    '</div>';
-  }).join('');
-  return '<div class="guide-card">' +
-    '<div class="guide-hero">' +
-      '<div class="guide-hero-cat">' + esc(guideCatLabel(g.category)) + '</div>' +
-      '<div class="guide-hero-title">' + esc(g.title) + '</div>' +
-    '</div>' +
-    '<div class="guide-body">' +
-      (g.description ? '<div class="guide-desc">' + esc(g.description) + '</div>' : '') +
-      '<div style="font-size:11px;color:#888;">' + esc(platName) + ' · ' + snap.length + ' part' + (snap.length !== 1 ? 's' : '') + '</div>' +
-      (snap.length ? '<div class="guide-parts-list">' + partsHtml + '</div>' : '') +
-      '<div class="guide-footer">' +
-        '<div><span class="guide-total-label">Total</span><span class="guide-total">$' + Math.round(total).toLocaleString() + '</span></div>' +
-        '<button type="button" class="guide-remix-btn" data-guide-id="' + g.id + '">Remix this build</button>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
-}
-function guideCatLabel(k) { var m = GUIDE_CATEGORIES.find(function (c) { return c.key === k; }); return m ? m.label : k; }
-
-function remixGuide(guideId) {
-  if (!CURRENT_USER) { toast('Sign in to remix a build', 'gunforma-signin.html', 'Sign in'); return; }
-  var g = GUIDES.find(function (x) { return x.id === guideId; });
-  if (!g) return;
-  var plat = PLATFORMS_BY_ID[g.platform_id];
-  if (!plat) { toast('Guide platform unavailable'); return; }
-
-  // Ask BEFORE replacing anything. A remix overwrites the whole builder, and
-  // the work it overwrites may never have been saved — losing that silently
-  // is worse than making someone click once. Asked after the guide and its
-  // platform check out, so we never prompt and then fail anyway.
-  if (!confirmDiscardIfDirty('Remix this guide')) return;
-
-  // A REMIX IS A NEW, UNSAVED BUILD — so the identity has to be dropped along
-  // with the parts.
-  //
-  // This used to set platform and parts and nothing else, leaving buildId
-  // pointing at whatever draft happened to be open. Open a draft, go to
-  // Guides, Remix, Save as draft, and saveDraft() took its UPDATE branch
-  // against THAT draft's id, replacing its parts_snapshot and its
-  // platform_id with the guide's. No error — .eq('status','draft') passes,
-  // because it really is a draft — and the header went on showing the old
-  // draft's name over the guide's parts.
-  STATE.buildId   = null;
-  savedSignature  = null;   // nothing saved yet; this is not an edit of a row
-  scrubBuildParam();        // drop ?build=<id> so a refresh can't reopen it
-
-  // Arrive pre-named from the guide instead of carrying the previous draft's
-  // title, which would be doubly wrong now the header is an editable field.
-  //
-  // nameTouched stays FALSE: this is a generated name, not one the user
-  // typed, and the flag's whole job is telling those apart on UPDATE. It
-  // costs nothing here because the INSERT path takes STATE.buildName
-  // whatever the flag says — see the note on newName in saveDraft(). If this
-  // build is later saved and reopened, the name is the server's and the flag
-  // is correctly false for it.
-  STATE.buildName = g.title || null;
-  nameTouched     = false;
-
-  // Clone into user's My Build state — never mutate the guide row itself.
-  STATE.platform = plat;
-  rebuildCatalogForPlatform();
-  var snap = Array.isArray(g.parts_snapshot) ? g.parts_snapshot : [];
-  STATE.parts = snap.map(function (part) {
-    var live = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
-    return {
-      uid: 'p' + (partUid++), refId: part.refId || null, category: part.category,
-      brand: part.brand || (live ? live.brand : 'Unknown'),
-      name:  part.name  || (live ? live.name  : ''),
-      pending: !!part.pending,
-      // Carried, or they are gone on the next save — see buildPartsSnapshot().
-      // finish is post-build's object; it passes through untouched.
-      finish:  part.finish  || undefined,
-      variant: part.variant || undefined,
-      details: part.details || undefined,
-      // Same pass-through as the two above, and the same trap: dropping a
-      // field here loses it just as completely as dropping it from
-      // buildPartsSnapshot(), because that function reads STATE.parts.
-      variantId:     part.variantId     || undefined,
-      variantLabel:  part.variantLabel  || undefined,
-      variantColor:  part.variantColor  || undefined,
-      variantSpecs:  part.variantSpecs  || undefined,
-      variantFinish: part.variantFinish || undefined,
-      imageUrl:      part.imageUrl      || undefined,
-      partId:        part.partId        || undefined,
-      price: live ? live.price : null,
-    };
-  });
-  STATE.openCategory = null;
-  setTab('build');
-  renderPlatformRow();
-  renderPartsSection();
-  renderSummary();
-  updateActionButtons();
-  toast('Remixed — customize your build below');
-  window.scrollTo({ top: 0, behavior: 'smooth' });
-}
-
-// ─── AFFILIATE COVERAGE AUDIT ──────────────────────────────
-// Was: buy_url audit against the untracked products.url column. Now that
-// every buy link goes through affiliate_links (tracked commission), the
-// same gap warning fires against affiliate coverage — a product with no
-// affiliate listing surfaces nothing to click, which is a catalog-
-// completeness issue we want visible during QA.
-function runBuyUrlAudit() {
-  if (!window.affiliate) return;
-  var visibleProductIds = [];
-  if (STATE.tab === 'build' && STATE.openCategory && PRODUCTS_BY_CATEGORY[STATE.openCategory]) {
-    (PRODUCTS_BY_CATEGORY[STATE.openCategory] || []).forEach(function (p) { visibleProductIds.push(p.id); });
-  }
-  if (STATE.tab === 'guides') {
-    var list = STATE.guideCategory === 'all' ? GUIDES : GUIDES.filter(function (g) { return g.category === STATE.guideCategory; });
-    list.forEach(function (g) {
-      (g.parts_snapshot || []).forEach(function (part) {
-        if (part.refId) visibleProductIds.push(part.refId);
-      });
-    });
-  }
-  if (visibleProductIds.length < 5) return;
-  var missing = visibleProductIds.filter(function (id) { return !window.affiliate.get(id); }).length;
-  var pct = missing / visibleProductIds.length;
-  if (pct > 0.2) {
-    console.warn('[armory] affiliate coverage gap: ' + missing + '/' + visibleProductIds.length + ' visible parts (' + Math.round(pct * 100) + '%) have no affiliate listing. Add rows to affiliate_links for these.');
-  }
-}
-
-// ─── UTILITIES ─────────────────────────────────────────────
+// ─── HELPERS ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function escAttr(s) { return esc(s); }
-
+function money(n) {
+  if (n == null || isNaN(n)) return '—';
+  var v = Number(n);
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
+}
 function fatalErr(what, err) {
   console.error('[armory]', what, err);
-  document.getElementById('parts-container').innerHTML = '<div class="empty"><div class="empty-title">Couldn\'t load ' + what + '</div><div>' + esc(err.message || 'unknown error') + '</div></div>';
+  document.getElementById('parts-container').innerHTML =
+    '<div class="card"><div class="empty"><div class="empty-title">Couldn’t load ' + esc(what) + '</div><div>' + esc(err.message || 'unknown error') + '</div></div></div>';
 }
-
-var _toastTimer = null;
+var toastTimer = null;
 function toast(msg, href, linkText) {
   var el = document.getElementById('toast');
   document.getElementById('toast-msg').textContent = msg;
-  document.getElementById('toast-link-wrap').innerHTML = href ? '<a href="' + escAttr(href) + '">' + esc(linkText || 'Go') + '</a>' : '';
+  document.getElementById('toast-link-wrap').innerHTML = href ? '<a href="' + escAttr(href) + '">' + esc(linkText || 'Open') + '</a>' : '';
   el.classList.add('show');
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(function () { el.classList.remove('show'); }, 3500);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { el.classList.remove('show'); }, 5000);
 }
 
-init();
+loadAll();
 </script>
-
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
 </html>

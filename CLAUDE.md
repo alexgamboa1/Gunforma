@@ -3116,64 +3116,69 @@ and `isDirty()` is false for it — so the dirty check waves through exactly
 the case where *saved* work is on the line. Key the prompt to what would
 actually be destroyed.
 
-## The Armory is parked — do not restore it by accident
+## The Armory is rebuilt, and still unlaunched — do not wire the nav by accident
 
-`gunforma-armory.html` is **deliberately hidden and deliberately still in the
-repo**. It has no nav link on any page, it is not in `sitemap.mjs`, and it
-carries `<meta name="robots" content="noindex">`. It still works, and it still
-answers on its own URL — no 404, no redirect, no auth gate.
+**Rebuilt 2026-10-27** (Alex's call): `gunforma-armory.html` is now
+**pick-and-save only** — platform → model → one part per catalog category,
+dropdowns filtered live by PARTS_BUILDER_COMPATIBILITY_LOGIC.md (barrel↔slide
+length + `barrel_slide_requirements`, `threaded_barrel_ok`, the comp rules,
+`FrameFit` for grips, `magwell_frame_requirements`). Saving writes a row to
+**`gun_guides`** (`supabase/migrations/20261027120000_gun_guides.sql`), shown
+by **`gunforma-gun-guides.html`**, which also lists the curated `guides` rows
+(so that table now has TWO readers — the old "only `from('guides')` query"
+claim is dead). The old page's drafts list, remix, favourites sort,
+`?prefill=`/`?build=` handling and post-build handoff are **gone on purpose**;
+posting a real build is still only `gunforma-post-build.html`, and the
+`ARMORY_POST_KEY` handshake there is untouched. The Armory no longer reads or
+writes `builds.parts_snapshot` at all, which is why it is out of
+`check-snapshot-fields.mjs`. Both pages tolerate a missing `gun_guides` table
+(save says "isn't switched on yet", the gallery shows a coming-online empty
+state), so the **code deploys before the migration**, per the house rule.
 
-**None of that is a bug.** A future session finding a working page with no way
-to reach it will want to helpfully wire the nav back up. Don't.
+**Both pages stay hidden**: no nav link, not in `sitemap.mjs`, `noindex` on
+each. A future session finding working pages with no way to reach them will
+want to helpfully wire the nav back up. Don't — launch (nav × 16 files,
+sitemap, the two noindex lines) is its own PR on Alex's go.
 
-**Why it is parked:** the page works — `#83`–`#86` fixed its picker, save,
-remix and photos — but it is the wrong object. It produces *draft builds*,
-which is what `gunforma-post-build.html` already owns. It is coming back
-rebuilt as **Loadouts**: a distinct object with its own `loadouts` table,
-rather than another producer of rows in `builds`. That is the whole reason it
-is parked — not that it is broken, but that "a saved parts list" and "a posted
-build" are the same row today and should not be.
+**History — why the old Armory was parked** (kept because the reasoning still
+binds the rebuild): the pre-rebuild page worked — `#83`–`#86` fixed its
+picker, save, remix and photos — but it was the wrong object. It produced
+*draft builds*,
+which is what `gunforma-post-build.html` already owns — "a saved parts list"
+and "a posted build" were the same row and should not be. The rebuild is that
+distinct object: the loadouts-spec concept, shipped under the name **Gun
+Guides** (`gun_guides` table, not `loadouts` — Alex's naming, 2026-10-27).
 
-**`claude/loadouts-spec.md` is the canonical spec for that rebuild** — the
-taxonomy, the schema decision, the collage design, the five settled decisions
-and the build sequencing. Read it before starting any Loadouts work, and keep
-it current: a mirror exists outside the repo that agents cannot read, so this
-copy is the one that has to be right.
+**`claude/loadouts-spec.md` remains the canonical spec for what is still
+unbuilt** — the collage design (§5), the share-route family, title
+moderation's report button (§7.5; the table already carries `is_removed`).
+Its §9 renderer warning is honoured: the rebuilt page renders the CHOSEN
+variant's photo, with `variant-swatch.js` when it has none, never the default
+variant's photo as a stand-in.
 
-**What went with it, on purpose:**
+**What went with the park, and where it stands after the rebuild:**
 
 - The **four published guides** — Sig P365 Concealed Carry / Home Defense /
-  Range & Competition / Duty — go dark, because the Armory's Guides tab is
-  their only surface. **The rows, the `guides` table and the rendering code
-  are all intact.** Verified at the time: `gunforma-armory.html` holds the
-  only `from('guides')` query anywhere — no other page, no Netlify function,
-  no script, and nothing in `sitemap.xml` or `_redirects`. Nothing has an FK
-  to `guides` and no view is built on it. Those titles become content pieces
-  later.
-- **Add to Armory build** on the parts-catalog detail panel — element, handler
-  and `.detail-btn.armory` CSS all removed. A control that opens nothing is
-  worse than no control.
-- The profile's **parts-only-draft** route (`routeForBuild()`), which sent
-  those drafts to the Armory. Every draft now goes to post-build's edit mode,
-  which handles one with no photos or description. `isPartsOnlyDraft()` is
-  kept, uncalled, so restoring that branch is a revert and not a rewrite.
-
-**What is untouched, because it is how this comes back:** post-build's
-`ARMORY_POST_KEY` handshake, the Armory's own `?prefill=` and `?build=`
-handling, the `guides` table and its four rows, everything under
-`part_favorites`, and `/gunforma-armory.html` in `auth-callback.html`'s
-`ALLOWED_NEXT` — that last one is a redirect allowlist, not a nav surface, and
-dropping it would break sign-in return for anyone who reaches the parked page
-directly.
+  Range & Competition / Duty — went dark with the park; they are **back**, on
+  `gunforma-gun-guides.html`'s "Gunforma guides" tab. The rows and table were
+  never touched.
+- **Add to Armory build** on the parts-catalog detail panel stays removed.
+- The profile's **parts-only-draft** route (`routeForBuild()`) stays removed;
+  every draft goes to post-build's edit mode. `isPartsOnlyDraft()` is still
+  kept, uncalled. Old Armory draft builds stay as draft builds (loadouts-spec
+  §4: not worth migrating).
+- The old Armory's `?prefill=` / `?build=` handling did NOT survive the
+  rebuild — the rebuilt page has no builds read at all. Post-build's
+  `ARMORY_POST_KEY` handshake is intact but currently has no sender.
+- `/gunforma-armory.html` stays in `auth-callback.html`'s `ALLOWED_NEXT`, and
+  the rebuilt page uses it: save is gated on sign-in
+  (`?next=gunforma-armory.html`), with in-progress picks held in localStorage
+  across the OAuth round trip.
 
 **Favourites are NOT part of this.** `part_favorites` is a standalone
 watchlist that will back price-drop emails. The heart lives on
 `gunforma-parts-catalog.html` (the only write path), the catalog has a
 "My Favorites" tab, and the profile has a "Favorite parts" tab — all three
 read the table directly and none of them needs the Armory. The Armory only
-ever *read* favourites, to sort them first in its picker. Leave all of it
-alone.
-
-**The whole change is one commit** so that restoring it is one `git revert`.
-Keep it that way: if you park or unpark something else here, don't spread it
-across commits.
+ever *read* favourites, to sort them first in its picker; the rebuilt page
+does not read them at all yet. Leave all of it alone.
