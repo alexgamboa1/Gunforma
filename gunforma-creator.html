@@ -124,6 +124,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <script src="js/site-url.js"></script>
+<script src="js/display-name.js"></script>
 <script src="js/supabase-client.js"></script>
 <script>
 // gunforma-creator.html — the private preview + claim page for creator invites.
@@ -214,7 +215,7 @@ function renderPreview() {
   var buildsHtml = (p.builds || []).map(function(b) {
     var hero = (b.photos || []).length ? (b.photos[0].thumb || b.photos[0].path) : null;
     var parts = (b.parts || []).map(function(x) {
-      return '<strong>' + escH([x.brand, x.name].filter(Boolean).join(' ')) + '</strong>';
+      return '<strong>' + escH(window.displayProductName({ brand: x.brand, name: x.name })) + '</strong>';
     }).join(' · ');
     return '<div class="build-preview">' +
       '<div class="build-preview-photo">' +
