@@ -13,6 +13,22 @@
 <meta name="description" content="A Gunforma creator page, waiting to be claimed." />
 <meta name="robots" content="noindex, nofollow" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  // Turnstile site key — same env swap as gunforma-signup.html. Supabase
+  // Auth has CAPTCHA required, so the inline email signup below must send
+  // a token. (On deploy previews the production key's hostname allowlist
+  // refuses, which matches CLAUDE.md: email/password auth is apex-only.)
+  window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
+    ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+  // The widget's container is rendered after the preview loads, so this
+  // only marks the script ready; renderCaptcha() does the explicit render.
+  window.onloadTurnstileCallback = function () {
+    window.TURNSTILE_READY = true;
+    if (window.renderCaptcha) window.renderCaptcha();
+  };
+</script>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?onload=onloadTurnstileCallback" async defer></script>
 <style>
 /* Private creator preview + claim page. Styling follows gunforma-claim.html:
    dark hero strip, white card, same tokens. No shared nav (viewer is usually
@@ -97,6 +113,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .card-footer a { color: #2a7bbd; font-weight: 600; text-decoration: none; }
 .card-footer a:hover { text-decoration: underline; }
 
+/* Inline email signup (the email path must finish on THIS page) */
+.email-form { border-top: 0.5px solid #e5e5e5; margin-top: 18px; padding-top: 18px; display: none; }
+.email-form.show { display: block; }
+.field-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #666; margin: 0 0 6px; }
+.field-input { width: 100%; font-size: 14px; font-family: inherit; border: 0.5px solid #d5d5d5; border-radius: 6px; padding: 11px 12px; margin-bottom: 14px; background: #fff; color: #1a1a1a; }
+.field-input:focus { outline: none; border-color: #4a9edd; }
+.cf-turnstile { margin-bottom: 14px; }
+.pending-box { background: #fdf6e3; border: 0.5px solid #ecd9a0; border-radius: 6px; padding: 12px 14px; font-size: 12px; color: #6b5516; line-height: 1.7; margin-bottom: 16px; }
+.pending-box strong { color: #4a3a0a; }
+.pending-box ol { margin: 6px 0 0 18px; }
+.pending-box button { color: #2a7bbd; font-weight: 600; background: none; border: none; font-family: inherit; cursor: pointer; padding: 0; font-size: 12px; }
+
 @media (max-width: 480px) {
   .card { padding: 22px 18px; }
   .hero-strip { padding: 32px 20px 40px; }
@@ -134,11 +162,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // which is the only reader of the hidden drafts. No token, wrong token,
 // expired token: a generic dead end that confirms nothing.
 //
-// Sign-in for the claim happens ON this page (Google OAuth, redirecting back
-// here). The token survives the OAuth round trip in sessionStorage, because
-// the Supabase redirect allowlist carries the bare page URL, not every
-// token-bearing variant. The shared client's detectSessionInUrl picks the
-// returned hash session up automatically.
+// Sign-in for the claim happens ON this page: Google OAuth redirecting back
+// here, or inline email signup whose confirmation link also lands back here.
+// The token survives both round trips in localStorage — the redirect
+// allowlist carries the bare page URL, not every token-bearing variant, and
+// the email confirmation opens a NEW tab, which sessionStorage (the first
+// version) could not reach. That is how the first rehearsal's claim was
+// silently lost: the email path sent the creator to the signup page and
+// nothing brought them back. Every terminal state clears the stored token.
+// The shared client's detectSessionInUrl picks the returned hash session up
+// automatically.
 //
 // This page deliberately has NO analytics tag (the invite token is in the
 // query string — same grounds as gunforma-claim.html) and NO session
@@ -149,7 +182,8 @@ var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 // The version of the agreement the Claim button accepts — keep in step with
 // builder-agreement.html's AGREEMENT_VERSION.
 var AGREEMENT_VERSION = 'v1-2026-01';
-var TOKEN_KEY = 'gf_creator_token';   // sessionStorage, for the OAuth round trip
+var TOKEN_KEY = 'gf_creator_token';     // localStorage: survives OAuth AND the email-confirm tab
+var PENDING_KEY = 'gf_pending_confirm'; // {email, ts} — an account exists but is unconfirmed; gunforma-signup.html sets it too
 
 var TOKEN = null;
 var PREVIEW = null;        // the creator_invite_preview payload
@@ -157,6 +191,31 @@ var SESSION_EMAIL = null;  // set when a session exists
 
 function escH(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
 function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+
+// Storage helpers. localStorage first (cross-tab, which the email path
+// needs); sessionStorage as the fallback where localStorage is blocked —
+// that degrades to the old behavior, where only same-tab Google works.
+function storeToken(t) {
+  try { localStorage.setItem(TOKEN_KEY, t); return true; } catch (e) { /* fall through */ }
+  try { sessionStorage.setItem(TOKEN_KEY, t); return true; } catch (e) { return false; }
+}
+function readStoredToken() {
+  try { var v = localStorage.getItem(TOKEN_KEY); if (v) return v; } catch (e) { /* fall through */ }
+  try { return sessionStorage.getItem(TOKEN_KEY) || null; } catch (e) { return null; }
+}
+function clearToken() {
+  try { localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+}
+function readPending() {
+  try {
+    var v = JSON.parse(localStorage.getItem(PENDING_KEY) || 'null');
+    if (v && v.email && (Date.now() - (v.ts || 0)) < 86400000) return v;  // 24h, the confirm link's life
+  } catch (e) { /* ignore */ }
+  return null;
+}
+function setPending(email) { try { localStorage.setItem(PENDING_KEY, JSON.stringify({ email: email, ts: Date.now() })); } catch (e) { /* ignore */ } }
+function clearPending() { try { localStorage.removeItem(PENDING_KEY); } catch (e) { /* ignore */ } }
 
 // ============================================================
 // INIT — recover the token (URL first, sessionStorage after OAuth),
@@ -166,34 +225,39 @@ function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build
   var search = new URLSearchParams(window.location.search || '');
   TOKEN = (search.get('t') || '').trim() || null;
   if (TOKEN) {
-    try { sessionStorage.setItem(TOKEN_KEY, TOKEN); } catch (e) { /* private mode: the URL keeps working */ }
+    storeToken(TOKEN);  // private mode: the URL keeps working
   } else {
-    try { TOKEN = sessionStorage.getItem(TOKEN_KEY) || null; } catch (e) { TOKEN = null; }
+    TOKEN = readStoredToken();
   }
   if (!TOKEN) return showDeadEnd();
 
   // Don't leave the credential sitting in the address bar / history when
   // storage can hold it instead. (If storage failed, keep the URL as-is.)
-  var stored = null;
-  try { stored = sessionStorage.getItem(TOKEN_KEY); } catch (e) { /* ignore */ }
-  if (stored === TOKEN && search.get('t')) history.replaceState({}, '', window.location.pathname);
+  if (readStoredToken() === TOKEN && search.get('t')) history.replaceState({}, '', window.location.pathname);
 
-  // Who's signed in, if anyone (the OAuth hash session is consumed by the
-  // shared client; getSession waits for it).
+  // Who's signed in, if anyone (the OAuth or email-confirm hash session is
+  // consumed by the shared client; getSession waits for it).
   try {
     var s = await sb.auth.getSession();
     if (s && s.data && s.data.session) SESSION_EMAIL = s.data.session.user.email || '(signed in)';
   } catch (e) { /* anonymous is fine */ }
+  if (SESSION_EMAIL) clearPending();  // a session means the account is confirmed
 
+  // A failure to REACH the function is not a verdict on the link. The dead
+  // end is for a token the server rejected; a network hiccup gets a retry,
+  // and the stored token stays (same reasoning as CLAUDE.md's "not found
+  // means PostgREST said zero rows").
   var res;
   try {
     res = await sb.functions.invoke('creator-claim', { body: { action: 'preview', token: TOKEN } });
   } catch (e) {
-    return showDeadEnd();
+    return showLoadFailed();
   }
   if (res.error) {
+    if (!res.error.context) return showLoadFailed();  // FunctionsFetchError: nothing answered
     var code = '';
     try { var b = await res.error.context.json(); code = (b && b.error) || ''; } catch (e) { /* ignore */ }
+    clearToken();  // the server answered: this token is finished, whichever way
     if (code === 'already_claimed') return showAlreadyClaimed();
     if (code === 'declined')        return showDeclined(false);
     if (code === 'expired')         return showExpired();
@@ -246,12 +310,34 @@ function renderPreview() {
         '<div class="spinner" id="spinner"></div><span id="claim-btn-text">Claim @' + escH(p.handle) + ' →</span>' +
       '</button>';
   } else {
+    var pending = readPending();
     authHtml =
+      (pending
+        ? '<div class="pending-box"><strong>You created an account (' + escH(pending.email) + ') but haven\'t confirmed it — nothing is claimed yet.</strong>' +
+          '<ol><li>Open the confirmation email from Gunforma.</li>' +
+          '<li>Click its link — it brings you back to this page, signed in.</li>' +
+          '<li>Finish the claim here.</li></ol>' +
+          'No email? <button onclick="resendConfirm(\'' + escH(pending.email).replace(/'/g, '&#39;') + '\', this)">Send it again</button></div>'
+        : '') +
       '<button class="btn-google" onclick="signInWithGoogle()">' +
         '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.16-3.16A11 11 0 0 0 2.18 7.06L5.84 9.9C6.71 7.31 9.14 5.38 12 5.38z"/></svg>' +
         'Continue with Google to claim it' +
       '</button>' +
-      '<div class="card-footer">Prefer email and password? <a href="gunforma-signup.html" target="_blank" rel="noopener">Create an account</a>, then open your invite link again.</div>';
+      '<div class="card-footer">Prefer email and password? <a href="#" onclick="toggleEmailForm(); return false;">Create your account right here</a> — this page walks you through every step.</div>' +
+      '<div class="email-form" id="email-form">' +
+        '<div class="field-label">Email</div>' +
+        '<input class="field-input" id="su-email" type="email" autocomplete="email" placeholder="you@example.com"/>' +
+        '<div class="field-label">Password (8+ characters)</div>' +
+        '<input class="field-input" id="su-password" type="password" autocomplete="new-password"/>' +
+        '<div class="checkbox-row">' +
+          '<input type="checkbox" id="su-legal"/>' +
+          '<label for="su-legal">I am 18 or older and agree to Gunforma\'s <a href="terms-of-service.html" target="_blank" rel="noopener">Terms of Service</a>.</label>' +
+        '</div>' +
+        '<div class="cf-turnstile" id="ts-creator" data-theme="light"></div>' +
+        '<button class="btn-submit" id="su-btn" onclick="handleEmailSignup()">' +
+          '<div class="spinner" id="su-spinner"></div><span id="su-btn-text">Create account — step 1 of 3</span>' +
+        '</button>' +
+      '</div>';
   }
 
   document.getElementById('card').innerHTML =
@@ -305,7 +391,7 @@ async function handleClaim() {
     return;
   }
 
-  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  clearToken(); clearPending();
   var handle = (res.data && res.data.handle) || PREVIEW.handle;
   document.getElementById('hero-eyebrow').textContent = 'Live';
   document.getElementById('hero-title').textContent = 'Welcome to Gunforma, @' + handle;
@@ -320,12 +406,12 @@ async function handleClaim() {
 }
 
 // ============================================================
-// AUTH — Google round trip, token parked in sessionStorage
+// AUTH — Google round trip, token parked in localStorage
 // ============================================================
 async function signInWithGoogle() {
   showError('');
-  try { sessionStorage.setItem(TOKEN_KEY, TOKEN); } catch (e) {
-    showError('Your browser is blocking storage, which the sign-in round trip needs. Open this link outside private mode, or create an account on the signup page and come back.');
+  if (!storeToken(TOKEN)) {
+    showError('Your browser is blocking storage, which the sign-in round trip needs. Open this link outside private mode and try again.');
     return;
   }
   var res = await sb.auth.signInWithOAuth({
@@ -336,9 +422,117 @@ async function signInWithGoogle() {
 }
 
 async function switchAccount() {
-  try { sessionStorage.setItem(TOKEN_KEY, TOKEN); } catch (e) { /* ignore */ }
+  storeToken(TOKEN);
   await sb.auth.signOut();
   window.location.reload();
+}
+
+// ============================================================
+// AUTH — inline email signup. The whole point: the email path
+// starts AND finishes on this page, with the steps numbered, so
+// nobody can leave believing they claimed when they didn't.
+// ============================================================
+function toggleEmailForm() {
+  var f = document.getElementById('email-form');
+  if (!f) return;
+  f.classList.toggle('show');
+  if (f.classList.contains('show')) renderCaptcha();
+}
+
+// Explicit Turnstile render: the widget container exists only after the
+// preview renders and the form is expanded, so the usual render-on-load
+// can't see it. Safe to call repeatedly — an already-rendered widget is
+// left alone.
+window.renderCaptcha = function () {
+  var el = document.getElementById('ts-creator');
+  if (!el || el.dataset.widgetId || !window.TURNSTILE_READY || !window.turnstile) return;
+  el.dataset.widgetId = turnstile.render(el, { sitekey: window.TURNSTILE_SITE_KEY, theme: 'light' });
+};
+
+async function handleEmailSignup() {
+  showError('');
+  var el = document.getElementById('ts-creator');
+  var captchaToken = (window.turnstile && el && el.dataset.widgetId) ? turnstile.getResponse(el.dataset.widgetId) : '';
+  if (!captchaToken) { showError('Please complete the verification above the button.'); return; }
+
+  var email    = (document.getElementById('su-email').value || '').trim().toLowerCase();
+  var password = document.getElementById('su-password').value;
+  if (!email || email.indexOf('@') < 1) { showError('Enter your email address.'); return; }
+  if (password.length < 8) { showError('Password must be at least 8 characters.'); return; }
+  if (!document.getElementById('su-legal').checked) { showError('You must confirm you are 18 or older and agree to the Terms of Service.'); return; }
+  if (!storeToken(TOKEN)) {
+    showError('Your browser is blocking storage, which the email confirmation round trip needs. Open this link outside private mode and try again.');
+    return;
+  }
+
+  var btn = document.getElementById('su-btn');
+  btn.disabled = true;
+  document.getElementById('su-spinner').classList.add('show');
+  document.getElementById('su-btn-text').textContent = 'Creating your account…';
+
+  // No username here on purpose: the claim gives this account the invite's
+  // handle, so asking for a throwaway name just to rename it is the detour
+  // this form replaces.
+  var res = await sb.auth.signUp({
+    email: email,
+    password: password,
+    options: {
+      captchaToken: captchaToken,
+      emailRedirectTo: siteBaseUrl() + '/gunforma-creator.html',
+    },
+  });
+
+  if (res.error) {
+    btn.disabled = false;
+    document.getElementById('su-spinner').classList.remove('show');
+    document.getElementById('su-btn-text').textContent = 'Create account — step 1 of 3';
+    // Turnstile tokens are single-use — reset for the next attempt.
+    if (window.turnstile && el && el.dataset.widgetId) turnstile.reset(el.dataset.widgetId);
+    var msg = res.error.message || '';
+    if (msg.toLowerCase().includes('captcha')) msg = 'Verification failed. Please try again.';
+    if (msg.toLowerCase().includes('already registered')) {
+      showError('That email already has a Gunforma account. Sign in on the sign-in page (new tab), then come back to this tab and reload — your invite is saved on this page.');
+      return;
+    }
+    showError(msg || 'That didn\'t go through. Try again.');
+    return;
+  }
+
+  setPending(email);
+  showCheckEmail(email);
+}
+
+async function resendConfirm(email, btn) {
+  try { await sb.auth.resend({ type: 'signup', email: email }); } catch (e) { /* the button text is the only feedback either way */ }
+  if (btn) { btn.textContent = 'Sent!'; btn.disabled = true; setTimeout(function () { btn.textContent = 'Send it again'; btn.disabled = false; }, 4000); }
+}
+
+// The explicit staged state. Nothing on it can be read as "claimed":
+// the title numbers the step, the body says what has NOT happened yet.
+// When the confirmation signs them in (usually in the new tab, which
+// claims there; the auth state broadcasts across tabs), this tab reloads
+// into the signed-in claim screen on its own.
+function showCheckEmail(email) {
+  setHero('One more step', 'Check your email', '');
+  document.getElementById('card').innerHTML =
+    '<div class="global-error" id="global-error"></div>' +
+    '<div class="state-center">' +
+      '<div class="state-icon">✉</div>' +
+      '<div class="state-title">Step 2 of 3 — confirm your email</div>' +
+      '<div class="state-sub">We sent a link to <strong>' + escH(email) + '</strong>.<br/>' +
+        '<strong>You haven\'t claimed anything yet</strong> — your page is still private. ' +
+        'Open that email and click the link: it brings you back to this page, signed in, where you finish the claim (step 3).</div>' +
+      '<button class="btn-decline" onclick="resendConfirm(\'' + escH(email).replace(/'/g, '&#39;') + '\', this)">No email after a minute? Send it again</button>' +
+      '<button class="btn-decline" onclick="renderPreview()">Wrong email? Go back</button>' +
+    '</div>';
+  // One-shot: reload into the claim screen the moment a session appears
+  // (the confirm tab's sign-in reaches this tab through the shared client).
+  if (!window.GF_SESSION_WATCH) {
+    window.GF_SESSION_WATCH = true;
+    sb.auth.onAuthStateChange(function (evt, session) {
+      if (session && !SESSION_EMAIL) window.location.reload();
+    });
+  }
 }
 
 // ============================================================
@@ -367,7 +561,7 @@ async function handleDecline() {
     showError('That didn\'t go through. Try again, or just ignore this link — nothing goes live without you.');
     return;
   }
-  try { sessionStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+  clearToken(); clearPending();
   showDeclined(true);
 }
 
@@ -378,6 +572,20 @@ function setHero(eyebrow, title, sub) {
   document.getElementById('hero-eyebrow').textContent = eyebrow;
   document.getElementById('hero-title').textContent = title;
   document.getElementById('hero-sub').textContent = sub;
+}
+
+// A network failure is NOT the dead end: the dead end tells the creator
+// their link is finished, which a hiccup must never claim. The token stays
+// stored, so Try again just works.
+function showLoadFailed() {
+  setHero('Gunforma', 'One moment', '');
+  document.getElementById('card').innerHTML =
+    '<div class="state-center">' +
+      '<div class="state-icon">⟳</div>' +
+      '<div class="state-title">Couldn\'t load your preview</div>' +
+      '<div class="state-sub">That was a connection hiccup, not a problem with your invite — nothing has changed on your page.</div>' +
+      '<button class="btn-submit" onclick="window.location.reload()">Try again</button>' +
+    '</div>';
 }
 
 function showDeadEnd() {

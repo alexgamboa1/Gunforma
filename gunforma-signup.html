@@ -525,6 +525,12 @@ async function handleSignUp() {
   document.getElementById('success-email').textContent = email;
   document.getElementById('form-section').style.display = 'none';
   document.getElementById('success-state').classList.add('show');
+
+  // An unconfirmed account exists now. gunforma-creator.html reads this so
+  // a creator who took the signup detour and comes back to their invite
+  // link is told "confirm your email first — nothing is claimed yet"
+  // instead of a silent Google button. Cleared there once a session exists.
+  try { localStorage.setItem('gf_pending_confirm', JSON.stringify({ email: email, ts: Date.now() })); } catch (e) { /* ignore */ }
 }
 
 async function handleResend() {
