@@ -323,20 +323,21 @@ function renderPreview() {
         '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.16-3.16A11 11 0 0 0 2.18 7.06L5.84 9.9C6.71 7.31 9.14 5.38 12 5.38z"/></svg>' +
         'Continue with Google to claim it' +
       '</button>' +
-      '<div class="card-footer">Prefer email and password? <a href="#" onclick="toggleEmailForm(); return false;">Create your account right here</a> — this page walks you through every step.</div>' +
+      '<div class="card-footer">Prefer email and password? <a href="#" onclick="toggleEmailForm(); return false;">Create your account or sign in right here</a> — this page walks you through every step.</div>' +
       '<div class="email-form" id="email-form">' +
         '<div class="field-label">Email</div>' +
         '<input class="field-input" id="su-email" type="email" autocomplete="email" placeholder="you@example.com"/>' +
-        '<div class="field-label">Password (8+ characters)</div>' +
+        '<div class="field-label">Password <span id="su-pw-hint">(8+ characters)</span></div>' +
         '<input class="field-input" id="su-password" type="password" autocomplete="new-password"/>' +
-        '<div class="checkbox-row">' +
+        '<div class="checkbox-row" id="su-legal-row">' +
           '<input type="checkbox" id="su-legal"/>' +
           '<label for="su-legal">I am 18 or older and agree to Gunforma\'s <a href="terms-of-service.html" target="_blank" rel="noopener">Terms of Service</a>.</label>' +
         '</div>' +
         '<div class="cf-turnstile" id="ts-creator" data-theme="light"></div>' +
-        '<button class="btn-submit" id="su-btn" onclick="handleEmailSignup()">' +
+        '<button class="btn-submit" id="su-btn" onclick="handleEmailSubmit()">' +
           '<div class="spinner" id="su-spinner"></div><span id="su-btn-text">Create account — step 1 of 3</span>' +
         '</button>' +
+        '<div class="card-footer" id="email-mode-toggle">Already have an account? <a href="#" onclick="switchEmailMode(\'signin\'); return false;">Sign in instead</a></div>' +
       '</div>';
   }
 
@@ -432,11 +433,32 @@ async function switchAccount() {
 // starts AND finishes on this page, with the steps numbered, so
 // nobody can leave believing they claimed when they didn't.
 // ============================================================
+var EMAIL_MODE = 'signup';  // 'signup' | 'signin'
+
 function toggleEmailForm() {
   var f = document.getElementById('email-form');
   if (!f) return;
   f.classList.toggle('show');
   if (f.classList.contains('show')) renderCaptcha();
+}
+
+// One form, two modes. Sign-in exists because an existing account must be
+// able to claim WITHOUT leaving the invite page — the send-them-elsewhere
+// copy is the detour this card replaced.
+function switchEmailMode(mode) {
+  EMAIL_MODE = mode;
+  showError('');
+  var signup = mode === 'signup';
+  document.getElementById('su-legal-row').style.display = signup ? '' : 'none';
+  document.getElementById('su-pw-hint').textContent = signup ? '(8+ characters)' : '';
+  document.getElementById('su-password').setAttribute('autocomplete', signup ? 'new-password' : 'current-password');
+  document.getElementById('su-btn-text').textContent = signup ? 'Create account — step 1 of 3' : 'Sign in to claim';
+  document.getElementById('email-mode-toggle').innerHTML = signup
+    ? 'Already have an account? <a href="#" onclick="switchEmailMode(\'signin\'); return false;">Sign in instead</a>'
+    : 'New here? <a href="#" onclick="switchEmailMode(\'signup\'); return false;">Create an account instead</a>';
+  var f = document.getElementById('email-form');
+  if (f && !f.classList.contains('show')) { f.classList.add('show'); renderCaptcha(); }
+  resetCaptcha();  // tokens are single-use; a mode switch should never submit a spent one
 }
 
 // Explicit Turnstile render: the widget container exists only after the
@@ -448,8 +470,20 @@ window.renderCaptcha = function () {
   if (!el || el.dataset.widgetId || !window.TURNSTILE_READY || !window.turnstile) return;
   el.dataset.widgetId = turnstile.render(el, { sitekey: window.TURNSTILE_SITE_KEY, theme: 'light' });
 };
+function resetCaptcha() {
+  var el = document.getElementById('ts-creator');
+  if (window.turnstile && el && el.dataset.widgetId) turnstile.reset(el.dataset.widgetId);
+}
 
-async function handleEmailSignup() {
+function emailFormBusy(busy, label) {
+  var btn = document.getElementById('su-btn');
+  if (!btn) return;
+  btn.disabled = busy;
+  document.getElementById('su-spinner').classList.toggle('show', busy);
+  document.getElementById('su-btn-text').textContent = label;
+}
+
+async function handleEmailSubmit() {
   showError('');
   var el = document.getElementById('ts-creator');
   var captchaToken = (window.turnstile && el && el.dataset.widgetId) ? turnstile.getResponse(el.dataset.widgetId) : '';
@@ -458,17 +492,18 @@ async function handleEmailSignup() {
   var email    = (document.getElementById('su-email').value || '').trim().toLowerCase();
   var password = document.getElementById('su-password').value;
   if (!email || email.indexOf('@') < 1) { showError('Enter your email address.'); return; }
-  if (password.length < 8) { showError('Password must be at least 8 characters.'); return; }
-  if (!document.getElementById('su-legal').checked) { showError('You must confirm you are 18 or older and agree to the Terms of Service.'); return; }
   if (!storeToken(TOKEN)) {
-    showError('Your browser is blocking storage, which the email confirmation round trip needs. Open this link outside private mode and try again.');
+    showError('Your browser is blocking storage, which the sign-in round trip needs. Open this link outside private mode and try again.');
     return;
   }
+  if (EMAIL_MODE === 'signin') return emailSignIn(email, password, captchaToken);
+  if (password.length < 8) { showError('Password must be at least 8 characters.'); return; }
+  if (!document.getElementById('su-legal').checked) { showError('You must confirm you are 18 or older and agree to the Terms of Service.'); return; }
+  return emailSignUp(email, password, captchaToken);
+}
 
-  var btn = document.getElementById('su-btn');
-  btn.disabled = true;
-  document.getElementById('su-spinner').classList.add('show');
-  document.getElementById('su-btn-text').textContent = 'Creating your account…';
+async function emailSignUp(email, password, captchaToken) {
+  emailFormBusy(true, 'Creating your account…');
 
   // No username here on purpose: the claim gives this account the invite's
   // handle, so asking for a throwaway name just to rename it is the detour
@@ -483,23 +518,66 @@ async function handleEmailSignup() {
   });
 
   if (res.error) {
-    btn.disabled = false;
-    document.getElementById('su-spinner').classList.remove('show');
-    document.getElementById('su-btn-text').textContent = 'Create account — step 1 of 3';
-    // Turnstile tokens are single-use — reset for the next attempt.
-    if (window.turnstile && el && el.dataset.widgetId) turnstile.reset(el.dataset.widgetId);
+    emailFormBusy(false, 'Create account — step 1 of 3');
+    resetCaptcha();  // tokens are single-use
     var msg = res.error.message || '';
     if (msg.toLowerCase().includes('captcha')) msg = 'Verification failed. Please try again.';
-    if (msg.toLowerCase().includes('already registered')) {
-      showError('That email already has a Gunforma account. Sign in on the sign-in page (new tab), then come back to this tab and reload — your invite is saved on this page.');
-      return;
-    }
+    if (msg.toLowerCase().includes('already registered')) { alreadyHasAccount(email); return; }
     showError(msg || 'That didn\'t go through. Try again.');
+    return;
+  }
+
+  // An existing CONFIRMED account does not error: Supabase anti-enumeration
+  // returns a fake user whose identities array is EMPTY, and sends nothing.
+  // Waiting on "confirm your email" there is waiting forever — the first
+  // version did exactly that. Detect it and route to sign-in.
+  var u = res.data && res.data.user;
+  if (u && Array.isArray(u.identities) && u.identities.length === 0) {
+    emailFormBusy(false, 'Create account — step 1 of 3');
+    resetCaptcha();
+    alreadyHasAccount(email);
     return;
   }
 
   setPending(email);
   showCheckEmail(email);
+}
+
+function alreadyHasAccount(email) {
+  switchEmailMode('signin');
+  var input = document.getElementById('su-email');
+  if (input && !input.value) input.value = email;
+  showError('This email already has a Gunforma account — sign in with its password below to claim.');
+}
+
+async function emailSignIn(email, password, captchaToken) {
+  if (!password) { showError('Enter your password.'); return; }
+  emailFormBusy(true, 'Signing in…');
+
+  var res = await sb.auth.signInWithPassword({
+    email: email,
+    password: password,
+    options: { captchaToken: captchaToken },
+  });
+
+  if (res.error) {
+    emailFormBusy(false, 'Sign in to claim');
+    resetCaptcha();
+    var msg = res.error.message || '';
+    if (msg.toLowerCase().includes('captcha')) msg = 'Verification failed. Please try again.';
+    else if (msg.toLowerCase().includes('email not confirmed')) {
+      setPending(email);
+      msg = 'This account hasn\'t confirmed its email yet. Open the confirmation email from Gunforma (we can resend it — reload this page for the resend button), then come back.';
+    }
+    else if (msg.toLowerCase().includes('invalid login credentials')) msg = 'Wrong email or password. The reset link on the sign-in page works too — your invite stays saved on this page.';
+    showError(msg || 'That didn\'t go through. Try again.');
+    return;
+  }
+
+  // Signed in: re-run init, which now finds the session and renders the
+  // claim screen. The token is already in localStorage.
+  clearPending();
+  window.location.reload();
 }
 
 async function resendConfirm(email, btn) {
