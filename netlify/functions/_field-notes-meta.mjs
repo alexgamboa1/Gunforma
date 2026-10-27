@@ -79,3 +79,26 @@ export const FIELD_NOTES_DIR = 'field-notes';
 export function fieldNoteFile(slug) {
   return FIELD_NOTES_DIR + '/' + slug + '.md';
 }
+
+// Contextual links from the P365 cluster into articles: gun slug → the
+// articles that answer a question for that model, rendered by
+// guide-page.mjs (its Related block) and gun-hub.mjs (its links row).
+// Declared here, beside the draft flags, so the filter below can never be
+// forgotten: a draft is a 404 on the apex, and a live page linking one
+// would ship a dead link that renders perfectly — the same reasoning as
+// guide-page.mjs's isLiveGunHub() gate on the hub crumb.
+const FIELD_NOTE_LINKS = {
+  'p365-xmacro': [
+    { slug: 'best-p365-xmacro-grip-modules', label: 'Best XMacro-size grip modules, ranked' },
+  ],
+  'p365-fuse': [
+    { slug: 'best-p365-xmacro-grip-modules', label: 'Best XMacro-size grip modules (the size the FUSE ships on), ranked' },
+  ],
+};
+
+export function fieldNoteLinksForGun(gunSlug) {
+  const live = new Set(liveFieldNotes().map((a) => a.slug));
+  return (FIELD_NOTE_LINKS[gunSlug] || [])
+    .filter((l) => live.has(l.slug))
+    .map((l) => ({ href: fieldNotePath(l.slug), label: l.label }));
+}

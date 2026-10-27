@@ -226,6 +226,31 @@ for (const a of FIELD_NOTES) {
   if (failures === before) pass(id + (a.draft ? ' (draft)' : '') + ' — ' + r.blocks.length + ' block(s)');
 }
 
+// The index page's cards are static HTML (crawlers do not run JS), so
+// field-notes.html and the registry must agree in both directions: every
+// live article is linked — the first one shipped with no inbound link but
+// the sitemap, the /fit/ orphan shape all over again — and no draft is,
+// because a draft is a 404 on the apex and a linked one is a dead link
+// that renders perfectly. Order is part of the contract too: newest first.
+{
+  const indexHtml = await readFile(join(ROOT, 'field-notes.html'), 'utf8');
+  const posOf = (a) => indexHtml.indexOf('href="/field-notes/' + a.slug + '"');
+  for (const a of FIELD_NOTES) {
+    const pos = posOf(a);
+    if (!a.draft && pos === -1) fail('field-notes.html has no card linking /field-notes/' + a.slug + ' — the index lists every live article; add its card (and keep newest first)');
+    if (a.draft && pos !== -1) fail('field-notes.html links the DRAFT /field-notes/' + a.slug + ' — a draft is a 404 on the apex; the card ships in the commit that flips the flag');
+  }
+  const live = FIELD_NOTES.filter((a) => !a.draft && posOf(a) !== -1)
+    .sort((x, y) => (x.published < y.published ? 1 : x.published > y.published ? -1 : 0));
+  for (let i = 1; i < live.length; i++) {
+    if (posOf(live[i]) < posOf(live[i - 1])) {
+      fail('field-notes.html lists ' + live[i].slug + ' (published ' + live[i].published + ') above ' + live[i - 1].slug + ' (published ' + live[i - 1].published + ') — the index is newest first');
+      break;
+    }
+  }
+  if (!failures) pass('field-notes.html lists every live article, no draft, newest first');
+}
+
 console.log(failures === 0
   ? 'ok: ' + FIELD_NOTES.length + ' declared article(s), ' + files.length + ' file(s), every rule holds'
   : failures + ' FAILURE(S)');

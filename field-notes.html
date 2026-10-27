@@ -69,6 +69,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .card-type-badge { position: absolute; top: 8px; left: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 8px; border-radius: 3px; }
 .card-type-badge.review { background: #eaf4fc; color: #1d6fb8; border: 0.5px solid #a7cdec; }
 .card-type-badge.comparison { background: #fff5e6; color: #b45309; border: 0.5px solid #f8d5a0; }
+.card-type-badge.guide { background: #e9f6ee; color: #1d7a45; border: 0.5px solid #b7e0c6; }
 
 /* CARD BODY */
 .card-body { padding: 14px; flex: 1; display: flex; flex-direction: column; }
@@ -84,35 +85,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .card-score { font-size: 11px; font-weight: 700; color: #1a1a1a; }
 .card-vs-badge { font-size: 9px; color: #b45309; background: #fff5e6; border: 0.5px solid #f8d5a0; padding: 2px 7px; border-radius: 20px; font-weight: 600; letter-spacing: 0.02em; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
 
-/* SKELETON */
-@keyframes shimmer {
-  0%   { background-position: -600px 0; }
-  100% { background-position:  600px 0; }
-}
-.skeleton-card { border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; }
-.skel { background: linear-gradient(90deg, #f0ede7 25%, #e8e5df 50%, #f0ede7 75%); background-size: 600px 100%; animation: shimmer 1.4s infinite linear; border-radius: 3px; }
-.skel-img { aspect-ratio: 16/9; width: 100%; border-radius: 0; }
-.skel-body { padding: 14px; display: flex; flex-direction: column; gap: 8px; }
-.skel-line { height: 10px; }
-.skel-title { height: 14px; width: 85%; }
-.skel-full { width: 100%; }
-.skel-medium { width: 60%; }
-.skel-short { width: 40%; }
-.skel-meta { display: flex; justify-content: space-between; border-top: 0.5px solid #efece3; padding-top: 10px; margin-top: 2px; gap: 8px; }
-
 /* EMPTY STATE */
 .empty-state { grid-column: 1 / -1; text-align: center; padding: 64px 28px; }
 .empty-icon { width: 36px; height: 36px; border-radius: 6px; background: #f4f3ee; border: 0.5px solid #e5e5e5; margin: 0 auto 14px; display: flex; align-items: center; justify-content: center; }
 .empty-icon-line { width: 16px; height: 2px; background: #c8c5bc; border-radius: 1px; }
 .empty-title { font-size: 14px; font-weight: 600; color: #555; margin-bottom: 6px; }
 .empty-sub { font-size: 12px; color: #999; }
-
-/* PAGINATION */
-.pagination { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 28px 0 0; }
-.page-btn { font-size: 11px; color: #555; border: 0.5px solid #e5e5e5; padding: 7px 16px; border-radius: 4px; cursor: pointer; background: #fff; transition: all 0.15s; font-family: inherit; }
-.page-btn:hover:not(:disabled) { border-color: #4a9edd; color: #4a9edd; }
-.page-btn:disabled { color: #bbb; border-color: #e5e5e5; cursor: not-allowed; background: #fafaf8; }
-.page-info { font-size: 11px; color: #999; padding: 0 8px; }
 
 /* FOOTER */
 .footer-bar { border-top: 0.5px solid #e5e5e5; padding: 16px 28px; display: flex; justify-content: space-between; align-items: center; background: #fafaf8; flex-wrap: wrap; gap: 8px; }
@@ -192,11 +170,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
 
   <div class="content-area">
-    <div class="posts-grid" id="postsGrid"></div>
-    <div class="pagination" id="pagination" style="display:none;">
-      <button class="page-btn" id="prevBtn" disabled>&#8592; Prev</button>
-      <span class="page-info" id="pageInfo"></span>
-      <button class="page-btn" id="nextBtn">Next &#8594;</button>
+    <!-- The cards are static HTML on purpose: crawlers do not run JS, and
+         the first live article shipped with this grid empty on the wire —
+         the sitemap was its only discovery path, the same orphan shape the
+         /fit/ cluster had (#203's hubs are the worked example). One card
+         per published (non-draft) registry article, newest first;
+         scripts/check-field-notes.mjs holds this list to the registry in
+         both directions, so adding an article or flipping a draft flag
+         without the matching card here fails the build. -->
+    <div class="posts-grid" id="postsGrid">
+      <a href="/field-notes/best-p365-xmacro-grip-modules" class="post-card" data-type="guide" data-category="Grip Modules">
+        <div class="card-img" style="background-image:url('https://www.icarusprecision.com/media/catalog/product/cache/dd4850ad4231b6306bceadf38a0bbeed/3/6/365-x-macro-non-blk-1.png');background-size:cover;background-position:center;">
+          <span class="card-type-badge guide">Guide</span>
+        </div>
+        <div class="card-body">
+          <div class="card-category">Grip Modules</div>
+          <div class="card-title">Best P365 XMacro Grip Modules (2026): Every Option, Fit-Checked</div>
+          <p class="card-excerpt">Every aftermarket XMacro-size grip module in the Gunforma catalog, ranked from maker specs, verified magazine fit and real owner builds — with live prices on every card.</p>
+          <div class="card-meta">
+            <span class="card-author-date">Gunforma &middot; Oct 26, 2026</span>
+          </div>
+        </div>
+      </a>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <div class="empty-icon"><div class="empty-icon-line"></div></div>
+      <div class="empty-title">Nothing here yet.</div>
+      <div class="empty-sub">No article matches this filter — new field notes are added regularly.</div>
     </div>
   </div>
 
@@ -212,249 +212,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
-// ── Static article data — replace with Supabase fetch once field_notes_posts table exists ──
-const STATIC_POSTS = [
-  {
-    slug:             'holosun-507c-x2-review',
-    href:             'holosun-507c-x2-review.html',
-    type:             'review',
-    category:         'Optics',
-    title:            'Holosun 507C X2 — The Red Dot Everyone\'s Running For Good Reason',
-    excerpt:          'After 2,000 rounds across three hosts, here\'s exactly when the 507C X2 earns its reputation — and where it falls short.',
-    author_name:      'Marcus Webb',
-    publish_date:     '2026-06-18',
-    rating:           9.1,
-    comparison_label: null,
-    cover_image_url:  null,
-    coming_soon:      false
-  },
-  {
-    slug:             'holosun-507c-vs-trijicon-rmr-comparison',
-    href:             'holosun-507c-vs-trijicon-rmr-comparison.html',
-    type:             'comparison',
-    category:         'Optics',
-    title:            'Holosun 507C X2 vs Trijicon RMR Type 2 — Which One Actually Wins?',
-    excerpt:          'Six months, 3,000 rounds, back-to-back on the same Glock 17 MOS. The complete spec-by-spec breakdown.',
-    author_name:      'Marcus Webb',
-    publish_date:     '2026-06-10',
-    rating:           null,
-    comparison_label: '507C X2 vs RMR',
-    cover_image_url:  null,
-    coming_soon:      false
-  },
-  {
-    slug:             'streamlight-tlr-7-sub-review',
-    href:             null,
-    type:             'review',
-    category:         'Lights',
-    title:            'Streamlight TLR-7 Sub Review',
-    excerpt:          null,
-    author_name:      null,
-    publish_date:     null,
-    rating:           null,
-    comparison_label: null,
-    cover_image_url:  null,
-    coming_soon:      true
-  }
-];
+// The cards are static HTML (the grid above): crawlers do not run JS, and
+// scripts/check-field-notes.mjs holds the cards to the registry. This
+// script only wires the filter tabs over them -- a tab shows the cards
+// whose data-type / data-category match, and the empty state when none
+// does. No fetch, no templating.
+const cards = Array.from(document.querySelectorAll('#postsGrid .post-card'));
+const emptyState = document.getElementById('emptyState');
 
-const POSTS_PER_PAGE = 12;
-
-let allPosts     = [];
-let filteredPosts = [];
-let currentPage  = 1;
-
-const grid      = document.getElementById('postsGrid');
-const pagination = document.getElementById('pagination');
-const prevBtn   = document.getElementById('prevBtn');
-const nextBtn   = document.getElementById('nextBtn');
-const pageInfo  = document.getElementById('pageInfo');
-
-// ── Skeleton ──────────────────────────────────────────────
-function renderSkeletons() {
-  grid.innerHTML = Array.from({ length: 12 }, () => `
-    <div class="skeleton-card">
-      <div class="skel skel-img"></div>
-      <div class="skel-body">
-        <div class="skel skel-line skel-short"></div>
-        <div class="skel skel-title"></div>
-        <div class="skel skel-line skel-full"></div>
-        <div class="skel skel-line skel-medium"></div>
-        <div class="skel-meta">
-          <div class="skel skel-line" style="width:110px;"></div>
-          <div class="skel skel-line" style="width:54px;"></div>
-        </div>
-      </div>
-    </div>
-  `).join('');
-}
-
-// ── Helpers ───────────────────────────────────────────────
-function formatDate(str) {
-  if (!str) return '';
-  return new Date(str).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-// Ratings are stored and shown out of 10 ("9.1/10"), but the star row is five
-// stars wide — so halve before the math. Without that, a 9.1 gave full = 9 and
-// empty = 5 - 9 = -4, and '☆'.repeat(-4) throws a RangeError. The clamp keeps
-// an out-of-range rating from reintroducing the same crash.
-function buildStars(rating) {
-  // coming_soon posts carry no rating; Number(null) is 0, which would quietly
-  // paint five empty stars, so screen those out before coercing.
-  if (rating === null || rating === undefined || rating === '') return '';
-  const n = Number(rating);
-  if (!Number.isFinite(n)) return '';
-
-  const outOfFive = Math.min(5, Math.max(0, n / 2));
-  const full  = Math.floor(outOfFive);
-  const half  = (outOfFive % 1) >= 0.5 ? 1 : 0;
-  const empty = 5 - full - half;
-
-  return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
-}
-
-// ── Card renderer ─────────────────────────────────────────
-function cardHTML(post) {
-  if (post.coming_soon) {
-    return `
-      <div class="post-card coming-soon">
-        <div class="card-img">
-          <span class="card-img-placeholder">[ Article photo ]</span>
-          <span class="card-type-badge soon">Coming Soon</span>
-        </div>
-        <div class="card-body">
-          ${post.category ? `<div class="card-category">${post.category}</div>` : ''}
-          <div class="card-title">${post.title || 'Untitled'}</div>
-          <p class="card-excerpt">Check back soon.</p>
-        </div>
-      </div>`;
-  }
-
-  const author  = post.field_notes_authors ? post.field_notes_authors.name : (post.author_name || 'Gunforma');
-  const date    = formatDate(post.publish_date);
-  const byline  = [author, date].filter(Boolean).join(' · ');
-
-  const isReview     = post.type === 'review';
-  const isComparison = post.type === 'comparison';
-
-  const badgeClass = isReview ? 'review' : isComparison ? 'comparison' : '';
-  const badgeLabel = isReview ? 'Review'  : isComparison ? 'Comparison'  : (post.type || '');
-
-  const imgStyle = post.cover_image_url
-    ? `style="background-image:url('${post.cover_image_url}');background-size:cover;background-position:center;"`
-    : '';
-
-  const metaRight = isReview && post.rating
-    ? `<span class="card-rating">
-         <span class="card-stars">${buildStars(post.rating)}</span>
-         <span class="card-score">${post.rating}/10</span>
-       </span>`
-    : isComparison && post.comparison_label
-    ? `<span class="card-vs-badge">${post.comparison_label}</span>`
-    : '';
-
-  return `
-    <a href="${post.href}" class="post-card">
-      <div class="card-img" ${imgStyle}>
-        ${!post.cover_image_url ? '<span class="card-img-placeholder">[ Article photo ]</span>' : ''}
-        ${badgeClass ? `<span class="card-type-badge ${badgeClass}">${badgeLabel}</span>` : ''}
-      </div>
-      <div class="card-body">
-        ${post.category ? `<div class="card-category">${post.category}</div>` : ''}
-        <div class="card-title">${post.title || 'Untitled'}</div>
-        <p class="card-excerpt">${post.excerpt || ''}</p>
-        <div class="card-meta">
-          <span class="card-author-date">${byline}</span>
-          ${metaRight}
-        </div>
-      </div>
-    </a>`;
-}
-
-function emptyHTML() {
-  return `
-    <div class="empty-state">
-      <div class="empty-icon"><div class="empty-icon-line"></div></div>
-      <div class="empty-title">No posts yet — check back soon.</div>
-      <div class="empty-sub">New field notes are added regularly.</div>
-    </div>`;
-}
-
-// cardHTML is string templating over post data, and an exception inside
-// .map() aborts the whole join — grid.innerHTML never gets assigned and the
-// pagination block below never runs, so one malformed post blanks the entire
-// page. Isolate each card so a bad one degrades to a placeholder instead.
-function safeCardHTML(post, failures) {
-  try {
-    return cardHTML(post);
-  } catch (err) {
-    // Collected rather than logged here: a systemic problem would otherwise
-    // emit one line per card and bury the page's other output. renderPage
-    // logs the whole batch once.
-    failures.push({ id: (post && (post.slug || post.href || post.title)) || '(unknown)', err: err });
-    return `
-      <div class="post-card unavailable">
-        <div class="card-img">
-          <span class="card-img-placeholder">[ Unavailable ]</span>
-          <span class="card-type-badge unavailable">Unavailable</span>
-        </div>
-        <div class="card-body">
-          <div class="card-title">${post && post.title ? post.title : 'Entry unavailable'}</div>
-          <p class="card-excerpt">This entry couldn’t be displayed.</p>
-        </div>
-      </div>`;
-  }
-}
-
-// ── Render page ───────────────────────────────────────────
-function renderPage() {
-  const total = filteredPosts.length;
-  const pages = Math.ceil(total / POSTS_PER_PAGE);
-  const start = (currentPage - 1) * POSTS_PER_PAGE;
-  const slice = filteredPosts.slice(start, start + POSTS_PER_PAGE);
-
-  const failures = [];
-  grid.innerHTML = total === 0
-    ? emptyHTML()
-    : slice.map(function (post) { return safeCardHTML(post, failures); }).join('');
-
-  if (failures.length) {
-    console.error(
-      `[field-notes] ${failures.length} of ${slice.length} cards failed to render: ` +
-      failures.map(function (f) { return f.id; }).join(', '),
-      failures[0].err
-    );
-  }
-
-  if (pages > 1) {
-    pagination.style.display = 'flex';
-    prevBtn.disabled = currentPage <= 1;
-    nextBtn.disabled = currentPage >= pages;
-    pageInfo.textContent = `Page ${currentPage} of ${pages}`;
-  } else {
-    pagination.style.display = 'none';
-  }
-}
-
-// ── Filter ────────────────────────────────────────────────
 function applyFilter(filter) {
-  currentPage = 1;
-  if (filter === 'all') {
-    filteredPosts = allPosts;
-  } else if (filter.startsWith('type:')) {
-    const t = filter.slice(5);
-    filteredPosts = allPosts.filter(p => p.type === t);
-  } else if (filter.startsWith('category:')) {
-    const c = filter.slice(9);
-    filteredPosts = allPosts.filter(p => p.category === c);
-  } else {
-    filteredPosts = allPosts;
-  }
-  renderPage();
+  let shown = 0;
+  cards.forEach(card => {
+    const ok = filter === 'all'
+      || (filter.startsWith('type:') && card.dataset.type === filter.slice(5))
+      || (filter.startsWith('category:') && card.dataset.category === filter.slice(9));
+    card.style.display = ok ? '' : 'none';
+    if (ok) shown++;
+  });
+  emptyState.style.display = shown ? 'none' : '';
 }
 
-// ── Tabs ──────────────────────────────────────────────────
 document.querySelectorAll('.filter-tab').forEach(tab => {
   tab.addEventListener('click', () => {
     document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
@@ -462,24 +239,6 @@ document.querySelectorAll('.filter-tab').forEach(tab => {
     applyFilter(tab.dataset.filter);
   });
 });
-
-// ── Pagination ────────────────────────────────────────────
-prevBtn.addEventListener('click', () => {
-  if (currentPage > 1) { currentPage--; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-});
-nextBtn.addEventListener('click', () => {
-  const pages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE);
-  if (currentPage < pages) { currentPage++; renderPage(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-});
-
-// ── Load static data ──────────────────────────────────────
-function loadPosts() {
-  allPosts      = STATIC_POSTS;
-  filteredPosts = STATIC_POSTS;
-  renderPage();
-}
-
-loadPosts();
 </script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
