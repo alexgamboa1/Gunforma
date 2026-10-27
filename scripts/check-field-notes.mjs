@@ -110,6 +110,7 @@ for (const f of files) {
 }
 
 // ── each declared article ────────────────────────────────────────────────
+const liveCategories = new Set();   // front-matter categories of live articles
 for (const a of FIELD_NOTES) {
   const id = a.slug;
   const file = join(ROOT, fieldNoteFile(a.slug));
@@ -127,6 +128,7 @@ for (const a of FIELD_NOTES) {
   if (meta.author_credential && !meta.author) fail(id + ': author_credential without an author');
   if (!TYPES.includes(meta.type)) fail(id + ': type must be one of ' + TYPES.join('/') + ', is "' + (meta.type || '') + '"');
   if (!meta.category) fail(id + ': front matter has no category');
+  if (!a.draft && meta.category) liveCategories.add(meta.category);
   for (const k of ['published', 'updated', 'date', 'slug']) if (k in meta) fail(id + ': "' + k + '" belongs in _field-notes-meta.mjs, not the front matter');
   if (meta.cover && !/^(https?:\/\/|\/assets\/)/.test(meta.cover)) fail(id + ': cover must be an https URL or a path under /assets/');
 
@@ -248,7 +250,18 @@ for (const a of FIELD_NOTES) {
       break;
     }
   }
-  if (!failures) pass('field-notes.html lists every live article, no draft, newest first');
+  // The category tabs derive in the browser from the cards' data-category
+  // values ("All" is the only tab in markup), so a tab naming a category
+  // with zero live articles can only come from two places, and both fail:
+  // a card whose data-category no live article carries, or a hardcoded
+  // category tab reintroduced into the markup.
+  for (const m of indexHtml.matchAll(/data-category="([^"]*)"/g)) {
+    if (!liveCategories.has(m[1])) fail('field-notes.html: a card carries data-category="' + m[1] + '", a category no live article has — the derived tab would name an empty category');
+  }
+  for (const m of indexHtml.matchAll(/data-filter="category:([^"]*)"/g)) {
+    if (!liveCategories.has(m[1])) fail('field-notes.html: hardcoded tab for category "' + m[1] + '" with zero live articles — tabs derive from the cards; only "All" belongs in the markup');
+  }
+  if (!failures) pass('field-notes.html lists every live article, no draft, newest first; every category named has a live article');
 }
 
 console.log(failures === 0

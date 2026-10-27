@@ -11,7 +11,7 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Field Notes — Gunforma</title>
 <link rel="canonical" href="https://gunforma.com/field-notes.html" />
-<meta name="description" content="Field Notes — guides, gear reviews, and range reports from the Gunforma community." />
+<meta name="description" content="Field Notes — buyer's guides and fit-checked rankings, built from maker specs, live prices, and real owner builds." />
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -156,15 +156,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <div class="page-header-inner">
       <div class="page-eyebrow">Field Notes</div>
       <h1 class="page-h1">Field Notes</h1>
-      <p class="page-sub">Hands-on reviews, side-by-side comparisons, and buying guides from people who actually shoot.</p>
+      <p class="page-sub">Buyer&rsquo;s guides and fit-checked rankings, built from maker specs, live prices, and real owner builds.</p>
+      <!-- Only "All" is markup. The category tabs are derived by the
+           script below from the cards' data-category values — one tab per
+           distinct live category, appearing the moment a card in a new
+           category does. The guard refuses a hardcoded category tab (or a
+           card data-category) that no live article carries. -->
       <div class="filter-tabs">
         <button class="filter-tab active" data-filter="all">All</button>
-        <button class="filter-tab" data-filter="type:review">Reviews</button>
-        <button class="filter-tab" data-filter="type:comparison">Comparisons</button>
-        <button class="filter-tab" data-filter="category:Optics">Optics</button>
-        <button class="filter-tab" data-filter="category:Lights">Lights</button>
-        <button class="filter-tab" data-filter="category:Triggers">Triggers</button>
-        <button class="filter-tab" data-filter="category:Sights">Sights</button>
       </div>
     </div>
   </div>
@@ -179,7 +178,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
          both directions, so adding an article or flipping a draft flag
          without the matching card here fails the build. -->
     <div class="posts-grid" id="postsGrid">
-      <a href="/field-notes/best-p365-xmacro-grip-modules" class="post-card" data-type="guide" data-category="Grip Modules">
+      <a href="/field-notes/best-p365-xmacro-grip-modules" class="post-card" data-category="Grip Modules">
         <div class="card-img" style="background-image:url('https://www.icarusprecision.com/media/catalog/product/cache/dd4850ad4231b6306bceadf38a0bbeed/3/6/365-x-macro-non-blk-1.png');background-size:cover;background-position:center;">
           <span class="card-type-badge guide">Guide</span>
         </div>
@@ -213,18 +212,33 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/footer.js"></script>
 <script>
 // The cards are static HTML (the grid above): crawlers do not run JS, and
-// scripts/check-field-notes.mjs holds the cards to the registry. This
-// script only wires the filter tabs over them -- a tab shows the cards
-// whose data-type / data-category match, and the empty state when none
-// does. No fetch, no templating.
+// scripts/check-field-notes.mjs holds the cards to the registry. The
+// category tabs DERIVE from the cards -- "All" plus one tab per distinct
+// data-category, in card order -- so a new category's tab appears the
+// moment its first card does, with no tab list to forget. The guard
+// refuses a data-category (or a hardcoded category tab) that no live
+// article carries, which is what keeps a derived tab from naming a
+// category with nothing in it. No fetch, no templating.
 const cards = Array.from(document.querySelectorAll('#postsGrid .post-card'));
 const emptyState = document.getElementById('emptyState');
+const tabRow = document.querySelector('.filter-tabs');
+
+const seenCategories = new Set();
+cards.forEach(card => {
+  const c = card.dataset.category;
+  if (!c || seenCategories.has(c)) return;
+  seenCategories.add(c);
+  const b = document.createElement('button');
+  b.className = 'filter-tab';
+  b.dataset.filter = 'category:' + c;
+  b.textContent = c;
+  tabRow.appendChild(b);
+});
 
 function applyFilter(filter) {
   let shown = 0;
   cards.forEach(card => {
     const ok = filter === 'all'
-      || (filter.startsWith('type:') && card.dataset.type === filter.slice(5))
       || (filter.startsWith('category:') && card.dataset.category === filter.slice(9));
     card.style.display = ok ? '' : 'none';
     if (ok) shown++;
@@ -239,6 +253,10 @@ document.querySelectorAll('.filter-tab').forEach(tab => {
     applyFilter(tab.dataset.filter);
   });
 });
+
+// Run once so the degenerate case -- zero live articles, an empty grid --
+// shows the empty state instead of a blank page.
+applyFilter('all');
 </script>
 <!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
 </body>
