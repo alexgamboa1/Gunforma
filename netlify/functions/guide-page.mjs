@@ -35,6 +35,7 @@ import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
+import { fieldNoteLinksForGun } from './_field-notes-meta.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 const SITE = 'https://gunforma.com';
@@ -476,6 +477,12 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
     (isLiveGunHub(gun.slug)
       ? '<a href="' + esc(hubPath(gun.slug)) + '">Everything for the Sig Sauer ' + esc(gunName) + ' &rarr;</a>'
       : '') +
+    // Live Field Notes articles for this model — the reciprocal of the
+    // article's own sibling links, so the cluster links both ways in
+    // served HTML. fieldNoteLinksForGun() filters drafts, so a dead
+    // /field-notes/ URL can never be emitted here.
+    fieldNoteLinksForGun(gun.slug)
+      .map((l) => '<a href="' + esc(l.href) + '">' + esc(l.label) + ' &rarr;</a>').join('') +
     '<a href="/parts/' + esc(familyMeta.categorySegment) + '">All P365 ' + esc(familyMeta.label.toLowerCase()) + ' &rarr;</a>' +
     '<a href="/parts">Parts by category &rarr;</a>' +
     '<a href="/gunforma-builds.html">Real builds &rarr;</a>' +

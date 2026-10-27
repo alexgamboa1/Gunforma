@@ -622,10 +622,20 @@ directives. What is new:
   its slug test), so forcing the rule never exposes the source. Article
   images therefore cannot live under `/field-notes/`; put them under
   `/assets/field-notes/` (the guard refuses the other path). `/field-notes`
-  and `/field-notes/` still 301 to `/field-notes.html`, the index, which
-  is a static page whose `STATIC_POSTS` list still points at two mockups
-  that do not exist on the site — wiring the index to the registry is the
-  change that ships with the first live article.
+  and `/field-notes/` still 301 to `/field-notes.html`, the index. **Its
+  cards are static HTML, one per live article, newest first** (since
+  2026-10-26, with the first live article — the mockup `STATIC_POSTS`
+  apparatus is gone): crawlers do not run JS, and the first article
+  shipped with this grid empty on the wire, the sitemap its only
+  discovery path. `check-field-notes.mjs` holds the cards to the registry
+  in both directions — a live article with no card, a linked draft, or a
+  wrong order fails the build — so publishing an article means adding its
+  card in the commit that flips the flag. The filter tabs work over the
+  static cards; the tab set still names the mockup-era types and
+  categories. The cluster links both ways: `fieldNoteLinksForGun()` in
+  `_field-notes-meta.mjs` is the declared gun-slug → article map, rendered
+  by `guide-page.mjs` (Related) and `gun-hub.mjs` (links row), and
+  draft-filtered so a live page can never link a 404.
 - **Observable from outside**: `x-field-note`, `-draft`, `-source`,
   `-blocks`, `-products` (found/asked) and `-fits` (resolved/asked).
   `scripts/check-routes.mjs` asserts on the wire that the raw `.md` is not

@@ -24,6 +24,7 @@
 import {
   GUN_HUBS, GUN_META, GUIDE_FAMILIES, HUB_INDEX_PATH, HUB_MAGAZINE_COPY, HUB_BUILDS_COPY,
   hubPath, isLiveGunHub, guidePagesForGun, guidePath, hubTitle, APPLIES_TO_LABEL } from './_guide-meta.mjs';
+import { fieldNoteLinksForGun } from './_field-notes-meta.mjs';
 // "Owner builds on the <model>": the approved builds recorded as this
 // model, as /b/ cards — the hub is the page a build page's breadcrumb links
 // UP to, and this is the link back DOWN (CLAUDE.md, "gun_id is provenance,
@@ -432,6 +433,11 @@ function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount, builds }) 
 
       '<h2>Browse parts</h2>' +
       '<div class="links">' +
+        // Live Field Notes articles for this model — reciprocal of the
+        // article's own link up to this hub. Draft-filtered in
+        // fieldNoteLinksForGun(), so no dead link can render here.
+        fieldNoteLinksForGun(gun.slug)
+          .map((l) => '<a href="' + esc(l.href) + '">' + esc(l.label) + ' &rarr;</a>').join('') +
         '<a href="/parts">Parts by category &rarr;</a>' +
         '<a href="/gunforma-builds.html">Real builds &rarr;</a>' +
         '<a href="' + esc(HUB_INDEX_PATH) + '">Other P365 models &rarr;</a>' +

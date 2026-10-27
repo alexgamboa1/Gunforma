@@ -110,6 +110,7 @@ for (const f of files) {
 }
 
 // ── each declared article ────────────────────────────────────────────────
+const liveCategories = new Set();   // front-matter categories of live articles
 for (const a of FIELD_NOTES) {
   const id = a.slug;
   const file = join(ROOT, fieldNoteFile(a.slug));
@@ -127,6 +128,7 @@ for (const a of FIELD_NOTES) {
   if (meta.author_credential && !meta.author) fail(id + ': author_credential without an author');
   if (!TYPES.includes(meta.type)) fail(id + ': type must be one of ' + TYPES.join('/') + ', is "' + (meta.type || '') + '"');
   if (!meta.category) fail(id + ': front matter has no category');
+  if (!a.draft && meta.category) liveCategories.add(meta.category);
   for (const k of ['published', 'updated', 'date', 'slug']) if (k in meta) fail(id + ': "' + k + '" belongs in _field-notes-meta.mjs, not the front matter');
   if (meta.cover && !/^(https?:\/\/|\/assets\/)/.test(meta.cover)) fail(id + ': cover must be an https URL or a path under /assets/');
 
@@ -224,6 +226,42 @@ for (const a of FIELD_NOTES) {
 
   if (!r.blocks.length && !a.draft) console.log('      ' + id + ': no live-data block (fine for an article that needs none)');
   if (failures === before) pass(id + (a.draft ? ' (draft)' : '') + ' — ' + r.blocks.length + ' block(s)');
+}
+
+// The index page's cards are static HTML (crawlers do not run JS), so
+// field-notes.html and the registry must agree in both directions: every
+// live article is linked — the first one shipped with no inbound link but
+// the sitemap, the /fit/ orphan shape all over again — and no draft is,
+// because a draft is a 404 on the apex and a linked one is a dead link
+// that renders perfectly. Order is part of the contract too: newest first.
+{
+  const indexHtml = await readFile(join(ROOT, 'field-notes.html'), 'utf8');
+  const posOf = (a) => indexHtml.indexOf('href="/field-notes/' + a.slug + '"');
+  for (const a of FIELD_NOTES) {
+    const pos = posOf(a);
+    if (!a.draft && pos === -1) fail('field-notes.html has no card linking /field-notes/' + a.slug + ' — the index lists every live article; add its card (and keep newest first)');
+    if (a.draft && pos !== -1) fail('field-notes.html links the DRAFT /field-notes/' + a.slug + ' — a draft is a 404 on the apex; the card ships in the commit that flips the flag');
+  }
+  const live = FIELD_NOTES.filter((a) => !a.draft && posOf(a) !== -1)
+    .sort((x, y) => (x.published < y.published ? 1 : x.published > y.published ? -1 : 0));
+  for (let i = 1; i < live.length; i++) {
+    if (posOf(live[i]) < posOf(live[i - 1])) {
+      fail('field-notes.html lists ' + live[i].slug + ' (published ' + live[i].published + ') above ' + live[i - 1].slug + ' (published ' + live[i - 1].published + ') — the index is newest first');
+      break;
+    }
+  }
+  // The category tabs derive in the browser from the cards' data-category
+  // values ("All" is the only tab in markup), so a tab naming a category
+  // with zero live articles can only come from two places, and both fail:
+  // a card whose data-category no live article carries, or a hardcoded
+  // category tab reintroduced into the markup.
+  for (const m of indexHtml.matchAll(/data-category="([^"]*)"/g)) {
+    if (!liveCategories.has(m[1])) fail('field-notes.html: a card carries data-category="' + m[1] + '", a category no live article has — the derived tab would name an empty category');
+  }
+  for (const m of indexHtml.matchAll(/data-filter="category:([^"]*)"/g)) {
+    if (!liveCategories.has(m[1])) fail('field-notes.html: hardcoded tab for category "' + m[1] + '" with zero live articles — tabs derive from the cards; only "All" belongs in the markup');
+  }
+  if (!failures) pass('field-notes.html lists every live article, no draft, newest first; every category named has a live article');
 }
 
 console.log(failures === 0
