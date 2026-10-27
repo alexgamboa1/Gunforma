@@ -19,11 +19,16 @@
 // stripped before matching. A read with no HTML on its line (a query map, a
 // sort, a search haystack, a toast) is not a print and is not flagged.
 //
+// A second shape is flagged whatever the identifier is called: any
+// identifier's `.brand` joined with the SAME identifier's `.name` on one
+// emit line. That is a hand-rolled displayProductName(), and it shipped
+// doubled brands on gunforma-creator.html under the identifier `x`, which
+// the list above could not see.
+//
 // WHAT IS NOT CAUGHT, on purpose: a name read into a variable on one line
 // and printed on another. The rule in CLAUDE.md ("Every product name on a
 // page goes through displayProductName()") covers that; this guard catches
-// the common inline shape, which is every instance that existed when it
-// was written.
+// the inline shapes, which are every instance that has shipped.
 //
 // THE ALLOWLIST is per line, with a reason, and a stale entry fails the
 // build: an entry that matches nothing means the line it excused is gone
@@ -57,6 +62,7 @@ export const ALLOWLIST = [
   { file: 'gunforma-admin-queue.html', match: 'escH(r.brand) + \'</strong> — \' + escH(r.name)', reason: 'admin queue add-a-part picker: brand and name as two fields' },
   { file: 'gunforma-admin-queue.html', match: "escH(CATALOG.brands[pr.brand_id] || '') + '</strong> — ' + escH(pr.name)", reason: 'admin queue link-to-existing picker: brand and name as two fields' },
   { file: 'gunforma-admin-queue.html', match: 'escH(p.name || \'\')', reason: 'admin queue: quoting the builder\'s wording before it is replaced' },
+  { file: 'gunforma-admin-queue.html', match: "'Add ' + escH(row.brand + ' ' + row.name)", reason: 'admin queue + Add a part button: names the part the admin is adding' },
   { file: 'gunforma-admin-data.html', match: "esc(p.brand) + '</strong> — ' + esc(p.name)", reason: 'needs-data page: brand and name as two fields' },
   { file: 'gunforma-admin-data.html', match: '<span class="tag">\' + esc(p.name)', reason: 'needs-data page: parts grouped under a brand heading' },
   { file: 'gunforma-admin-part.html', match: "esc(p.name) + (p.is_live ?", reason: 'add-a-part: platform checkbox list (p is a platform, not a product)' },
@@ -84,6 +90,10 @@ export const ALLOWLIST = [
 ];
 
 const NAME_READ = /\b(?:p|product|item|part|prod|pr|r)\.name\b/;
+// Any identifier's .brand joined with the same identifier's .name on one
+// line — a hand-rolled displayProductName() under a name NAME_READ's list
+// does not carry.
+const BRAND_NAME_JOIN = /\b(\w+)\.brand\b[^\n]{0,60}?\b\1\.name\b/;
 const HTML_CONTEXT = /(['"`][^'"`]*<[a-zA-Z/][^'"`]*['"`])|\besc(?:H|Attr)?\(|\.textContent\b|\.innerHTML\b|document\.title|\balt=|aria-label=/;
 
 // Remove every balanced displayProductName(...) call so a correct use —
@@ -117,7 +127,7 @@ export async function scan() {
     const lines = (await readFile(join(ROOT, file), 'utf8')).split('\n');
     lines.forEach((raw, i) => {
       const line = stripHelperCalls(raw);
-      if (!NAME_READ.test(line)) return;
+      if (!NAME_READ.test(line) && !BRAND_NAME_JOIN.test(line)) return;
       if (!HTML_CONTEXT.test(line)) return;
       hits.push({ file, line: i + 1, text: raw.trim() });
     });
