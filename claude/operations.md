@@ -194,6 +194,17 @@ note on `gunforma-signin.html` (it read "1 hour" for five days after the setting
 raised), the expired screen on `gunforma-claim.html`, and the `--resend` messages in
 `scripts/launch-invites.js` and `supabase/functions/launch-invite`.
 
+### Redirect URLs (Authentication → URL Configuration)
+
+The allowlist lives only in the dashboard — it is not readable from a CLI
+session or SQL, so this list records what was added and why, not a dump:
+
+| URL | Added | Why |
+|---|---|---|
+| `https://gunforma.com/gunforma-creator.html` | 2026-10-27 (Alex) | Google sign-in on a creator invite returns to the invite page; without it the OAuth round trip falls back to the site URL and the creator has to reopen their link. See `claude/creator-invites.md`. |
+
+When auditing the dashboard, anything else on the list predates this table.
+
 ---
 
 ## 6. Advisor findings — accepted, with reasons
