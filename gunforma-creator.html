@@ -313,11 +313,16 @@ function renderPreview() {
     var pending = readPending();
     authHtml =
       (pending
-        ? '<div class="pending-box"><strong>You created an account (' + escH(pending.email) + ') but haven\'t confirmed it — nothing is claimed yet.</strong>' +
+        ? '<div class="pending-box"><strong>You created an account (' + escH(pending.email) + ') — if you haven\'t confirmed it yet, nothing is claimed.</strong>' +
           '<ol><li>Open the confirmation email from Gunforma.</li>' +
           '<li>Click its link — it brings you back to this page, signed in.</li>' +
           '<li>Finish the claim here.</li></ol>' +
-          'No email? <button onclick="resendConfirm(\'' + escH(pending.email).replace(/'/g, '&#39;') + '\', this)">Send it again</button></div>'
+          // An already-confirmed account gets NO email from "Send it again":
+          // Supabase has nothing left to confirm and answers 200 either way
+          // (anti-enumeration), so this page cannot tell — but it can say so
+          // and offer the way out instead of promising mail that never comes.
+          'Already confirmed it? No email will come — <button onclick="dismissPending()">just sign in below</button>.<br/>' +
+          'Not confirmed and no email? <button onclick="resendConfirm(\'' + escH(pending.email).replace(/'/g, '&#39;') + '\', this)">Send it again</button></div>'
         : '') +
       '<button class="btn-google" onclick="signInWithGoogle()">' +
         '<svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/><path fill="#FBBC05" d="M5.84 14.1A6.6 6.6 0 0 1 5.5 12c0-.73.13-1.44.34-2.1V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.16-3.16A11 11 0 0 0 2.18 7.06L5.84 9.9C6.71 7.31 9.14 5.38 12 5.38z"/></svg>' +
@@ -580,9 +585,29 @@ async function emailSignIn(email, password, captchaToken) {
   window.location.reload();
 }
 
+// The pending flag can outlive its truth: it is cleared on a signed-in page
+// load, so a browser that confirmed elsewhere (or signed out since) keeps
+// showing the banner for an account that is long confirmed. The banner's
+// sign-in line is the honest exit; this clears the flag with it.
+function dismissPending() {
+  clearPending();
+  renderPreview();
+  switchEmailMode('signin');
+}
+
 async function resendConfirm(email, btn) {
-  try { await sb.auth.resend({ type: 'signup', email: email }); } catch (e) { /* the button text is the only feedback either way */ }
-  if (btn) { btn.textContent = 'Sent!'; btn.disabled = true; setTimeout(function () { btn.textContent = 'Send it again'; btn.disabled = false; }, 4000); }
+  var failed = false;
+  try {
+    var res = await sb.auth.resend({ type: 'signup', email: email });
+    failed = !!(res && res.error);
+  } catch (e) { failed = true; }
+  // A 200 is NOT proof an email went out — a confirmed account gets none
+  // (the banner says so) — but a refusal must never read as "Sent!".
+  if (btn) {
+    btn.textContent = failed ? 'Couldn\'t send — try again' : 'Sent (if the account still needs confirming)';
+    btn.disabled = true;
+    setTimeout(function () { btn.textContent = 'Send it again'; btn.disabled = false; }, 5000);
+  }
 }
 
 // The explicit staged state. Nothing on it can be read as "claimed":
