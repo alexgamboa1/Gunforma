@@ -303,6 +303,14 @@ function onUsernameInput() {
 
   usernameTimer = setTimeout(async function() {
     var res = await sb.from('profiles').select('username').eq('username', val).maybeSingle();
+    // Also refuse a name HELD for a creator invite — same "Taken" as a real
+    // duplicate, by design. The profiles trigger (23505) is the backstop.
+    if (!res.data) {
+      try {
+        var held = await sb.rpc('username_is_held', { p_username: val });
+        if (held.data === true) res = { data: { username: val } };
+      } catch (e) { /* the trigger still refuses at submit */ }
+    }
     if (res.data) {
       status.textContent = 'Taken';
       status.className = 'username-status taken';

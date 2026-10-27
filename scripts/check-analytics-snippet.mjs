@@ -42,6 +42,8 @@ const EXCLUDED_PAGES = [
     why: 'receives the sign-in access_token in the URL hash. Today\'s beacon strips the hash and query before sending, but that is a property of a third-party script, not a guarantee: a page with a credential in its URL gets no analytics' },
   { match: (f) => f === 'gunforma-claim.html',
     why: 'receives the invite access_token in the URL hash — same grounds as auth-callback.html. Do not "fix" this' },
+  { match: (f) => f === 'gunforma-creator.html',
+    why: 'receives the creator-invite token in ?t= and, after Google sign-in, a session in the hash — same grounds as auth-callback.html. Do not "fix" this' },
 ];
 const EXCLUDED_FUNCTIONS = {
   'netlify/edge-functions/go.js': 'its only HTML is the 404 for a retired retailer link on the click-tracking path; not worth a cross-directory import into an edge function',

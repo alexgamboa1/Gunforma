@@ -341,6 +341,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       <div class="submit-status-label">Not ready yet</div>
       <div class="submit-status-desc" id="submit-status-desc">Complete sections 1–3 to submit your build.</div>
     </div>
+    <!-- Creator-invite drafts: status 'draft', consent flags FALSE, so the
+         build is invisible to the public (RLS shows approved only) and the
+         consent columns stay empty until the creator accepts them in the
+         claim (claim_creator_invite stamps all three). The consent-required
+         check on builds exempts drafts, so false is a legal insert here. -->
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:#666;line-height:1.5;margin:0 0 10px;cursor:pointer;">
+      <input type="checkbox" id="creator-draft" style="margin-top:2px;accent-color:#4a9edd;" onchange="onCreatorDraftToggle()"/>
+      <span><strong>Private creator draft</strong> — saved hidden, for a creator invite. Not published anywhere until the creator claims it (scripts/creator-invites.js).</span>
+    </label>
     <button class="btn-block blue" id="publish-btn" onclick="publishBuild()" disabled>Publish build (approved)</button>
     <button class="btn-block blue" id="post-another-btn" onclick="postAnother()" style="display:none;margin-top:10px;background:#22a06b;">Post another →</button>
   </div>
@@ -922,6 +931,11 @@ function renderSidebar() {
 
   document.getElementById('publish-btn').disabled = !minimum;
 }
+// Keep the big button honest about what it is about to do.
+function onCreatorDraftToggle() {
+  const on = !!document.getElementById('creator-draft')?.checked;
+  document.getElementById('publish-btn').textContent = on ? 'Save private creator draft' : 'Publish build (approved)';
+}
 function setDone(id,num,done) {
   const el=document.getElementById(id);
   el.textContent=done?'✓':num; el.className='card-step'+(done?' done':'');
@@ -998,18 +1012,22 @@ async function submitBuild() {
   //
   // Every part gets its own id before it is stored. See js/part-ids.js.
   PartIds.ensure(state.parts);
+  // A creator draft stays status 'draft' with NO consent flags: the consent
+  // is the creator's to give, and claim_creator_invite writes it when they
+  // claim. builds_consent_required_unless_draft permits exactly this shape.
+  const creatorDraft = !!document.getElementById('creator-draft')?.checked;
   const payload = {
     user_id: null,
     platform_id: state.platform.id,
     name: state.name.trim(),
     tier: state.parts.length ? 'full' : 'minimum',
-    status: 'approved',
+    status: creatorDraft ? 'draft' : 'approved',
     activities: state.activities,
     description: document.getElementById('build-description').value || null,
     parts_snapshot: buildPartsSnapshot(),
-    legal_confirmed: true,
-    content_license_confirmed: true,
-    builder_agreement_version: BUILDER_AGREEMENT_VERSION,
+    legal_confirmed: !creatorDraft,
+    content_license_confirmed: !creatorDraft,
+    builder_agreement_version: creatorDraft ? null : BUILDER_AGREEMENT_VERSION,
   };
   // { gun_id } once builds.gun_id exists, {} before — so this request never
   // names a column the database does not have. See js/gun-model.js.
@@ -1182,7 +1200,7 @@ async function publishBuild() {
   if (result.error) {
     console.error(result.error, result.rollbackError || '');
     btn.disabled = false;
-    btn.textContent = 'Publish build (approved)';
+    btn.textContent = document.getElementById('creator-draft')?.checked ? 'Save private creator draft' : 'Publish build (approved)';
 
     // Shown in the result note rather than only a toast: a toast disappears,
     // and this is the text an admin needs to read, copy and act on. The
@@ -1212,17 +1230,20 @@ async function publishBuild() {
   // state.name is the name that was just published, so the slug matches
   // what the server will emit for this build.
   const detailUrl = buildPath(result.buildId, state.name);
+  const wasCreatorDraft = !!document.getElementById('creator-draft')?.checked;
   // Goes through setResultNote so a success after a failed attempt resets the
   // red styling and the title, instead of showing "Publish failed" in red
   // above a successful publish.
-  setResultNote('ok', 'Published',
+  setResultNote('ok', wasCreatorDraft ? 'Saved as private creator draft' : 'Published',
     '<div style="margin-bottom:6px;">Build UUID: <code style="font-size:10px;">' + esc(result.buildId) + '</code></div>' +
-    '<a href="' + esc(detailUrl) + '" target="_blank" style="color:#166534;font-weight:700;text-decoration:underline;">Open build detail →</a>');
+    (wasCreatorDraft
+      ? '<div>Hidden from everyone. Copy the UUID into <code style="font-size:10px;">node scripts/creator-invites.js --invite &lt;handle&gt; --builds &lt;uuid&gt;</code> to put it on an invite.</div>'
+      : '<a href="' + esc(detailUrl) + '" target="_blank" style="color:#166534;font-weight:700;text-decoration:underline;">Open build detail →</a>'));
 
   btn.style.display = 'none';
   document.getElementById('post-another-btn').style.display = 'block';
 
-  showToast('Published — ' + result.buildId.slice(0, 8) + '…');
+  showToast((wasCreatorDraft ? 'Draft saved — ' : 'Published — ') + result.buildId.slice(0, 8) + '…');
 }
 
 // Reset all in-memory state so the admin can chain builds without a page

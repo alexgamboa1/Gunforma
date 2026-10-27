@@ -384,6 +384,17 @@ function onUsernameInput() {
 
   usernameTimer = setTimeout(async function() {
     var res = await sb.from('profiles').select('username').eq('username', val).maybeSingle();
+    // A name can also be HELD for a creator invite (username_is_held — one
+    // exact name in, one boolean out). The profiles trigger would refuse it
+    // at submit with the same 23505 as a duplicate; asking here shows
+    // "Taken" up front instead. Held and taken are deliberately the same
+    // word — a stranger learns nothing either way.
+    if (!res.data) {
+      try {
+        var held = await sb.rpc('username_is_held', { p_username: val });
+        if (held.data === true) res = { data: { username: val } };
+      } catch (e) { /* the trigger still refuses at submit */ }
+    }
     if (res.data) {
       status.textContent = 'Taken';
       status.className = 'username-status taken';
