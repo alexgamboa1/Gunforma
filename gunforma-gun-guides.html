@@ -264,6 +264,17 @@ function cardHtml(row, kind) {
   '</div>';
 }
 
+// A raw products.category value gets its own singular name ("Barrel",
+// "Compensator") — BC.categoryLabel maps both of those to the shared section
+// name "Barrels & Compensators", which the 110px column clips to "Barrels &"
+// twice. Section keys from older snapshots (mags, misc) keep the section label.
+function detailCatLabel(cat) {
+  if (window.CATEGORY_KEYS && window.CATEGORY_KEYS.indexOf(cat) !== -1) {
+    return window.categorySingular(cat);
+  }
+  return BC.categoryLabel(cat);
+}
+
 function detailHtml(row) {
   var parts = (row.parts_snapshot || []).slice();
   var html = '<div class="gdetail">';
@@ -271,7 +282,7 @@ function detailHtml(row) {
     var name = partName(p);
     var href = (p.slug && p.category && window.productPath) ? window.productPath(p.category, p.slug) : null;
     return '<div class="gdetail-row">' +
-      '<span class="gdetail-cat">' + esc(BC.categoryLabel(p.category)) + '</span>' +
+      '<span class="gdetail-cat">' + esc(detailCatLabel(p.category)) + '</span>' +
       '<span class="gdetail-name">' + (href ? '<a href="' + escAttr(href) + '">' + esc(name) + '</a>' : esc(name)) +
         (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') + '</span>' +
       '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) : '') + '</span>' +
