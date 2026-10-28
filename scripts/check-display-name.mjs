@@ -85,6 +85,7 @@ export const ALLOWLIST = [
   //    ruling as the picker cards). Everything else on the page (dropdown
   //    options, sidebar, alt text) goes through displayProductName().
   { file: 'gunforma-armory.html', match: "'<span class=\"picked-name\">' + esc(p.name) + '</span>'", reason: 'brand line directly above the name (picked card)' },
+  { file: 'gunforma-armory.html', match: "'<span class=\"part-card-name\">' + esc(p.name) + '</span>'", reason: 'brand line directly above the name (picker card)' },
 ];
 
 const NAME_READ = /\b(?:p|product|item|part|prod|pr|r)\.name\b/;

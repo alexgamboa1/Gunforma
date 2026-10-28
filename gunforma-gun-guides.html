@@ -66,23 +66,34 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .wrap { max-width: 1240px; margin: 0 auto; padding: 22px 32px 64px; }
 .guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 
-/* CARD */
-.gcard { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+/* CARD — photo-first, PCPartPicker-style: a tall hero collage (lead photo
+   plus two stacked beside it), then a compact text block and a footer bar
+   with the total and the part count. */
+.gcard { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }
 .gcard:hover { border-color: #4a9edd; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-.gcard-thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; background: #f4f3ee; padding: 2px; }
-.gcard-thumb { aspect-ratio: 4/3; background: #fff; border-radius: 3px; overflow: hidden; display: flex; align-items: center; justify-content: center; position: relative; }
-.gcard-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 3px; display: block; }
-.gcard-thumb .more { font-size: 12px; font-weight: 700; color: #888; }
-.gcard-thumb .blank { font-size: 9px; color: #c5c2b8; letter-spacing: 0.06em; text-transform: uppercase; }
-.gcard-body { padding: 12px 14px 14px; }
+.gcard-hero { position: relative; background: #fff; border-bottom: 0.5px solid #f0efe9; aspect-ratio: 5/4; padding: 12px; display: grid; grid-template-columns: 1.7fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
+.gcard-hero.one { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.gcard-hero.two { grid-template-rows: 1fr; }
+.gcard-hero .h-main { grid-row: 1 / -1; }
+.h-img { display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 0; min-width: 0; }
+.h-img img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.h-img .blank { font-size: 10px; color: #c5c2b8; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
+.gcard-morechip { position: absolute; right: 8px; bottom: 8px; font-size: 10px; font-weight: 700; color: #555; background: rgba(250,250,248,0.95); border: 0.5px solid #d5d3ca; border-radius: 20px; padding: 3px 9px; }
+.gcard-body { padding: 11px 14px 0; }
 .gcard-kicker { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .gcard-kicker.curated { color: #b06a1a; }
-.gcard-title { font-size: 14px; font-weight: 700; line-height: 1.3; margin-top: 3px; }
-.gcard-meta { display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 11.5px; color: #888; }
-.gcard-total { font-weight: 700; color: #1a1a1a; }
+.gcard-title { font-size: 15px; font-weight: 700; line-height: 1.25; margin-top: 2px; }
+.gcard-partsline { font-size: 10.5px; color: #999; line-height: 1.45; margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gcard-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 9px 14px 12px; margin-top: 9px; border-top: 0.5px solid #f0efe9; }
+.gcard-total { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.gcard-count { font-size: 11px; color: #888; }
 
 /* DETAIL (expand-in-place) */
 .gcard.open { grid-column: 1 / -1; cursor: default; }
+/* Full-width open card: the 5/4 hero would be a monitor-filling photo, so it
+   drops to a fixed-height strip and the parts list carries the detail. */
+.gcard.open .gcard-hero { aspect-ratio: auto; height: 170px; grid-template-rows: 1fr; grid-template-columns: 1.7fr 1fr 1fr; }
+.gcard.open .gcard-hero .h-main { grid-row: auto; }
 .gdetail { border-top: 0.5px solid #f0efe9; padding: 12px 14px 14px; }
 .gdetail-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid #f6f5f0; }
 .gdetail-row:last-child { border-bottom: none; }
@@ -235,30 +246,46 @@ function modelName(row) {
   return '';
 }
 
+// Which part leads the collage: the visually defining parts first, the same
+// idea as build-og's "most notable parts by category priority".
+var HERO_PRIORITY = ['slide', 'frame', 'optic', 'barrel', 'compensator', 'light', 'magwell', 'sight', 'trigger', 'magazine'];
+function heroParts(parts) {
+  var withImg = parts.filter(function (p) { return p.imageUrl; });
+  withImg.sort(function (a, b) {
+    var ai = HERO_PRIORITY.indexOf(a.category), bi = HERO_PRIORITY.indexOf(b.category);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  return withImg.slice(0, 3);
+}
+
 function cardHtml(row, kind) {
   var parts = row.parts_snapshot || [];
-  var withImg = parts.filter(function (p) { return p.imageUrl; });
-  var thumbs = '';
-  for (var i = 0; i < 4; i++) {
-    if (i === 3 && parts.length > 4) {
-      thumbs += '<div class="gcard-thumb"><span class="more">+' + (parts.length - 3) + '</span></div>';
-    } else if (withImg[i]) {
-      thumbs += '<div class="gcard-thumb"><img src="' + escAttr(withImg[i].imageUrl) + '" alt="' + escAttr(partName(withImg[i])) + '" loading="lazy" /></div>';
-    } else if (parts[i]) {
-      thumbs += '<div class="gcard-thumb"><span class="blank">' + esc((BC.categoryLabel(parts[i].category) || '').slice(0, 10)) + '</span></div>';
-    } else {
-      thumbs += '<div class="gcard-thumb"><span class="blank"></span></div>';
-    }
+  var heroes = heroParts(parts);
+  var cells = heroes.map(function (p, i) {
+    return '<div class="h-img' + (i === 0 ? ' h-main' : '') + '"><img src="' + escAttr(p.imageUrl) + '" alt="' + escAttr(partName(p)) + '" loading="lazy" /></div>';
+  });
+  if (!cells.length) {
+    cells.push('<div class="h-img h-main"><span class="blank">' + esc(modelName(row) || 'Build') + '<br/>' + parts.length + ' parts</span></div>');
   }
+  var heroClass = cells.length === 1 ? ' one' : (cells.length === 2 ? ' two' : '');
+  var moreChip = parts.length > heroes.length && heroes.length
+    ? '<span class="gcard-morechip">+' + (parts.length - heroes.length) + ' more</span>' : '';
+
+  // The caption line: the part names, browser-truncated to two lines.
+  var partsLine = parts.map(function (p) { return partName(p); }).join(' · ');
+
   var t = rowTotal(row);
   var isOpen = OPEN_ID === kind + ':' + row.id;
   return '<div class="gcard' + (isOpen ? ' open' : '') + '" data-kind="' + kind + '" data-id="' + escAttr(row.id) + '" role="button" tabindex="0">' +
-    '<div class="gcard-thumbs">' + thumbs + '</div>' +
+    '<div class="gcard-hero' + heroClass + '">' + cells.join('') + moreChip + '</div>' +
     '<div class="gcard-body">' +
       '<div class="gcard-kicker' + (kind === 'curated' ? ' curated' : '') + '">' + (kind === 'curated' ? 'Gunforma guide' : esc(modelName(row) || 'Build')) + '</div>' +
       '<div class="gcard-title">' + esc(row.title || 'Untitled build') + '</div>' +
-      '<div class="gcard-meta"><span>' + parts.length + ' part' + (parts.length === 1 ? '' : 's') + '</span>' +
-      '<span class="gcard-total">' + (t ? money(t.total) + (t.floor ? '+' : '') + ' MSRP' : '') + '</span></div>' +
+      '<div class="gcard-partsline">' + esc(partsLine) + '</div>' +
+    '</div>' +
+    '<div class="gcard-foot">' +
+      '<span class="gcard-total">' + (t ? money(t.total) + (t.floor ? '+' : '') + ' MSRP' : '') + '</span>' +
+      '<span class="gcard-count">' + parts.length + ' part' + (parts.length === 1 ? '' : 's') + '</span>' +
     '</div>' +
     (isOpen ? detailHtml(row) : '') +
   '</div>';

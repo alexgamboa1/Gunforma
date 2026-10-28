@@ -97,7 +97,37 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .section-name { font-size: 13px; font-weight: 700; color: #1a1a1a; }
 .section-count { font-size: 11px; color: #999; font-weight: 500; white-space: nowrap; }
 .slot + .slot { margin-top: 12px; padding-top: 12px; border-top: 0.5px solid #f0efe9; }
-.slot-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+.slot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.slot-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.slot-toggle { flex-shrink: 0; font-size: 11px; color: #2a7bbd; font-weight: 700; font-family: inherit; background: none; border: 0.5px solid #a7cdec; padding: 5px 12px; border-radius: 4px; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.slot-toggle:hover { background: #eaf4fc; }
+.slot.open .slot-toggle { color: #888; border-color: #d5d3ca; }
+
+/* VISUAL PICKER — the catalog-style card grid, opened per category. Its own
+   card CSS on purpose: this page must NOT load js/part-picker.js, whose
+   injected rules land on these same class names (CLAUDE.md, "Nor is the
+   part picker"). */
+.picker-panel { background: #fafaf8; border: 0.5px solid #e8e8e8; border-radius: 6px; margin-top: 8px; }
+.picker-tools { padding: 10px 12px 0; }
+.picker-search { width: 100%; font-family: inherit; font-size: 12.5px; color: #1a1a1a; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 10px; }
+.picker-search:focus { outline: none; border-color: #4a9edd; }
+.part-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 8px; padding: 10px 12px 12px; max-height: 620px; overflow-y: auto; }
+.part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, box-shadow 0.15s; }
+.part-card:hover { border-color: #4a9edd; box-shadow: 0 3px 12px rgba(0,0,0,0.05); }
+.part-card-photo { aspect-ratio: 4/3; background: #fff; border-bottom: 0.5px solid #f4f3ee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.part-card-photo img { width: 100%; height: 100%; object-fit: contain; padding: 6px; display: block; }
+.part-card-nophoto { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.part-card-body { padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; flex: 1; }
+.part-card-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.part-card-name { font-size: 12.5px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
+.part-card-variants { font-size: 10px; color: #999; }
+.part-card-price { font-size: 12.5px; font-weight: 700; color: #1a1a1a; margin-top: auto; }
+.part-card-price.na { color: #bbb; font-weight: 500; }
+.part-card-actions { padding: 8px 11px; border-top: 0.5px solid #f0f0f0; background: #fafaf8; }
+.part-card-btn { display: block; width: 100%; font-family: inherit; font-size: 11px; font-weight: 700; padding: 7px 8px; border-radius: 4px; cursor: pointer; border: 0.5px solid; text-align: center; letter-spacing: 0.02em; transition: all 0.15s; }
+.part-card-btn.add { background: #4a9edd; color: #fff; border-color: #4a9edd; }
+.part-card-btn.add:hover { background: #2a7bbd; }
+@media (max-width: 600px) { .part-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* PICKED PART */
 .picked { display: flex; align-items: flex-start; gap: 12px; background: #f6fdf9; border: 0.5px solid #86cfad; border-radius: 6px; padding: 10px; }
@@ -243,8 +273,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/footer.js"></script>
 <script>
 // ─── THE ARMORY, rebuilt as pick-and-save ───────────────────────────────────
-// One job: choose a pistol, pick one part per category from dropdowns that
-// only ever list parts compatible with everything already picked, and save
+// One job: choose a pistol, pick one part per category from a catalog-style
+// card grid (photos, not dropdowns — Alex, 2026-10-27) that only ever lists
+// parts compatible with everything already picked, and save
 // the result to Gun Guides (the `gun_guides` table — see
 // supabase/migrations/*gun_guides.sql). It does NOT write draft builds;
 // posting a real build stays gunforma-post-build.html's job.
@@ -292,6 +323,7 @@ var STATE = {
   platform: null,
   gun: null,              // guns row, or null = "custom / FCU / not sure"
   picks: {},              // category -> { productId, variantId }
+  openCat: null,          // which category's visual picker is open (one at a time)
   title: '',
   savedId: null,          // gun_guides row id once saved; later saves update it
 };
@@ -552,39 +584,65 @@ function selectPlatform(id) {
   renderAll();
 }
 
-function optionLabel(p) {
+// One card per part, catalog-style: the photo IS the pitch. A part with no
+// photo on its default variant gets its colour swatch (variant-swatch.js) —
+// never another variant's photo as a stand-in (loadouts-spec §9).
+function partCardHtml(cat, p) {
   var dv = p.defaultVariant;
-  var price = dv && dv.msrp != null ? ' — ' + money(dv.msrp) : '';
-  return displayProductName({ brand: p.brand, name: p.name }) + price;
+  var img = dv && dv.primary_image_url;
+  var dispName = displayProductName({ brand: p.brand, name: p.name });
+  var photo = img
+    ? '<img src="' + escAttr(img) + '" alt="' + escAttr(dispName) + '" loading="lazy" />'
+    : '<div class="part-card-nophoto">' + (window.variantMediaHtml ? window.variantMediaHtml(dv || {}) : '') + '</div>';
+  var price = dv && dv.msrp != null ? money(dv.msrp) : null;
+  return '<div class="part-card" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
+    '<div class="part-card-photo">' + photo + '</div>' +
+    '<div class="part-card-body">' +
+      '<span class="part-card-brand">' + esc(p.brand) + '</span>' +
+      '<span class="part-card-name">' + esc(p.name) + '</span>' +
+      (p.variants.length > 1 ? '<span class="part-card-variants">' + p.variants.length + ' colors / options</span>' : '') +
+      (price ? '<span class="part-card-price">' + price + '</span>' : '<span class="part-card-price na">Price n/a</span>') +
+    '</div>' +
+    '<div class="part-card-actions"><button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '">Add to build</button></div>' +
+  '</div>';
 }
 
 function slotHtml(slot) {
   var cat = slot.cat;
   var picked = pickedProduct(cat);
-  var html = '<div class="slot" data-cat="' + cat + '">';
+  var isOpen = STATE.openCat === cat;
+  var html = '<div class="slot' + (isOpen ? ' open' : '') + '" data-cat="' + cat + '">';
 
   if (cat === 'compensator') {
     var reason = compHiddenReason();
     if (reason) {
-      html += '<div class="slot-label">' + esc(slot.label) + '</div>';
+      html += '<div class="slot-head"><div class="slot-label">' + esc(slot.label) + '</div></div>';
       html += '<div class="note-banner muted">' + esc(reason) + '</div></div>';
       return html;
     }
   }
 
   var options = availableFor(cat);
-  html += '<div class="slot-label">' + esc(slot.label) + ' <span style="color:#c5c2b8;font-weight:500;">· ' + options.length + ' compatible</span></div>';
+  html += '<div class="slot-head">' +
+    '<div class="slot-label">' + esc(slot.label) + ' <span class="slot-count" style="color:#c5c2b8;font-weight:500;">· ' + options.length + ' compatible</span></div>' +
+    (options.length || isOpen
+      ? '<button type="button" class="slot-toggle" data-toggle="' + cat + '" aria-expanded="' + isOpen + '">' + (isOpen ? 'Close' : (picked ? 'Change' : 'Choose')) + '</button>'
+      : '') +
+    '</div>';
 
   if (picked) {
     html += pickedHtml(cat, picked);
   } else if (!options.length) {
     html += '<div class="slot-empty">' + esc(emptyText(cat)) + '</div>';
-  } else {
-    var article = /^[aeiou]/i.test(slot.label) ? 'an' : 'a';
-    html += '<select class="gf-select" data-pick="' + cat + '" aria-label="Choose ' + article + ' ' + escAttr(slot.label) + '">' +
-      '<option value="">Choose ' + article + ' ' + esc(slot.label.toLowerCase()) + '…</option>' +
-      options.map(function (p) { return '<option value="' + p.id + '">' + esc(optionLabel(p)) + '</option>'; }).join('') +
-      '</select>';
+  }
+
+  if (isOpen && options.length) {
+    html += '<div class="picker-panel">' +
+      (options.length > 8
+        ? '<div class="picker-tools"><input type="text" class="picker-search" data-search-input="' + cat + '" placeholder="Filter by brand or name…" aria-label="Filter parts" /></div>'
+        : '') +
+      '<div class="part-grid">' + options.map(function (p) { return partCardHtml(cat, p); }).join('') + '</div>' +
+    '</div>';
   }
 
   html += slotBanners(cat, picked);
@@ -681,14 +739,31 @@ function renderParts() {
            '<div class="section-card">' + inner + '</div>';
   }).join('');
 
-  container.querySelectorAll('select[data-pick]').forEach(function (sel) {
-    sel.addEventListener('change', function () {
-      if (!sel.value) return;
-      var p = PRODUCTS_BY_ID[sel.value];
+  container.querySelectorAll('button[data-toggle]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var cat = btn.dataset.toggle;
+      STATE.openCat = STATE.openCat === cat ? null : cat;
+      renderAll();
+    });
+  });
+  container.querySelectorAll('button[data-add]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = PRODUCTS_BY_ID[btn.dataset.id];
       if (!p) return;
-      STATE.picks[sel.dataset.pick] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
+      STATE.picks[btn.dataset.add] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
+      STATE.openCat = null;                 // a pick closes the picker — the green card is the confirmation
       reconcilePicks();
       renderAll();
+    });
+  });
+  // The filter narrows cards in place — no re-render, so typing keeps focus.
+  container.querySelectorAll('input[data-search-input]').forEach(function (inp) {
+    inp.addEventListener('input', function () {
+      var q = inp.value.trim().toLowerCase();
+      var grid = inp.closest('.picker-panel').querySelector('.part-grid');
+      grid.querySelectorAll('.part-card').forEach(function (card) {
+        card.style.display = !q || card.dataset.search.indexOf(q) !== -1 ? '' : 'none';
+      });
     });
   });
   container.querySelectorAll('select[data-variant]').forEach(function (sel) {
