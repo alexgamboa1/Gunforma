@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Gun Guides — Gunforma</title>
+<link rel="canonical" href="https://gunforma.com/gunforma-gun-guides.html" />
+<!-- Hidden from search until the Gun Guides launch wires the nav back up.
+     Remove this line in the same PR that adds the nav links and the sitemap
+     entries. See CLAUDE.md, "The Armory is parked". -->
+<meta name="robots" content="noindex" />
+<meta name="description" content="Gun Guides — builds spec'd in the Gunforma Armory, part by part from the catalog, plus Gunforma's own curated setups." />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fafaf8; color: #1a1a1a; min-height: 100vh; }
+
+/* NAV — shared nav.js */
+.nav { position: sticky; top: 0; z-index: 100; display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; transition: color 0.15s; }
+.nav-link:hover, .nav-link.active { color: #ffffff; }
+.nav-link.active { border-bottom: 2px solid #4a9edd; padding-bottom: 2px; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; color: #ffffff; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
+.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
+.nav-profile { display: none; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; border: 0.5px solid #2a2b2e; color: #e8e6e1; }
+.nav-profile svg { width: 16px; height: 16px; }
+.nav-toggle { display: none; flex-direction: column; justify-content: center; gap: 4px; width: 34px; height: 34px; background: none; border: 0.5px solid #2a2b2e; border-radius: 4px; cursor: pointer; padding: 7px; }
+.nav-toggle span { display: block; height: 1.5px; background: #e8e6e1; border-radius: 2px; }
+.nav-menu { display: none; }
+@media (max-width: 760px) {
+  .nav-links { display: none; }
+  .nav-signin-inline { display: none; }
+  .nav-toggle { display: flex; }
+  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }
+  .nav-menu.open { display: flex; }
+  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
+  .nav-menu a.signout { color: #ffffff; }
+}
+
+/* PAGE */
+.page-header { max-width: 1240px; margin: 0 auto; padding: 28px 32px 0; display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-title { font-size: 26px; font-weight: 700; letter-spacing: -0.01em; }
+.page-sub { font-size: 12.5px; color: #666; margin-top: 4px; max-width: 560px; }
+.btn-armory { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; padding: 9px 14px; border-radius: 4px; text-decoration: none; white-space: nowrap; }
+.btn-armory:hover { background: #2a7bbd; }
+
+.tab-row { max-width: 1240px; margin: 18px auto 0; padding: 0 32px; display: flex; gap: 4px; border-bottom: 0.5px solid #e5e5e5; }
+.tab-btn { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+           padding: 10px 14px; background: transparent; border: none; cursor: pointer; color: #888;
+           border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: color 0.15s, border-color 0.15s; }
+.tab-btn:hover { color: #1a1a1a; }
+.tab-btn.active { color: #1a1a1a; border-bottom-color: #4a9edd; }
+
+.wrap { max-width: 1240px; margin: 0 auto; padding: 22px 32px 64px; }
+.guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+
+/* CARD — photo-first, PCPartPicker-style: a tall hero collage (lead photo
+   plus two stacked beside it), then a compact text block and a footer bar
+   with the total and the part count. */
+.gcard { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }
+.gcard:hover { border-color: #4a9edd; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+.gcard-hero { position: relative; background: #fff; border-bottom: 0.5px solid #f0efe9; aspect-ratio: 5/4; padding: 12px; display: grid; grid-template-columns: 1.7fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
+.gcard-hero.one { grid-template-columns: 1fr; grid-template-rows: 1fr; }
+.gcard-hero.two { grid-template-rows: 1fr; }
+.gcard-hero .h-main { grid-row: 1 / -1; }
+.h-img { display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 0; min-width: 0; }
+.h-img img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.h-img .blank { font-size: 10px; color: #c5c2b8; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
+.gcard-morechip { position: absolute; right: 8px; bottom: 8px; font-size: 10px; font-weight: 700; color: #555; background: rgba(250,250,248,0.95); border: 0.5px solid #d5d3ca; border-radius: 20px; padding: 3px 9px; }
+.gcard-body { padding: 11px 14px 0; }
+.gcard-kicker { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+.gcard-kicker.curated { color: #b06a1a; }
+.gcard-title { font-size: 15px; font-weight: 700; line-height: 1.25; margin-top: 2px; }
+.gcard-partsline { font-size: 10.5px; color: #999; line-height: 1.45; margin-top: 5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gcard-foot { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 9px 14px 12px; margin-top: 9px; border-top: 0.5px solid #f0efe9; }
+.gcard-total { font-size: 14px; font-weight: 700; color: #1a1a1a; }
+.gcard-count { font-size: 11px; color: #888; }
+
+/* DETAIL (expand-in-place) */
+.gcard.open { grid-column: 1 / -1; cursor: default; }
+/* Full-width open card: the 5/4 hero would be a monitor-filling photo, so it
+   drops to a fixed-height strip and the parts list carries the detail. */
+.gcard.open .gcard-hero { aspect-ratio: auto; height: 170px; grid-template-rows: 1fr; grid-template-columns: 1.7fr 1fr 1fr; }
+.gcard.open .gcard-hero .h-main { grid-row: auto; }
+.gdetail { border-top: 0.5px solid #f0efe9; padding: 12px 14px 14px; }
+.gdetail-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid #f6f5f0; }
+.gdetail-row:last-child { border-bottom: none; }
+.gdetail-cat { flex-shrink: 0; width: 110px; font-size: 9.5px; color: #999; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.gdetail-name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: #1a1a1a; }
+.gdetail-name a { color: inherit; text-decoration: none; }
+.gdetail-name a:hover { color: #2a7bbd; text-decoration: underline; }
+.gdetail-variant { font-size: 11px; color: #888; font-weight: 500; }
+.gdetail-price { flex-shrink: 0; font-size: 12px; font-weight: 700; color: #1a1a1a; }
+.gdetail-close { margin-top: 10px; font-family: inherit; font-size: 11px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+.gdetail-close:hover { color: #1a1a1a; border-color: #b9b6aa; }
+
+.empty { text-align: center; padding: 60px 16px; color: #999; font-size: 12.5px; }
+.empty-title { font-size: 15px; font-weight: 700; color: #555; margin-bottom: 4px; }
+.empty a { color: #2a7bbd; font-weight: 700; text-decoration: none; }
+
+/* FOOTER */
+.footer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; max-width: 1240px; margin: 0 auto; padding: 18px 32px 28px; border-top: 0.5px solid #e5e5e5; }
+.footer-txt { font-size: 11px; color: #999; }
+.footer-txt a { color: #888; text-decoration: none; }
+.footer-txt a:hover { color: #2a7bbd; }
+
+@media (max-width: 600px) {
+  .page-header, .wrap, .tab-row, .footer-bar { padding-left: 16px; padding-right: 16px; }
+  .gdetail-cat { width: 84px; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
+  <div class="nav-links">
+    <a class="nav-link" href="/">Home</a>
+    <a class="nav-link" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link" href="/p365/">Your P365</a>
+    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="gunforma-armory.html">Armory</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build.html">+ Post your build</a>
+    <a class="nav-profile" href="gunforma-signin.html" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></a>
+    <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><span></span><span></span><span></span></button>
+  </div>
+  <div class="nav-menu" id="nav-menu">
+    <a href="gunforma-builds.html">Builds</a>
+    <a href="/p365/">Your P365</a>
+    <a href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a href="gunforma-armory.html">Armory</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">Gun Guides</div>
+    <div class="page-sub">Builds spec'd part-by-part in the Armory — every part is a real catalog product you can actually buy — plus Gunforma's own curated setups.</div>
+  </div>
+  <a class="btn-armory" href="gunforma-armory.html">Build yours in the Armory →</a>
+</div>
+
+<div class="tab-row" role="tablist">
+  <button class="tab-btn active" id="tab-community" role="tab" aria-selected="true">Community builds</button>
+  <button class="tab-btn" id="tab-curated" role="tab" aria-selected="false">Gunforma guides</button>
+</div>
+
+<div class="wrap">
+  <div id="community-panel">
+    <div class="guide-grid" id="community-grid"></div>
+    <div class="empty" id="community-empty" hidden></div>
+  </div>
+  <div id="curated-panel" hidden>
+    <div class="guide-grid" id="curated-grid"></div>
+    <div class="empty" id="curated-empty" hidden></div>
+  </div>
+</div>
+
+<div class="footer-bar"><span class="footer-txt">© 2026 Gunforma · All rights reserved</span><span class="footer-txt"><a href="gunforma-legal.html#legal">Legal</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="gunforma-legal.html#contact">Contact</a></span></div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/category-map.js"></script>
+<script src="js/build-categories.js"></script>
+<script src="js/display-name.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
+<script>
+// ─── GUN GUIDES — the gallery the Armory saves into ─────────────────────────
+// Two tabs over one renderer:
+//   Community builds — rows from `gun_guides` (saved by the Armory)
+//   Gunforma guides  — the curated `guides` rows (is_published), which had no
+//                      surface since the old Armory was parked
+// Read-only page. Every part row links to its /parts/ page when the snapshot
+// carries a slug; totals are the MSRPs stored at save time, labelled as such.
+
+var sb = window.sb;
+var BC = window.BuildCategories;
+var GUNS_BY_ID = {}, PLATFORMS_BY_ID = {};
+var COMMUNITY = [], CURATED = [];
+var OPEN_ID = null;
+
+async function loadAll() {
+  var r = await Promise.all([
+    sb.from('platforms').select('id, name'),
+    sb.from('guns').select('id, name'),
+    sb.from('gun_guides').select('id, title, platform_id, gun_id, parts_snapshot, created_at').order('created_at', { ascending: false }),
+    sb.from('guides').select('id, title, category, description, platform_id, parts_snapshot, created_at').eq('is_published', true).order('title'),
+  ]);
+  (r[0].data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
+  (r[1].data || []).forEach(function (g) { GUNS_BY_ID[g.id] = g; });
+
+  // gun_guides failing is survivable — the table may not exist yet. The
+  // curated tab still renders.
+  if (r[2].error) {
+    console.warn('[gun-guides] community read failed', r[2].error);
+    COMMUNITY = [];
+    showEmpty('community', 'Community builds are coming online', 'Nothing can be shown here yet. Be first — <a href="gunforma-armory.html">spec a build in the Armory</a>.');
+  } else {
+    COMMUNITY = r[2].data || [];
+  }
+  if (r[3].error) {
+    console.warn('[gun-guides] guides read failed', r[3].error);
+    CURATED = [];
+  } else {
+    CURATED = r[3].data || [];
+  }
+  renderAll();
+}
+
+function showEmpty(which, title, html) {
+  var el = document.getElementById(which + '-empty');
+  el.hidden = false;
+  el.innerHTML = '<div class="empty-title">' + title + '</div>' + html;
+}
+
+function partName(part) {
+  return displayProductName({ brand: part.brand || '', name: part.name || '' });
+}
+
+function rowTotal(row) {
+  var parts = row.parts_snapshot || [];
+  var priced = parts.filter(function (p) { return p.msrp != null && !isNaN(Number(p.msrp)); });
+  if (!priced.length) return null;
+  var total = priced.reduce(function (s, p) { return s + Number(p.msrp); }, 0);
+  return { total: total, floor: priced.length < parts.length };
+}
+
+function modelName(row) {
+  if (row.gun_id && GUNS_BY_ID[row.gun_id]) return GUNS_BY_ID[row.gun_id].name;
+  if (row.platform_id && PLATFORMS_BY_ID[row.platform_id]) return PLATFORMS_BY_ID[row.platform_id].name;
+  return '';
+}
+
+// Which part leads the collage: the visually defining parts first, the same
+// idea as build-og's "most notable parts by category priority".
+var HERO_PRIORITY = ['slide', 'frame', 'optic', 'barrel', 'compensator', 'light', 'magwell', 'sight', 'trigger', 'magazine'];
+function heroParts(parts) {
+  var withImg = parts.filter(function (p) { return p.imageUrl; });
+  withImg.sort(function (a, b) {
+    var ai = HERO_PRIORITY.indexOf(a.category), bi = HERO_PRIORITY.indexOf(b.category);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
+  return withImg.slice(0, 3);
+}
+
+function cardHtml(row, kind) {
+  var parts = row.parts_snapshot || [];
+  var heroes = heroParts(parts);
+  var cells = heroes.map(function (p, i) {
+    return '<div class="h-img' + (i === 0 ? ' h-main' : '') + '"><img src="' + escAttr(p.imageUrl) + '" alt="' + escAttr(partName(p)) + '" loading="lazy" /></div>';
+  });
+  if (!cells.length) {
+    cells.push('<div class="h-img h-main"><span class="blank">' + esc(modelName(row) || 'Build') + '<br/>' + parts.length + ' parts</span></div>');
+  }
+  var heroClass = cells.length === 1 ? ' one' : (cells.length === 2 ? ' two' : '');
+  var moreChip = parts.length > heroes.length && heroes.length
+    ? '<span class="gcard-morechip">+' + (parts.length - heroes.length) + ' more</span>' : '';
+
+  // The caption line: the part names, browser-truncated to two lines.
+  var partsLine = parts.map(function (p) { return partName(p); }).join(' · ');
+
+  var t = rowTotal(row);
+  var isOpen = OPEN_ID === kind + ':' + row.id;
+  return '<div class="gcard' + (isOpen ? ' open' : '') + '" data-kind="' + kind + '" data-id="' + escAttr(row.id) + '" role="button" tabindex="0">' +
+    '<div class="gcard-hero' + heroClass + '">' + cells.join('') + moreChip + '</div>' +
+    '<div class="gcard-body">' +
+      '<div class="gcard-kicker' + (kind === 'curated' ? ' curated' : '') + '">' + (kind === 'curated' ? 'Gunforma guide' : esc(modelName(row) || 'Build')) + '</div>' +
+      '<div class="gcard-title">' + esc(row.title || 'Untitled build') + '</div>' +
+      '<div class="gcard-partsline">' + esc(partsLine) + '</div>' +
+    '</div>' +
+    '<div class="gcard-foot">' +
+      '<span class="gcard-total">' + (t ? money(t.total) + (t.floor ? '+' : '') + ' MSRP' : '') + '</span>' +
+      '<span class="gcard-count">' + parts.length + ' part' + (parts.length === 1 ? '' : 's') + '</span>' +
+    '</div>' +
+    (isOpen ? detailHtml(row) : '') +
+  '</div>';
+}
+
+// A raw products.category value gets its own singular name ("Barrel",
+// "Compensator") — BC.categoryLabel maps both of those to the shared section
+// name "Barrels & Compensators", which the 110px column clips to "Barrels &"
+// twice. Section keys from older snapshots (mags, misc) keep the section label.
+function detailCatLabel(cat) {
+  if (window.CATEGORY_KEYS && window.CATEGORY_KEYS.indexOf(cat) !== -1) {
+    return window.categorySingular(cat);
+  }
+  return BC.categoryLabel(cat);
+}
+
+function detailHtml(row) {
+  var parts = (row.parts_snapshot || []).slice();
+  var html = '<div class="gdetail">';
+  html += parts.map(function (p) {
+    var name = partName(p);
+    var href = (p.slug && p.category && window.productPath) ? window.productPath(p.category, p.slug) : null;
+    return '<div class="gdetail-row">' +
+      '<span class="gdetail-cat">' + esc(detailCatLabel(p.category)) + '</span>' +
+      '<span class="gdetail-name">' + (href ? '<a href="' + escAttr(href) + '">' + esc(name) + '</a>' : esc(name)) +
+        (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') + '</span>' +
+      '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) : '') + '</span>' +
+    '</div>';
+  }).join('');
+  html += '<button type="button" class="gdetail-close">Close</button></div>';
+  return html;
+}
+
+function renderGrid(which, rows, kind) {
+  var grid = document.getElementById(which + '-grid');
+  var empty = document.getElementById(which + '-empty');
+  if (!rows.length) {
+    grid.innerHTML = '';
+    if (empty.hidden) {
+      showEmpty(which, which === 'community' ? 'No community builds yet' : 'No curated guides yet',
+        which === 'community' ? 'Be first — <a href="gunforma-armory.html">spec a build in the Armory</a>.' : '');
+    }
+    return;
+  }
+  empty.hidden = true;
+  grid.innerHTML = rows.map(function (row) { return cardHtml(row, kind); }).join('');
+  grid.querySelectorAll('.gcard').forEach(function (card) {
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('a')) return;
+      var key = card.dataset.kind + ':' + card.dataset.id;
+      if (e.target.closest('.gdetail-close')) { OPEN_ID = null; renderAll(); return; }
+      if (OPEN_ID === key) return;
+      OPEN_ID = key;
+      renderAll();
+    });
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); card.click(); }
+    });
+  });
+}
+
+function renderAll() {
+  renderGrid('community', COMMUNITY, 'community');
+  renderGrid('curated', CURATED, 'curated');
+}
+
+// Tabs
+function setTab(which) {
+  var isCommunity = which === 'community';
+  document.getElementById('tab-community').classList.toggle('active', isCommunity);
+  document.getElementById('tab-curated').classList.toggle('active', !isCommunity);
+  document.getElementById('tab-community').setAttribute('aria-selected', String(isCommunity));
+  document.getElementById('tab-curated').setAttribute('aria-selected', String(!isCommunity));
+  document.getElementById('community-panel').hidden = !isCommunity;
+  document.getElementById('curated-panel').hidden = isCommunity;
+}
+document.getElementById('tab-community').onclick = function () { setTab('community'); };
+document.getElementById('tab-curated').onclick = function () { setTab('curated'); };
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+function escAttr(s) { return esc(s); }
+function money(n) {
+  if (n == null || isNaN(n)) return '—';
+  var v = Number(n);
+  return '$' + v.toLocaleString('en-US', { minimumFractionDigits: v % 1 ? 2 : 0, maximumFractionDigits: 2 });
+}
+
+loadAll();
+</script>
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

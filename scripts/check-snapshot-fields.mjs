@@ -8,16 +8,20 @@
 //
 //   gunforma-post-build.html   buildPartsSnapshot()   writes
 //   gunforma-admin-post.html   buildPartsSnapshot()   writes
-//   gunforma-armory.html       buildPartsSnapshot()   writes
-//   gunforma-armory.html       loadBuildById()        reads  (rebuilds STATE.parts)
-//   gunforma-armory.html       remixGuide()           reads  (clones a guide)
 //   gunforma-admin-queue.html  snapshotRow()          writes (a reviewer's "+ Add a part")
 //
 // A field missing from any of them is not "left alone" — it is DELETED, on
-// the next armory save of any draft that carried it, with no error. That has
+// the next save of any draft that carried it, with no error. That has
 // already happened once: `finish` was written by post-build and named by none
 // of the armory's whitelists, so the Paint Job & Finish object was silently
 // dropped until #86.
+//
+// THE ARMORY IS NO LONGER ON THIS LIST (2026-10-27). The rebuilt
+// gunforma-armory.html never reads or writes builds.parts_snapshot — it
+// writes gun_guides.parts_snapshot, a table only it writes and only
+// gunforma-gun-guides.html reads, with no round-trip through another page's
+// whitelist. If the Armory ever reads builds rows again, or a second page
+// starts writing gun_guides rows, its entries go back in here first.
 //
 // It cannot be caught by a unit test (the functions are inline in HTML) or by
 // looking at a page (it renders perfectly either way). It is a property of
@@ -42,9 +46,7 @@ const READ_RE  = /(\w+)\s*:\s*part\.(\w+)\s*\|\|\s*undefined/g;
 const SOURCES = [
   { file: 'gunforma-post-build.html', kind: 'write', label: 'post-build buildPartsSnapshot()' },
   { file: 'gunforma-admin-post.html', kind: 'write', label: 'admin-post buildPartsSnapshot()' },
-  { file: 'gunforma-armory.html',     kind: 'write', label: 'armory buildPartsSnapshot()' },
   { file: 'gunforma-admin-queue.html', kind: 'write', label: 'admin-queue snapshotRow() (+ Add a part)' },
-  { file: 'gunforma-armory.html',     kind: 'read',  label: 'armory readers (loadBuildById + remixGuide)' },
 ];
 
 let failures = 0;

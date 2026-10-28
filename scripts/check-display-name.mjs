@@ -79,14 +79,13 @@ export const ALLOWLIST = [
   { file: 'gunforma-post-build.html', match: "selectPlatform(\\''+p.id+'\\')\">'+p.name+'</button>'", reason: 'p is a platform' },
   { file: 'gunforma-post-build.html', match: "getElementById('platform-selected-name').textContent = p.name", reason: 'p is a platform' },
   { file: 'gunforma-armory.html', match: "class=\"platform-btn' + (isActive ? ' active' : '') + '\" data-id=\"' + p.id + '\">' + esc(p.name)", reason: 'p is a platform' },
-  // ── The Armory is parked (CLAUDE.md, "The Armory is parked"): hidden,
-  //    noindex, restored by one revert. Its prints are listed, not fixed.
-  { file: 'gunforma-armory.html', match: "alt=\"' + escAttr(p.brand + ' ' + p.name)", reason: 'parked Armory' },
-  { file: 'gunforma-armory.html', match: "'<div class=\"selected-part-name\">'  + esc(p.name)", reason: 'parked Armory' },
-  { file: 'gunforma-armory.html', match: "aria-label=\"Variant or colour for ' + escAttr(p.name)", reason: 'parked Armory' },
-  { file: 'gunforma-armory.html', match: "'\">' + esc(p.name) + '</a>'", reason: 'parked Armory' },
-  { file: 'gunforma-armory.html', match: ": esc(p.name);", reason: 'parked Armory' },
-  { file: 'gunforma-armory.html', match: "esc(part.brand || '') + '</strong> ' + esc(part.name || '')", reason: 'parked Armory guide rows' },
+  // ── The rebuilt Armory (2026-10-27): one excused print, the picked card's
+  //    stored name under its own brand eyebrow — the brand-line-over-name
+  //    pattern Alex ruled stays as-is (claude/display-name-decisions, same
+  //    ruling as the picker cards). Everything else on the page (dropdown
+  //    options, sidebar, alt text) goes through displayProductName().
+  { file: 'gunforma-armory.html', match: "'<span class=\"picked-name\">' + esc(p.name) + '</span>'", reason: 'brand line directly above the name (picked card)' },
+  { file: 'gunforma-armory.html', match: "'<span class=\"part-card-name\">' + esc(p.name) + '</span>'", reason: 'brand line directly above the name (picker card)' },
 ];
 
 const NAME_READ = /\b(?:p|product|item|part|prod|pr|r)\.name\b/;
