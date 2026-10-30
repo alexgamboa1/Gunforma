@@ -181,17 +181,22 @@ function ensureAdminNavStyles() {
 
 // The signed-in bar: a mail icon with the unread count where the word
 // "Inbox" was, no Sign out button, and the three-line button shown at every
-// width. Above the collapse width that button opens a small dropdown holding
-// only the account entries (My Builds, Saved Builds, Sign out); below it the
-// panel is the page's own full-width list, which carries those same entries
-// after the site links.
+// width. Above the collapse width that button opens a right-anchored
+// dropdown panel; below it the panel is the page's own full-width list.
+// EITHER WAY THE MENU'S CONTENTS ARE THE SAME (Alex, 2026-10-30): the three
+// site links, the Your P365 dropdown between its blue dividers, then the
+// account group — the panel's shape changes with width, never its rows, and
+// check-nav.mjs refuses a media query that hides any of them. (Until then
+// the dropdown showed only the account entries, so the menu said different
+// things at different widths.) Yes, Builds / Parts Catalog / Armory then
+// appear on the bar AND in the open panel at full width — intended.
 //
 // Injected for the same reason as the admin styles above: the nav's CSS is
 // copied into every page that loads this file, and this is one copy.
 //
-// Only a nav marked .nav-authed gets any of it. Signed out there is nothing
-// to put in a dropdown at full width — Builds and Parts Catalog are already
-// on the bar — so the button stays hidden there exactly as before.
+// Only a nav marked .nav-authed gets any of it. Signed out at full width
+// the button stays hidden exactly as before — the desktop bar is the
+// signed-out nav, and keeping it as it is was part of the same call.
 var INBOX_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"' +
   ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -204,9 +209,11 @@ function ensureAccountNavStyles() {
 
   // The dropdown rules, for one nav selector at one minimum width. Written
   // once and emitted twice because an admin nav collapses earlier: between
-  // 821px and ADMIN_COLLAPSE_AT it is still the full-width list and still
-  // the only route to the site links and the admin pages, so the dropdown —
-  // which hides both — must not apply there.
+  // 821px and ADMIN_COLLAPSE_AT it is the full-width list, and the compact
+  // panel must not replace it there. These rules restyle the panel only —
+  // no rule here may hide a row, the Your P365 dropdown or its dividers:
+  // the menu's contents are the same at every width (Alex, 2026-10-30),
+  // and check-nav.mjs pins that.
   function dropdown(nav, minWidth) {
     return '@media (min-width: ' + minWidth + 'px) {' +
       nav + ' .nav-toggle { display: block; }' +
@@ -218,9 +225,11 @@ function ensureAccountNavStyles() {
       nav + ' .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em;' +
       '  text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }' +
       nav + ' .nav-menu a:hover { background: #17181b; color: #4a9edd; }' +
-      // Everything that is not an account entry is already on the bar at
-      // this width: the site links, and for an admin the two admin links.
-      nav + ' .nav-menu > :not(.acct) { display: none; }' +
+      // The compact panel's row metrics (11px 18px) out-specify the page's
+      // .nav-sub rules, so the dropdown's own summary and indent are
+      // restated at the panel's scale here.
+      nav + ' .nav-menu .nav-sub summary { padding: 11px 18px; font-size: 12px; }' +
+      nav + ' .nav-menu .nav-sub a { padding-left: 34px; }' +
     '}';
   }
 
@@ -582,8 +591,8 @@ async function updateNavAuth() {
   //
   // The account entries depend on the session, so they are appended here
   // rather than shipped in the static markup, and swept just above in the
-  // same idempotent pass as the rest. Every one carries .acct: above the
-  // collapse width the dropdown shows .acct entries and nothing else.
+  // same idempotent pass as the rest. Every one carries .acct so the sweeps
+  // can tell them from the menu's static rows.
   if (menuEl) {
     // Admin group first, under its own label: below 820px the inline entries
     // are hidden with .nav-signin-inline, so this is the only way in. Swept

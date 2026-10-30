@@ -232,6 +232,29 @@ for (const file of CSS_FILES) {
 }
 pass('dropdown CSS block identical in every file that styles the menu (or failures above name them)');
 
+// ── the menu says the same thing at every width ───────────────────────────
+// (Alex, 2026-10-30.) The signed-in desktop dropdown used to hide every
+// non-account row (`.nav-menu > :not(.acct) { display: none; }`), so the
+// three-line menu's contents changed with the viewport. No nav copy may
+// hide a menu row, the Your P365 dropdown, its dividers or the signed-out
+// rows by width or by panel shape: a rule may restyle the panel, never
+// thin it. (The summary's ::-webkit-details-marker is the one legitimate
+// display:none — it swaps the browser's triangle for our ▾.)
+for (const file of [...CSS_FILES, 'js/nav.js']) {
+  const t = read(file);
+  if (/\.nav-menu[^{}'"]*>\s*:not\(/.test(t)) {
+    fail(`${file}: a child-hiding .nav-menu > :not(…) rule — the menu must hold the same rows at every width`);
+  }
+  for (const m of t.matchAll(/([^{};]*)\{([^{}]*)\}/g)) {
+    const [, sel, body] = m;
+    if (!/\.(nav-sub|anon)\b/.test(sel) || sel.includes('-webkit-details-marker')) continue;
+    if (/display:\s*none/.test(body)) {
+      fail(`${file}: "${sel.trim().slice(0, 60)}" hides a menu group`);
+    }
+  }
+}
+pass('no rule hides a menu row, the dropdown or its dividers at any width');
+
 if (failures) {
   console.error('\n' + failures + ' nav failure(s). Every nav copy must carry Home/Builds/Parts Catalog/Armory on the bar and the "Your P365" GUN_HUBS dropdown in the hamburger — see scripts/check-nav.mjs header.');
   process.exit(1);
