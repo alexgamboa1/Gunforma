@@ -669,20 +669,23 @@ for (const [label, path, want] of [
   }
 }
 
-// ── the front door: "Your P365" in the served nav, the picker on / ──────
-// The cluster above was reachable by crawlers (sitemap) and by nobody
+// ── the front door: the nav's dropdown and Armory link, the picker on / ─
+// The /p365/ cluster was reachable by crawlers (sitemap) and by nobody
 // else: no nav item, no homepage link. This asserts the way in on the
-// wire — the nav link on a static page, a hub, a guide AND a function-
-// rendered product page (the function copies are the ones a sweep of
-// *.html misses), and every hub button of the homepage picker. The build
-// holds the picker to GUN_HUBS (scripts/check-home-picker.mjs); this is
-// the live half, so the front door cannot quietly disappear from what a
+// wire, on a static page, a hub, a guide AND a function-rendered product
+// page (the function copies are the ones a sweep of *.html misses), and
+// every hub button of the homepage picker. Since 2026-10-29 the nav item
+// is a hamburger-menu dropdown — one <summary>, every hub link, the index
+// link — and the Armory holds the old bar slot, desktop and mobile. The
+// build holds the picker and every dropdown copy to GUN_HUBS
+// (scripts/check-home-picker.mjs, scripts/check-nav.mjs); this is the
+// live half, so the front door cannot quietly disappear from what a
 // reader is actually served.
 {
-  console.log('\n── front door to /p365/');
+  console.log('\n── front door to /p365/ and the Armory');
   const { GUN_HUBS, GUIDE_PAGES, hubPath, guidePath, HUB_INDEX_PATH } =
     await import('../netlify/functions/_guide-meta.mjs');
-  const NAV_LINK = 'href="/p365/">Your P365</a>';
+  const ARMORY_LINK = 'href="gunforma-armory.html">Armory</a>';
   const g0 = GUIDE_PAGES[0];
   for (const [label, path] of [
     ['static page',   '/gunforma-builds.html'],
@@ -692,8 +695,15 @@ for (const [label, path, want] of [
     ['parts index',   '/parts'],
   ]) {
     const r = await get(path);
-    const n = r.body.split(NAV_LINK).length - 1;
-    ok(r.status === 200 && n >= 2, `${label} ${path}: "Your P365" in desktop nav and mobile menu`, `${r.status}, ${n} link(s)`);
+    const armory = r.body.split(ARMORY_LINK).length - 1;
+    ok(r.status === 200 && armory >= 2, `${label} ${path}: Armory in desktop nav and mobile menu`, `${r.status}, ${armory} link(s)`);
+    const summaries = r.body.split('<summary>Your P365</summary>').length - 1;
+    ok(summaries === 1, `${label} ${path}: one "Your P365" dropdown in the menu`, `${summaries} dropdown(s)`);
+    const missing = GUN_HUBS.filter((h) => !r.body.includes('href="' + hubPath(h.gun) + '">'));
+    ok(missing.length === 0 && r.body.includes('href="' + HUB_INDEX_PATH + '">All P365 models'),
+       `${label} ${path}: the dropdown links every hub and the index`,
+       missing.length ? 'missing ' + missing.map((h) => h.gun).join(', ') : undefined);
+    ok(!r.body.includes('href="/p365/">Your P365</a>'), `${label} ${path}: no flat "Your P365" bar link`);
   }
   const home = await get('/');
   ok(home.status === 200, '/: 200', home.status);
@@ -743,7 +753,7 @@ for (const [label, path, want] of [
   console.log('\n── field notes');
   const { FIELD_NOTES, fieldNotePath } = await import('../netlify/functions/_field-notes-meta.mjs');
   const apex = origin === 'https://gunforma.com';
-  const NAV_LINK = 'href="/p365/">Your P365</a>';
+  const NAV_LINK = 'href="gunforma-armory.html">Armory</a>';
   const NOINDEX = /<meta[^>]+name=["']robots["'][^>]+noindex/i;
   const same = (ratio) => { const [a, b] = String(ratio || '').split('/'); return a !== undefined && a === b; };
 

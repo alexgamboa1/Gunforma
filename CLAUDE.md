@@ -711,6 +711,25 @@ and nothing failed. `scripts/check-routes.mjs` ("front door to /p365/")
 asserts the link on the wire on a static page, a hub, a guide, a product
 page and `/parts`, in both the desktop nav and the mobile menu.
 
+Third worked example, and the one that ended the unguarded era: the Armory
+link (2026-10-29, Alex's call). The #218 rebuild added it to the two pages
+it touched — `gunforma-armory.html` and `gunforma-gun-guides.html` — and
+every other copy still reflected the park, so the link appeared only while
+you were already on those pages. The fix made the bar **Home / Builds /
+Parts Catalog / Armory** everywhere (Armory `active` only on its own page)
+and moved **"Your P365" into the hamburger as a dropdown**: a
+`<details class="nav-sub">` row listing every `GUN_HUBS` hub (names from
+`GUN_META`, order from the registry, the `/p365/` index link last — the
+same contract the homepage picker is held to). The dropdown exists once per
+rendering path — `navSubHtml()` in `_page-chrome.mjs` for the three
+function copies, a literal in `js/nav.js` and in each static page — plus a
+five-rule CSS block beside each `.nav-menu { display: none; }`. **Every
+copy is now held to that one shape by `scripts/check-nav.mjs`** on every
+deploy, so a seventeenth copy that forgets a link fails the build instead
+of shipping. A truly shared header is still not possible without a build
+step or server-rendering every static page (crawlers must see the links
+in-source), which is why the guard, not consolidation, is the fix.
+
 ## Deploy previews and auth
 
 `js/site-url.js` returns the preview origin on
@@ -1309,6 +1328,7 @@ Registered today:
 | `scripts/check-display-name.mjs` | a render file printing a raw product name (`p.name`, `item.name`, `part.name`, … on a line that emits HTML or DOM text) instead of `displayProductName()`, so a new section or category ships "AMAG 15 SG9" with nothing saying Magpul; also an allowlist entry whose line is gone |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose; a hub `<title>` at 60 characters or over, or off the "`<model>`: Which Mags … Fit \| Gunforma" shape |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
+| `scripts/check-nav.mjs` | a nav copy drifting from the one shape — a public page or nav-rendering function whose header is missing the Armory link (how #218 shipped it on two pages and nowhere else), Armory active off its own page or inactive on it, a flat "Your P365" bar link surviving, the hamburger's "Your P365" dropdown drifting from `GUN_HUBS` (hubs, order, `GUN_META` names, the index link last — the picker's contract), a menu missing its signed-out bottom group (`class="anon"` Sign in / Create account, which nav.js swaps for the account entries on sign-in and restores on sign-out), or a menu-styling file missing the dropdown's CSS block |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
 | `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose — or in a directive's args or body (a best-for label, a pros/cons line, an FAQ answer, a changelog entry); a directive that does not parse, an unclosed picks/rank/faq block, or one naming an unknown gun; a picks/rank/compare slug that is not a live catalog product (against `scripts/fixtures/product-names.json`); ::picks outside 3–7 entries or naming a part with no ::rank card on the page; a ::compare column or category `_guide-blocks.mjs` does not declare, a compare of one part, or one mixing categories; a malformed registry changelog entry; an image under `/field-notes/`, which the forced rewrite swallows |
@@ -3209,10 +3229,15 @@ writes `builds.parts_snapshot` at all, which is why it is out of
 (save says "isn't switched on yet", the gallery shows a coming-online empty
 state), so the **code deploys before the migration**, per the house rule.
 
-**Both pages stay hidden**: no nav link, not in `sitemap.mjs`, `noindex` on
-each. A future session finding working pages with no way to reach them will
-want to helpfully wire the nav back up. Don't — launch (nav × 16 files,
-sitemap, the two noindex lines) is its own PR on Alex's go.
+**The Armory got its nav link on 2026-10-29** (Alex's explicit request —
+the "Armory becomes a permanent header link" PR): every nav copy now
+carries it after Parts Catalog, desktop and hamburger, guarded by
+`scripts/check-nav.mjs`. **The rest of the launch has NOT happened**: both
+pages are still `noindex`, still out of `sitemap.mjs` (the Armory path is
+under `RETIRED` in `check-sitemap.mjs`), and `gunforma-gun-guides.html`
+still has no nav link of its own — it is reached from the Armory page.
+Lifting the two noindex lines and the sitemap exclusion is its own PR on
+Alex's go; do not fold it into something else.
 
 **History — why the old Armory was parked** (kept because the reasoning still
 binds the rebuild): the pre-rebuild page worked — `#83`–`#86` fixed its

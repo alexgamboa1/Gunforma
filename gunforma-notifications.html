@@ -30,17 +30,30 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .nav-right { display: flex; align-items: center; gap: 14px; }
 .nav-btn { font-size: 11px; color: #ffffff; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }
 .nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }
-.nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
+.nav-toggle { display: block; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
 .nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }
 .nav-toggle span + span { margin-top: 4px; }
 .nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }
 .nav-profile svg { width: 19px; height: 19px; }
 .nav-menu { display: none; }
+.nav-menu .nav-sub { border-top: 2px solid #4a9edd; border-bottom: 2px solid #4a9edd; }
+.nav-menu .nav-sub summary { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; cursor: pointer; list-style: none; border-bottom: 0.5px solid #1a1b1e; }
+.nav-menu .nav-sub summary::-webkit-details-marker { display: none; }
+.nav-menu .nav-sub summary::after { content: " ▾"; color: #6a6b6e; }
+.nav-menu .nav-sub[open] summary::after { content: " ▴"; }
+.nav-menu .nav-sub a { display: block; padding-left: 44px; }
+@media (min-width: 821px) {
+  .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px; background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0; border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+  .nav-menu.open { display: flex; }
+  .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }
+  .nav-menu a:hover { background: #17181b; color: #4a9edd; }
+  .nav-menu .nav-sub summary { padding: 11px 18px; font-size: 12px; }
+  .nav-menu .nav-sub a { padding-left: 34px; }
+}
 @media (max-width: 820px) {
   .nav-links { display: none; }
   .nav-signin-inline { display: none; }
   .nav-profile { display: flex; }
-  .nav-toggle { display: block; }
   .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }
   .nav-menu.open { display: flex; }
   .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
@@ -96,8 +109,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div class="nav-links">
     <a class="nav-link" href="/">Home</a>
     <a class="nav-link" href="gunforma-builds.html">Builds</a>
-    <a class="nav-link" href="/p365/">Your P365</a>
     <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="gunforma-armory.html">Armory</a>
   </div>
   <div class="nav-right">
     <a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>
@@ -107,8 +120,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   </div>
   <div class="nav-menu" id="nav-menu">
     <a href="gunforma-builds.html">Builds</a>
-    <a href="/p365/">Your P365</a>
     <a href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a href="gunforma-armory.html">Armory</a>
+    <details class="nav-sub">
+      <summary>Your P365</summary>
+      <a href="/p365/p365">P365</a>
+      <a href="/p365/p365-x">P365 X</a>
+      <a href="/p365/p365-xl">P365 XL</a>
+      <a href="/p365/p365-xmacro">P365 XMacro</a>
+      <a href="/p365/p365-axg">P365 AXG Legion</a>
+      <a href="/p365/p365-xf-dh3">P365 XF DH3</a>
+      <a href="/p365/p365-xf-dh3-axg">P365 XF DH3 AXG</a>
+      <a href="/p365/p365-fuse">P365 FUSE</a>
+      <a href="/p365/p365-fuse-comp">P365 FUSE Comp</a>
+      <a href="/p365/">All P365 models →</a>
+    </details>
+    <a class="anon" href="gunforma-signin.html">Sign in</a>
+    <a class="anon" href="gunforma-signup.html">Create account</a>
   </div>
 </nav>
 

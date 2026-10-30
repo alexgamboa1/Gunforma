@@ -55,11 +55,34 @@ var NAV_TOGGLE =
     '<span></span><span></span><span></span>' +
   '</button>';
 
+// The "Your P365" dropdown in the three-line menu: the hubs, in GUN_HUBS
+// order, names from GUN_META, the index link last. This is a browser-side
+// literal copy of navSubHtml() in netlify/functions/_page-chrome.mjs — no
+// module loader here, same reason as every other nav copy — and
+// scripts/check-nav.mjs holds it to the registry on every deploy.
+var NAV_P365_SUB =
+  '<details class="nav-sub">' +
+    '<summary>Your P365</summary>' +
+    '<a href="/p365/p365">P365</a>' +
+    '<a href="/p365/p365-x">P365 X</a>' +
+    '<a href="/p365/p365-xl">P365 XL</a>' +
+    '<a href="/p365/p365-xmacro">P365 XMacro</a>' +
+    '<a href="/p365/p365-axg">P365 AXG Legion</a>' +
+    '<a href="/p365/p365-xf-dh3">P365 XF DH3</a>' +
+    '<a href="/p365/p365-xf-dh3-axg">P365 XF DH3 AXG</a>' +
+    '<a href="/p365/p365-fuse">P365 FUSE</a>' +
+    '<a href="/p365/p365-fuse-comp">P365 FUSE Comp</a>' +
+    '<a href="/p365/">All P365 models →</a>' +
+  '</details>';
+
 var NAV_MENU =
   '<div class="nav-menu" id="nav-menu">' +
     '<a href="gunforma-builds.html">Builds</a>' +
-    '<a href="/p365/">Your P365</a>' +
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+    '<a href="gunforma-armory.html">Armory</a>' +
+    NAV_P365_SUB +
+    '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
+    '<a class="anon" href="gunforma-signup.html">Create account</a>' +
   '</div>';
 
 // Admin entries. Convenience only — /admin and /admin-post are protected by
@@ -85,6 +108,16 @@ var ADMIN_COLLAPSE_AT = 1099;
 var ACCOUNT_LINKS = [
   { href: 'gunforma-profile.html?tab=my-builds', label: 'My Builds' },
   { href: 'gunforma-profile.html?tab=saved',     label: 'Saved Builds' },
+];
+
+// The signed-out rows of the menu's bottom group, below the dropdown's
+// second blue line (Alex, 2026-10-30). The static pages ship them in their
+// markup (class="anon"); the signed-in paint removes them and the anon
+// branch puts them back, so a sign-out in this tab or another restores
+// them. check-nav.mjs pins the pair against every copy.
+var ANON_LINKS = [
+  { href: 'gunforma-signin.html', label: 'Sign in' },
+  { href: 'gunforma-signup.html', label: 'Create account' },
 ];
 
 var ADMIN_LINKS = [
@@ -147,18 +180,23 @@ function ensureAdminNavStyles() {
 }
 
 // The signed-in bar: a mail icon with the unread count where the word
-// "Inbox" was, no Sign out button, and the three-line button shown at every
-// width. Above the collapse width that button opens a small dropdown holding
-// only the account entries (My Builds, Saved Builds, Sign out); below it the
-// panel is the page's own full-width list, which carries those same entries
-// after the site links.
+// "Inbox" was, and no Sign out button (it lives in the menu).
+//
+// The three-line button itself shows at EVERY width and auth state since
+// 2026-10-30 (Alex): "Your P365" and "Create account" live only in the
+// menu, so hiding the button signed out at desktop cut those visitors off
+// from both. Above 820px it opens the compact right-anchored panel that is
+// PAGE CSS (`@media (min-width: 821px)` beside every copy's menu styles),
+// below it the full-width list — AND THE ROWS ARE THE SAME EITHER WAY: the
+// three site links, the Your P365 dropdown between its blue dividers, then
+// the account group (or Sign in / Create account signed out). check-nav.mjs
+// refuses a rule that hides the button or thins the menu by width. Yes,
+// Builds / Parts Catalog / Armory appear on the bar AND in the open panel
+// at full width — intended.
 //
 // Injected for the same reason as the admin styles above: the nav's CSS is
-// copied into every page that loads this file, and this is one copy.
-//
-// Only a nav marked .nav-authed gets any of it. Signed out there is nothing
-// to put in a dropdown at full width — Builds and Parts Catalog are already
-// on the bar — so the button stays hidden there exactly as before.
+// copied into every page that loads this file, and this is one copy. Only
+// a nav marked .nav-authed gets any of it.
 var INBOX_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"' +
   ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -169,28 +207,13 @@ var INBOX_ICON =
 function ensureAccountNavStyles() {
   if (document.getElementById('nav-account-styles')) return;
 
-  // The dropdown rules, for one nav selector at one minimum width. Written
-  // once and emitted twice because an admin nav collapses earlier: between
-  // 821px and ADMIN_COLLAPSE_AT it is still the full-width list and still
-  // the only route to the site links and the admin pages, so the dropdown —
-  // which hides both — must not apply there.
-  function dropdown(nav, minWidth) {
-    return '@media (min-width: ' + minWidth + 'px) {' +
-      nav + ' .nav-toggle { display: block; }' +
-      nav + ' .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px;' +
-      '  background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0;' +
-      '  border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99;' +
-      '  box-shadow: 0 10px 24px rgba(0,0,0,0.35); }' +
-      nav + ' .nav-menu.open { display: flex; }' +
-      nav + ' .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em;' +
-      '  text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }' +
-      nav + ' .nav-menu a:hover { background: #17181b; color: #4a9edd; }' +
-      // Everything that is not an account entry is already on the bar at
-      // this width: the site links, and for an admin the two admin links.
-      nav + ' .nav-menu > :not(.acct) { display: none; }' +
-    '}';
-  }
-
+  // There are no dropdown-panel rules here any more. The compact desktop
+  // panel the three-line button opens above 820px is PAGE CSS now — the
+  // `@media (min-width: 821px)` block beside every copy's menu styles —
+  // because since 2026-10-30 the button shows at every width and auth
+  // state, so a signed-out visitor (and a page that never loads this file)
+  // needs the panel too. This injector is left styling only what exists
+  // solely signed in: the inbox icon, and the ≤350px give-way below.
   var style = document.createElement('style');
   style.id = 'nav-account-styles';
   style.textContent =
@@ -206,9 +229,7 @@ function ensureAccountNavStyles() {
     // goes to the profile, and so do My Builds and Saved Builds in the menu.
     // .nav-right is in the selector to out-specify the admin block's own
     // `nav.nav-admin-on .nav-profile { display: flex }`.
-    '@media (max-width: 350px) { nav.nav-authed .nav-right .nav-profile { display: none; } }' +
-    dropdown('nav.nav-authed:not(.nav-admin-on)', 821) +
-    dropdown('nav.nav-authed.nav-admin-on', ADMIN_COLLAPSE_AT + 1);
+    '@media (max-width: 350px) { nav.nav-authed .nav-right .nav-profile { display: none; } }';
   document.head.appendChild(style);
 }
 
@@ -239,17 +260,6 @@ function ensureAccountNavStyles() {
     var linkFile = (href.split('/').pop() || '').toLowerCase();
     return currentFile === linkFile ? ' active' : '';
   }
-  // "Your P365" is a cluster of routes, not a file: /p365/ (the model
-  // index), /p365/<gun> (a hub) and /fit/p365/... (a fit guide). Those pages
-  // are server-rendered and carry their own nav (_page-chrome.mjs), so this
-  // only matters if nav.js is ever mounted on one — but the file test above
-  // would read /p365/ as index.html and light up Home, so the route test
-  // exists so that cannot happen.
-  function activeIfPath(prefix) {
-    var p = window.location.pathname;
-    return (p === prefix || p.indexOf(prefix) === 0 || p.indexOf('/fit/') === 0) ? ' active' : '';
-  }
-
   var html;
   if (variant === 'auth-signin') {
     html =
@@ -275,8 +285,8 @@ function ensureAccountNavStyles() {
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
-          '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+          '<a class="nav-link' + activeIf('gunforma-armory.html') + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" id="nav-signin">…</a>' +
@@ -293,8 +303,8 @@ function ensureAccountNavStyles() {
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
-          '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+          '<a class="nav-link' + activeIf('gunforma-armory.html') + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
@@ -411,6 +421,20 @@ async function updateNavAuth() {
     // go with the links it labels.
     document.querySelectorAll('.nav-menu .acct, .nav-menu .admin')
       .forEach(function (el) { el.remove(); });
+    // Put the signed-out rows back (the signed-in paint removed them).
+    // Sweep-then-insert, not insert-if-missing: updateNavAuth runs
+    // concurrently on load, and two callers checking an empty menu would
+    // each insert a pair — the same race as the signed-in entries below.
+    if (menuEl) {
+      menuEl.querySelectorAll('.anon').forEach(function (el) { el.remove(); });
+      ANON_LINKS.forEach(function (link) {
+        var a = document.createElement('a');
+        a.className = 'anon';
+        a.href = link.href;
+        a.textContent = link.label;
+        menuEl.appendChild(a);
+      });
+    }
     // .nav-authed is what shows the three-line button at full width. Signed
     // out it must go, or the button would open a dropdown with nothing in it.
     document.querySelectorAll('nav.nav-admin-on, nav.nav-authed')
@@ -467,7 +491,9 @@ async function updateNavAuth() {
   // idempotent under the race.
   document.querySelectorAll('#nav-inbox, #nav-admin-queue, #nav-admin-post')
     .forEach(function (el) { el.remove(); });
-  document.querySelectorAll('.nav-menu .acct, .nav-menu .admin')
+  // .anon too: signed in, the bottom group is My Builds / Saved Builds /
+  // Sign out in place of the static markup's Sign in / Create account.
+  document.querySelectorAll('.nav-menu .acct, .nav-menu .admin, .nav-menu .anon')
     .forEach(function (el) { el.remove(); });
   document.querySelectorAll('nav.nav-admin-on')
     .forEach(function (el) { el.classList.remove('nav-admin-on'); });
@@ -544,8 +570,8 @@ async function updateNavAuth() {
   //
   // The account entries depend on the session, so they are appended here
   // rather than shipped in the static markup, and swept just above in the
-  // same idempotent pass as the rest. Every one carries .acct: above the
-  // collapse width the dropdown shows .acct entries and nothing else.
+  // same idempotent pass as the rest. Every one carries .acct so the sweeps
+  // can tell them from the menu's static rows.
   if (menuEl) {
     // Admin group first, under its own label: below 820px the inline entries
     // are hidden with .nav-signin-inline, so this is the only way in. Swept

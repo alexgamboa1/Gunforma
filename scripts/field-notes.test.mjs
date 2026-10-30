@@ -213,7 +213,9 @@ test('the fixture renders off the apex: verdicts, prices, chrome, meta', async (
   assert.ok(h.includes('"@type":"Article"') && h.includes('"@type":"BreadcrumbList"'), 'JSON-LD');
   assert.ok(h.includes('"datePublished":"' + FIXTURE.published + '"'));
   assert.ok(/<meta name="robots" content="noindex"\/>/.test(h), 'a draft is noindex');
-  assert.equal(count(h, 'href="/p365/">Your P365</a>'), 2, 'the shared nav, desktop and mobile');
+  assert.equal(count(h, 'href="gunforma-armory.html">Armory</a>'), 2, 'the shared nav, desktop and mobile');
+  assert.equal(count(h, '<summary>Your P365</summary>'), 1, 'the Your P365 dropdown in the menu');
+  assert.ok(!h.includes('href="/p365/">Your P365</a>'), 'no flat Your P365 link — it lives in the dropdown');
   assert.ok(h.includes('class="draft-strip"'));
   assert.ok(h.includes('<h1>Does the Holosun 507K X2 fit a P365 XL?'));
   assert.ok(!/<!--fn-block-\d+-->/.test(h), 'every placeholder was replaced');

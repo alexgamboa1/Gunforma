@@ -15,13 +15,34 @@
 // What is NOT here: page-specific CSS. Each page keeps its own rules for
 // its own components; only the shared chrome moved.
 
-// `active` names the item that carries the underline: 'p365' on the hub and
-// guide pages (the whole /p365/ and /fit/ cluster is one nav item, "Your
-// P365"), 'parts' on a catalog page, anything else for none. It is passed
-// rather than derived from the request because the function copies render
-// with no request-aware helper — nav.js's activeIf() is the browser's
-// version. Before this took an argument it hardcoded Parts Catalog as
-// active, which lit the wrong item on every hub and guide page.
+import { GUN_HUBS, GUN_META, hubPath, HUB_INDEX_PATH } from './_guide-meta.mjs';
+
+// The "Your P365" dropdown in the three-line menu: the hubs, in GUN_HUBS
+// order, names from GUN_META, the index link last — the same registry the
+// homepage picker mirrors (scripts/check-home-picker.mjs). One copy for the
+// three function navs; the static pages carry a literal copy that
+// scripts/check-nav.mjs holds to this registry on every deploy. "Your P365"
+// left the desktop bar for this dropdown 2026-10-29, when the Armory took
+// its bar slot.
+export function navSubHtml() {
+  return (
+    '<details class="nav-sub">' +
+      '<summary>Your P365</summary>' +
+      GUN_HUBS.map((h) => '<a href="' + hubPath(h.gun) + '">' + GUN_META[h.gun] + '</a>').join('') +
+      '<a href="' + HUB_INDEX_PATH + '">All P365 models →</a>' +
+    '</details>'
+  );
+}
+
+// `active` names the item that carries the underline: 'parts' on a catalog
+// page, 'armory' on the Armory, anything else for none. The hub and guide
+// pages still pass 'p365'; since the "Your P365" bar item moved into the
+// hamburger dropdown that lights nothing, which is the intended state — the
+// cluster has no bar item to underline. It is passed rather than derived
+// from the request because the function copies render with no request-aware
+// helper — nav.js's activeIf() is the browser's version. Before this took
+// an argument it hardcoded Parts Catalog as active, which lit the wrong
+// item on every hub and guide page.
 export function navHtml({ active } = {}) {
   const on = (key) => (active === key ? ' active' : '');
   return (
@@ -30,8 +51,8 @@ export function navHtml({ active } = {}) {
   '<div class="nav-links">' +
     '<a class="nav-link' + on('home') + '" href="/">Home</a>' +
     '<a class="nav-link' + on('builds') + '" href="gunforma-builds.html">Builds</a>' +
-    '<a class="nav-link' + on('p365') + '" href="/p365/">Your P365</a>' +
     '<a class="nav-link' + on('parts') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+    '<a class="nav-link' + on('armory') + '" href="gunforma-armory.html">Armory</a>' +
   '</div>' +
   '<div class="nav-right">' +
     '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html">Sign in</a>' +
@@ -41,8 +62,15 @@ export function navHtml({ active } = {}) {
   '</div>' +
 '<div class="nav-menu" id="nav-menu">' +
   '<a href="gunforma-builds.html">Builds</a>' +
-  '<a href="/p365/">Your P365</a>' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+  '<a href="gunforma-armory.html">Armory</a>' +
+  navSubHtml() +
+  // The signed-out bottom group, under the dropdown's second blue line.
+  // class="anon" is what nav.js's signed-in paint removes; these pages do
+  // not load nav.js, and their bar says "Sign in" regardless of session,
+  // so the rows showing unconditionally here matches the rest of the nav.
+  '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
+  '<a class="anon" href="gunforma-signup.html">Create account</a>' +
 '</div>' +
 '</nav>'
   );
@@ -92,17 +120,30 @@ export function chromeCss() {
 '.nav-right { display: flex; align-items: center; gap: 14px; }' +
 '.nav-btn { font-size: 11px; color: #ffffff; border: 0.5px solid #2a2b2e; padding: 5px 12px; border-radius: 4px; cursor: pointer; text-decoration: none; }' +
 '.nav-btn.cta { color: #4a9edd; border-color: #4a9edd; }' +
-'.nav-toggle { display: none; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }' +
+'.nav-toggle { display: block; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }' +
 '.nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }' +
 '.nav-toggle span + span { margin-top: 4px; }' +
 '.nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }' +
 '.nav-profile svg { width: 19px; height: 19px; }' +
 '.nav-menu { display: none; }' +
+'.nav-menu .nav-sub { border-top: 2px solid #4a9edd; border-bottom: 2px solid #4a9edd; }' +
+'.nav-menu .nav-sub summary { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; cursor: pointer; list-style: none; border-bottom: 0.5px solid #1a1b1e; }' +
+'.nav-menu .nav-sub summary::-webkit-details-marker { display: none; }' +
+'.nav-menu .nav-sub summary::after { content: " ▾"; color: #6a6b6e; }' +
+'.nav-menu .nav-sub[open] summary::after { content: " ▴"; }' +
+'.nav-menu .nav-sub a { display: block; padding-left: 44px; }' +
+'@media (min-width: 821px) {' +
+'  .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px; background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0; border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }' +
+'  .nav-menu.open { display: flex; }' +
+'  .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }' +
+'  .nav-menu a:hover { background: #17181b; color: #4a9edd; }' +
+'  .nav-menu .nav-sub summary { padding: 11px 18px; font-size: 12px; }' +
+'  .nav-menu .nav-sub a { padding-left: 34px; }' +
+'}' +
 '@media (max-width: 820px) {' +
 '  .nav-links { display: none; }' +
 '  .nav-signin-inline { display: none; }' +
 '  .nav-profile { display: flex; }' +
-'  .nav-toggle { display: block; }' +
 '  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }' +
 '  .nav-menu.open { display: flex; }' +
 '  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }' +
