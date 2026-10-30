@@ -86,6 +86,7 @@ check "field note renderer"        scripts/field-notes.test.mjs
 check "field note guide blocks"    scripts/guide-blocks.test.mjs
 check "go section tracking"        scripts/go-redirect.test.mjs
 check "barrel/slide fit sections"  scripts/fit-sections.test.mjs
+check "gun guide parts build order" scripts/guide-part-order.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
