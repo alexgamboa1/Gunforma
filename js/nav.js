@@ -180,23 +180,23 @@ function ensureAdminNavStyles() {
 }
 
 // The signed-in bar: a mail icon with the unread count where the word
-// "Inbox" was, no Sign out button, and the three-line button shown at every
-// width. Above the collapse width that button opens a right-anchored
-// dropdown panel; below it the panel is the page's own full-width list.
-// EITHER WAY THE MENU'S CONTENTS ARE THE SAME (Alex, 2026-10-30): the three
-// site links, the Your P365 dropdown between its blue dividers, then the
-// account group — the panel's shape changes with width, never its rows, and
-// check-nav.mjs refuses a media query that hides any of them. (Until then
-// the dropdown showed only the account entries, so the menu said different
-// things at different widths.) Yes, Builds / Parts Catalog / Armory then
-// appear on the bar AND in the open panel at full width — intended.
+// "Inbox" was, and no Sign out button (it lives in the menu).
+//
+// The three-line button itself shows at EVERY width and auth state since
+// 2026-10-30 (Alex): "Your P365" and "Create account" live only in the
+// menu, so hiding the button signed out at desktop cut those visitors off
+// from both. Above 820px it opens the compact right-anchored panel that is
+// PAGE CSS (`@media (min-width: 821px)` beside every copy's menu styles),
+// below it the full-width list — AND THE ROWS ARE THE SAME EITHER WAY: the
+// three site links, the Your P365 dropdown between its blue dividers, then
+// the account group (or Sign in / Create account signed out). check-nav.mjs
+// refuses a rule that hides the button or thins the menu by width. Yes,
+// Builds / Parts Catalog / Armory appear on the bar AND in the open panel
+// at full width — intended.
 //
 // Injected for the same reason as the admin styles above: the nav's CSS is
-// copied into every page that loads this file, and this is one copy.
-//
-// Only a nav marked .nav-authed gets any of it. Signed out at full width
-// the button stays hidden exactly as before — the desktop bar is the
-// signed-out nav, and keeping it as it is was part of the same call.
+// copied into every page that loads this file, and this is one copy. Only
+// a nav marked .nav-authed gets any of it.
 var INBOX_ICON =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"' +
   ' stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
@@ -207,32 +207,13 @@ var INBOX_ICON =
 function ensureAccountNavStyles() {
   if (document.getElementById('nav-account-styles')) return;
 
-  // The dropdown rules, for one nav selector at one minimum width. Written
-  // once and emitted twice because an admin nav collapses earlier: between
-  // 821px and ADMIN_COLLAPSE_AT it is the full-width list, and the compact
-  // panel must not replace it there. These rules restyle the panel only —
-  // no rule here may hide a row, the Your P365 dropdown or its dividers:
-  // the menu's contents are the same at every width (Alex, 2026-10-30),
-  // and check-nav.mjs pins that.
-  function dropdown(nav, minWidth) {
-    return '@media (min-width: ' + minWidth + 'px) {' +
-      nav + ' .nav-toggle { display: block; }' +
-      nav + ' .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px;' +
-      '  background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0;' +
-      '  border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99;' +
-      '  box-shadow: 0 10px 24px rgba(0,0,0,0.35); }' +
-      nav + ' .nav-menu.open { display: flex; }' +
-      nav + ' .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em;' +
-      '  text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }' +
-      nav + ' .nav-menu a:hover { background: #17181b; color: #4a9edd; }' +
-      // The compact panel's row metrics (11px 18px) out-specify the page's
-      // .nav-sub rules, so the dropdown's own summary and indent are
-      // restated at the panel's scale here.
-      nav + ' .nav-menu .nav-sub summary { padding: 11px 18px; font-size: 12px; }' +
-      nav + ' .nav-menu .nav-sub a { padding-left: 34px; }' +
-    '}';
-  }
-
+  // There are no dropdown-panel rules here any more. The compact desktop
+  // panel the three-line button opens above 820px is PAGE CSS now — the
+  // `@media (min-width: 821px)` block beside every copy's menu styles —
+  // because since 2026-10-30 the button shows at every width and auth
+  // state, so a signed-out visitor (and a page that never loads this file)
+  // needs the panel too. This injector is left styling only what exists
+  // solely signed in: the inbox icon, and the ≤350px give-way below.
   var style = document.createElement('style');
   style.id = 'nav-account-styles';
   style.textContent =
@@ -248,9 +229,7 @@ function ensureAccountNavStyles() {
     // goes to the profile, and so do My Builds and Saved Builds in the menu.
     // .nav-right is in the selector to out-specify the admin block's own
     // `nav.nav-admin-on .nav-profile { display: flex }`.
-    '@media (max-width: 350px) { nav.nav-authed .nav-right .nav-profile { display: none; } }' +
-    dropdown('nav.nav-authed:not(.nav-admin-on)', 821) +
-    dropdown('nav.nav-authed.nav-admin-on', ADMIN_COLLAPSE_AT + 1);
+    '@media (max-width: 350px) { nav.nav-authed .nav-right .nav-profile { display: none; } }';
   document.head.appendChild(style);
 }
 

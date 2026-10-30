@@ -22,6 +22,10 @@
 //     check-home-picker.mjs holds the homepage picker to
 //   - the dropdown's CSS block is present wherever the menu is styled —
 //     without it the <details> row renders as an unstyled browser default
+//   - the three-line button shows at EVERY width and auth state, and every
+//     copy carries the desktop panel it opens into (Alex, 2026-10-30:
+//     "Your P365" and "Create account" live only in the menu, so a hidden
+//     button cuts signed-out desktop visitors off from both)
 //
 // A failure renders perfectly in a browser — a page whose header quietly
 // lacks a link is the orphan shape this repo keeps paying for — which is
@@ -247,13 +251,37 @@ for (const file of [...CSS_FILES, 'js/nav.js']) {
   }
   for (const m of t.matchAll(/([^{};]*)\{([^{}]*)\}/g)) {
     const [, sel, body] = m;
-    if (!/\.(nav-sub|anon)\b/.test(sel) || sel.includes('-webkit-details-marker')) continue;
+    if (!/\.(nav-sub|anon|nav-toggle)\b/.test(sel) || sel.includes('-webkit-details-marker')) continue;
     if (/display:\s*none/.test(body)) {
-      fail(`${file}: "${sel.trim().slice(0, 60)}" hides a menu group`);
+      fail(`${file}: "${sel.trim().slice(0, 60)}" hides a menu group or the menu button`);
     }
   }
 }
-pass('no rule hides a menu row, the dropdown or its dividers at any width');
+pass('no rule hides the menu button, a menu row, the dropdown or its dividers at any width or auth state');
+
+// ── the button shows everywhere, and the desktop panel it opens exists ────
+// (Alex, 2026-10-30.) The base .nav-toggle rule must draw the button
+// (block, or flex on the two span-burger pages), and every copy must carry
+// the min-width panel block — without it a desktop click adds .open to a
+// display:none menu and nothing appears, which is exactly how this would
+// quietly regress.
+const DESKTOP_PANEL_RULES = [
+  '@media (min-width: 821px) {',
+  '  .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px; background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0; border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }',
+  '  .nav-menu.open { display: flex; }',
+  '  .nav-menu .nav-sub summary { padding: 11px 18px; font-size: 12px; }',
+  '  .nav-menu .nav-sub a { padding-left: 34px; }',
+];
+for (const file of CSS_FILES) {
+  const t = read(file);
+  if (!/\.nav-toggle \{ display: (block|flex);/.test(t)) {
+    fail(`${file}: the base .nav-toggle rule does not draw the button at every width`);
+  }
+  for (const rule of DESKTOP_PANEL_RULES) {
+    if (!t.includes(rule)) fail(`${file}: desktop panel rule missing or drifted: ${rule.trim().slice(0, 44)}…`);
+  }
+}
+pass('the three-line button and its desktop panel exist in every copy (or failures above name them)');
 
 if (failures) {
   console.error('\n' + failures + ' nav failure(s). Every nav copy must carry Home/Builds/Parts Catalog/Armory on the bar and the "Your P365" GUN_HUBS dropdown in the hamburger — see scripts/check-nav.mjs header.');
