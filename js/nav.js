@@ -81,6 +81,8 @@ var NAV_MENU =
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
     '<a href="gunforma-armory.html">Armory</a>' +
     NAV_P365_SUB +
+    '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
+    '<a class="anon" href="gunforma-signup.html">Create account</a>' +
   '</div>';
 
 // Admin entries. Convenience only — /admin and /admin-post are protected by
@@ -106,6 +108,16 @@ var ADMIN_COLLAPSE_AT = 1099;
 var ACCOUNT_LINKS = [
   { href: 'gunforma-profile.html?tab=my-builds', label: 'My Builds' },
   { href: 'gunforma-profile.html?tab=saved',     label: 'Saved Builds' },
+];
+
+// The signed-out rows of the menu's bottom group, below the dropdown's
+// second blue line (Alex, 2026-10-30). The static pages ship them in their
+// markup (class="anon"); the signed-in paint removes them and the anon
+// branch puts them back, so a sign-out in this tab or another restores
+// them. check-nav.mjs pins the pair against every copy.
+var ANON_LINKS = [
+  { href: 'gunforma-signin.html', label: 'Sign in' },
+  { href: 'gunforma-signup.html', label: 'Create account' },
 ];
 
 var ADMIN_LINKS = [
@@ -421,6 +433,20 @@ async function updateNavAuth() {
     // go with the links it labels.
     document.querySelectorAll('.nav-menu .acct, .nav-menu .admin')
       .forEach(function (el) { el.remove(); });
+    // Put the signed-out rows back (the signed-in paint removed them).
+    // Sweep-then-insert, not insert-if-missing: updateNavAuth runs
+    // concurrently on load, and two callers checking an empty menu would
+    // each insert a pair — the same race as the signed-in entries below.
+    if (menuEl) {
+      menuEl.querySelectorAll('.anon').forEach(function (el) { el.remove(); });
+      ANON_LINKS.forEach(function (link) {
+        var a = document.createElement('a');
+        a.className = 'anon';
+        a.href = link.href;
+        a.textContent = link.label;
+        menuEl.appendChild(a);
+      });
+    }
     // .nav-authed is what shows the three-line button at full width. Signed
     // out it must go, or the button would open a dropdown with nothing in it.
     document.querySelectorAll('nav.nav-admin-on, nav.nav-authed')
@@ -477,7 +503,9 @@ async function updateNavAuth() {
   // idempotent under the race.
   document.querySelectorAll('#nav-inbox, #nav-admin-queue, #nav-admin-post')
     .forEach(function (el) { el.remove(); });
-  document.querySelectorAll('.nav-menu .acct, .nav-menu .admin')
+  // .anon too: signed in, the bottom group is My Builds / Saved Builds /
+  // Sign out in place of the static markup's Sign in / Create account.
+  document.querySelectorAll('.nav-menu .acct, .nav-menu .admin, .nav-menu .anon')
     .forEach(function (el) { el.remove(); });
   document.querySelectorAll('nav.nav-admin-on')
     .forEach(function (el) { el.classList.remove('nav-admin-on'); });

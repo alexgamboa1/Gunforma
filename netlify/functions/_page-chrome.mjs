@@ -65,6 +65,12 @@ export function navHtml({ active } = {}) {
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '<a href="gunforma-armory.html">Armory</a>' +
   navSubHtml() +
+  // The signed-out bottom group, under the dropdown's second blue line.
+  // class="anon" is what nav.js's signed-in paint removes; these pages do
+  // not load nav.js, and their bar says "Sign in" regardless of session,
+  // so the rows showing unconditionally here matches the rest of the nav.
+  '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
+  '<a class="anon" href="gunforma-signup.html">Create account</a>' +
 '</div>' +
 '</nav>'
   );

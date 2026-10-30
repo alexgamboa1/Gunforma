@@ -1029,6 +1029,8 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '<a href="gunforma-armory.html">Armory</a>' +
   navSubHtml() +
+  '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
+  '<a class="anon" href="gunforma-signup.html">Create account</a>' +
 '</div>' +
 '</nav>' +
 '<div class="breadcrumb">' +
