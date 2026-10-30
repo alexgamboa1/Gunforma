@@ -930,7 +930,12 @@ for (const [label, path, want] of [
 // variants of one product with a DIFFERENT colour or finish must never
 // share a primary_image_url. Same colour and finish may (a 2 MOA and a 6
 // MOA optic are one housing). A group shot that is the only photo a product
-// has may stay on the DEFAULT variant alone, listed here with its reason.
+// has may stay on named variants, listed here with the variants and the
+// reason. The variants are part of the ruling: a group that holds any other
+// variant fails. (Until 2026-10-30 an entry passed any group that held the
+// default, so the Anarchy composite sat on all five colours while its note
+// said Black alone — catalog_approvals_photos.sql made the note true, and
+// naming the variants keeps it true.)
 {
   console.log('\n── variant photos: one colour, one photo');
   const SHARED_PHOTO_ALLOWED = {
@@ -938,14 +943,26 @@ for (const [label, path, want] of [
     // (the default) keep it: Fdez photographs neither on its own, and the
     // shot shows every finish, so neither is misleading. Black DLC and
     // Stainless have their own photos. Alex's ruling, 2026-10-22.
-    'fdez-werx-p365-xl-ported-barrel': 'four-finish group shot kept on Gold and Copper (default), which Fdez never photographs alone (Alex, 2026-10-22)',
+    'fdez-werx-p365-xl-ported-barrel': {
+      variants: ['fdez-werx-p365-xl-ported-barrel-copper-high-polished-copper', 'fdez-werx-p365-xl-ported-barrel-gold-high-polished-gold-tin'],
+      reason: 'four-finish group shot kept on Gold and Copper (default), which Fdez never photographs alone (Alex, 2026-10-22)',
+    },
     // OpticsPlanet's one five-plate composite; the product's only photo, so
     // it stays on Black (the default) and the other four show the swatch.
-    'anarchy-outdoors-slide-plate-p365': 'five-colour composite kept on the default variant only (audit 2026-10-21, item 3)',
+    // One variant cannot share with itself, so this entry never excuses a
+    // group: it records the ruling, and any second colour on the composite
+    // fails.
+    'anarchy-outdoors-slide-plate-p365': {
+      variants: ['anarchy-outdoors-slide-plate-p365-black'],
+      reason: 'five-colour composite kept on the default variant only (audit 2026-10-21, item 3; Alex, 2026-10-30)',
+    },
     // Fdez's group photo of all four finishes (image 4496: copper, gold,
     // stainless, black). Black DLC, Copper (the default) and Stainless
     // share it; Gold keeps its own photo (4500). Alex's choice, 2026-10-22.
-    'fdez-werx-p365-fuse-ported-barrel': 'four-finish group photo shared by Black DLC, Copper (default) and Stainless; Gold has its own (Alex, 2026-10-22)',
+    'fdez-werx-p365-fuse-ported-barrel': {
+      variants: ['fdez-werx-p365-fuse-ported-barrel-black-high-polished-black-dlc', 'fdez-werx-p365-fuse-ported-barrel-copper-high-polished-copper-rose', 'fdez-werx-p365-fuse-ported-barrel-stainless-steel-high-polished-stainless'],
+      reason: 'four-finish group photo shared by Black DLC, Copper (default) and Stainless; Gold has its own (Alex, 2026-10-22)',
+    },
   };
   const res = await fetch(`${SB_URL}/rest/v1/product_variants?select=slug,color,finish,is_default,primary_image_url,products!product_variants_product_id_fkey(slug,is_discontinued)&retired_at=is.null&primary_image_url=not.is.null&limit=3000`,
     { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
@@ -967,8 +984,8 @@ for (const [label, path, want] of [
       for (const [url, group] of byUrl) {
         const colours = new Set(group.map(key));
         if (colours.size < 2) continue;
-        const reason = SHARED_PHOTO_ALLOWED[slug];
-        if (reason && group.some((v) => v.is_default)) { allowed++; note(`${slug}: allowed`, reason); continue; }
+        const rule = SHARED_PHOTO_ALLOWED[slug];
+        if (rule && group.every((v) => rule.variants.includes(v.slug))) { allowed++; note(`${slug}: allowed`, rule.reason); continue; }
         shared++;
         note(`${slug}: ${group.map((v) => v.slug).join(', ')} share one photo`, url);
       }

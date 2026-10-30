@@ -377,8 +377,10 @@ parts.
   (every locked slide unapproved or discontinued) and the fit read can
   fail. With slides listed the line is "Only these slides — …"; with none
   it is "Only for specific <brand> slides — the maker says this barrel
-  should not be used in any other slide." Today the Zaffiri P365XL ported
-  barrel, whose one slide is unapproved, shows the second. Rooting the fit
+  should not be used in any other slide." The Zaffiri P365XL ported
+  barrel showed the second until its one slide (the ZPS.P) was approved
+  by `*_catalog_approvals_photos.sql`; since then no live barrel does, and
+  `fit-sections.test.mjs` keeps the case covered. Rooting the fit
   query on `products` instead does not work: PostgREST reads the view's
   barrel column as unique (it inherits `barrel_specs`' key) and returns
   ONE fit row as an object.
