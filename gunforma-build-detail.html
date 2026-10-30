@@ -556,6 +556,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- The label and rel for a buy button to a part's own store, for parts with
      no partner listing. Mirrored by netlify/functions/_maker-link.mjs. -->
 <script src="js/maker-link.js"></script>
+<!-- The headline price rule for a part with no partner listing. -->
+<script src="js/option-price.js"></script>
 <script src="js/display-name.js"></script>
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
@@ -1512,11 +1514,18 @@ function renderAffiliateRow(part, vr) {
     // No listing anywhere on the product. MSRP is the only number there is,
     // so it shows — labelled — beside the maker button, or alone when there
     // is no url to link to. Nothing at all only when there is neither.
+    // The number follows the build's chosen option by js/option-price.js's
+    // rule: that option's MSRP; a part saved with no option, "From" the
+    // lowest priced option; a chosen option with no MSRP (or one since
+    // retired), "Check price" — never another option's number.
     var makerBtn = makerBtnHtml(part.refId, 'part-affiliate-btn');
-    var msrpHtml = (vr && vr.msrp != null)
-      ? '<span class="part-affiliate-price">$'+vr.msrp.toFixed(2)+'</span>'+
+    var head = window.optionHeadline(
+      (VARIANTS_BY_PRODUCT_ID[part.refId] || []).map(function(v){ return { id: v.id, msrp: v.msrp }; }),
+      vr && vr.id ? vr.id : null);
+    var msrpHtml = head.kind !== 'check'
+      ? '<span class="part-affiliate-price">'+head.text+'</span>'+
         '<span class="part-affiliate-msrp-tag">MSRP</span>'
-      : (makerBtn ? '<span class="part-affiliate-price">Check price</span>' : '');
+      : (makerBtn ? '<span class="part-affiliate-price">'+window.CHECK_PRICE+'</span>' : '');
     if (!msrpHtml && !makerBtn) return '';
     return '<div class="part-affiliate">'+
       '<div class="part-affiliate-info">'+msrpHtml+'</div>'+

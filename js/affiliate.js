@@ -24,9 +24,11 @@
 //                                  + stock + Buy button); '' if no PARTNER
 //                                  listing — grid cards never carry a maker
 //                                  button
-//   renderBlock(productId)       → full block: hero row + expandable
+//   renderBlock(productId, opts) → full block: hero row + expandable
 //                                  variants list + disclosure line; '' if
-//                                  no data
+//                                  no data. opts.selectedVariantId: the
+//                                  selected option (a maker-only headline
+//                                  follows it)
 //   renderEmpty(reason)          → muted "No retailer listings" markup
 //   AFFILIATE_BY_PRODUCT_ID      → the raw cache, exposed for pages that
 //                                  want to do bespoke rendering
@@ -234,22 +236,34 @@
   // opts.compact (renderHero on grid cards): drops the "at Partner" text
   // and the in-stock badge, since the partner name is already in the CTA
   // label and stock lives in the detail view. Keeps price + Buy button.
+  //
+  // opts.selectedVariantId: the option the page has selected, or absent for
+  // none. Only a MAKER-ONLY product reads it — its headline is an option's
+  // MSRP, so it follows the selection by js/option-price.js's rule. A
+  // product with any partner listing keeps its retailer headline whatever
+  // is selected.
   function heroRowHtml(aff, opts) {
     opts = opts || {};
     var hero = aff.hero;
     var multi = aff.listings.length > 1;
     var priceHtml;
-    if (aff.minPrice != null && multi && aff.maxPrice !== aff.minPrice) {
+    if (!aff.partnerCount) {
+      // Read at call time: js/option-price.js is a separate <script>.
+      var h = global.optionHeadline(aff.listings.map(function (l) {
+        return { id: l.variantId, msrp: l.msrp };
+      }), opts.selectedVariantId);
+      priceHtml = h.kind === 'option'
+        ? '<span class="part-affiliate-price">MSRP ' + h.text + '</span>'
+        : h.kind === 'from'
+          ? '<span class="part-affiliate-price">' + h.text + '</span><span class="part-affiliate-range">MSRP</span>'
+          : '<span class="part-affiliate-price">' + esc(global.CHECK_PRICE) + '</span>';
+    } else if (aff.minPrice != null && multi && aff.maxPrice !== aff.minPrice) {
       priceHtml = '<span class="part-affiliate-price">From $' + aff.minPrice.toFixed(2) + '</span>' +
                   '<span class="part-affiliate-range">up to $' + aff.maxPrice.toFixed(2) + '</span>';
     } else if (aff.minPrice != null) {
       priceHtml = '<span class="part-affiliate-price">$' + aff.minPrice.toFixed(2) + '</span>';
     } else if (hero.price != null && !hero.stale) {
       priceHtml = '<span class="part-affiliate-price">$' + hero.price.toFixed(2) + '</span>';
-    } else if (hero.maker && hero.msrp != null) {
-      // A maker hero has no street price. MSRP is the only number there is
-      // and it is still true — labelled, as product-page.mjs labels it.
-      priceHtml = '<span class="part-affiliate-price">MSRP $' + hero.msrp.toFixed(2) + '</span>';
     } else {
       // Unknown or unverified — the buy link still works, we just won't state
       // a number we can't stand behind.
@@ -302,10 +316,11 @@
     return heroRowHtml(aff, { compact: true }) + hint;
   }
 
-  function renderBlock(productId) {
+  // opts.selectedVariantId — see heroRowHtml.
+  function renderBlock(productId, opts) {
     var aff = get(productId);
     if (!aff || !aff.hero) return '';
-    var main = heroRowHtml(aff);
+    var main = heroRowHtml(aff, { selectedVariantId: opts && opts.selectedVariantId });
     var multi = aff.listings.length > 1;
     // Says what is true of the buttons in this block: partner-only,
     // maker-only, or both. Never absent here — a block exists only when

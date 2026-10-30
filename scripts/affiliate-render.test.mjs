@@ -32,7 +32,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // classic scripts against the same global. check-script-order.mjs is what
 // enforces that ordering in the HTML; this mirrors it.
 const win = {};
-for (const f of ['js/variant-label.js', 'js/maker-link.js', 'js/affiliate.js']) {
+for (const f of ['js/variant-label.js', 'js/maker-link.js', 'js/option-price.js', 'js/affiliate.js']) {
   new Function('window', await readFile(join(ROOT, f), 'utf8'))(win);
 }
 

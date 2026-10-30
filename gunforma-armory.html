@@ -800,7 +800,7 @@ function partCardHtml(cat, p, meta) {
       (disabled && meta.tag.reason ? '<span class="part-card-reason">' + esc(meta.tag.reason) + '</span>' : '') +
       (meta.note ? '<span class="part-card-note">' + esc(meta.note) + '</span>' : '') +
       (p.variants.length > 1 ? '<span class="part-card-variants">' + p.variants.length + ' colors / options</span>' : '') +
-      (price ? '<span class="part-card-price">' + price + '</span>' : '<span class="part-card-price na">Price n/a</span>') +
+      (price ? '<span class="part-card-price">' + price + '</span>' : '<span class="part-card-price na">Check price</span>') +
     '</div>' +
     '<div class="part-card-actions"><button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '"' + (disabled ? ' disabled' : '') + '>' + (disabled ? 'Won’t fit' : 'Add to build') + '</button></div>' +
   '</div>';
@@ -992,7 +992,7 @@ function pickedHtml(cat, p) {
       '<span class="picked-name">' + esc(p.name) + '</span>' +
       tagRow +
       variantRow +
-      (price != null ? '<span class="picked-price">' + money(price) + '</span>' : '<span class="picked-price na">Price n/a</span>') +
+      (price != null ? '<span class="picked-price">' + money(price) + '</span>' : '<span class="picked-price na">Check price</span>') +
     '</div>' +
     '<button type="button" class="picked-remove" data-remove="' + cat + '">Remove</button>' +
   '</div>';
