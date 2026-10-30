@@ -79,19 +79,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .wrap { max-width: 1240px; margin: 0 auto; padding: 22px 32px 64px; }
 .guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 
-/* CARD — photo-first, PCPartPicker-style: a tall hero collage (lead photo
-   plus two stacked beside it), then a compact text block and a footer bar
-   with the total and the part count. */
+/* CARD — photo-first: the first five parts in build order as thumbnails
+   (a "+N" tile for the rest), then a compact text block and a footer bar
+   with the total and the part count. Each tile is sized like a catalog card
+   photo (4:3, cover, the same #f4f3ee ground); a part with no photo shows
+   its colour swatch (js/variant-swatch.js), never an empty box. */
 .gcard { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; display: flex; flex-direction: column; }
 .gcard:hover { border-color: #4a9edd; box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
-.gcard-hero { position: relative; background: #fff; border-bottom: 0.5px solid #f0efe9; aspect-ratio: 5/4; padding: 12px; display: grid; grid-template-columns: 1.7fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
-.gcard-hero.one { grid-template-columns: 1fr; grid-template-rows: 1fr; }
-.gcard-hero.two { grid-template-rows: 1fr; }
-.gcard-hero .h-main { grid-row: 1 / -1; }
-.h-img { display: flex; align-items: center; justify-content: center; overflow: hidden; min-height: 0; min-width: 0; }
-.h-img img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-.h-img .blank { font-size: 10px; color: #c5c2b8; letter-spacing: 0.06em; text-transform: uppercase; text-align: center; }
-.gcard-morechip { position: absolute; right: 8px; bottom: 8px; font-size: 10px; font-weight: 700; color: #555; background: rgba(250,250,248,0.95); border: 0.5px solid #d5d3ca; border-radius: 20px; padding: 3px 9px; }
+.gthumbs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 12px; border-bottom: 0.5px solid #f0efe9; }
+.gthumb { position: relative; aspect-ratio: 4/3; background: #f4f3ee; border-radius: 4px; overflow: hidden; min-width: 0; }
+.gthumb img, .gdetail-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gthumb-more { display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700; color: #555; background: #efeee8; }
+.gthumbs-blank { padding: 28px 12px; text-align: center; font-size: 10px; color: #c5c2b8; letter-spacing: 0.06em; text-transform: uppercase; border-bottom: 0.5px solid #f0efe9; }
+.gmedia { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+.gmedia-swatch { display: block; width: 40%; aspect-ratio: 1; max-width: 30px; border-radius: 50%; }
 .gcard-body { padding: 11px 14px 0; }
 .gcard-kicker { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .gcard-kicker.curated { color: #b06a1a; }
@@ -103,13 +104,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 /* DETAIL (expand-in-place) */
 .gcard.open { grid-column: 1 / -1; cursor: default; }
-/* Full-width open card: the 5/4 hero would be a monitor-filling photo, so it
-   drops to a fixed-height strip and the parts list carries the detail. */
-.gcard.open .gcard-hero { aspect-ratio: auto; height: 170px; grid-template-rows: 1fr; grid-template-columns: 1.7fr 1fr 1fr; }
-.gcard.open .gcard-hero .h-main { grid-row: auto; }
+/* Full-width open card: the thumbnails drop to one capped row so they stay
+   thumbnails, and the grouped parts list below carries the detail. */
+.gcard.open .gthumbs { grid-template-columns: repeat(6, 1fr); max-width: 640px; }
 .gdetail { border-top: 0.5px solid #f0efe9; padding: 12px 14px 14px; }
+.gdetail-group { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2a7bbd; padding: 10px 0 2px; }
+.gdetail-group:first-child { padding-top: 0; }
 .gdetail-row { display: flex; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 0.5px solid #f6f5f0; }
 .gdetail-row:last-child { border-bottom: none; }
+.gdetail-photo { flex-shrink: 0; width: 64px; aspect-ratio: 4/3; background: #f4f3ee; border-radius: 4px; overflow: hidden; }
 .gdetail-cat { flex-shrink: 0; width: 110px; font-size: 9.5px; color: #999; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 .gdetail-name { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 600; color: #1a1a1a; }
 .gdetail-name a { color: inherit; text-decoration: none; }
@@ -132,6 +135,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 @media (max-width: 600px) {
   .page-header, .wrap, .tab-row, .footer-bar { padding-left: 16px; padding-right: 16px; }
   .gdetail-cat { width: 84px; }
+  .gdetail-photo { width: 52px; }
+  .gcard.open .gthumbs { grid-template-columns: repeat(3, 1fr); }
 }
 </style>
 </head>
@@ -203,6 +208,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/category-map.js"></script>
 <script src="js/build-categories.js"></script>
 <script src="js/display-name.js"></script>
+<script src="js/variant-label.js"></script>
+<script src="js/variant-swatch.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
@@ -213,12 +220,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 //                      surface since the old Armory was parked
 // Read-only page. Every part row links to its /parts/ page when the snapshot
 // carries a slug; totals are the MSRPs stored at save time, labelled as such.
+//
+// Parts render in BUILD ORDER everywhere on the page — BC.orderParts() /
+// BC.groupParts() from js/build-categories.js, the taxonomy's one copy —
+// and scripts/guide-part-order.test.mjs runs this script to hold the card
+// thumbnails and the detail list to it.
+//
+// Photos are read live from product_variants, never from the snapshot alone:
+// the curated guides' snapshots carry no image at all (name, brand, refId,
+// category), which is why every card used to show a bare "4 parts" box.
 
 var sb = window.sb;
 var BC = window.BuildCategories;
 var GUNS_BY_ID = {}, PLATFORMS_BY_ID = {};
 var COMMUNITY = [], CURATED = [];
 var OPEN_ID = null;
+var THUMBS_ON_CARD = 5;
+var VARIANTS_BY_ID = {}, DEFAULT_VARIANT_BY_PRODUCT = {};
 
 async function loadAll() {
   var r = await Promise.all([
@@ -245,7 +263,54 @@ async function loadAll() {
   } else {
     CURATED = r[3].data || [];
   }
+  await loadPhotos(COMMUNITY.concat(CURATED));
   renderAll();
+}
+
+// Every variant of every product the guides name, in one read. A failure
+// leaves the maps empty and every part shows its swatch — the page still
+// renders, it just has no photos.
+async function loadPhotos(rows) {
+  var ids = {};
+  rows.forEach(function (row) {
+    (row.parts_snapshot || []).forEach(function (p) { if (p && p.refId) ids[p.refId] = 1; });
+  });
+  var list = Object.keys(ids);
+  if (!list.length) return;
+  var res = await sb.from('product_variants')
+    .select('id, product_id, is_default, color, primary_image_url')
+    .in('product_id', list)
+    .is('retired_at', null);
+  if (res.error) { console.warn('[gun-guides] photo read failed', res.error); return; }
+  (res.data || []).forEach(function (v) {
+    VARIANTS_BY_ID[v.id] = v;
+    if (v.is_default) DEFAULT_VARIANT_BY_PRODUCT[v.product_id] = v;
+  });
+}
+
+// The photo and swatch colour for one snapshot part. A part saved with a
+// chosen option (the Armory records variantId) shows THAT option; one with
+// none (every curated guide) shows the product's default option. Never
+// another option's photo as a stand-in — a saved option that is retired or
+// photoless gets its own colour's swatch (loadouts-spec §9).
+function partMedia(p) {
+  if (p.variantId) {
+    var v = VARIANTS_BY_ID[p.variantId];
+    return { url: v ? v.primary_image_url : (p.imageUrl || null), color: v ? v.color : p.variantColor };
+  }
+  var d = DEFAULT_VARIANT_BY_PRODUCT[p.refId];
+  return { url: d ? d.primary_image_url : null, color: d ? d.color : null };
+}
+
+// Photo when there is one (lazy, like a catalog card), swatch otherwise,
+// and the swatch again if the photo URL is dead.
+function partMediaHtml(p) {
+  var m = partMedia(p);
+  var swatch = window.variantMediaHtml({ color: m.color }, 'gmedia', p.brand);
+  return m.url
+    ? '<img src="' + escAttr(m.url) + '" alt="' + escAttr(partName(p)) + '" loading="lazy"' +
+        ' data-fallback="' + escAttr(swatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback" />'
+    : swatch;
 }
 
 function showEmpty(which, title, html) {
@@ -272,30 +337,27 @@ function modelName(row) {
   return '';
 }
 
-// Which part leads the collage: the visually defining parts first, the same
-// idea as build-og's "most notable parts by category priority".
-var HERO_PRIORITY = ['slide', 'frame', 'optic', 'barrel', 'compensator', 'light', 'magwell', 'sight', 'trigger', 'magazine'];
-function heroParts(parts) {
-  var withImg = parts.filter(function (p) { return p.imageUrl; });
-  withImg.sort(function (a, b) {
-    var ai = HERO_PRIORITY.indexOf(a.category), bi = HERO_PRIORITY.indexOf(b.category);
-    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-  });
-  return withImg.slice(0, 3);
+// The first THUMBS_ON_CARD parts in build order, then one "+N" tile for the
+// rest; a guide with that many or fewer shows them all and no tile.
+function thumbsHtml(row) {
+  var ordered = BC.orderParts(row.parts_snapshot);
+  if (!ordered.length) {
+    return '<div class="gthumbs-blank">' + esc(modelName(row) || 'Build') + ' · no parts</div>';
+  }
+  var shown = ordered.slice(0, THUMBS_ON_CARD);
+  var rest = ordered.length - shown.length;
+  return '<div class="gthumbs">' +
+    shown.map(function (p) {
+      return '<div class="gthumb" data-ref="' + escAttr(p.refId || '') + '">' + partMediaHtml(p) + '</div>';
+    }).join('') +
+    (rest > 0
+      ? '<div class="gthumb gthumb-more" aria-label="' + rest + ' more part' + (rest === 1 ? '' : 's') + '">+' + rest + '</div>'
+      : '') +
+  '</div>';
 }
 
 function cardHtml(row, kind) {
-  var parts = row.parts_snapshot || [];
-  var heroes = heroParts(parts);
-  var cells = heroes.map(function (p, i) {
-    return '<div class="h-img' + (i === 0 ? ' h-main' : '') + '"><img src="' + escAttr(p.imageUrl) + '" alt="' + escAttr(partName(p)) + '" loading="lazy" /></div>';
-  });
-  if (!cells.length) {
-    cells.push('<div class="h-img h-main"><span class="blank">' + esc(modelName(row) || 'Build') + '<br/>' + parts.length + ' parts</span></div>');
-  }
-  var heroClass = cells.length === 1 ? ' one' : (cells.length === 2 ? ' two' : '');
-  var moreChip = parts.length > heroes.length && heroes.length
-    ? '<span class="gcard-morechip">+' + (parts.length - heroes.length) + ' more</span>' : '';
+  var parts = BC.orderParts(row.parts_snapshot);
 
   // The caption line: the part names, browser-truncated to two lines.
   var partsLine = parts.map(function (p) { return partName(p); }).join(' · ');
@@ -303,7 +365,7 @@ function cardHtml(row, kind) {
   var t = rowTotal(row);
   var isOpen = OPEN_ID === kind + ':' + row.id;
   return '<div class="gcard' + (isOpen ? ' open' : '') + '" data-kind="' + kind + '" data-id="' + escAttr(row.id) + '" role="button" tabindex="0">' +
-    '<div class="gcard-hero' + heroClass + '">' + cells.join('') + moreChip + '</div>' +
+    thumbsHtml(row) +
     '<div class="gcard-body">' +
       '<div class="gcard-kicker' + (kind === 'curated' ? ' curated' : '') + '">' + (kind === 'curated' ? 'Gunforma guide' : esc(modelName(row) || 'Build')) + '</div>' +
       '<div class="gcard-title">' + esc(row.title || 'Untitled build') + '</div>' +
@@ -328,21 +390,26 @@ function detailCatLabel(cat) {
   return BC.categoryLabel(cat);
 }
 
+// Every part with its photo, under the build's group headings, in build order.
 function detailHtml(row) {
-  var parts = (row.parts_snapshot || []).slice();
   var html = '<div class="gdetail">';
-  html += parts.map(function (p) {
-    var name = partName(p);
-    var href = (p.slug && p.category && window.productPath) ? window.productPath(p.category, p.slug) : null;
-    return '<div class="gdetail-row">' +
-      '<span class="gdetail-cat">' + esc(detailCatLabel(p.category)) + '</span>' +
-      '<span class="gdetail-name">' + (href ? '<a href="' + escAttr(href) + '">' + esc(name) + '</a>' : esc(name)) +
-        (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') + '</span>' +
-      '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) : '') + '</span>' +
-    '</div>';
+  html += BC.groupParts(row.parts_snapshot).map(function (g) {
+    return '<div class="gdetail-group">' + esc(g.group.label) + '</div>' + g.parts.map(detailRowHtml).join('');
   }).join('');
   html += '<button type="button" class="gdetail-close">Close</button></div>';
   return html;
+}
+
+function detailRowHtml(p) {
+  var name = partName(p);
+  var href = (p.slug && p.category && window.productPath) ? window.productPath(p.category, p.slug) : null;
+  return '<div class="gdetail-row" data-ref="' + escAttr(p.refId || '') + '">' +
+    '<span class="gdetail-photo">' + partMediaHtml(p) + '</span>' +
+    '<span class="gdetail-cat">' + esc(detailCatLabel(p.category)) + '</span>' +
+    '<span class="gdetail-name">' + (href ? '<a href="' + escAttr(href) + '">' + esc(name) + '</a>' : esc(name)) +
+      (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') + '</span>' +
+    '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) : '') + '</span>' +
+  '</div>';
 }
 
 function renderGrid(which, rows, kind) {

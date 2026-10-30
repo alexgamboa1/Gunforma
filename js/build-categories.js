@@ -246,6 +246,45 @@ function categoryByKey(key) {
   return CATEGORIES.find(function (c) { return c.key === key; }) || null;
 }
 
+// A part's place in the build order: its section's position in CATEGORIES,
+// then its catalog category's position in that section's dbCategory list
+// (barrel before compensator) — the order the Armory lists its slots in. A
+// section key or legacy alias sorts first within its section. A category
+// nothing recognises sorts with FALLBACK_CATEGORY_KEY, after its known parts.
+const SECTION_INDEX = CATEGORIES.reduce(function (m, c, i) { m[c.key] = i; return m; }, {});
+function partRank(raw) {
+  const value = (raw == null ? '' : String(raw)).trim();
+  const key = sectionKeyFor(value);
+  if (!key) return SECTION_INDEX[FALLBACK_CATEGORY_KEY] * 100 + 99;
+  const db = categoryByKey(key).dbCategory || [];
+  return SECTION_INDEX[key] * 100 + Math.max(0, db.indexOf(value));
+}
+
+// parts_snapshot rows in build order, as a new array. Stable: two parts in
+// the same place keep the order they were stored in. Gun Guides cards and
+// detail render through this so their thumbnails cannot drift from the
+// order the builder shows (scripts/guide-part-order.test.mjs).
+function orderParts(parts) {
+  return (parts || [])
+    .map(function (p, i) { return { p: p, i: i, r: partRank(p && p.category) }; })
+    .sort(function (a, b) { return a.r - b.r || a.i - b.i; })
+    .map(function (x) { return x.p; });
+}
+
+// orderParts() collected under CATEGORY_GROUPS, in group order, empty groups
+// dropped: [{ group, parts }]. An unrecognised category lands with the
+// fallback section's group, as it does on the builder pages.
+function groupParts(parts) {
+  const groupOf = function (p) {
+    const key = sectionKeyFor(p && p.category) || FALLBACK_CATEGORY_KEY;
+    return categoryByKey(key).group;
+  };
+  const ordered = orderParts(parts);
+  return CATEGORY_GROUPS
+    .map(function (g) { return { group: g, parts: ordered.filter(function (p) { return groupOf(p) === g.key; }) }; })
+    .filter(function (g) { return g.parts.length; });
+}
+
 global.BuildCategories = {
   CATEGORIES: CATEGORIES,
   CATEGORY_GROUPS: CATEGORY_GROUPS,
@@ -257,6 +296,8 @@ global.BuildCategories = {
   categoryLabel: categoryLabel,
   sectionKeyFor: sectionKeyFor,
   categoryByKey: categoryByKey,
+  orderParts: orderParts,
+  groupParts: groupParts,
 };
 
 })(window);
