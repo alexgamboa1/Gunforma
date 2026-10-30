@@ -24,13 +24,27 @@ update public.product_variants set sku = 'Standard-Magwell-Custom-Ano'
                 'ecm-precision-standard-magwell-r11-red-anodized')
    and sku is null;
 
--- 5. Anarchy: the composite back on all four colours
+-- 5. Anarchy: the composite back on all four colours, and the purple
+--    thumbnail back in Black's gallery by its old id
 update public.product_variants
    set primary_image_url = 'https://op1.0ps.us/640-640/opplanet-anarchy-outdoors-slide-plate-for-sig-365-image.jpg',
        no_photo_ok = false
  where slug in ('anarchy-outdoors-slide-plate-p365-blue', 'anarchy-outdoors-slide-plate-p365-gold',
-                'anarchy-outdoors-slide-plate-p365-purple', 'anarchy-outdoors-slide-plate-p365-red')
+                'anarchy-outdoors-slide-plate-p365-red')
    and primary_image_url is null;
+
+update public.product_variants
+   set primary_image_url = 'https://op1.0ps.us/640-640/opplanet-anarchy-outdoors-slide-plate-for-sig-365-image.jpg'
+ where slug = 'anarchy-outdoors-slide-plate-p365-purple'
+   and primary_image_url = 'https://op1.0ps.us/640-640/opplanet-anarchy-outdoors-slide-plate-for-sig-365-purple-791617481541-main.jpg';
+
+insert into public.variant_images (id, variant_id, url, position, alt_text)
+select 'e4178d55-0158-42e1-8e9b-2387128d06cb', v.id,
+       'https://www.opticsplanet.com/i/200-200-ffffff/opplanet-anarchy-outdoors-slide-plate-for-sig-365-purple-791617481541-main.jpg',
+       1, null
+  from public.product_variants v
+ where v.slug = 'anarchy-outdoors-slide-plate-p365-black'
+on conflict (id) do nothing;
 
 -- 4. TP P365-FUSE Black · DLC: the Spectrum gallery row, by its old id
 insert into public.variant_images (id, variant_id, url, position, alt_text)

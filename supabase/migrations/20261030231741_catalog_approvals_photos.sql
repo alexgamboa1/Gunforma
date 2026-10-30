@@ -20,7 +20,12 @@
 --      gallery (the Spectrum option has its own primary).
 --   5. Anarchy Outdoors slide plate: the five-colour composite stays on
 --      Black (the default) only, which is what check-routes' allowlist note
---      always said. Blue, Gold, Purple and Red lose it.
+--      always said. Blue, Gold and Red lose it. Purple gets its own photo:
+--      OpticsPlanet's shot of the purple plate on a P365 (SKU 791617481541
+--      in the file name; looked at 2026-10-30), which sat as a 200px
+--      thumbnail in BLACK's gallery. It leaves that gallery and becomes
+--      Purple's primary, at the 640px size the other OpticsPlanet primaries
+--      use (the same image, 299x640).
 --   6. ECM Precision Standard Magwell (R11): Blue, Purple and Red shared one
 --      SKU ("Standard-Magwell-Custom-Ano", ECM's custom-anodize line item,
 --      not a per-colour number). Cleared; a SKU nobody can order by is not a
@@ -38,7 +43,7 @@
 --
 -- (Item 9, the retired TLR-7 Sub, changes nothing: it stays discontinued.)
 --
--- Every option that loses a borrowed photo (items 2, 3, 5) takes the same
+-- Every option left with no photo (items 2, 3, and 5 but Purple) takes the same
 -- no_photo_ok waiver as item 1 — otherwise removing a wrong photo would
 -- un-approve a part that was approved with it.
 --
@@ -65,6 +70,8 @@ declare
   c_tp_spectrum   constant text := 'https://cdn11.bigcommerce.com/s-c7qzuakk7l/products/5629/images/7041/True-Precision-Sig-Sauer-P365-FUSE-Axiom-Slide-Spectrum-TP-P365FSS-S-RMS__20292.1775849936.386.513.jpg?c=1';
   c_tyrant_multi  constant text := 'https://op1.0ps.us/640-640/opplanet-tyrant-designs-sig-sauer-p365-pistol-slide-cap-mcimage-spids-94567-94818-129215-94778-94814-vids.jpg';
   c_anarchy_multi constant text := 'https://op1.0ps.us/640-640/opplanet-anarchy-outdoors-slide-plate-for-sig-365-image.jpg';
+  c_purple_thumb  constant text := 'https://www.opticsplanet.com/i/200-200-ffffff/opplanet-anarchy-outdoors-slide-plate-for-sig-365-purple-791617481541-main.jpg';
+  c_purple_photo  constant text := 'https://op1.0ps.us/640-640/opplanet-anarchy-outdoors-slide-plate-for-sig-365-purple-791617481541-main.jpg';
   c_contour_old   constant text := 'https://www.streamlight.com/products/detail/tlr-7-x-sub';
   c_contour_new   constant text := 'https://www.streamlight.com/products/detail/tlr-7-x-contour-remote';
 begin
@@ -134,15 +141,33 @@ begin
   update public.product_variants v set primary_image_url = null, no_photo_ok = true
     from public.products p
    where p.id = v.product_id and p.slug = c_anarchy and v.retired_at is null
-     and v.slug in (c_anarchy || '-blue', c_anarchy || '-gold', c_anarchy || '-purple', c_anarchy || '-red')
+     and v.slug in (c_anarchy || '-blue', c_anarchy || '-gold', c_anarchy || '-red')
      and not v.is_default and v.primary_image_url = c_anarchy_multi
      and not exists (select 1 from public.variant_images vi where vi.variant_id = v.id);
   get diagnostics n = row_count;
-  if n <> 4 then raise exception 'catalog_approvals_photos: expected Blue, Gold, Purple and Red % on the composite with no gallery, matched %', c_anarchy, n; end if;
+  if n <> 3 then raise exception 'catalog_approvals_photos: expected Blue, Gold and Red % on the composite with no gallery, matched %', c_anarchy, n; end if;
 
   perform 1 from public.product_variants
    where slug = c_anarchy || '-black' and is_default and retired_at is null and primary_image_url = c_anarchy_multi;
   if not found then raise exception 'catalog_approvals_photos: %-black is not the default holding the composite', c_anarchy; end if;
+
+  -- Purple's own photo leaves Black's gallery (the rollback restores the row
+  -- by id) and becomes Purple's primary; Purple keeps no waiver.
+  delete from public.variant_images vi
+   using public.product_variants v
+   where v.id = vi.variant_id and v.slug = c_anarchy || '-black'
+     and vi.id = 'e4178d55-0158-42e1-8e9b-2387128d06cb' and vi.url = c_purple_thumb;
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'catalog_approvals_photos: expected the purple thumbnail in %-black''s gallery, matched %', c_anarchy, n; end if;
+
+  update public.product_variants v set primary_image_url = c_purple_photo
+    from public.products p
+   where p.id = v.product_id and p.slug = c_anarchy and v.retired_at is null
+     and v.slug = c_anarchy || '-purple' and v.color = 'Purple' and v.sku = '791617481541'
+     and not v.is_default and not v.no_photo_ok and v.primary_image_url = c_anarchy_multi
+     and not exists (select 1 from public.variant_images vi where vi.variant_id = v.id);
+  get diagnostics n = row_count;
+  if n <> 1 then raise exception 'catalog_approvals_photos: expected %-purple (SKU 791617481541) on the composite with no gallery, matched %', c_anarchy, n; end if;
 
   -- ── 6. ECM Standard Magwell: no shared SKU on the custom colours ──────────
   update public.product_variants v set sku = null

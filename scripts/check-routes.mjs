@@ -947,8 +947,8 @@ for (const [label, path, want] of [
       variants: ['fdez-werx-p365-xl-ported-barrel-copper-high-polished-copper', 'fdez-werx-p365-xl-ported-barrel-gold-high-polished-gold-tin'],
       reason: 'four-finish group shot kept on Gold and Copper (default), which Fdez never photographs alone (Alex, 2026-10-22)',
     },
-    // OpticsPlanet's one five-plate composite; the product's only photo, so
-    // it stays on Black (the default) and the other four show the swatch.
+    // OpticsPlanet's five-plate composite stays on Black (the default);
+    // Purple has its own photo and Blue, Gold and Red show the swatch.
     // One variant cannot share with itself, so this entry never excuses a
     // group: it records the ruling, and any second colour on the composite
     // fails.
