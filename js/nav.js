@@ -78,9 +78,9 @@ var NAV_P365_SUB =
 var NAV_MENU =
   '<div class="nav-menu" id="nav-menu">' +
     '<a href="gunforma-builds.html">Builds</a>' +
-    NAV_P365_SUB +
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
     '<a href="gunforma-armory.html">Armory</a>' +
+    NAV_P365_SUB +
   '</div>';
 
 // Admin entries. Convenience only — /admin and /admin-post are protected by

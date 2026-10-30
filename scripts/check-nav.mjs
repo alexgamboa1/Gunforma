@@ -13,9 +13,12 @@
 //   - desktop bar: Home, Builds, Parts Catalog, Armory — in that order,
 //     Armory active ONLY on gunforma-armory.html, and NO flat "Your P365"
 //     bar link anywhere
-//   - hamburger: Builds, the "Your P365" dropdown, Parts Catalog, Armory —
-//     and the dropdown is GUN_HUBS exactly (same hubs, same order, names
-//     from GUN_META, the /p365/ index link last), the same contract
+//   - hamburger, in three groups (Alex, 2026-10-29): Builds / Parts
+//     Catalog / Armory (desktop order), then the "Your P365" dropdown as
+//     its own group framed by two blue dividers (its own borders), the
+//     account items nav.js appends landing below the second line — and the
+//     dropdown is GUN_HUBS exactly (same hubs, same order, names from
+//     GUN_META, the /p365/ index link last), the same contract
 //     check-home-picker.mjs holds the homepage picker to
 //   - the dropdown's CSS block is present wherever the menu is styled —
 //     without it the <details> row renders as an unstyled browser default
@@ -104,8 +107,8 @@ for (const file of STATIC_PAGES) {
       good = sameList(links(sub), DROPDOWN, file, 'dropdown') && good;
       const around = links(menu.replace(sub + '</details>', '\u0000'));
       good = sameList(around, [['gunforma-builds.html', 'Builds'], ['gunforma-parts-catalog.html', 'Parts Catalog'], ['gunforma-armory.html', 'Armory']], file, 'menu') && good;
-      if (menu.indexOf('Builds</a>') > menu.indexOf('<details') || menu.indexOf('</details>') > menu.indexOf('Parts Catalog</a>')) {
-        fail(`${file}: the dropdown sits between Builds and Parts Catalog`); good = false;
+      if (menu.indexOf('Armory</a>') > menu.indexOf('<details')) {
+        fail(`${file}: the dropdown is its own group after Builds / Parts Catalog / Armory`); good = false;
       }
     } else good = false;
   } else good = false;
@@ -123,8 +126,8 @@ for (const file of STATIC_PAGES) {
   if (sub) good = sameList(links(sub), DROPDOWN, file, 'NAV_P365_SUB') && good; else good = false;
   const menu = region(t, 'class="nav-menu"', '</div>\';', file, 'NAV_MENU');
   if (menu) {
-    const idx = ['Builds</a>', 'NAV_P365_SUB', 'Parts Catalog</a>', 'Armory</a>'].map((m) => menu.indexOf(m));
-    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: NAV_MENU is not Builds, the dropdown, Parts Catalog, Armory`); good = false; }
+    const idx = ['Builds</a>', 'Parts Catalog</a>', 'Armory</a>', 'NAV_P365_SUB'].map((m) => menu.indexOf(m));
+    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: NAV_MENU is not Builds, Parts Catalog, Armory, the dropdown`); good = false; }
   } else good = false;
   const armoryBars = (t.match(/activeIf\('gunforma-armory\.html'\) \+ '" href="gunforma-armory\.html">Armory<\/a>'/g) || []).length;
   if (armoryBars !== 2) { fail(`${file}: the full and full-authed bars each carry Armory with activeIf (found ${armoryBars})`); good = false; }
@@ -144,8 +147,8 @@ for (const file of STATIC_PAGES) {
     if (!/class="nav-link active" href="gunforma-armory\.html"/.test(bar)) { fail(`${file}: active 'armory' does not light the Armory item`); good = false; }
   } else good = false;
   const menu = region(html, 'class="nav-menu"', '</nav>', file, 'hamburger menu');
-  if (!menu || !menu.includes('<summary>Your P365</summary>') || menu.indexOf('</details>') > menu.indexOf('Parts Catalog</a>') || menu.indexOf('Parts Catalog</a>') > menu.indexOf('Armory</a>')) {
-    fail(`${file}: navHtml menu is not Builds, the dropdown, Parts Catalog, Armory`); good = false;
+  if (!menu || !menu.includes('<summary>Your P365</summary>') || menu.indexOf('Parts Catalog</a>') > menu.indexOf('Armory</a>') || menu.indexOf('Armory</a>') > menu.indexOf('<details')) {
+    fail(`${file}: navHtml menu is not Builds, Parts Catalog, Armory, the dropdown`); good = false;
   }
   if (html.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
   if (good) pass(`${file}: navHtml() and navSubHtml() render the shape`);
@@ -159,8 +162,8 @@ for (const file of ['netlify/functions/product-page.mjs', 'netlify/functions/par
   if (bar) good = sameList(links(bar), DESKTOP, file, 'desktop') && good; else good = false;
   const menu = region(t, 'class="nav-menu" id="nav-menu"', '</nav>', file, 'hamburger menu');
   if (menu) {
-    const idx = ['Builds</a>', 'navSubHtml()', 'Parts Catalog</a>', 'Armory</a>'].map((m) => menu.indexOf(m));
-    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: menu is not Builds, navSubHtml(), Parts Catalog, Armory`); good = false; }
+    const idx = ['Builds</a>', 'Parts Catalog</a>', 'Armory</a>', 'navSubHtml()'].map((m) => menu.indexOf(m));
+    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: menu is not Builds, Parts Catalog, Armory, navSubHtml()`); good = false; }
   } else good = false;
   if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
   if (good) pass(`${file}: bar and menu carry the shape`);
@@ -171,6 +174,11 @@ for (const file of ['netlify/functions/product-page.mjs', 'netlify/functions/par
 // links are flex children (blockified), the dropdown's are not, so without
 // it they flow inline and overlap — found on the first preview walkthrough.
 const CSS_RULES = [
+  // The two blue group dividers (Alex, 2026-10-29): the dropdown is its own
+  // menu group — site links above its top border, the account items nav.js
+  // appends land below its bottom border. #4a9edd is the site's accent blue
+  // (the "+ Post your build" button), not a new colour.
+  '.nav-menu .nav-sub { border-top: 2px solid #4a9edd; border-bottom: 2px solid #4a9edd; }',
   '.nav-menu .nav-sub summary { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; cursor: pointer; list-style: none; border-bottom: 0.5px solid #1a1b1e; }',
   '.nav-menu .nav-sub summary::-webkit-details-marker { display: none; }',
   '.nav-menu .nav-sub summary::after { content: " ▾"; color: #6a6b6e; }',
