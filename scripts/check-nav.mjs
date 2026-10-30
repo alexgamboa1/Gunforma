@@ -34,7 +34,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { GUN_HUBS, GUN_META, hubPath, HUB_INDEX_PATH } from '../netlify/functions/_guide-meta.mjs';
-import { navHtml, navSubHtml } from '../netlify/functions/_page-chrome.mjs';
+import { navHtml, navSubHtml, navScript } from '../netlify/functions/_page-chrome.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
@@ -210,6 +210,62 @@ for (const file of ['netlify/functions/product-page.mjs', 'netlify/functions/par
   } else good = false;
   if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
   if (good) pass(`${file}: bar and menu carry the shape`);
+}
+
+// ── server-rendered pages are signed-in aware, client-side ────────────────
+// (Alex, 2026-10-30.) The function pages — product pages, /parts, hubs,
+// guides, field notes — serve the signed-out nav to everyone (one cacheable
+// document; crawlers see it) and js/nav.js repaints it in the browser for a
+// signed-in visitor. Before this, only /parts loaded nav.js, so a signed-in
+// reader on any other function page was told to "Sign in" — renders
+// perfectly, says the wrong thing. Every function that emits a nav is found
+// here, not listed, so a sixth page type is held to it on arrival:
+//   - its nav carries the #nav-signin hook nav.js repaints;
+//   - every document it emits with a nav also emits navScript() — the three
+//     scripts in the static pages' order — once;
+//   - no inline toggle beside it: nav.js wires the hamburger, and a second
+//     click listener opens and closes the menu in the same click.
+{
+  const chrome = 'netlify/functions/_page-chrome.mjs';
+  let good = true;
+  const SCRIPTS = [
+    '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>',
+    '<script src="js/supabase-client.js"></script>',
+    '<script src="js/nav.js"></script>',
+  ];
+  if (navScript() !== SCRIPTS.join('')) {
+    fail(`${chrome}: navScript() is not exactly supabase-js, supabase-client.js, nav.js, in that order`); good = false;
+  }
+  if (!/class="nav-btn nav-signin-inline" href="gunforma-signin\.html" id="nav-signin">Sign in<\/a>/.test(navHtml({}))) {
+    fail(`${chrome}: navHtml()'s Sign in button lacks id="nav-signin" — nav.js has nothing to repaint`); good = false;
+  }
+  if (good) pass(`${chrome}: navHtml() carries #nav-signin and navScript() loads nav.js`);
+
+  const dir = 'netlify/functions';
+  const pages = fs.readdirSync(path.join(root, dir))
+    .filter((f) => f.endsWith('.mjs') && !f.startsWith('_'))
+    .map((f) => dir + '/' + f)
+    .filter((f) => { const t = read(f); return t.includes('navHtml(') || t.includes('class="nav-toggle"'); });
+  for (const want of ['product-page', 'parts-index', 'guide-page', 'gun-hub', 'field-note']) {
+    if (!pages.includes(`${dir}/${want}.mjs`)) fail(`${dir}/${want}.mjs: no longer found as a nav-rendering page — the discovery above is broken`);
+  }
+  for (const file of pages) {
+    // Comments may name either; count code only.
+    const code = read(file).split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n');
+    let ok = true;
+    const navs = (code.match(/navHtml\(/g) || []).length + (code.match(/'<nav class="nav">'/g) || []).length;
+    const scripts = (code.match(/navScript\(\)/g) || []).length;
+    if (navs === 0 || scripts !== navs) {
+      fail(`${file}: ${navs} nav(s) rendered but navScript() called ${scripts} time(s) — every nav needs nav.js once`); ok = false;
+    }
+    if (code.includes(`'<nav class="nav">'`) && !code.includes('id="nav-signin">Sign in</a>')) {
+      fail(`${file}: its own nav copy lacks id="nav-signin" on the Sign in button`); ok = false;
+    }
+    if (/querySelector\(\\?["']\.nav-toggle/.test(code)) {
+      fail(`${file}: an inline hamburger script survives beside nav.js — the menu would open and close in one click`); ok = false;
+    }
+    if (ok) pass(`${file}: signed-in aware (hook + nav.js, no second toggle)`);
+  }
 }
 
 // ── the dropdown's CSS rides with every styled menu, byte for byte ────────

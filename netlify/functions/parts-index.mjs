@@ -24,7 +24,7 @@ import { CATEGORY_META } from './_category-meta.mjs';
 // P365" hamburger dropdown, built from GUN_HUBS in _page-chrome.mjs. The
 // rest of the nav deliberately stays this file's own — see CLAUDE.md, "The
 // nav exists in 16 places".
-import { navSubHtml } from './_page-chrome.mjs';
+import { navSubHtml, navScript } from './_page-chrome.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 // What a product is CALLED: "{brand} {name}" unless the name already
@@ -292,13 +292,9 @@ function renderPage(products) {
   '<span><a href="gunforma-legal.html#legal">Legal</a> &middot; <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> &middot; <a href="gunforma-legal.html#contact">Contact</a></span>' +
 '</div>' +
 '<!-- The nav ships fully rendered above, so crawlers see the links with no\n' +
-'     JS at all. These three only fill in the signed-in state for humans:\n' +
-'     without them a signed-in visitor arriving from the catalog link sees\n' +
-'     "Sign in", which is the same inconsistency PR #29 fixed across the rest\n' +
-'     of the site. They do not affect the server-rendered content. -->' +
-'<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>' +
-'<script src="js/supabase-client.js"></script>' +
-'<script src="js/nav.js"></script>' +
+'     JS at all. These scripts only fill in the signed-in state for humans;\n' +
+'     they do not affect the server-rendered content. -->' +
+navScript() +
 ANALYTICS_SNIPPET + '</body></html>';
 }
 

@@ -55,7 +55,7 @@ export function navHtml({ active } = {}) {
     '<a class="nav-link' + on('armory') + '" href="gunforma-armory.html">Armory</a>' +
   '</div>' +
   '<div class="nav-right">' +
-    '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html">Sign in</a>' +
+    '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
     '<a class="nav-btn cta" href="gunforma-post-build.html">+ Post your build</a>' +
     '<a class="nav-profile" href="gunforma-signin.html" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></a>' +
     '<button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><span></span><span></span><span></span></button>' +
@@ -66,9 +66,8 @@ export function navHtml({ active } = {}) {
   '<a href="gunforma-armory.html">Armory</a>' +
   navSubHtml() +
   // The signed-out bottom group, under the dropdown's second blue line.
-  // class="anon" is what nav.js's signed-in paint removes; these pages do
-  // not load nav.js, and their bar says "Sign in" regardless of session,
-  // so the rows showing unconditionally here matches the rest of the nav.
+  // class="anon" is what nav.js's signed-in paint removes (navScript()
+  // loads it), swapping in My Builds / Saved Builds / Sign out.
   '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
   '<a class="anon" href="gunforma-signup.html">Create account</a>' +
 '</div>' +
@@ -87,20 +86,24 @@ export function footerHtml() {
   );
 }
 
-// Dependency-free hamburger. These pages ship no other client JS, so
-// without it the nav is unreachable below 820px.
+// The nav's client half, for every server-rendered page: the same three
+// scripts, in the same order, as the static pages. The served HTML stays the
+// signed-out nav for everyone — crawlers and the durable edge cache see one
+// document — and js/nav.js repaints it in the browser for a signed-in
+// visitor through the #nav-signin hook in navHtml(): the bar's account
+// button and inbox, and My Builds / Saved Builds / Sign out in the menu.
+//
+// nav.js also wires the hamburger, so there is no inline toggle beside it:
+// two click listeners on .nav-toggle would open and close the menu in one
+// click. The toggle survives the CDN failing — supabase-client.js bails
+// without window.supabase, and nav.js still runs and wires the menu, the
+// session repaint simply skipped. scripts/check-nav.mjs holds every
+// server-rendered page to this.
 export function navScript() {
   return (
-    '<script>(function(){' +
-      'var t=document.querySelector(".nav-toggle"),m=document.querySelector(".nav-menu");' +
-      'if(!t||!m)return;' +
-      'function c(){m.classList.remove("open");t.setAttribute("aria-expanded","false");}' +
-      't.addEventListener("click",function(){' +
-        'var o=m.classList.toggle("open");t.setAttribute("aria-expanded",o?"true":"false");' +
-      '});' +
-      'm.addEventListener("click",function(e){if(e.target.closest("a"))c();});' +
-      'window.addEventListener("resize",function(){if(window.innerWidth>820)c();});' +
-    '})();</script>'
+    '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>' +
+    '<script src="js/supabase-client.js"></script>' +
+    '<script src="js/nav.js"></script>'
   );
 }
 

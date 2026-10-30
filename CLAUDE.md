@@ -730,6 +730,18 @@ of shipping. A truly shared header is still not possible without a build
 step or server-rendering every static page (crawlers must see the links
 in-source), which is why the guard, not consolidation, is the fix.
 
+**The server-rendered pages are signed-in aware, in the browser**
+(2026-10-30). Every function page serves the signed-out nav — one
+document for everyone, so the durable edge cache and crawlers see the same
+thing — and `navScript()` in `_page-chrome.mjs` loads supabase-js,
+`js/supabase-client.js` and `js/nav.js` exactly as the static pages do;
+nav.js repaints the bar and menu through the `#nav-signin` hook. Before
+that only `/parts` loaded nav.js, so every product page, hub, guide and
+field note told a signed-in reader to "Sign in". nav.js also wires the
+hamburger, so those pages carry **no** inline toggle — two listeners on
+`.nav-toggle` open and close the menu in one click. `check-nav.mjs` finds
+every nav-emitting function and holds it to all three.
+
 ## Deploy previews and auth
 
 `js/site-url.js` returns the preview origin on
@@ -1328,7 +1340,7 @@ Registered today:
 | `scripts/check-display-name.mjs` | a render file printing a raw product name (`p.name`, `item.name`, `part.name`, … on a line that emits HTML or DOM text) instead of `displayProductName()`, so a new section or category ships "AMAG 15 SG9" with nothing saying Magpul; also an allowlist entry whose line is gone |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose; a hub `<title>` at 60 characters or over, or off the "`<model>`: Which Mags … Fit \| Gunforma" shape |
 | `scripts/check-home-picker.mjs` | the homepage's "What fits your P365?" picker drifting from `GUN_HUBS` — a hub with no button, a dead button for a gun with no hub, a wrong order or name, the index link not last, or a typed count in its copy |
-| `scripts/check-nav.mjs` | a nav copy drifting from the one shape — a public page or nav-rendering function whose header is missing the Armory link (how #218 shipped it on two pages and nowhere else), Armory active off its own page or inactive on it, a flat "Your P365" bar link surviving, the hamburger's "Your P365" dropdown drifting from `GUN_HUBS` (hubs, order, `GUN_META` names, the index link last — the picker's contract), a menu missing its signed-out bottom group (`class="anon"` Sign in / Create account, which nav.js swaps for the account entries on sign-in and restores on sign-out), or a menu-styling file missing the dropdown's CSS block |
+| `scripts/check-nav.mjs` | a nav copy drifting from the one shape — a public page or nav-rendering function whose header is missing the Armory link (how #218 shipped it on two pages and nowhere else), Armory active off its own page or inactive on it, a flat "Your P365" bar link surviving, the hamburger's "Your P365" dropdown drifting from `GUN_HUBS` (hubs, order, `GUN_META` names, the index link last — the picker's contract), a menu missing its signed-out bottom group (`class="anon"` Sign in / Create account, which nav.js swaps for the account entries on sign-in and restores on sign-out), a menu-styling file missing the dropdown's CSS block, or a server-rendered page (found, not listed: any function emitting a nav) whose nav lacks the `#nav-signin` hook, that renders a nav without `navScript()` (nav.js) once, or that keeps an inline hamburger script beside it |
 | `scripts/upstream-failure.test.mjs` | a server-rendered page answering 404 or 410 when PostgREST failed rather than said zero rows — runs the four lookup functions against a fetch that rejects, times out, answers 5xx or answers 2xx with the wrong body, and requires 503 + Retry-After after one retry |
 | `scripts/go-bot.test.mjs` | the `/go/` click classifier calling a reader's browser a bot or a tool a reader — runs `_lib/go-bot.mjs` over real user agents (Chrome, Safari iOS, Firefox, Edge, Samsung Internet → reader; curl, python-requests, Googlebot, Screaming Frog, HeadlessChrome, facebookexternalhit, none at all → bot) and holds that nothing but the user agent decides |
 | `scripts/check-field-notes.mjs` | a Field Notes slug declared without a file or a file nothing declares; a date in the front matter (they live in the registry); a typed dollar figure or a retailer link in the prose — or in a directive's args or body (a best-for label, a pros/cons line, an FAQ answer, a changelog entry); a directive that does not parse, an unclosed picks/rank/faq block, or one naming an unknown gun; a picks/rank/compare slug that is not a live catalog product (against `scripts/fixtures/product-names.json`); ::picks outside 3–7 entries or naming a part with no ::rank card on the page; a ::compare column or category `_guide-blocks.mjs` does not declare, a compare of one part, or one mixing categories; a malformed registry changelog entry; an image under `/field-notes/`, which the forced rewrite swallows |
