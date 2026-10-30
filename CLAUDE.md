@@ -1381,6 +1381,7 @@ Registered today:
 | `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
+| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; and on the gallery, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -3283,6 +3284,49 @@ the baseline guard covers it again. **Gun Guides has NOT launched**:
 and has no nav link of its own — it is reached from the Armory page.
 Lifting that is its own PR on Alex's go; do not fold it into something
 else.
+
+**The Armory is also the guide editor** (2026-10-30, Alex's call — no
+separate admin form; it already has the picker, the photos and every fit
+rule):
+
+- **Two tables, one save.** A signed-in reader saves a community guide
+  (`gun_guides`). An admin's save step adds **Save to: Community / Gunforma
+  guide**; a Gunforma guide goes to **`guides`** with a **theme** and a
+  **Published** switch. Themes are rows in **`guide_themes`** (the CHECK
+  over four literals is gone; `guides.category` is a foreign key to it), and
+  "New theme…" in the save step inserts one — admins only.
+- **Edit on every card, for who may use it** — admins on every card, a
+  community guide's owner on their own, nobody else (`canEdit()` in the
+  gallery). It opens `gunforma-armory.html?edit=<curated|community>:<uuid>`,
+  which ADOPTS the row: `STATE.target`, `savedId`, `ownerId` and the theme
+  settings are the build's identity, set together on open and cleared
+  together by "Start a new build" (see **Replacing the builder's
+  contents**). Save then updates in place from any device, which also ended
+  the old same-browser limit on "Update your Gun Guide". Opening asks before
+  replacing a build in progress; parts the Armory cannot bring back (not in
+  the live catalog for that pistol, a second part in one category, a pair
+  that no longer fits) are listed in the sidebar, never silently dropped.
+- **An admin's edit of a community guide keeps its owner**: an UPDATE never
+  sends `user_id`. **And an update that matches no row never becomes an
+  INSERT** on someone else's guide or a Gunforma guide — that would leave
+  the original untouched and add a copy. Only a reader's own community
+  guide, deleted from another tab, is made again on save, as before.
+- **Delete** sits beside Edit, behind a confirm, and counts only when a row
+  comes back (an RLS-refused delete matches nothing and says nothing).
+- **The database decides, not the page**:
+  `supabase/migrations/20261030200231_guides_admin_writes.sql` — admin-only
+  insert / update / delete on `guides` and a read of unpublished rows, all
+  through `is_admin()` and scoped `TO authenticated` (anon cannot execute
+  it, and a public-role policy calling it would break every anonymous read);
+  admin update / delete on `gun_guides` beside the owner policies; the
+  grants on `guides` reset to SELECT for anon and authenticated plus the
+  writes the admin policies use. Its PR carries a 23-case rolled-back dry
+  run (admin, a signed-in reader, anon). The pages read `guide_themes` to
+  tell whether it is applied, and until then an admin-only save or delete
+  says it isn't switched on yet instead of sending a write RLS would refuse.
+  `scripts/guide-editor.test.mjs` pins what each page sends.
+- An admin also sees **unpublished** Gunforma guides in the gallery, marked
+  "Unpublished"; every Gunforma guide card now names its theme.
 
 **History — why the old Armory was parked** (kept because the reasoning still
 binds the rebuild): the pre-rebuild page worked — `#83`–`#86` fixed its

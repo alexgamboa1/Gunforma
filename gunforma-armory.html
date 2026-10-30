@@ -207,6 +207,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .btn-block.ghost { background: #fff; color: #333; border-color: #d5d3ca; }
 .btn-block.ghost:hover { border-color: #4a9edd; color: #2a7bbd; }
 
+/* EDITING — the guide this build saves back to, and an admin's save options */
+.edit-banner { font-size: 11.5px; line-height: 1.45; color: #1d5f94; background: #eaf4fc; border: 0.5px solid #c3def4; border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
+.edit-banner b { color: #123f63; }
+.edit-banner-kind { display: block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #2a7bbd; margin-bottom: 2px; }
+.edit-banner-new { display: inline-block; margin-top: 6px; font-family: inherit; font-size: 11px; font-weight: 700; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+.edit-banner-new:hover { background: #f4f9fd; }
+.edit-dropped { font-size: 11px; line-height: 1.45; color: #8a6d3b; background: #fdf3e2; border: 0.5px solid #f3d9a8; border-radius: 4px; padding: 7px 10px; margin-bottom: 12px; }
+.save-opts { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid #f0efe9; display: flex; flex-direction: column; gap: 8px; }
+.save-opts-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.save-target { display: flex; gap: 6px; }
+.save-target label { flex: 1; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 11.5px; font-weight: 600; color: #555; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 7px 6px; cursor: pointer; text-align: center; }
+.save-target input { margin: 0; }
+.save-target label.on { border-color: #4a9edd; background: #eaf4fc; color: #1d6fb8; }
+.save-opts .gf-select, .save-opts .build-title-input { margin-top: 0; font-size: 12.5px; padding: 7px 9px; }
+.save-check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #333; cursor: pointer; }
+.save-opts-note { font-size: 11px; color: #999; line-height: 1.4; }
+
 /* EMPTY / LOADING */
 .empty { text-align: center; padding: 40px 16px; color: #999; font-size: 12.5px; }
 .empty-title { font-size: 14px; font-weight: 700; color: #555; margin-bottom: 4px; }
@@ -289,6 +306,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
     <aside class="build-side">
       <div class="card">
         <div class="card-title">Your build</div>
+        <div class="edit-banner" id="edit-banner" hidden></div>
+        <div class="edit-dropped" id="edit-dropped" hidden></div>
         <div class="summary-row"><span class="summary-label">Pistol</span><span class="summary-value" id="s-platform">—</span></div>
         <div class="summary-row"><span class="summary-label">Parts picked</span><span class="summary-value" id="s-parts">0</span></div>
         <div class="summary-parts" id="s-list" hidden></div>
@@ -298,6 +317,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
           <div class="summary-total-sub" id="s-total-sub"></div>
         </div>
         <input type="text" class="build-title-input" id="build-title" maxlength="80" placeholder="Name this build" autocomplete="off" hidden />
+        <div class="save-opts" id="save-opts" hidden></div>
         <button type="button" class="btn-block primary" id="btn-save" disabled>Save to Gun Guides →</button>
         <a class="btn-block ghost" href="gunforma-gun-guides.html">Browse Gun Guides</a>
       </div>
@@ -347,6 +367,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 //   Rule 7    everything else is platform-universal
 //   Rule 8    magwells filtered by magwell_frame_requirements whitelist
 // plus slide_specs.threaded_barrel_ok === false excludes threaded barrels.
+//
+// It is also the GUIDE EDITOR (Alex, 2026-10-30). Two tables, one page:
+//   community  gun_guides — anyone signed in saves one; its owner and admins
+//              edit and delete it
+//   curated    guides — the "Gunforma guides" tab; admins only, with a theme
+//              (guide_themes) and a Published switch
+// gunforma-gun-guides.html links Edit as ?edit=<kind>:<uuid>. Opening one
+// ADOPTS that row's identity (STATE.target + savedId, below) so Save updates
+// it in place, from any device; "Start a new build" clears every part of it.
+// Writes are refused by RLS, never trusted to this page — the checks here
+// only decide what to offer. Until supabase/migrations/*_guides_admin_writes
+// is applied, guide_themes does not exist, GUIDE_EDITING_LIVE stays false,
+// and the admin-only saves say they aren't switched on yet instead of trying.
 
 var sb = window.sb;
 var BC = window.BuildCategories;
@@ -394,19 +427,48 @@ var STATE = {
   picks: {},              // category -> { productId, variantId }
   openCat: null,          // which category's visual picker is open (one at a time)
   title: '',
-  savedId: null,          // gun_guides row id once saved; later saves update it
+  // Which row Save writes. These four are the build's IDENTITY: anything
+  // that replaces the builder's contents sets or clears all of them
+  // together (CLAUDE.md, "Replacing the builder's contents").
+  target: 'community',    // 'community' (gun_guides) | 'curated' (guides)
+  savedId: null,          // that table's row id once saved; later saves update it
+  ownerId: null,          // a community row's user_id — an admin's edit keeps it
+  curated: { theme: null, newTheme: '', published: true },
+  dropped: [],            // parts an opened guide carried that the Armory can't
 };
 
 var DRAFT_KEY = 'gf-armory-picks-v1';
+var NEW_THEME = '__new__';
+
+var IS_ADMIN = false;
+var THEMES = [];                    // guide_themes rows, sort order
+var GUIDE_EDITING_LIVE = false;     // guide_themes readable = the migration is applied
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────
-sb.auth.onAuthStateChange(function (event, session) {
-  CURRENT_USER = session && session.user || null;
-});
-(async function () {
+// Admin is read from get_my_profile(), as the admin pages and nav.js do. It
+// only decides what this page OFFERS; guides' RLS (is_admin()) decides what
+// is written.
+async function refreshAdmin() {
+  IS_ADMIN = false;
+  if (!CURRENT_USER) return;
+  try {
+    var r = await sb.rpc('get_my_profile').maybeSingle();
+    IS_ADMIN = !!(r && r.data && r.data.role === 'admin');
+  } catch (e) { IS_ADMIN = false; }
+}
+var AUTH_READY = (async function () {
   var sess = await sb.auth.getSession();
   CURRENT_USER = sess && sess.data && sess.data.session && sess.data.session.user || null;
+  await refreshAdmin();
 })();
+sb.auth.onAuthStateChange(function (event, session) {
+  CURRENT_USER = session && session.user || null;
+  // Never await a supabase call inside this callback (supabase-js holds a
+  // lock across it); hop out first.
+  setTimeout(function () {
+    refreshAdmin().then(function () { if (STATE.platform) renderSidebar(); });
+  }, 0);
+});
 
 // ─── LOAD ──────────────────────────────────────────────────────────────────
 async function loadAll() {
@@ -468,9 +530,29 @@ async function loadAll() {
       .push({ frame: row.frame_product_id, note: row.compatibility_note || '' });
   });
 
-  await loadFitTiers();
+  await Promise.all([loadFitTiers(), loadGuideThemes(), AUTH_READY]);
   renderPlatformRow();
-  restoreDraft();
+  var edit = editParam();
+  if (edit) await openForEdit(edit.kind, edit.id);
+  else restoreDraft();
+}
+
+// The theme list, read on its own: guide_themes arrives with the
+// guides-admin-writes migration, so an error here means "not applied yet"
+// and nothing else on the page is affected.
+async function loadGuideThemes() {
+  try {
+    var r = await sb.from('guide_themes').select('key, label, sort_order').order('sort_order').order('label');
+    if (r.error) { GUIDE_EDITING_LIVE = false; return; }
+    THEMES = r.data || [];
+    GUIDE_EDITING_LIVE = true;
+  } catch (e) { GUIDE_EDITING_LIVE = false; }
+}
+function themeLabel(key) {
+  var t = THEMES.find(function (x) { return x.key === key; });
+  if (t) return t.label;
+  var s = String(key || '').replace(/_/g, ' ');
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // Probe-and-load for the fitment-tier columns, all four in one round so one
@@ -674,7 +756,7 @@ function availableFor(cat) {
 
 // After any change, drop picks that the new state makes incompatible — and
 // say so. Loops because removing one pick can free or break another.
-function reconcilePicks() {
+function reconcilePicks(opts) {
   var removed = [];
   var changed = true;
   while (changed) {
@@ -706,9 +788,12 @@ function reconcilePicks() {
       }
     }
   }
-  if (removed.length) {
+  // quiet: an opened guide reports what was left out in the sidebar instead,
+  // where it stays put — a toast would be gone before it was read.
+  if (removed.length && !(opts && opts.quiet)) {
     toast('Removed ' + removed.join(', ') + ' — not compatible with your new pick.');
   }
+  return removed;
 }
 
 // ─── RENDER ────────────────────────────────────────────────────────────────
@@ -762,9 +847,13 @@ function selectPlatform(id) {
   var next = PLATFORMS_BY_ID[id];
   if (!next) return;
   if (STATE.platform && STATE.platform.id !== id) {
+    // A new pistol is a new build: the next save makes a new row, so the
+    // row it would have updated (and whose it was) go with the picks.
     STATE.picks = {};
     STATE.gun = null;
     STATE.savedId = null;
+    STATE.ownerId = null;
+    STATE.dropped = [];
   }
   STATE.platform = next;
   renderPlatformRow();
@@ -1093,6 +1182,9 @@ function renderSidebar() {
   titleEl.hidden = !rows.length;
   titleEl.value = STATE.title;
 
+  renderEditBanner();
+  renderSaveOpts(rows.length > 0);
+
   // "Needs comp" holds Save until a comp (or a longer slide) resolves it —
   // the one tag that is selectable but not saveable.
   var pairTag = currentPairTag();
@@ -1101,7 +1193,80 @@ function renderSidebar() {
   btn.disabled = !rows.length || needsComp;
   btn.textContent = needsComp
     ? 'Add a comp to finish this build'
-    : (STATE.savedId ? 'Update your Gun Guide →' : 'Save to Gun Guides →');
+    : saveLabel();
+}
+
+function saveLabel() {
+  if (STATE.target === 'curated') return STATE.savedId ? 'Update Gunforma guide →' : 'Save as a Gunforma guide →';
+  if (STATE.savedId) return STATE.ownerId && CURRENT_USER && STATE.ownerId !== CURRENT_USER.id ? 'Update this Gun Guide →' : 'Update your Gun Guide →';
+  return 'Save to Gun Guides →';
+}
+
+// What this build saves back to, once it is a saved row — and the way out.
+function renderEditBanner() {
+  var el = document.getElementById('edit-banner');
+  var dropEl = document.getElementById('edit-dropped');
+  if (!STATE.savedId) { el.hidden = true; } else {
+    el.hidden = false;
+    var kind = STATE.target === 'curated' ? 'Gunforma guide' : 'Community Gun Guide';
+    el.innerHTML = '<span class="edit-banner-kind">Editing · ' + kind + '</span>' +
+      'Saving updates <b>' + esc(STATE.title || 'this guide') + '</b> in place.' +
+      '<br><button type="button" class="edit-banner-new" id="btn-new-build">Start a new build</button>';
+    document.getElementById('btn-new-build').onclick = startNewBuild;
+  }
+  if (!STATE.dropped.length) { dropEl.hidden = true; return; }
+  dropEl.hidden = false;
+  dropEl.innerHTML = 'Left out of this guide: ' + STATE.dropped.map(function (d) {
+    return '<b>' + esc(d.name) + '</b> (' + esc(d.why) + ')';
+  }).join(', ') + '. Saving updates the guide without ' + (STATE.dropped.length === 1 ? 'it' : 'them') + '.';
+}
+
+// An admin's save step: where it goes, and for a Gunforma guide its theme
+// and whether it is published. Nobody else sees this block — a signed-in
+// reader only ever saves a community guide.
+function renderSaveOpts(hasParts) {
+  var el = document.getElementById('save-opts');
+  if (!IS_ADMIN || !hasParts) { el.hidden = true; el.innerHTML = ''; return; }
+  el.hidden = false;
+  var c = STATE.curated;
+  var themeKeys = THEMES.map(function (t) { return t.key; });
+  if (c.theme && c.theme !== NEW_THEME && themeKeys.indexOf(c.theme) === -1) themeKeys.push(c.theme);
+  if (!c.theme && themeKeys.length) c.theme = themeKeys[0];
+
+  var html = '';
+  if (STATE.savedId) {
+    // A saved row stays in its own table: moving a guide between the two is
+    // a new guide, not an edit.
+    html += '<div class="save-opts-label">Saves to ' + (STATE.target === 'curated' ? 'Gunforma guides' : 'Community builds') + '</div>';
+  } else {
+    html += '<div class="save-opts-label">Save to</div><div class="save-target">' +
+      '<label class="' + (STATE.target === 'community' ? 'on' : '') + '"><input type="radio" name="save-target" value="community"' + (STATE.target === 'community' ? ' checked' : '') + '> Community</label>' +
+      '<label class="' + (STATE.target === 'curated' ? 'on' : '') + '"><input type="radio" name="save-target" value="curated"' + (STATE.target === 'curated' ? ' checked' : '') + '> Gunforma guide</label>' +
+    '</div>';
+  }
+  if (STATE.target === 'curated') {
+    html += '<div class="save-opts-label">Theme</div>' +
+      '<select class="gf-select" id="save-theme" aria-label="Theme">' +
+        themeKeys.map(function (k) { return '<option value="' + escAttr(k) + '"' + (c.theme === k ? ' selected' : '') + '>' + esc(themeLabel(k)) + '</option>'; }).join('') +
+        (GUIDE_EDITING_LIVE ? '<option value="' + NEW_THEME + '"' + (c.theme === NEW_THEME ? ' selected' : '') + '>New theme…</option>' : '') +
+      '</select>' +
+      (c.theme === NEW_THEME
+        ? '<input type="text" class="build-title-input" id="save-new-theme" maxlength="40" placeholder="Theme name, e.g. Competition carry" autocomplete="off" value="' + escAttr(c.newTheme) + '" />'
+        : '') +
+      '<label class="save-check"><input type="checkbox" id="save-published"' + (c.published ? ' checked' : '') + '> Published — shown on Gun Guides</label>' +
+      (GUIDE_EDITING_LIVE ? '' : '<div class="save-opts-note">Saving Gunforma guides switches on with the next database update.</div>');
+  }
+  el.innerHTML = html;
+
+  el.querySelectorAll('input[name="save-target"]').forEach(function (r) {
+    r.onchange = function () { STATE.target = r.value; renderSidebar(); persistDraft(); };
+  });
+  var themeSel = document.getElementById('save-theme');
+  if (themeSel) themeSel.onchange = function () { c.theme = themeSel.value; renderSidebar(); persistDraft(); };
+  var newTheme = document.getElementById('save-new-theme');
+  if (newTheme) newTheme.oninput = function () { c.newTheme = newTheme.value; persistDraft(); };
+  var pub = document.getElementById('save-published');
+  if (pub) pub.onchange = function () { c.published = pub.checked; persistDraft(); };
 }
 
 function renderAll() {
@@ -1122,19 +1287,30 @@ function persistDraft() {
       gunId: STATE.gun ? STATE.gun.id : null,
       picks: STATE.picks,
       title: STATE.title,
+      target: STATE.target,
       savedId: STATE.savedId,
+      ownerId: STATE.ownerId,
+      curated: STATE.curated,
+      dropped: STATE.dropped,
     }));
   } catch (e) { /* storage unavailable — build just won't survive a reload */ }
 }
 
+function readDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return null; }
+}
+
 function restoreDraft() {
-  var draft = null;
-  try { draft = JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) {}
+  var draft = readDraft();
   if (!draft || !PLATFORMS_BY_ID[draft.platformId]) return;
   STATE.platform = PLATFORMS_BY_ID[draft.platformId];
   STATE.gun = GUNS.find(function (g) { return g.id === draft.gunId; }) || null;
   STATE.title = draft.title || '';
+  STATE.target = draft.target === 'curated' ? 'curated' : 'community';
   STATE.savedId = draft.savedId || null;
+  STATE.ownerId = draft.ownerId || null;
+  STATE.curated = Object.assign({ theme: null, newTheme: '', published: true }, draft.curated || {});
+  STATE.dropped = Array.isArray(draft.dropped) ? draft.dropped : [];
   STATE.picks = {};
   Object.keys(draft.picks || {}).forEach(function (cat) {
     var pick = draft.picks[cat];
@@ -1144,6 +1320,123 @@ function restoreDraft() {
     STATE.picks[cat] = { productId: p.id, variantId: v ? v.id : null };
   });
   reconcilePicks();
+  renderPlatformRow();
+  renderAll();
+}
+
+// ─── EDITING A SAVED GUIDE ─────────────────────────────────────────────────
+// ?edit=curated:<uuid> (guides) or ?edit=community:<uuid> (gun_guides), from
+// the Edit link on a gunforma-gun-guides.html card.
+var EDIT_TABLE = { curated: 'guides', community: 'gun_guides' };
+
+function editParam() {
+  var raw;
+  try { raw = new URLSearchParams(location.search).get('edit'); } catch (e) { return null; }
+  var m = /^(curated|community):([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(raw || '');
+  return m ? { kind: m[1].toLowerCase(), id: m[2].toLowerCase() } : null;
+}
+
+// The param has done its job once read: the draft carries the identity from
+// here, so a reload neither re-asks nor re-reads over unsaved changes.
+function clearEditParam() {
+  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+}
+
+// A saved snapshot as Armory picks, one per catalog category. What cannot
+// come back is listed, never silently dropped: a part no longer in the live
+// catalog for this pistol, or a second part in a category the Armory holds
+// one of. The snapshot's category is not trusted for the slot — older rows
+// use section keys — the product's own category is.
+function picksFromSnapshot(snapshot, platformId) {
+  var picks = {}, dropped = [];
+  (snapshot || []).forEach(function (part) {
+    if (!part) return;
+    var label = displayProductName({ brand: part.brand || '', name: part.name || '' });
+    var p = part.refId ? PRODUCTS_BY_ID[part.refId] : null;
+    if (!p || p.platform_ids.indexOf(platformId) === -1) {
+      dropped.push({ name: label, why: 'not in the catalog for this pistol' });
+      return;
+    }
+    if (picks[p.category]) {
+      dropped.push({ name: label, why: 'one ' + window.categorySingular(p.category).toLowerCase() + ' per build' });
+      return;
+    }
+    var v = part.variantId ? p.variants.find(function (x) { return x.id === part.variantId; }) : null;
+    picks[p.category] = { productId: p.id, variantId: (v || p.defaultVariant || {}).id || null };
+  });
+  return { picks: picks, dropped: dropped };
+}
+
+function canEditRow(kind, row) {
+  if (!CURRENT_USER) return false;
+  if (kind === 'curated') return IS_ADMIN;
+  return IS_ADMIN || row.user_id === CURRENT_USER.id;
+}
+
+async function openForEdit(kind, id) {
+  clearEditParam();
+  if (!CURRENT_USER) {
+    restoreDraft();
+    toast('Sign in to edit this guide, then open Edit on it again.', 'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
+    return;
+  }
+  // select('*'): guides gains gun_id with the migration, and a column named
+  // here before it exists would fail the read.
+  var res = await sb.from(EDIT_TABLE[kind]).select('*').eq('id', id);
+  var row = !res.error && res.data && res.data[0];
+  if (!row || !PLATFORMS_BY_ID[row.platform_id]) {
+    restoreDraft();
+    toast(res.error ? 'Couldn’t open that guide: ' + (res.error.message || 'unknown error') : 'That guide isn’t there any more.');
+    return;
+  }
+  if (!canEditRow(kind, row)) {
+    restoreDraft();
+    toast(kind === 'curated' ? 'Only admins can edit Gunforma guides.' : 'Only this guide’s owner can edit it.');
+    return;
+  }
+
+  // Ask before replacing work in progress — before touching anything, so a
+  // "no" leaves the builder exactly as it was. Re-opening the same guide is
+  // not a replacement.
+  var draft = readDraft();
+  var sameRow = draft && draft.savedId === row.id && (draft.target || 'community') === kind;
+  if (draft && draft.picks && Object.keys(draft.picks).length && !sameRow &&
+      !window.confirm('Open “' + row.title + '” for editing? The build in progress here will be replaced.')) {
+    restoreDraft();
+    return;
+  }
+
+  var got = picksFromSnapshot(row.parts_snapshot, row.platform_id);
+  STATE.platform = PLATFORMS_BY_ID[row.platform_id];
+  STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
+  STATE.title = row.title || '';
+  STATE.target = kind;
+  STATE.savedId = row.id;
+  STATE.ownerId = kind === 'community' ? row.user_id : null;
+  STATE.curated = kind === 'curated'
+    ? { theme: row.category, newTheme: '', published: row.is_published !== false }
+    : { theme: null, newTheme: '', published: true };
+  STATE.picks = got.picks;
+  STATE.openCat = null;
+  var unfit = reconcilePicks({ quiet: true });
+  STATE.dropped = got.dropped.concat(unfit.map(function (n) { return { name: n, why: 'doesn’t fit with the rest' }; }));
+  renderPlatformRow();
+  renderAll();
+}
+
+function startNewBuild() {
+  if (Object.keys(STATE.picks).length &&
+      !window.confirm('Start a new build? This clears your picks here. The saved guide isn’t changed.')) return;
+  STATE.picks = {};
+  STATE.gun = null;
+  STATE.title = '';
+  STATE.target = 'community';
+  STATE.savedId = null;
+  STATE.ownerId = null;
+  STATE.curated = { theme: null, newTheme: '', published: true };
+  STATE.dropped = [];
+  STATE.openCat = null;
+  clearEditParam();
   renderPlatformRow();
   renderAll();
 }
@@ -1172,6 +1465,17 @@ async function saveGuide() {
     return;
   }
 
+  // The admin-only writes are refused by RLS until the migration is applied;
+  // say so rather than send a write that cannot land.
+  var foreign = STATE.target === 'community' && STATE.savedId && STATE.ownerId && STATE.ownerId !== CURRENT_USER.id;
+  if (!GUIDE_EDITING_LIVE && (STATE.target === 'curated' || foreign)) {
+    toast(STATE.target === 'curated'
+      ? 'Saving Gunforma guides isn’t switched on yet — it needs the database update.'
+      : 'Editing someone else’s Gun Guide isn’t switched on yet — it needs the database update.');
+    return;
+  }
+  if (STATE.target === 'curated' && !IS_ADMIN) { toast('Only admins can save Gunforma guides.'); return; }
+
   var btn = document.getElementById('btn-save');
   btn.disabled = true; btn.textContent = 'Saving…';
 
@@ -1191,25 +1495,33 @@ async function saveGuide() {
       msrp: r.price,
     };
   });
-  var payload = {
-    title: (STATE.title || '').trim() || defaultBuildName(),
-    platform_id: STATE.platform.id,
-    gun_id: STATE.gun ? STATE.gun.id : null,
-    parts_snapshot: snapshot,
-    user_id: CURRENT_USER.id,
-  };
-
   var res;
-  if (STATE.savedId) {
+  if (STATE.target === 'curated' && STATE.curated.theme === NEW_THEME) {
+    var themeRes = await ensureNewTheme(STATE.curated.newTheme);
+    if (themeRes.error) { toast(themeRes.error); renderSidebar(); return; }
+    STATE.curated.theme = themeRes.key;
+    STATE.curated.newTheme = '';
+  }
+  var plan = savePlan(snapshot);
+
+  if (plan.op === 'update') {
     // Verify the row came back: an RLS-refused update matches zero rows and
     // returns no error. (CLAUDE.md, "A green result is not evidence".)
-    res = await sb.from('gun_guides').update(payload).eq('id', STATE.savedId).select('id');
+    res = await sb.from(plan.table).update(plan.payload).eq('id', STATE.savedId).select('id');
     if (!res.error && (!res.data || !res.data.length)) {
-      STATE.savedId = null;
-      res = await sb.from('gun_guides').insert(payload).select('id');
+      if (plan.reinsertOnMiss) {
+        // The reader's own community guide is gone (deleted from another
+        // tab): saving makes it again, theirs, as it always did.
+        STATE.savedId = null;
+        res = await sb.from(plan.table).insert(plan.insertPayload).select('id');
+      } else {
+        // Never fall back to an insert on someone else's row or a Gunforma
+        // guide: that would leave the original untouched and add a copy.
+        res = { error: { message: 'it was deleted, or you can no longer edit it' } };
+      }
     }
   } else {
-    res = await sb.from('gun_guides').insert(payload).select('id');
+    res = await sb.from(plan.table).insert(plan.payload).select('id');
   }
 
   if (res.error) {
@@ -1220,10 +1532,57 @@ async function saveGuide() {
     toast(msg);
   } else {
     STATE.savedId = (res.data && res.data[0] && res.data[0].id) || STATE.savedId;
+    if (STATE.target === 'community' && !STATE.ownerId) STATE.ownerId = CURRENT_USER.id;
+    STATE.dropped = [];
     persistDraft();
-    toast('Saved to Gun Guides.', 'gunforma-gun-guides.html', 'See it there');
+    toast(STATE.target === 'curated'
+      ? (STATE.curated.published ? 'Saved — the Gunforma guide is live.' : 'Saved as an unpublished Gunforma guide.')
+      : 'Saved to Gun Guides.', 'gunforma-gun-guides.html', 'See it there');
   }
   renderSidebar();
+}
+
+// Which table, which operation and which columns one save sends. Pure, so
+// scripts/guide-editor.test.mjs can hold it to the rules:
+//   * a Gunforma guide goes to guides with its theme and Published switch,
+//     and never a user_id (the table has none)
+//   * a community guide's UPDATE never sends user_id, so an admin's edit
+//     leaves the guide its owner's; only an INSERT names the saver
+//   * gun_id goes to guides only once the migration has added the column
+function savePlan(snapshot) {
+  var base = {
+    title: (STATE.title || '').trim() || defaultBuildName(),
+    platform_id: STATE.platform.id,
+    parts_snapshot: snapshot,
+  };
+  var gunId = STATE.gun ? STATE.gun.id : null;
+  if (STATE.target === 'curated') {
+    var curated = Object.assign({}, base, { category: STATE.curated.theme, is_published: !!STATE.curated.published });
+    if (GUIDE_EDITING_LIVE) curated.gun_id = gunId;
+    return { table: 'guides', op: STATE.savedId ? 'update' : 'insert', payload: curated, reinsertOnMiss: false };
+  }
+  var community = Object.assign({}, base, { gun_id: gunId });
+  var insert = Object.assign({}, community, { user_id: CURRENT_USER.id });
+  if (!STATE.savedId) return { table: 'gun_guides', op: 'insert', payload: insert };
+  var mine = !STATE.ownerId || STATE.ownerId === CURRENT_USER.id;
+  return { table: 'gun_guides', op: 'update', payload: community, insertPayload: insert, reinsertOnMiss: mine };
+}
+
+// "New theme…": the label as typed, its key derived from it. An existing
+// theme with the same key or label is reused rather than refused.
+async function ensureNewTheme(label) {
+  label = String(label || '').replace(/\s+/g, ' ').trim();
+  if (!label) return { error: 'Name the new theme first.' };
+  if (label.length > 40) return { error: 'Theme names are 40 characters at most.' };
+  var key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!key) return { error: 'A theme name needs a letter or a number.' };
+  var same = THEMES.find(function (t) { return t.key === key || t.label.toLowerCase() === label.toLowerCase(); });
+  if (same) return { key: same.key };
+  var order = THEMES.reduce(function (m, t) { return Math.max(m, t.sort_order || 0); }, 0) + 10;
+  var r = await sb.from('guide_themes').insert({ key: key, label: label, sort_order: order }).select('key, label, sort_order');
+  if (r.error || !r.data || !r.data.length) return { error: 'Couldn’t add the theme: ' + ((r.error && r.error.message) || 'refused') };
+  THEMES.push(r.data[0]);
+  return { key: r.data[0].key };
 }
 
 document.getElementById('btn-save').addEventListener('click', saveGuide);

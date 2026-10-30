@@ -88,6 +88,7 @@ check "go section tracking"        scripts/go-redirect.test.mjs
 check "barrel/slide fit sections"  scripts/fit-sections.test.mjs
 check "gun guide parts build order" scripts/guide-part-order.test.mjs
 check "headline price follows option" scripts/option-price.test.mjs
+check "guide editor writes"       scripts/guide-editor.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
