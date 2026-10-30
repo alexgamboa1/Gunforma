@@ -909,8 +909,8 @@ async function loadEverything() {
   PRODUCTS = (prodRes.data || []).map(function (r) {
     var variants = r.product_variants || [];
     var dv = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
-    var price = dv && dv.msrp != null ? Number(dv.msrp)
-              : (r.lowest_price != null ? Number(r.lowest_price) : null);
+    var priceHeadline = cardHeadline(variants, r.lowest_price);
+    var price = priceHeadline.amount;
     var product = {
       id: r.id,
       slug: r.slug || null,
@@ -920,6 +920,7 @@ async function loadEverything() {
       brand_id: r.brand_id,
       brand: (r.brands && r.brands.name) || 'Unknown',
       price: price,
+      priceHeadline: priceHeadline,
       // The PRODUCT's picture, for the grid card: the default variant's own
       // photo, else the first variant that has one. A product-level image is
       // not a variant choice; the detail panel's hero below never uses it
@@ -1910,11 +1911,22 @@ function swatchFallbackHtml(color, brand, cls) {
          ' role="img" aria-label="' + escAttr(color || 'Colour') + '"></span></div>';
 }
 
+// A card's price is the panel's opening headline (js/option-price.js, nothing
+// selected): "From" the lowest priced option when there are several, the one
+// option's price when there is one. Sorting and the price filter read the
+// same number the card prints. A product with no option rows keeps its
+// product-level lowest_price.
+function cardHeadline(variants, lowestPrice) {
+  if (variants && variants.length) {
+    return window.optionHeadline(variants.map(function (v) { return { id: v.id, msrp: v.msrp }; }), null);
+  }
+  return lowestPrice != null ? { kind: 'option', amount: Number(lowestPrice) } : { kind: 'check', amount: null };
+}
+
 function renderCard(r) {
   var isFav = FAVORITES.has(r.id);
-  var priceHtml = r.price != null
-    ? '<div class="part-card-price">$' + r.price.toFixed(r.price < 100 ? 2 : 0) + '</div>'
-    : '<div class="part-card-price na">' + esc(window.CHECK_PRICE) + '</div>';
+  var priceHtml = '<div class="part-card-price' + (r.price != null ? '' : ' na') + '">' +
+    esc(window.optionPriceText(r.priceHeadline)) + '</div>';
   // A product with no photo of any variant, or a dead image URL, shows the
   // default variant's colour swatch — never an empty "No photo" box.
   var cardDv = (r.variants || []).find(function (v) { return v.is_default; }) || (r.variants || [])[0] || null;
@@ -2112,17 +2124,11 @@ function renderDetail(p) {
     ? window.optionHeadline(variants.map(function (v) { return { id: v.id, msrp: v.msrp }; }), activeV ? activeV.id : null)
     : (p.price != null ? { kind: 'option', amount: p.price } : { kind: 'check', amount: null });
   var priceEl = document.getElementById('detail-price');
-  // Show cents whenever the price has them. The old rule dropped cents above
-  // $100, which now reads as a contradiction: the hero said $400 while the
-  // selected row directly beneath it said $399.99.
-  if (headline.kind !== 'check') {
-    var hasCents = Math.round(headline.amount * 100) % 100 !== 0;
-    priceEl.textContent = (headline.kind === 'from' ? 'From ' : '') + '$' + headline.amount.toFixed(hasCents ? 2 : 0);
-    priceEl.classList.remove('na');
-  } else {
-    priceEl.textContent = window.CHECK_PRICE;
-    priceEl.classList.add('na');
-  }
+  // Show cents whenever the price has them (optionPriceText). The old rule
+  // dropped cents above $100, which read as a contradiction: the hero said
+  // $400 while the selected row directly beneath it said $399.99.
+  priceEl.textContent = window.optionPriceText(headline);
+  priceEl.classList.toggle('na', headline.kind === 'check');
   // Description: keep it simple — split on double-newline into paragraphs.
   var descEl = document.getElementById('detail-desc');
   if (p.description) {

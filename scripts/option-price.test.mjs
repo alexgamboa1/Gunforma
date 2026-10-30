@@ -126,6 +126,81 @@ test('the build page\'s maker-only row uses the shared rule', () => {
   assert.match(src, /var head = window\.optionHeadline\(/);
 });
 
+// ── the cards: the page's own functions, run ───────────────────────────────
+// A card never has an option picked, so it shows the panel's OPENING headline:
+// several options → "From $<lowest>", one option → its price, none priced →
+// "Check price". The Armory's picked card is a picked option: its own price,
+// or "Check price". Each function is lifted out of the page by name and run
+// against the real shared modules, so a card that goes back to reading the
+// default option's MSRP fails here.
+function liftFn(src, name) {
+  const at = src.indexOf('\nfunction ' + name + '(');
+  assert.ok(at !== -1, 'function ' + name + ' not found');
+  let i = src.indexOf('{', at), depth = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === '{') depth++;
+    else if (src[i] === '}' && --depth === 0) break;
+  }
+  return src.slice(at + 1, i + 1);
+}
+function pageScope(page, fns, extra) {
+  const src = read(page);
+  const scope = {};
+  for (const f of ['js/category-map.js', 'js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js', 'js/option-price.js']) {
+    new Function('window', read(f))(scope);
+  }
+  const body = fns.map((n) => liftFn(src, n)).join('\n') +
+    '\nreturn {' + fns.join(',') + '};';
+  return new Function('window', ...Object.keys(extra), 'with (window) {' + body + '}')(scope, ...Object.values(extra));
+}
+const cardPrice = (html, cls) => (html.match(new RegExp('<(?:div|span) class="' + cls + '( na)?">([^<]*)<')) || []).slice(1);
+const axgVariants = OPTIONS.map((o) => ({ id: o.id, msrp: o.msrp, color: o.color, is_default: !!o.is_default }));
+
+test('catalog grid card: "From $<lowest>" until an option is picked, the same number as its panel', () => {
+  const page = pageScope('gunforma-parts-catalog.html',
+    ['cardHeadline', 'renderCard', 'swatchFallbackHtml', 'partCatLabel', 'esc', 'escAttr'],
+    { FAVORITES: new Set(), PART_TYPES: {} });
+  page.affiliate = undefined;
+  const card = (variants, lowest) => {
+    const h = page.cardHeadline(variants, lowest);
+    return { h, price: cardPrice(page.renderCard({ id: 'x', slug: 'part', name: 'Part', brand: 'Brand', category: 'frame',
+      variants, price: h.amount, priceHeadline: h }), 'part-card-price') };
+  };
+  // AXG FUSE: six options, default is Black / Hogue; the card prints the lowest.
+  const axg = card(axgVariants);
+  assert.deepEqual(axg.price, [undefined, 'From $449.99'], 'several options: From the lowest, cents kept');
+  assert.equal(axg.h.amount, 449.99, 'sort and the price filter read the same number');
+  // A default option that is NOT the cheapest — the card used to print the default's MSRP.
+  const pricier = card([{ id: 'a', msrp: 399.99, is_default: true }, { id: 'b', msrp: 349.99 }]);
+  assert.deepEqual(pricier.price, [undefined, 'From $349.99'], 'never the default option\'s number when a cheaper one exists');
+  assert.deepEqual(card([{ id: 'a', msrp: 129, is_default: true }]).price, [undefined, '$129'], 'one option: its plain price');
+  assert.deepEqual(card([{ id: 'a', msrp: null }, { id: 'b', msrp: null }]).price, [' na', 'Check price'], 'nothing priced');
+  assert.deepEqual(card([], 89.5).price, [undefined, '$89.50'], 'no option rows: the product-level price');
+  assert.deepEqual(card([], null).price, [' na', 'Check price']);
+  // The panel opens on the same text the card shows.
+  const src = read('gunforma-parts-catalog.html');
+  assert.match(src, /priceEl\.textContent = window\.optionPriceText\(headline\);/, 'the panel prints through the same formatter');
+  assert.match(src, /var priceHeadline = cardHeadline\(variants, r\.lowest_price\);\s*var price = priceHeadline\.amount;/,
+    'the product row\'s price (sort, filter) is the card\'s headline');
+});
+
+test('Armory part cards: "From $<lowest>" on a picker card; the picked card follows the picked option', () => {
+  const STATE = { picks: {} };
+  const page = pageScope('gunforma-armory.html',
+    ['partCardHtml', 'pickedHtml', 'optionPrices', 'fitTagHtml', 'esc', 'escAttr', 'money'], { STATE });
+  const p = { id: 'axg', brand: 'Icarus Precision', name: 'AXG FUSE', variants: axgVariants,
+    defaultVariant: axgVariants[0] };
+  assert.deepEqual(cardPrice(page.partCardHtml('grip', p), 'part-card-price'), [undefined, 'From $449.99']);
+  const one = { id: 'one', brand: 'B', name: 'One', variants: [{ id: 'o', msrp: 79.99, is_default: true }] };
+  one.defaultVariant = one.variants[0];
+  assert.deepEqual(cardPrice(page.partCardHtml('grip', one), 'part-card-price'), [undefined, '$79.99'], 'one option: plain price');
+  const picked = (variantId) => { STATE.picks.grip = { id: 'axg', variantId }; return cardPrice(page.pickedHtml('grip', p), 'picked-price'); };
+  assert.deepEqual(picked('v-fde-gold'), [undefined, '$584.99'], 'FDE / Gold: its own price');
+  assert.deepEqual(picked('v-black-hogue'), [undefined, '$449.99']);
+  assert.deepEqual(picked('v-black-gold'), [' na', 'Check price'], 'picked option with no price: no number');
+  assert.match(read('gunforma-armory.html'), /<script src="js\/option-price\.js"><\/script>/);
+});
+
 test('one wording for no price: "Check price" — never "Price N/A" or "Price n/a"', () => {
   const files = [
     ...readdirSync(ROOT).filter((f) => f.endsWith('.html')),
