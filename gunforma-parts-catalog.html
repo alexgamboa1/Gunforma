@@ -641,8 +641,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/maker-link.js"></script>
 <!-- frame-fit: the grip-module fit rule — class equality, plus the FUSE
      exception where the maker states it. Read by frameOk(), subModelCompat()
-     and the badge below; the rule lives there and nowhere else. -->
+     and the badge below. Since the 2026-10-29 fitment model it is the P320's
+     rule and the P365's pre-migration fallback: a P365 model whose guns row
+     carries the fit-tier columns judges grips with slide-fit instead. -->
 <script src="js/frame-fit.js"></script>
+<!-- slide-fit: the P365 tier rule — where the factory slide ends against the
+     grip. Same three readers as frame-fit, through slideFitTag(). -->
+<script src="js/slide-fit.js"></script>
 <script src="js/display-name.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
@@ -833,6 +838,27 @@ async function loadEverything() {
 
   (platRes.data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
   GUNS = gunsRes.data || [];
+
+  // The 2026-10-29 fitment-tier columns, in a read of their OWN so a database
+  // that predates the migration fails this one and nothing else (naming them
+  // in gunsQ above would fail the whole guns load). On success each GUNS row
+  // gains its tiers and the P365 grip surfaces judge with js/slide-fit.js;
+  // on any error frame-fit's housing-class rule keeps the whole job.
+  try {
+    var tierRes = await sb.from('guns').select('id, grip_fit_tier, slide_fit_tier, slide_comp_style');
+    if (!tierRes.error) {
+      var tiersById = {};
+      (tierRes.data || []).forEach(function (r) { tiersById[r.id] = r; });
+      GUNS.forEach(function (g) {
+        var t = tiersById[g.id];
+        if (t) {
+          g.grip_fit_tier = t.grip_fit_tier;
+          g.slide_fit_tier = t.slide_fit_tier;
+          g.slide_comp_style = t.slide_comp_style;
+        }
+      });
+    }
+  } catch (e) { /* tiers unavailable — the frame-fit path stands */ }
 
   BSR_BY_BARREL = {};
   BSR_BY_SLIDE  = {};
@@ -1291,15 +1317,37 @@ function frameOk(frame, sel) {
     var wl = MFR_BY_MAGWELL[sel.magwell.id] || [];
     if (!wl.length || !wl.some(function (r) { return r.frame_product_id === frame.id; })) return false;
   }
-  // Sub-model constraint: the one rule in js/frame-fit.js — class equality,
-  // plus the FUSE exception where the maker states it. The filter shows
-  // CONFIRMED fits only: a maker silent on the FUSE is 'unjudged' and stays
-  // out, as does a frame with no spec (fail closed — frames are one of the
-  // most fitment-critical categories, so a missing spec is unknown-not-safe).
-  if (SELECTED_SUBMODEL && SELECTED_SUBMODEL.housing_class) {
-    if (window.FrameFit.verdict(frame, SELECTED_SUBMODEL, GUNS) !== 'fits') return false;
+  // Sub-model constraint. With the fitment-tier columns live (P365 models
+  // after the 2026-10-29 migration) the judge is js/slide-fit.js: the grip's
+  // tier against the model's FACTORY slide. The filter still shows CONFIRMED
+  // fits only — flush and extended pass; needs_comp does not (the factory
+  // configuration doesn't cover it without more parts), and unconfirmed
+  // stays out exactly as 'unjudged' always has. Without tiers (P320, or a
+  // database that predates the migration) the rule is js/frame-fit.js —
+  // class equality plus the maker-stated FUSE exception — with a frame that
+  // has no spec failing closed, as before.
+  if (SELECTED_SUBMODEL) {
+    var tierTag = slideFitTag(frame, SELECTED_SUBMODEL);
+    if (tierTag) {
+      if (tierTag.key !== 'flush' && tierTag.key !== 'extended') return false;
+    } else if (SELECTED_SUBMODEL.housing_class &&
+               window.FrameFit.verdict(frame, SELECTED_SUBMODEL, GUNS) !== 'fits') {
+      return false;
+    }
   }
   return true;
+}
+
+// The P365 tier verdict for one grip against one gun's factory slide, or
+// null when the gun carries no tier columns (P320, or pre-migration) — null
+// hands the question back to js/frame-fit.js.
+function slideFitTag(frame, gun) {
+  if (!gun || !gun.slide_fit_tier || !window.SlideFit) return null;
+  var fs = frame.frame_specs;
+  return window.SlideFit.tag(
+    { fit_tier: gun.slide_fit_tier, comp_style: gun.slide_comp_style || null },
+    { fit_tier: fs ? fs.fit_tier : null },
+    null);
 }
 function compensatorOkSubmodel(comp) {
   // Standalone: sub-model with integrated_comp rejects every compensator,
@@ -1320,6 +1368,11 @@ function subModelCompat(product, gun) {
   var cat = product.category;
   if (cat === 'compensator') return !gun.integrated_comp;
   if (cat === 'frame') {
+    // Tier columns live -> js/slide-fit.js, same pass bar as frameOk; the
+    // badge below tells the in-between tags (needs comp, won't fit,
+    // unconfirmed) apart before it draws anything.
+    var tierTag = slideFitTag(product, gun);
+    if (tierTag) return tierTag.key === 'flush' || tierTag.key === 'extended';
     if (!gun.housing_class) return true;
     // js/frame-fit.js; 'unjudged' reads as not-ok here and the badge below
     // tells the two apart before it draws anything.
@@ -1948,7 +2001,22 @@ function renderDetail(p) {
   var compatWrap = document.getElementById('detail-compat-badge-wrap');
   if (SELECTED_SUBMODEL) {
     var applies = ['frame','slide','barrel','compensator'].indexOf(p.category) !== -1;
-    if (applies) {
+    var gripTierTag = applies && p.category === 'frame' ? slideFitTag(p, SELECTED_SUBMODEL) : null;
+    if (gripTierTag) {
+      // The 2026-10-29 fitment model: the badge is the tag, in the Armory's
+      // own words — the grip's tier against the model's factory slide. Flush
+      // and Extended slide are fits; Needs comp says what would finish it;
+      // Won't fit carries the module's reason; null tiers say "not
+      // confirmed" rather than guessing.
+      compatWrap.innerHTML =
+        gripTierTag.key === 'flush' || gripTierTag.key === 'extended'
+          ? '<div class="detail-compat-badge ok">✓ Fits the ' + esc(SELECTED_SUBMODEL.name) + ' — ' + esc(gripTierTag.label) + '</div>'
+        : gripTierTag.key === 'needs_comp'
+          ? '<div class="detail-compat-badge unjudged">Needs comp on the ' + esc(SELECTED_SUBMODEL.name) + ' — a comp’d slide or add-on comp covers this grip</div>'
+        : gripTierTag.key === 'wont_fit'
+          ? '<div class="detail-compat-badge no">✗ Won’t fit the ' + esc(SELECTED_SUBMODEL.name) + (gripTierTag.reason ? ' — ' + esc(gripTierTag.reason) : '') + '</div>'
+          : '<div class="detail-compat-badge unjudged">' + esc(gripTierTag.label) + '</div>';
+    } else if (applies) {
       var ok = subModelCompat(p, SELECTED_SUBMODEL);
       // Two answers the check cannot back, so no badge rather than a wrong one:
       // - a compensator's "yes" only means the gun has no integrated comp; it

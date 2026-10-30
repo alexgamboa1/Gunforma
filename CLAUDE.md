@@ -1316,6 +1316,7 @@ Registered today:
 | `scripts/go-redirect.test.mjs` | `go.js` leaking `s`/`loc` into the outbound retailer URL, storing an unwhitelisted `loc`, not truncating `s` at 128, breaking the redirect over a refused insert, logging a `x-go-no-log` request, or losing the PGRST204 ladder (full → bot → legacy, descending only on PGRST204) — runs the edge function under Node with a stubbed Deno and fetch |
 | `scripts/fit-sections.test.mjs` | a product page's barrel/slide fit section listing a threaded barrel on a slide whose maker says no (or the reverse), an unapproved or discontinued part, a locked barrel without its heading and warning ("Only these slides", or "Only for specific <brand> slides" when none is listed or the fit read fails), a stale "From" price, or a heading over nothing — runs `product-page.mjs` against a stubbed fetch and pins both the one query it sends and the HTML |
 | `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
+| `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -1848,8 +1849,67 @@ is what the category now says, `17rd-xmacro` is a magazine family rather
 than the maker's model list, and `capacity_change 3` is a delta, not a
 capacity.
 
+### Slide-on-grip fit on the P365: tiers (`js/slide-fit.js`)
+
+**Since 2026-10-29 (Alex's sign-off) the P365 judges slide-on-grip fit by
+TIER, never by hiding parts.** Every P365 slide mechanically goes on every
+P365 grip (FCU permitting); what changes is where the slide ends. The rule is
+one function, `SlideFit.tag(slide, grip, addOnComp)` in `js/slide-fit.js`,
+and `scripts/slide-fit.test.mjs` pins the signed-off 30-cell matrix
+(10 slide setups × 3 grip tiers) plus every label, colour and reason.
+
+- **Tiers are names, never inches:** `short` (P365/X/XL grips, 3.1" slides),
+  `xmacro` (XMacro/AXG/OEM-FUSE grips, 3.7"-class slides), `fuse`
+  (full-FUSE-length aftermarket grips, 4.3"-class slides). A slide's tier is
+  where the SLIDE ends — an XMacro Comp slide carries a 3.1" barrel and is
+  still `xmacro` tier — which is why `slide_specs.fit_tier` exists apart
+  from `barrel_length_in` (Rule 1, barrel ↔ slide match, is unchanged).
+- **`comp_style`** (`none` / `short_barrel` / `ported_barrel`) decides
+  whether a one-tier gap reads "Needs comp" (plain slide) or "Won't fit"
+  (a comp slide's comp slot is taken). Neither comp style takes an add-on
+  comp. On a `ported_barrel` slide (FDEZ), threaded barrels stay listed
+  with a note; the maker's own chunk barrel (its
+  `barrel_slide_requirements` row) is badged **Recommended** and sorts
+  first. `slide_specs.includes_barrel` (the ARC Reactor kits) hides the
+  barrel picker: "Barrel included with this kit".
+- **The model prefills, never filters.** Choosing a model sets the stock
+  slide and grip tier from `guns.grip_fit_tier` / `slide_fit_tier` /
+  `slide_comp_style`; every grip stays listed, tagged. "Won't fit" options
+  are shown DISABLED with the reason — never hidden. "Needs comp" is
+  pickable but holds Save until a comp resolves it. Changing the model
+  never drops a grip; only a picked slide × picked grip pair turning
+  "Won't fit" does (the Armory's `reconcilePicks`).
+- **NULL tier = "Fit not confirmed", never a guess** — and a comp's
+  `fit_result` is NULL on every comp today (makers don't publish it), so an
+  add-on comp bridging a tier reads "Comp flush / partially flush". Owner
+  fit reports fill it in later; that feature does not exist yet.
+- **Dark until `supabase/migrations/20261030013433_fitment_tiers.sql` is
+  applied**, the same shape as `js/gun-model.js`: the Armory and the catalog
+  read the tier columns in queries of their OWN (never in a main select —
+  a named missing column fails the whole load) and fall back to the
+  `FrameFit` behaviour below on any error. **P320 keeps `FrameFit`
+  permanently**; the tier path keys on the platform (Armory) and on the
+  gun's tier columns being non-null (catalog), so P320's null tiers never
+  enter it.
+- **That migration also fixes the mis-classed FUSE rows**:
+  `guns.housing_class` for P365 FUSE and FUSE Comp becomes `xmacro`,
+  because SIG ships the XMacro-size module on the FUSE — which also moves
+  the FUSE hub's magazine list onto the XMacro family rows, the true claim.
+  `frame_specs.housing_class` keeps `fuse` for the aftermarket full-length
+  modules: the class stays a grouping label; it no longer decides fit on
+  the P365.
+- **Not done yet, deliberately:** the product-page "Fits on" grids (a slide
+  page listing grips by tier, a grip page listing which slides sit flush —
+  §4.4 of the ship prompt) are a follow-up PR: they touch
+  `product-page.mjs`, one of the two most crawled routes, need the server
+  copy + parity test, and until the migration AND backfill are live every
+  cell would read "Fit not confirmed". Same blast-radius reasoning as not
+  folding the nav into `product-page.mjs`.
+
 ### Grip-module fit in the catalog: `js/frame-fit.js`
 
+**The P320's rule, and the P365's pre-migration fallback** — see the tier
+section above for what judges the P365 once the fitment columns exist.
 **One rule, one file, read by the catalog's grip filter (`frameOk()`),
 `subModelCompat()` and the detail panel's badge.** Base: a grip module fits
 a gun when `frame_specs.housing_class` equals `guns.housing_class`. **The

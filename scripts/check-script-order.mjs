@@ -83,6 +83,12 @@ const RULES = [
   // first time a sub-model is chosen and the grip list goes empty.
   { global: 'FrameFit', defines: 'js/frame-fit.js', consumers: [],
     pattern: /\bFrameFit\s*\./ },
+  // SlideFit is the same shape: an object read as a member (SlideFit.tag)
+  // at call time, from the Armory's card renderers and the catalog's
+  // frameOk()/badge. A missing tag throws mid-render and the grid or badge
+  // silently stays empty.
+  { global: 'SlideFit', defines: 'js/slide-fit.js', consumers: [],
+    pattern: /\bSlideFit\s*\./ },
   { global: 'PartIds', defines: 'js/part-ids.js', consumers: [],
     pattern: /\bPartIds\s*\./ },
   // GunModel is an object read as a member, so it needs a pattern too. The

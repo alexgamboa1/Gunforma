@@ -896,6 +896,11 @@ for (const [label, path, want] of [
     ['/parts/basepads/tti-xmacro-completed-mag-w-basepad', '/parts/magazines/tti-xmacro-completed-mag-w-basepad'],
     ['/parts/safety-selectors/sig-sauer-manual-safety-parts-kit-black-p365', '/parts/safety-selectors/sig-sauer-manual-safety-kit-p365'],
     ['/parts/frames/icarus-precision-311-fuse-sl', '/parts/frames/icarus-precision-311-fuse'],
+    // The ARC Reactor 365F is a FUSE slide; the fitment-tiers migration moves
+    // its slug off ...-p365-xmacro. The redirect deploys with the code, so the
+    // target answers 404 until `supabase db push --linked` runs — a scheduled
+    // red here in that window means the push is overdue, which is the point.
+    ['/parts/slides/arc-division-reactor-365f-p365-xmacro', '/parts/slides/arc-division-reactor-365f-p365-fuse'],
   ]) {
     const r = await get(from);
     const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');
