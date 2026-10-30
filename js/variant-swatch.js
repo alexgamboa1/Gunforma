@@ -128,10 +128,22 @@
     return null;
   }
 
+  // Makers whose two-part colour names a FRAME and an ACCENT, not an object in
+  // two colours. Icarus Precision writes "<frame>/<panel>" — "FDE/Gold" is an
+  // FDE grip module with a brass panel, "ODG/Hogue" an ODG one with a Hogue
+  // G10 panel — so the swatch is the frame colour alone (Alex, 2026-10-30).
+  // Keyed by brand, not category: Sharps Bros grips are frames too, and
+  // their "Black/Cherry" is a real second colour that must still split.
+  var FRAME_COLOUR_BRANDS = {
+    'icarus precision': true,
+  };
+
   // Returns {kind, css} describing the swatch, or kind 'unknown' when the name
   // resolves to nothing. Exposed separately from the markup so a caller can
-  // decide its own size and shape.
-  function swatchFor(color) {
+  // decide its own size and shape. `brand` is optional; it only matters for
+  // FRAME_COLOUR_BRANDS.
+  function swatchFor(color, brand) {
+    if (FRAME_COLOUR_BRANDS[norm(brand)]) color = parts(color)[0] || color;
     var special = specialFor(color);
     if (special === 'iridescent') {
       return { kind: 'iridescent',
@@ -166,13 +178,14 @@
   // `cls` lets the two call sites size their own box. Both pass a class whose
   // CSS sets object-fit: contain on the img — a catalog shot on white is
   // identifying the part, and cropping it hides the thing being chosen by.
-  function variantMediaHtml(variant, cls) {
+  // `brand` is the product's maker, passed through to swatchFor.
+  function variantMediaHtml(variant, cls, brand) {
     var c = cls || 'variant-media';
     var label = global.variantLabel ? global.variantLabel(variant) : '';
     var alt = String(label || variant && variant.color || 'variant').replace(/"/g, '&quot;');
     var url = variant && variant.primary_image_url;
     if (url) {
-      var sw = swatchFor(variant && variant.color);
+      var sw = swatchFor(variant && variant.color, brand);
       // onerror falls back to the SWATCH, not to an empty box: a dead image
       // URL is common in this catalog and should degrade to the same honest
       // answer as having no URL at all.
@@ -182,7 +195,7 @@
                    sw.css.replace(/"/g, '') + '\\&quot;></span>&quot;"/>' +
              '</div>';
     }
-    var s = swatchFor(variant && variant.color);
+    var s = swatchFor(variant && variant.color, brand);
     return '<div class="' + c + '">' +
              '<span class="' + c + '-swatch" style="' + s.css + '"></span>' +
            '</div>';

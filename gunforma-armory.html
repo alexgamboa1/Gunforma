@@ -134,6 +134,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .picked-thumb { flex-shrink: 0; width: 84px; height: 63px; background: #fff; border: 0.5px solid #eee; border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .picked-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 4px; background: #fff; display: block; }
 .picked-thumb .swatch-wrap { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; }
+/* js/variant-swatch.js draws these; without a size the swatch is a zero-size
+   span and a photo-less part reads as an empty box. */
+.variant-media { display: flex; align-items: center; justify-content: center; }
+.variant-media-swatch { display: block; width: 56px; height: 56px; border-radius: 50%; }
+.picked-thumb .variant-media-swatch { width: 36px; height: 36px; }
 .picked-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .picked-brand { font-size: 9.5px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .picked-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
@@ -755,9 +760,11 @@ function partCardHtml(cat, p, meta) {
   var dv = p.defaultVariant;
   var img = dv && dv.primary_image_url;
   var dispName = displayProductName({ brand: p.brand, name: p.name });
+  var swatch = '<div class="part-card-nophoto">' + window.variantMediaHtml({ color: dv && dv.color }, 'variant-media', p.brand) + '</div>';
   var photo = img
-    ? '<img src="' + escAttr(img) + '" alt="' + escAttr(dispName) + '" loading="lazy" />'
-    : '<div class="part-card-nophoto">' + (window.variantMediaHtml ? window.variantMediaHtml(dv || {}) : '') + '</div>';
+    ? '<img src="' + escAttr(img) + '" alt="' + escAttr(dispName) + '" loading="lazy"' +
+        ' data-fallback="' + escAttr(swatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback" />'
+    : swatch;
   var price = dv && dv.msrp != null ? money(dv.msrp) : null;
   var disabled = !!(meta.tag && !meta.tag.selectable);
   return '<div class="part-card' + (disabled ? ' wont-fit' : '') + '" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
@@ -924,11 +931,15 @@ function slotBanners(cat, picked) {
 function pickedHtml(cat, p) {
   var pick = STATE.picks[cat];
   var variant = p.variants.find(function (v) { return v.id === pick.variantId; }) || p.defaultVariant;
-  var price = variant && variant.msrp != null ? variant.msrp : (p.defaultVariant && p.defaultVariant.msrp);
+  // The picked option's own price, or none — never the default variant's,
+  // which is a different option's number.
+  var price = variant && variant.msrp != null ? variant.msrp : null;
   var img = variant && variant.primary_image_url;
+  var swatch = '<div class="swatch-wrap">' + window.variantMediaHtml({ color: variant && variant.color }, 'variant-media', p.brand) + '</div>';
   var thumb = img
-    ? '<img src="' + escAttr(img) + '" alt="' + escAttr(displayProductName({ brand: p.brand, name: p.name })) + '" loading="lazy" />'
-    : '<div class="swatch-wrap">' + (window.variantMediaHtml ? window.variantMediaHtml(variant || {}) : '') + '</div>';
+    ? '<img src="' + escAttr(img) + '" alt="' + escAttr(displayProductName({ brand: p.brand, name: p.name })) + '" loading="lazy"' +
+        ' data-fallback="' + escAttr(swatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback" />'
+    : swatch;
 
   var variantRow = '';
   var labelled = p.variants.filter(function (v) { return (window.variantLabel(v) || '').length; });

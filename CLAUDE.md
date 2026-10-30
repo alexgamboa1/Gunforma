@@ -1304,6 +1304,7 @@ Registered today:
 | `scripts/check-canonical-coupling.mjs` | `build-og.mjs` or `profile-og.mjs` replacing a literal its page no longer contains, or a page carrying a noindex or canonical its function never strips |
 | `scripts/listing-rules.test.mjs` | `_listing-rules.mjs` drifting from the documented stale-price and sort rules |
 | `scripts/maker-link.test.mjs` | `js/maker-link.js` and `_maker-link.mjs` drifting apart — the same unpaid buy button labelled, or disclosed, differently on the catalog panel and the part page |
+| `scripts/variant-swatch.test.mjs` | `js/variant-swatch.js` and `_variant-swatch.mjs` drawing the same colour differently — the catalog chip and the product page's buy-row swatch disagreeing; also an Icarus Precision "FDE/Gold" (frame/panel — `FRAME_COLOUR_BRANDS`) drawn as a two-tone split instead of its frame colour, or another maker's real two-tone ("Black/Cherry") losing its split |
 | `scripts/display-name.test.mjs` | `_display-name.mjs` printing a product without its brand ("AMAG 15 SG9") or with it twice ("Magpul Magpul AMAG", "Sig Sauer SIG P365", "Radian Weapons Radian Ramjet") — pins every live name shape: full-brand prefix, first-word and initials short forms, a listed alias, a brand mid-name, another maker's name inside the name; and `js/display-name.js` drifting from it — both copies over every pinned case, every product in `scripts/fixtures/product-names.json` and a seeded fuzz |
 | `scripts/check-display-name.mjs` | a render file printing a raw product name (`p.name`, `item.name`, `part.name`, … on a line that emits HTML or DOM text) instead of `displayProductName()`, so a new section or category ships "AMAG 15 SG9" with nothing saying Magpul; also an allowlist entry whose line is gone |
 | `scripts/check-guide-content.mjs` | a guide page declared without content or vice versa; typed prices or counts in guide prose; a hub `<title>` at 60 characters or over, or off the "`<model>`: Which Mags … Fit \| Gunforma" shape |
@@ -1462,6 +1463,19 @@ part** below. Both share one copy of the variant logic.
   `{approved, missing[], optional_blank[], platforms[]}`.
 - `create_product()` always returns that status, so an unapproved save is
   never silent.
+- **Every live variant needs a photo and an MSRP to approve — unless Alex
+  has waived it for that variant** (since 2026-10-30,
+  `supabase/migrations/*_approve_fuse_grips.sql`).
+  `product_variants.no_photo_ok` means no maker photo exists and the colour
+  swatch is its picture; `no_msrp_ok` means the price is unconfirmed and the
+  variant shows none. A waived gap moves from `missing` to `optional_blank`,
+  so Needs data still finds it. Both default false and are set by a
+  migration naming the variant, never by add-a-part. **Per variant, not a
+  relaxed rule, on purpose**: relaxing it for everyone on 2026-10-30 would
+  have approved seven unrelated parts blocked only on photos.
+  - A variant with no MSRP shows **no price** — the Armory's picked card and
+    the catalog's detail panel no longer fall back to the default variant's
+    number, which is a different option's price.
 - Only an approved part may carry a `fitment_confidence` other than
   `unverified`.
   - This applies to `create_product()` only. Existing products were not
