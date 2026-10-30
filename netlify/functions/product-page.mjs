@@ -561,9 +561,13 @@ async function fetchFitsOn(category, productId) {
   };
 }
 
-function fitTagHtml(tag) {
+// `sameAs` is the neighbouring cell's tag: its reason is not said twice in
+// one row (a Short slide on a FUSE grip won't fit with or without a comp,
+// for the same reason).
+function fitTagHtml(tag, sameAs) {
+  const reason = tag.reason && !(sameAs && sameAs.reason === tag.reason) ? tag.reason : '';
   return '<span class="fit-tag fit-tag-' + esc(tag.color) + '">' + esc(tag.label) + '</span>' +
-    (tag.reason ? '<span class="fit-reason">' + esc(tag.reason) + '</span>' : '');
+    (reason ? '<span class="fit-reason">' + esc(reason) + '</span>' : '');
 }
 
 const FITS_ON_LENGTHS = 'Slide lengths: Short is the P365 and P365 X length, XMacro the P365 XL and XMacro length, FUSE the P365 FUSE length.';
@@ -589,7 +593,7 @@ function fitsOnHtml(grid) {
         grid.rows.map((r) => '<tr><th scope="row"><span class="fiton-tier">' + esc(r.tier) + '</span>' +
           '<span class="fiton-sub">' + esc(r.grips) + '</span></th>' +
           '<td>' + fitTagHtml(r.tag) + '</td>' +
-          (grid.takesComp ? '<td>' + fitTagHtml(r.comp) + '</td>' : '') + '</tr>').join('') +
+          (grid.takesComp ? '<td>' + fitTagHtml(r.comp, r.tag) + '</td>' : '') + '</tr>').join('') +
       '</tbody></table>' +
       '<div class="fitguide-note">' +
         (grid.compSlide ? 'A comp slide carries its comp inside and takes no add-on comp. ' : '') +
@@ -1111,7 +1115,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.fiton { width: 100%; border-collapse: collapse; font-size: 13px; }' +
 '.fiton th, .fiton td { text-align: left; vertical-align: top; padding: 8px 8px 8px 0; border-bottom: 0.5px solid #ececec; }' +
 '.fiton thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; }' +
-'.fiton tbody th { font-weight: 600; color: #1a1a1a; }' +
+'.fiton tbody th { font-weight: 600; color: #1a1a1a; width: 38%; }' +
 '.fiton-tier { display: block; }' +
 '.fiton-sub { display: block; font-size: 11.5px; font-weight: 400; color: #888; margin-top: 2px; }' +
 '.fit-tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }' +

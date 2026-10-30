@@ -114,6 +114,11 @@ test('a slide page of every kind reproduces its matrix row, and a plain slide it
       assert.match(sec, /<th scope="col">With an add-on comp<\/th>/);
       assert.deepEqual(got.map((x) => x.cells[1]), MATRIX[key + '+comp'], key + ': with an add-on comp');
       assert.match(sec, /Comp flush \/ partially flush”/, 'the hedge is explained');
+      if (key === 'short/none') {
+        // a Short slide on a FUSE grip: same reason with or without a comp, said once
+        const fuseRow = sec.slice(sec.lastIndexOf('<tr><th scope="row">'));
+        assert.equal((fuseRow.match(/can’t cover a FUSE grip/g) || []).length, 1, 'one reason per row, not two');
+      }
     } else {
       assert.doesNotMatch(sec, /With an add-on comp/, key + ': a comp slide offers no add-on comp column');
       assert.ok(got.every((x) => x.cells.length === 1));
