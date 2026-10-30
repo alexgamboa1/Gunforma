@@ -43,10 +43,13 @@
 // pages gate on the platform and on the columns existing (null tiers fall
 // out as 'unconfirmed' here either way).
 //
-// Browser global, same split story as frame-fit: ONE file today (the Armory
-// and the catalog are the readers); a server copy with a parity test comes
-// with the product-page "Fits on" grids. scripts/slide-fit.test.mjs pins all
-// 30 cells of the signed-off matrix plus every label, colour and reason.
+// ONE file, and no server copy: the Armory and the catalog load it as a
+// browser global, and product-page.mjs's "Fits on" grids read and evaluate
+// this very file (netlify/functions/_slide-fit.mjs, shipped through
+// included_files) — Alex's ruling, "no second copy of the rule". So it must
+// stay a plain script that only touches the `global` it is handed.
+// scripts/slide-fit.test.mjs pins all 30 cells of the signed-off matrix plus
+// every label, colour and reason; scripts/fits-on.test.mjs pins the grids.
 //
 // Global: window.SlideFit = { tag, sortRank, TAGS, TIER_INDEX, TIER_LABEL }.
 (function (global) {

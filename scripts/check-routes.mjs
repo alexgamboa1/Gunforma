@@ -71,6 +71,7 @@ async function get(path, headers) {
     fnProducts: res.headers.get('x-field-note-products'),
     fnFits: res.headers.get('x-field-note-fits'),
     fitSection: res.headers.get('x-fit-section'),
+    fitsOn: res.headers.get('x-fits-on'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -1047,6 +1048,60 @@ for (const [label, path, want] of [
     ok(!r.body.includes('<div class="fit-group">Threaded</div>'), 'slide that takes no threaded barrel: lists no threaded barrel', slug);
   } else {
     note('no live slide with threaded_barrel_ok false; thread exclusion not exercised');
+  }
+}
+
+// ── P365 slides and grips say where a slide ends ("Fits on") ─────────────
+// product-page.mjs judges every cell with js/slide-fit.js, which it reads
+// from its own bundle (included_files) — so the one failure only the wire
+// can show is the rule missing from the deploy: x-fits-on: no-rule, and no
+// grid on any page. The cells themselves are pinned to the signed-off
+// matrix by scripts/fits-on.test.mjs; here every kind of P365 slide (one
+// per tier and comp style) and grip (one per tier, and every grip with no
+// tier) is fetched, and the served section must match the tier the
+// database holds. Parts are picked through PostgREST, so a part leaving
+// the catalog does not turn this red.
+{
+  console.log('\n── P365 slides and grips: "Fits on" grids');
+  const H = { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } };
+  const rest = async (q) => { const r = await fetch(`${SB_URL}/rest/v1/${q}`, H); return r.ok ? r.json() : null; };
+  const p365 = (row) => (row.p.product_platforms || []).some((pp) => pp.platforms && pp.platforms.slug === 'p365');
+  const PART = 'p:products!%s_product_id_fkey!inner(slug,is_discontinued,is_approved,product_platforms(platforms(slug)))';
+  const slides = await rest('slide_specs?select=fit_tier,comp_style,' + encodeURIComponent(PART.replace('%s', 'slide_specs')) + '&p.is_discontinued=is.false');
+  const grips = await rest('frame_specs?select=fit_tier,' + encodeURIComponent(PART.replace('%s', 'frame_specs')) + '&p.is_discontinued=is.false');
+  ok(Array.isArray(slides) && Array.isArray(grips), 'slide and grip tiers readable with the public key',
+    (slides || []).length + ' slides, ' + (grips || []).length + ' grips');
+  // One live, approved P365 part per kind, and every part with no tier.
+  const pick = (rows, keyOf) => {
+    const byKind = new Map();
+    for (const r of (rows || []).filter((r) => r.p.is_approved === true && p365(r)).sort((a, b) => (a.p.slug < b.p.slug ? -1 : 1))) {
+      const k = keyOf(r) ?? 'untiered:' + r.p.slug;
+      if (!byKind.has(k)) byKind.set(k, r);
+    }
+    return [...byKind.values()];
+  };
+  const tableRows = (body, title) => {
+    const i = body.indexOf('<div class="section-title">' + title + '</div>');
+    if (i === -1) return null;
+    const end = body.indexOf('<div class="section-title">', i + 10);
+    const sec = body.slice(i, end === -1 ? undefined : end);
+    return { sec, rows: (sec.match(/<tr><th scope="row">/g) || []).length };
+  };
+  const cases = [
+    ...pick(slides, (r) => (r.fit_tier ? r.fit_tier + '/' + (r.comp_style || 'unstated') : null)).map((r) => ({ r, seg: 'slides', title: 'Fits on', want: r.fit_tier ? 'tier:' + r.fit_tier + '/' + (r.comp_style || 'unstated') : 'unconfirmed', n: 3 })),
+    ...pick(grips, (r) => (r.fit_tier || null)).map((r) => ({ r, seg: 'frames', title: 'Slides on this grip', want: r.fit_tier ? 'tier:' + r.fit_tier : 'unconfirmed', n: 10 })),
+  ];
+  for (const c of cases) {
+    const path = '/parts/' + c.seg + '/' + c.r.p.slug;
+    const res = await get(path);
+    note('x-fits-on on ' + path, res.fitsOn);
+    ok(res.status === 200 && res.fitsOn === c.want, path + ': x-fits-on is the tier the database holds', res.fitsOn + ' (want ' + c.want + ')');
+    const t = tableRows(res.body, c.title);
+    if (c.want === 'unconfirmed') {
+      ok(!!t && t.rows === 0 && t.sec.includes('Fit not confirmed'), path + ': no tier reads "Fit not confirmed", not an empty grid', t ? t.rows + ' rows' : 'no section');
+    } else {
+      ok(!!t && t.rows === c.n, path + ': the grid is served', t ? t.rows + ' rows' : 'no section');
+    }
   }
 }
 

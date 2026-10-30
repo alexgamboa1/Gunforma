@@ -1383,6 +1383,7 @@ Registered today:
 | `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
+| `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a tier label showing inches; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
 | `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; and on the gallery, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub |
 
 This table is the full registry, not a sample. It read "Registered today:"
@@ -1978,13 +1979,30 @@ and `scripts/slide-fit.test.mjs` pins the signed-off 30-cell matrix
   `frame_specs.housing_class` keeps `fuse` for the aftermarket full-length
   modules: the class stays a grouping label; it no longer decides fit on
   the P365.
-- **Not done yet, deliberately:** the product-page "Fits on" grids (a slide
-  page listing grips by tier, a grip page listing which slides sit flush —
-  §4.4 of the ship prompt) are a follow-up PR: they touch
-  `product-page.mjs`, one of the two most crawled routes, need the server
-  copy + parity test, and until the migration AND backfill are live every
-  cell would read "Fit not confirmed". Same blast-radius reasoning as not
-  folding the nav into `product-page.mjs`.
+- **The product pages draw it, server-rendered** (2026-10-30, §4.4 of the
+  ship prompt). A P365 **slide** page has a **"Fits on"** grid: one row per
+  grip tier (Short / XMacro / FUSE, each with the grips it means, never
+  inches) with the slide's tag, plus a "With an add-on comp" column on a
+  plain slide only. A P365 **grip** page has **"Slides on this grip"**: the
+  ten slide setups of the signed-off matrix, in matrix order, each with its
+  tag (the two comp-slide kinds under their signed-off labels verbatim). A
+  part with no tier reads "Fit not confirmed" as one line, never a grid of
+  blanks; a P320 part gets no section (it keeps `FrameFit`). Both sit after
+  the buy rows, above the barrel/slide list.
+  - **There is no server copy of the rule.** `product-page.mjs` evaluates
+    `js/slide-fit.js` itself through `netlify/functions/_slide-fit.mjs`,
+    shipped by `included_files` (`[functions."product-page"]` in
+    `netlify.toml`) — Alex's call, "no second copy of the rule", in place
+    of the copy-plus-parity-test shape the other pairs use. So
+    `js/slide-fit.js` must stay a plain script that touches only the
+    `global` it is handed.
+  - **Observable**: `x-fits-on` is `n/a`, `no-spec`, `not-p365`,
+    `no-rule` (the rule file missing from the bundle), `failed`,
+    `unconfirmed`, or `tier:<tier>` (`tier:<tier>/<comp style>` on a
+    slide). `scripts/fits-on.test.mjs` holds every served cell to the
+    signed-off matrix, written out in labels; `scripts/check-routes.mjs`
+    fetches one live part of every kind and every untiered grip and
+    requires the header to match the database and the grid to be served.
 
 ### Grip-module fit in the catalog: `js/frame-fit.js`
 
