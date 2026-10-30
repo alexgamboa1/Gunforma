@@ -166,11 +166,24 @@ for (const file of ['netlify/functions/product-page.mjs', 'netlify/functions/par
   if (good) pass(`${file}: bar and menu carry the shape`);
 }
 
-// ── the dropdown's CSS rides with every styled menu ───────────────────────
+// ── the dropdown's CSS rides with every styled menu, byte for byte ────────
+// `display: block` on the links is load-bearing, not styling: the flat menu
+// links are flex children (blockified), the dropdown's are not, so without
+// it they flow inline and overlap — found on the first preview walkthrough.
+const CSS_RULES = [
+  '.nav-menu .nav-sub summary { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; cursor: pointer; list-style: none; border-bottom: 0.5px solid #1a1b1e; }',
+  '.nav-menu .nav-sub summary::-webkit-details-marker { display: none; }',
+  '.nav-menu .nav-sub summary::after { content: " ▾"; color: #6a6b6e; }',
+  '.nav-menu .nav-sub[open] summary::after { content: " ▴"; }',
+  '.nav-menu .nav-sub a { display: block; padding-left: 44px; }',
+];
 for (const file of CSS_FILES) {
-  if (!read(file).includes('.nav-menu .nav-sub summary {')) fail(`${file}: the .nav-sub CSS block is missing — the dropdown renders as an unstyled browser default`);
+  const t = read(file);
+  for (const rule of CSS_RULES) {
+    if (!t.includes(rule)) fail(`${file}: .nav-sub CSS rule missing or drifted: ${rule.slice(0, 40)}…`);
+  }
 }
-pass('dropdown CSS present in every file that styles the menu (or failures above name them)');
+pass('dropdown CSS block identical in every file that styles the menu (or failures above name them)');
 
 if (failures) {
   console.error('\n' + failures + ' nav failure(s). Every nav copy must carry Home/Builds/Parts Catalog/Armory on the bar and the "Your P365" GUN_HUBS dropdown in the hamburger — see scripts/check-nav.mjs header.');
