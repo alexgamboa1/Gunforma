@@ -153,7 +153,9 @@ ok(locs.every((u) => u.startsWith(SITE + '/')), 'every URL is an apex https://gu
 // Deleting an entry from this list puts that URL back under the guard — which
 // is what should happen when the Armory is un-parked (see claude/loadouts-spec.md).
 const RETIRED = new Set([
-  '/gunforma-armory.html',  // PR #88 — Armory parked: no nav, noindex, out of the sitemap
+  // /gunforma-armory.html was here from PR #88 (Armory parked) until
+  // 2026-10-30, when the launch lifted its noindex and put it back in
+  // sitemap.mjs's STATIC_PATHS — so it is under the guard again.
   // 2026-10-22 — the legal pages are deliberately not submitted: a sitemap
   // says what we want indexed, and nobody searches this site for its terms
   // of service. Still served, still indexable, linked from every footer.
