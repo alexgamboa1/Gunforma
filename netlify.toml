@@ -485,6 +485,18 @@
   status = 301
   force = true
 
+# The ARC Reactor 365F is a FUSE slide and was slugged ...-p365-xmacro; the
+# fitment-tiers migration (supabase/migrations/20261030013433_fitment_tiers.sql)
+# renames the slug, this sends the old address to the new one. Same placement
+# rule: an exact path above the /parts/* rewrite; the pair is asserted in
+# scripts/check-routes.mjs. (Not in check-sitemap's RETIRED: the part postdates
+# the static-sitemap baseline that list pins.)
+[[redirects]]
+  from = "/parts/slides/arc-division-reactor-365f-p365-xmacro"
+  to = "/parts/slides/arc-division-reactor-365f-p365-fuse"
+  status = 301
+  force = true
+
 # Per-product pages, server-rendered so crawlers see real content instead of
 # the "Loading parts…" shell the client-side catalog shows before Supabase
 # resolves. :splat carries "category/slug" (or just "slug" — the function

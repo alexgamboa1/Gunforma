@@ -73,6 +73,7 @@ check "listing rules pinned"       scripts/listing-rules.test.mjs
 check "maker-link copies agree"    scripts/maker-link.test.mjs
 check "variant swatch copies agree" scripts/variant-swatch.test.mjs
 check "grip-module fit verdicts"    scripts/frame-fit.test.mjs
+check "slide-on-grip fit matrix"    scripts/slide-fit.test.mjs
 check "product display names"      scripts/display-name.test.mjs
 check "names go through the helper" scripts/check-display-name.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs

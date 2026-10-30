@@ -144,6 +144,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .picked-remove { flex-shrink: 0; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; cursor: pointer; color: #888; font-size: 10.5px; font-weight: 700; padding: 5px 10px; font-family: inherit; transition: all 0.15s; }
 .picked-remove:hover { background: #fde8e2; color: #c25d3a; border-color: #f9c4b6; }
 
+/* FIT TAGS — js/slide-fit.js. Colour names come from the module: green is a
+   confirmed flush fit, amber is "needs comp" (saveable only once resolved),
+   red flags "won't fit" on a disabled card, muted is "fit not confirmed". */
+.fit-tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 10px; white-space: nowrap; }
+.fit-tag.green { background: #e7f6ee; color: #1e7a4d; border: 0.5px solid #9edbbb; }
+.fit-tag.neutral { background: #f0f1f3; color: #555; border: 0.5px solid #d9dbdf; }
+.fit-tag.amber { background: #fdf3e2; color: #8a6d3b; border: 0.5px solid #f3d9a8; }
+.fit-tag.red { background: #fdeae4; color: #b24a2a; border: 0.5px solid #f3bfae; }
+.fit-tag.muted { background: #f4f3ee; color: #999; border: 0.5px solid #e5e2d8; }
+.part-card-tags { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.part-card.wont-fit { opacity: 0.65; }
+.part-card.wont-fit:hover { border-color: #e5e5e5; box-shadow: none; }
+.part-card-btn.add:disabled { background: #cfd8e0; border-color: #cfd8e0; cursor: default; }
+.part-card-reason { font-size: 10px; color: #b24a2a; line-height: 1.35; }
+.part-card-note { font-size: 10px; color: #8a6d3b; line-height: 1.35; }
+.part-card-badge { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1e7a4d; background: #e7f6ee; border: 0.5px solid #9edbbb; border-radius: 3px; padding: 1px 6px; }
+.picked-fit { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.picked-fit-reason { font-size: 11px; color: #8a6d3b; line-height: 1.4; }
+.slot.comp-needed { background: #fdf8ec; border-radius: 6px; padding: 10px; margin-top: 8px; border-top: none; }
+
 /* BANNERS */
 .note-banner { display: flex; gap: 8px; align-items: flex-start; font-size: 11.5px; line-height: 1.45; border-radius: 4px; padding: 8px 10px; margin-top: 8px; }
 .note-banner.info { background: #eaf4fc; border: 0.5px solid #c3def4; color: #1d5f94; }
@@ -269,6 +289,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
 <script src="js/frame-fit.js"></script>
+<script src="js/slide-fit.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
@@ -287,7 +308,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 //             (unless comes_with_barrel)
 //   Rule 4/5  comp section hidden on integrated-comp slides and ported barrels
 //   Rule 6    frames filtered by the chosen model's housing class (FrameFit,
-//             which carries the FUSE exception)
+//             which carries the FUSE exception) — P320 ONLY since the 2026-10-29
+//             fitment model. On the P365 the model PREFILLS and never filters:
+//             every grip stays listed, tagged by js/slide-fit.js against the
+//             effective slide (the picked one, or the model's stock slide).
+//             Until the fit-tier migration is applied the columns don't exist,
+//             loadFitTiers() reports unsupported, and Rule 6 runs on the P365
+//             exactly as before — the same dark-until-the-column-exists shape
+//             as js/gun-model.js.
 //   Rule 7    everything else is platform-universal
 //   Rule 8    magwells filtered by magwell_frame_requirements whitelist
 // plus slide_specs.threaded_barrel_ok === false excludes threaded barrels.
@@ -302,6 +330,19 @@ var PRODUCTS = [], PRODUCTS_BY_ID = {};
 var SPEC = { slide: {}, barrel: {}, compensator: {}, frame: {} };
 var BARREL_LOCKS = {};              // barrel pid -> [{slide, note}]
 var MAGWELL_FITS = {};              // magwell pid -> [{frame, note}]
+
+// The 2026-10-29 fitment model's columns, read in queries of their OWN so a
+// database that predates the migration fails these four reads and nothing
+// else — supported flips false and the page behaves exactly as it did the
+// day before (see Rule 6 above). Never add these columns to loadAll()'s main
+// selects: a column named there before it exists fails the whole load.
+var FIT = {
+  supported: null,   // null = not probed; then true/false for good
+  frame: {},         // product id -> { fit_tier }
+  slide: {},         // product id -> { fit_tier, comp_style, includes_barrel }
+  comp: {},          // product id -> { fit_result }
+  gun: {},           // guns id   -> { slide_fit_tier, slide_comp_style, grip_fit_tier }
+};
 
 // Categories that get a dropdown, in render order, grouped like the builder
 // pages. Derived from BuildCategories so the taxonomy lives once; only
@@ -399,8 +440,33 @@ async function loadAll() {
       .push({ frame: row.frame_product_id, note: row.compatibility_note || '' });
   });
 
+  await loadFitTiers();
   renderPlatformRow();
   restoreDraft();
+}
+
+// Probe-and-load for the fitment-tier columns, all four in one round so one
+// answer decides the mode. Any error — 42703 before the migration, or a
+// plain network failure — means "not there": today's behaviour, no tags.
+async function loadFitTiers() {
+  var r;
+  try {
+    r = await Promise.all([
+      sb.from('frame_specs').select('product_id, fit_tier'),
+      sb.from('slide_specs').select('product_id, fit_tier, comp_style, includes_barrel'),
+      sb.from('compensator_specs').select('product_id, fit_result'),
+      sb.from('guns').select('id, grip_fit_tier, slide_fit_tier, slide_comp_style'),
+    ]);
+  } catch (e) {
+    FIT.supported = false;
+    return;
+  }
+  if (r.some(function (res) { return res.error; })) { FIT.supported = false; return; }
+  FIT.supported = true;
+  (r[0].data || []).forEach(function (row) { FIT.frame[row.product_id] = row; });
+  (r[1].data || []).forEach(function (row) { FIT.slide[row.product_id] = row; });
+  (r[2].data || []).forEach(function (row) { FIT.comp[row.product_id] = row; });
+  (r[3].data || []).forEach(function (row) { FIT.gun[row.id] = row; });
 }
 
 // ─── COMPATIBILITY ENGINE ──────────────────────────────────────────────────
@@ -414,6 +480,57 @@ function pickedSpec(cat) {
 }
 function isThreadedType(t) { return t === 'threaded' || t === 'threaded-and-ported'; }
 
+// ── FIT TIERS (P365 only, dark until the migration) ────────────────────────
+function tierMode() {
+  return FIT.supported === true && STATE.platform && STATE.platform.slug === 'p365';
+}
+// The slide whose tier the grips are judged against: the picked slide, or the
+// model's stock slide (guns.slide_fit_tier / slide_comp_style — the prefill).
+// No model and no slide -> null -> no tags anywhere.
+function effectiveSlideFit() {
+  var slide = pickedProduct('slide');
+  if (slide) return FIT.slide[slide.id] || { fit_tier: null, comp_style: null };
+  if (STATE.gun) {
+    var g = FIT.gun[STATE.gun.id];
+    if (g && (g.slide_fit_tier || g.slide_comp_style)) {
+      return { fit_tier: g.slide_fit_tier, comp_style: g.slide_comp_style, stock: true };
+    }
+  }
+  return null;
+}
+function pickedCompFit() {
+  var comp = pickedProduct('compensator');
+  return comp ? (FIT.comp[comp.id] || { fit_result: null }) : null;
+}
+// A grip's tag against the effective slide (and the picked add-on comp), or
+// null when there is nothing to judge against.
+function gripTagFor(frameProduct) {
+  if (!tierMode()) return null;
+  var es = effectiveSlideFit();
+  if (!es) return null;
+  return window.SlideFit.tag(es, FIT.frame[frameProduct.id] || { fit_tier: null }, pickedCompFit());
+}
+// The reverse direction, so picking grip-first works too: a slide's tag
+// against the PICKED grip, or null when no grip is picked.
+function slideTagFor(slideProduct) {
+  if (!tierMode()) return null;
+  var grip = pickedProduct('frame');
+  if (!grip) return null;
+  return window.SlideFit.tag(FIT.slide[slideProduct.id] || { fit_tier: null },
+                             FIT.frame[grip.id] || { fit_tier: null }, pickedCompFit());
+}
+// The current slide/grip pair's tag — the Save gate (needs_comp holds Save)
+// and the picked-grip card both read it.
+function currentPairTag() {
+  var grip = pickedProduct('frame');
+  if (!grip) return null;
+  return gripTagFor(grip);
+}
+function fitTagHtml(tag) {
+  if (!tag) return '';
+  return '<span class="fit-tag ' + tag.color + '">' + esc(tag.label) + '</span>';
+}
+
 function productsForPlatform() {
   if (!STATE.platform) return [];
   return PRODUCTS.filter(function (p) { return p.platform_ids.indexOf(STATE.platform.id) !== -1; });
@@ -422,12 +539,23 @@ function productsForPlatform() {
 // The compensator category has three states: open, filtered, or hidden with a
 // stated reason (Rules 4 and 5). null reason = show the dropdown.
 function compHiddenReason() {
+  // comp_style is the decider once the fitment columns exist (neither comp
+  // style can take an add-on comp — Rule 4); integrated_comp is the same
+  // fact in the pre-migration shape, kept as the fallback.
+  var slide = pickedProduct('slide');
   var slideSpec = pickedSpec('slide');
-  if (slideSpec && slideSpec.integrated_comp === true) return 'Your slide has a built-in compensator.';
+  var slideStyle = slide && FIT.supported === true ? (FIT.slide[slide.id] || {}).comp_style : null;
+  if (slideStyle ? slideStyle !== 'none' : (slideSpec && slideSpec.integrated_comp === true)) {
+    return 'Your slide has a built-in compensator.';
+  }
   var barrelSpec = pickedSpec('barrel');
   if (barrelSpec && barrelSpec.barrel_type === 'ported') return 'Ported barrels already reduce muzzle flip — no separate comp needed.';
-  if (STATE.gun && STATE.gun.integrated_comp === true && !pickedProduct('slide')) {
-    return 'The ' + STATE.gun.name + '’s factory slide has a built-in compensator. Pick an aftermarket slide if you want a separate comp.';
+  if (STATE.gun && !slide) {
+    var gunFit = FIT.supported === true ? FIT.gun[STATE.gun.id] : null;
+    var stockStyle = gunFit ? gunFit.slide_comp_style : null;
+    if (stockStyle ? stockStyle !== 'none' : STATE.gun.integrated_comp === true) {
+      return 'The ' + STATE.gun.name + '’s factory slide has a built-in compensator. Pick an aftermarket slide if you want a separate comp.';
+    }
   }
   return null;
 }
@@ -438,6 +566,10 @@ function availableFor(cat) {
 
   if (cat === 'barrel') {
     var slide = pickedProduct('slide'), slideSpec = pickedSpec('slide');
+    // An ARC Reactor kit ships its own chunk-port barrel: the slot says so
+    // and offers nothing (slotHtml), and a barrel picked before the slide is
+    // reconciled away rather than priced twice.
+    if (tierMode() && slide && (FIT.slide[slide.id] || {}).includes_barrel === true) return [];
     var comp = pickedProduct('compensator'), compSpec = comp ? SPEC.compensator[comp.id] : null;
     return all.filter(function (b) {
       var bs = SPEC.barrel[b.id];
@@ -485,6 +617,12 @@ function availableFor(cat) {
   }
 
   if (cat === 'frame') {
+    // The 2026-10-29 fitment model: on the P365 the model PREFILLS, never
+    // filters — every grip is listed, tagged by slide-fit tier, and a
+    // wont_fit option is shown disabled with its reason (slotHtml). Rule 6's
+    // housing-class filter stays for the P320, and for a database that
+    // predates the fit-tier migration.
+    if (tierMode()) return all;
     if (!STATE.gun) return all;                                                                    // Rule 6: no model, no filter
     var platformGuns = GUNS.filter(function (g) { return g.platform_id === STATE.platform.id; });
     return all.filter(function (f) {
@@ -523,6 +661,22 @@ function reconcilePicks() {
         changed = true;
       }
     });
+    // Tier mode lists every grip, so availableFor never drops one — but a
+    // PICKED slide and grip that can no longer coexist still part ways: the
+    // grip goes, with the toast. Only a picked slide does this; changing the
+    // model never drops a grip on its own (the stock slide only tags).
+    if (tierMode()) {
+      var slide = pickedProduct('slide'), gripPick = pickedProduct('frame');
+      if (slide && gripPick) {
+        var t = window.SlideFit.tag(FIT.slide[slide.id] || { fit_tier: null },
+                                    FIT.frame[gripPick.id] || { fit_tier: null }, pickedCompFit());
+        if (t.key === 'wont_fit') {
+          removed.push(displayProductName({ brand: gripPick.brand, name: gripPick.name }));
+          delete STATE.picks.frame;
+          changed = true;
+        }
+      }
+    }
   }
   if (removed.length) {
     toast('Removed ' + removed.join(', ') + ' — not compatible with your new pick.');
@@ -566,9 +720,14 @@ function renderModelRow() {
     reconcilePicks();
     renderAll();
   };
-  note.textContent = STATE.gun
-    ? 'Grip modules are filtered to ones that fit the ' + STATE.gun.name + '.'
-    : 'Pick a model to filter grip modules to your gun — or build free-form.';
+  // Tier mode: the model prefills, never filters (2026-10-29 fitment model).
+  note.textContent = tierMode()
+    ? (STATE.gun
+        ? 'The ' + STATE.gun.name + ' sets your stock slide and grip — every part stays listed, tagged by how it fits.'
+        : 'Pick a model to tag every grip against its stock slide — or build free-form.')
+    : (STATE.gun
+        ? 'Grip modules are filtered to ones that fit the ' + STATE.gun.name + '.'
+        : 'Pick a model to filter grip modules to your gun — or build free-form.');
 }
 
 function selectPlatform(id) {
@@ -587,7 +746,12 @@ function selectPlatform(id) {
 // One card per part, catalog-style: the photo IS the pitch. A part with no
 // photo on its default variant gets its colour swatch (variant-swatch.js) —
 // never another variant's photo as a stand-in (loadouts-spec §9).
-function partCardHtml(cat, p) {
+// meta (optional, tier mode): { tag, recommended, note } — the fit tag chip,
+// the "Recommended" badge on a comp slide's own chunk barrel, and the
+// threaded-barrel note beside it. A wont_fit tag disables the card: shown,
+// never hidden, with the reason — a disappeared option is the old model's bug.
+function partCardHtml(cat, p, meta) {
+  meta = meta || {};
   var dv = p.defaultVariant;
   var img = dv && dv.primary_image_url;
   var dispName = displayProductName({ brand: p.brand, name: p.name });
@@ -595,23 +759,61 @@ function partCardHtml(cat, p) {
     ? '<img src="' + escAttr(img) + '" alt="' + escAttr(dispName) + '" loading="lazy" />'
     : '<div class="part-card-nophoto">' + (window.variantMediaHtml ? window.variantMediaHtml(dv || {}) : '') + '</div>';
   var price = dv && dv.msrp != null ? money(dv.msrp) : null;
-  return '<div class="part-card" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
+  var disabled = !!(meta.tag && !meta.tag.selectable);
+  return '<div class="part-card' + (disabled ? ' wont-fit' : '') + '" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
     '<div class="part-card-photo">' + photo + '</div>' +
     '<div class="part-card-body">' +
       '<span class="part-card-brand">' + esc(p.brand) + '</span>' +
       '<span class="part-card-name">' + esc(p.name) + '</span>' +
+      (meta.tag || meta.recommended
+        ? '<span class="part-card-tags">' + (meta.recommended ? '<span class="part-card-badge">Recommended</span> ' : '') + fitTagHtml(meta.tag) + '</span>'
+        : '') +
+      (disabled && meta.tag.reason ? '<span class="part-card-reason">' + esc(meta.tag.reason) + '</span>' : '') +
+      (meta.note ? '<span class="part-card-note">' + esc(meta.note) + '</span>' : '') +
       (p.variants.length > 1 ? '<span class="part-card-variants">' + p.variants.length + ' colors / options</span>' : '') +
       (price ? '<span class="part-card-price">' + price + '</span>' : '<span class="part-card-price na">Price n/a</span>') +
     '</div>' +
-    '<div class="part-card-actions"><button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '">Add to build</button></div>' +
+    '<div class="part-card-actions"><button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '"' + (disabled ? ' disabled' : '') + '>' + (disabled ? 'Won’t fit' : 'Add to build') + '</button></div>' +
   '</div>';
+}
+
+// What the picker shows about one option in tier mode: its fit tag (grips
+// against the effective slide; slides against the picked grip), and on a
+// ported-barrel comp slide which barrel is the maker's own chunk barrel.
+// FDEZ says threaded barrels work — they stay listed — but the slide's comp
+// ports only work with the ported barrel, so that one is badged and sorts
+// first and the threaded ones carry the note.
+function cardMeta(cat, p) {
+  if (!tierMode()) return null;
+  if (cat === 'frame') {
+    var t = gripTagFor(p);
+    return t ? { tag: t } : null;
+  }
+  if (cat === 'slide') {
+    var ts = slideTagFor(p);
+    return ts ? { tag: ts } : null;
+  }
+  if (cat === 'barrel') {
+    var slide = pickedProduct('slide');
+    if (!slide || (FIT.slide[slide.id] || {}).comp_style !== 'ported_barrel') return null;
+    var locks = BARREL_LOCKS[p.id];
+    if (locks && locks.some(function (l) { return l.slide === slide.id; })) return { recommended: true };
+    var bs = SPEC.barrel[p.id];
+    if (bs && isThreadedType(bs.barrel_type)) {
+      return { note: 'Fits, but the slide’s comp ports only work with the ported barrel — pick this for a suppressor or thread protector.' };
+    }
+    return null;
+  }
+  return null;
 }
 
 function slotHtml(slot) {
   var cat = slot.cat;
   var picked = pickedProduct(cat);
   var isOpen = STATE.openCat === cat;
-  var html = '<div class="slot' + (isOpen ? ' open' : '') + '" data-cat="' + cat + '">';
+  var pairTag = cat === 'compensator' || cat === 'frame' ? currentPairTag() : null;
+  var needsComp = cat === 'compensator' && pairTag && pairTag.key === 'needs_comp';
+  var html = '<div class="slot' + (isOpen ? ' open' : '') + (needsComp ? ' comp-needed' : '') + '" data-cat="' + cat + '">';
 
   if (cat === 'compensator') {
     var reason = compHiddenReason();
@@ -622,13 +824,42 @@ function slotHtml(slot) {
     }
   }
 
+  // An ARC Reactor kit: the barrel is in the box, so the slot says that and
+  // offers nothing — not required to save, and never priced twice.
+  if (cat === 'barrel' && tierMode()) {
+    var pickedSlide = pickedProduct('slide');
+    if (pickedSlide && (FIT.slide[pickedSlide.id] || {}).includes_barrel === true) {
+      html += '<div class="slot-head"><div class="slot-label">' + esc(slot.label) + '</div></div>';
+      html += '<div class="note-banner info">Barrel included with this kit.</div></div>';
+      return html;
+    }
+  }
+
   var options = availableFor(cat);
+  var metas = null;
+  if (tierMode() && (cat === 'frame' || cat === 'slide' || cat === 'barrel')) {
+    metas = {};
+    options.forEach(function (p) { metas[p.id] = cardMeta(cat, p); });
+    // Sort: Flush first, Won't fit last (SlideFit.sortRank); a comp slide's
+    // own chunk barrel ("Recommended") first. Array.prototype.sort is stable,
+    // so ties keep the catalog's order.
+    options = options.slice().sort(function (a, b) {
+      var ma = metas[a.id] || {}, mb = metas[b.id] || {};
+      var ra = ma.recommended ? -1 : (ma.tag ? window.SlideFit.sortRank(ma.tag.key) : 0);
+      var rb = mb.recommended ? -1 : (mb.tag ? window.SlideFit.sortRank(mb.tag.key) : 0);
+      return ra - rb;
+    });
+  }
   html += '<div class="slot-head">' +
-    '<div class="slot-label">' + esc(slot.label) + ' <span class="slot-count" style="color:#c5c2b8;font-weight:500;">· ' + options.length + ' compatible</span></div>' +
+    '<div class="slot-label">' + esc(slot.label) + ' <span class="slot-count" style="color:#c5c2b8;font-weight:500;">· ' + options.length + ' ' + (cat === 'frame' && tierMode() ? 'listed' : 'compatible') + '</span></div>' +
     (options.length || isOpen
       ? '<button type="button" class="slot-toggle" data-toggle="' + cat + '" aria-expanded="' + isOpen + '">' + (isOpen ? 'Close' : (picked ? 'Change' : 'Choose')) + '</button>'
       : '') +
     '</div>';
+
+  if (needsComp && !picked) {
+    html += '<div class="note-banner warn">Your grip runs past the slide — add a comp here to cover it.</div>';
+  }
 
   if (picked) {
     html += pickedHtml(cat, picked);
@@ -641,7 +872,7 @@ function slotHtml(slot) {
       (options.length > 8
         ? '<div class="picker-tools"><input type="text" class="picker-search" data-search-input="' + cat + '" placeholder="Filter by brand or name…" aria-label="Filter parts" /></div>'
         : '') +
-      '<div class="part-grid">' + options.map(function (p) { return partCardHtml(cat, p); }).join('') + '</div>' +
+      '<div class="part-grid">' + options.map(function (p) { return partCardHtml(cat, p, metas ? metas[p.id] : null); }).join('') + '</div>' +
     '</div>';
   }
 
@@ -710,11 +941,23 @@ function pickedHtml(cat, p) {
       }).join('') + '</select></div>';
   }
 
+  // The picked grip wears the pair's tag (and its reason, when it has one):
+  // "Needs comp" is what holds Save, and the card is where it says why.
+  var tagRow = '';
+  if (cat === 'frame') {
+    var t = gripTagFor(p);
+    if (t) {
+      tagRow = '<span class="picked-fit">' + fitTagHtml(t) +
+        (t.reason ? ' <span class="picked-fit-reason">' + esc(t.reason) + '</span>' : '') + '</span>';
+    }
+  }
+
   return '<div class="picked">' +
     '<div class="picked-thumb">' + thumb + '</div>' +
     '<div class="picked-body">' +
       '<span class="picked-brand">' + esc(p.brand) + '</span>' +
       '<span class="picked-name">' + esc(p.name) + '</span>' +
+      tagRow +
       variantRow +
       (price != null ? '<span class="picked-price">' + money(price) + '</span>' : '<span class="picked-price na">Price n/a</span>') +
     '</div>' +
@@ -814,9 +1057,15 @@ function renderSidebar() {
   titleEl.hidden = !rows.length;
   titleEl.value = STATE.title;
 
+  // "Needs comp" holds Save until a comp (or a longer slide) resolves it —
+  // the one tag that is selectable but not saveable.
+  var pairTag = currentPairTag();
+  var needsComp = !!(pairTag && pairTag.key === 'needs_comp');
   var btn = document.getElementById('btn-save');
-  btn.disabled = !rows.length;
-  btn.textContent = STATE.savedId ? 'Update your Gun Guide →' : 'Save to Gun Guides →';
+  btn.disabled = !rows.length || needsComp;
+  btn.textContent = needsComp
+    ? 'Add a comp to finish this build'
+    : (STATE.savedId ? 'Update your Gun Guide →' : 'Save to Gun Guides →');
 }
 
 function renderAll() {
@@ -877,6 +1126,8 @@ function defaultBuildName() {
 async function saveGuide() {
   var rows = buildRows();
   if (!rows.length || !STATE.platform) return;
+  var pairTag = currentPairTag();
+  if (pairTag && pairTag.key === 'needs_comp') return;   // the button is disabled; belt and braces
 
   if (!CURRENT_USER) {
     persistDraft();
