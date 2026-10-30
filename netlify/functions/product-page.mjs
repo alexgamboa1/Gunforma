@@ -39,7 +39,7 @@ import { GUIDE_PAGES, GUIDE_FAMILIES, guidePath, hubPath, GUN_META, GUN_HUBS, is
 // P365" hamburger dropdown, built from GUN_HUBS in _page-chrome.mjs. The
 // rest of the nav deliberately stays this file's own — see CLAUDE.md, "The
 // nav exists in 16 places".
-import { navSubHtml } from './_page-chrome.mjs';
+import { navSubHtml, navScript } from './_page-chrome.mjs';
 // Stale-price rule and listing sort. These moved to _listing-rules.mjs when
 // guide-page.mjs arrived needing the same rules — two server renderers, one
 // copy, same reasoning as _variant-label.mjs. The browser copies
@@ -1083,25 +1083,10 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   '<span>&copy; 2026 Gunforma &middot; All rights reserved</span>' +
   '<span><a href="gunforma-legal.html#legal">Legal</a> &middot; <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> &middot; <a href="gunforma-legal.html#contact">Contact</a></span>' +
 '</div>' +
-// This page ships no client JS at all -- unlike parts-index.mjs it does not
-// load supabase-client.js or nav.js -- so the hamburger needs its own toggle
-// or the nav links are simply unreachable below 820px. Kept inline and
-// dependency-free, in keeping with the rest of the function.
-//
-// The account icon here is a plain link to sign-in: with no session script on
-// the page there is nothing to make it session-aware, which is the same reason
-// the "Sign in" button beside it is already static. Both are consistent with
-// each other; parts-index.mjs, which does load nav.js, gets the live version.
-'<script>(function(){' +
-  'var t=document.querySelector(".nav-toggle"),m=document.querySelector(".nav-menu");' +
-  'if(!t||!m)return;' +
-  'function c(){m.classList.remove("open");t.setAttribute("aria-expanded","false");}' +
-  't.addEventListener("click",function(){' +
-    'var o=m.classList.toggle("open");t.setAttribute("aria-expanded",o?"true":"false");' +
-  '});' +
-  'm.addEventListener("click",function(e){if(e.target.closest("a"))c();});' +
-  'window.addEventListener("resize",function(){if(window.innerWidth>820)c();});' +
-'})();</script>' +
+// The nav above is the signed-out one for everyone (cacheable, what a
+// crawler sees); navScript() loads nav.js, which repaints it for a
+// signed-in visitor and wires the hamburger. See _page-chrome.mjs.
+navScript() +
 ANALYTICS_SNIPPET + '</body></html>';
 }
 

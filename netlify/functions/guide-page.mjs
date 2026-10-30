@@ -492,11 +492,9 @@ function renderPage({ family, familyMeta, gun, content, cuts, vocab, optics, bui
     '<span>Last reviewed ' + esc(updated) + '</span></div>' +
 '</div>' +
   footerHtml() +
-// Same dependency-free hamburger as product-page.mjs, same reason: this page
-// ships no client JS, so without it the nav is unreachable below 820px.
-  // navScript() is that inline toggle, byte for byte, now shared with
-  // gun-hub.mjs through _page-chrome.mjs. The analytics tag closes the
-  // document, as on every HTML-emitting function.
+  // navScript() loads nav.js: the hamburger, and the signed-in repaint of
+  // the nav (see _page-chrome.mjs). The analytics tag closes the document,
+  // as on every HTML-emitting function.
   navScript() + ANALYTICS_SNIPPET + '</body></html>';
 }
 
