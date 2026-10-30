@@ -51,6 +51,12 @@ const RULES = [
   // inside loadFor() and the buy rows silently render empty — the exact
   // shape the rule above describes.
   { global: 'makerLink',    defines: 'js/maker-link.js',    consumers: ['js/affiliate.js'] },
+  // The option-price headline rule. affiliate.js and part-picker.js read
+  // window.optionHeadline at call time (a maker-only buy box; the builder's
+  // picker cards and selected rows); the catalog, the Armory, the profile and
+  // the build page call it inline. A page missing the tag throws inside the render
+  // and the buy box or price silently stays empty.
+  { global: 'optionHeadline', defines: 'js/option-price.js', consumers: ['js/affiliate.js', 'js/part-picker.js'] },
   // What a product is called. part-picker.js reads window.displayProductName
   // at render time for alt text and aria-labels; the build page and the
   // catalog call it inline from their card renderers. A page that misses

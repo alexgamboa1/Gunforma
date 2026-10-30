@@ -678,6 +678,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
      grip. Same three readers as frame-fit, through slideFitTag(). -->
 <script src="js/slide-fit.js"></script>
 <script src="js/display-name.js"></script>
+<script src="js/option-price.js"></script>
 <script src="js/affiliate.js"></script>
 <script>
 // ============================================================
@@ -908,8 +909,8 @@ async function loadEverything() {
   PRODUCTS = (prodRes.data || []).map(function (r) {
     var variants = r.product_variants || [];
     var dv = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
-    var price = dv && dv.msrp != null ? Number(dv.msrp)
-              : (r.lowest_price != null ? Number(r.lowest_price) : null);
+    var priceHeadline = cardHeadline(variants, r.lowest_price);
+    var price = priceHeadline.amount;
     var product = {
       id: r.id,
       slug: r.slug || null,
@@ -919,6 +920,7 @@ async function loadEverything() {
       brand_id: r.brand_id,
       brand: (r.brands && r.brands.name) || 'Unknown',
       price: price,
+      priceHeadline: priceHeadline,
       // The PRODUCT's picture, for the grid card: the default variant's own
       // photo, else the first variant that has one. A product-level image is
       // not a variant choice; the detail panel's hero below never uses it
@@ -1909,11 +1911,31 @@ function swatchFallbackHtml(color, brand, cls) {
          ' role="img" aria-label="' + escAttr(color || 'Colour') + '"></span></div>';
 }
 
+// A card's price is the panel's opening headline (js/option-price.js, nothing
+// selected): "From" the lowest priced option when there are several, the one
+// option's price when there is one. Sorting and the price filter read the
+// same number the card prints. A product with no option rows keeps its
+// product-level lowest_price.
+function cardHeadline(variants, lowestPrice) {
+  if (variants && variants.length) {
+    return window.optionHeadline(variants.map(function (v) { return { id: v.id, msrp: v.msrp }; }), null);
+  }
+  return lowestPrice != null ? { kind: 'option', amount: Number(lowestPrice) } : { kind: 'check', amount: null };
+}
+
 function renderCard(r) {
   var isFav = FAVORITES.has(r.id);
-  var priceHtml = r.price != null
-    ? '<div class="part-card-price">$' + r.price.toFixed(r.price < 100 ? 2 : 0) + '</div>'
-    : '<div class="part-card-price na">Price N/A</div>';
+  // Compact affiliate hero — real street price + retailer + Buy button.
+  // Rendered on top of any card that has affiliate data. Skipped silently
+  // when the product isn't listed anywhere (no dead untracked link).
+  var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
+  // Beside a live retailer price the card's own number is named for what it
+  // is — the options' MSRP, the maker's list price ("MSRP from $X") — so the
+  // retailer's number reads as the deal. Only an option-row price is MSRP;
+  // the no-options fallback (lowest_price) is a repricing-job number and
+  // keeps no label.
+  var priceHtml = '<div class="part-card-price' + (r.price != null ? '' : ' na') + '">' +
+    esc(window.optionPriceText(r.priceHeadline, { msrp: !!affHtml && !!(r.variants && r.variants.length) })) + '</div>';
   // A product with no photo of any variant, or a dead image URL, shows the
   // default variant's colour swatch — never an empty "No photo" box.
   var cardDv = (r.variants || []).find(function (v) { return v.is_default; }) || (r.variants || [])[0] || null;
@@ -1925,10 +1947,6 @@ function renderCard(r) {
   // Whole card is clickable; the heart button stopPropagation's so favoriting
   // doesn't open the detail panel. openDetail is delegated (see below) rather
   // than inline so we don't accidentally trigger on the fav-btn click.
-  // Compact affiliate hero — real street price + retailer + Buy button.
-  // Rendered on top of any card that has affiliate data. Skipped silently
-  // when the product isn't listed anywhere (no dead untracked link).
-  var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
   // Colour count on the card. Without this the grid gives no hint that a
   // product has twelve finishes behind it, so nobody opens the panel to look.
   // Counts DISTINCT colours, not variants: the 311 has 12 variants across only
@@ -1979,7 +1997,10 @@ document.getElementById('grid-container').addEventListener('click', function (e)
 });
 
 // ─── DETAIL SLIDE-OVER ────────────────────────────────────
-var DETAIL_STATE = { productId: null, activeVariantIdx: 0 };
+// activeVariantIdx null = nothing selected: the panel opens that way, so its
+// price reads "From $<lowest option>" until an option is picked
+// (js/option-price.js).
+var DETAIL_STATE = { productId: null, activeVariantIdx: null };
 
 // Live variants for a product, default first then alphabetical by label.
 // Deliberately the same ordering js/part-picker.js applies on the build side:
@@ -2000,7 +2021,7 @@ function openDetail(productId) {
   var p = PRODUCTS.find(function (x) { return x.id === productId; });
   if (!p) return;
   DETAIL_STATE.productId = productId;
-  DETAIL_STATE.activeVariantIdx = 0;
+  DETAIL_STATE.activeVariantIdx = null;
   renderDetail(p);
   var scrim = document.getElementById('detail-scrim');
   var panel = document.getElementById('detail-panel');
@@ -2097,24 +2118,26 @@ function renderDetail(p) {
   // the same selection. Sorted default-first then by label, matching the rule
   // js/part-picker.js uses on the build side so the two surfaces agree.
   var variants  = sortedVariants(p);
-  var activeV   = variants[DETAIL_STATE.activeVariantIdx] || variants[0] || null;
-  // A variant's own msrp beats the product-level rollup — picking "Gold" should
-  // show what Gold costs, not the cheapest colour in the family.
-  // A chosen variant with no MSRP shows no price — never the product's, which
-  // is the default variant's and a different option's number.
-  var shownPrice = activeV ? (activeV.msrp != null ? Number(activeV.msrp) : null) : p.price;
+  var activeV   = DETAIL_STATE.activeVariantIdx != null ? (variants[DETAIL_STATE.activeVariantIdx] || null) : null;
+  var defaultV  = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
+  // The price follows the selection by js/option-price.js's one rule:
+  // the selected option's own price; with nothing selected, "From" the
+  // lowest priced option; a selected option with no price shows "Check
+  // price" — never the product's number, which is another option's. A
+  // product with no option rows keeps its product-level price.
+  var headline = variants.length
+    ? window.optionHeadline(variants.map(function (v) { return { id: v.id, msrp: v.msrp }; }), activeV ? activeV.id : null)
+    : (p.price != null ? { kind: 'option', amount: p.price } : { kind: 'check', amount: null });
   var priceEl = document.getElementById('detail-price');
-  // Show cents whenever the price has them. The old rule dropped cents above
-  // $100, which now reads as a contradiction: the hero said $400 while the
-  // selected row directly beneath it said $399.99.
-  if (shownPrice != null) {
-    var hasCents = Math.round(shownPrice * 100) % 100 !== 0;
-    priceEl.textContent = '$' + shownPrice.toFixed(hasCents ? 2 : 0);
-    priceEl.classList.remove('na');
-  } else {
-    priceEl.textContent = 'Price N/A';
-    priceEl.classList.add('na');
-  }
+  // Show cents whenever the price has them (optionPriceText). The old rule
+  // dropped cents above $100, which read as a contradiction: the hero said
+  // $400 while the selected row directly beneath it said $399.99.
+  // With a retailer listing in the buy box below, this number is labelled
+  // MSRP, the same as on the card that opened the panel.
+  var panelAff = window.affiliate ? window.affiliate.get(p.id) : null;
+  priceEl.textContent = window.optionPriceText(headline,
+    { msrp: !!(panelAff && panelAff.partnerCount) && variants.length > 0 });
+  priceEl.classList.toggle('na', headline.kind === 'check');
   // Description: keep it simple — split on double-newline into paragraphs.
   var descEl = document.getElementById('detail-desc');
   if (p.description) {
@@ -2131,16 +2154,18 @@ function renderDetail(p) {
   // until 2026-10-21 under a comment claiming it was not; the chips below
   // already did it right. The product image is only for a product with no
   // variant to choose.
+  // With nothing selected the hero is the product's picture (p.image), and
+  // its fallback is the default option's swatch — no option is claimed.
   var heroEl = document.getElementById('detail-hero');
   var heroSrc = activeV ? activeV.primary_image_url : p.image;
-  var heroColor = activeV ? activeV.color : null;
+  var heroColor = activeV ? activeV.color : (defaultV ? defaultV.color : null);
   var heroSwatch = '<span class="detail-hero-swatch" style="' + window.variantSwatch(heroColor, p.brand).css + '"' +
                    ' role="img" aria-label="' + escAttr(heroColor || 'Colour') + '"></span>';
   if (heroSrc) {
     // A dead image URL degrades to the same swatch as no URL at all.
     heroEl.innerHTML = '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(window.displayProductName(p)) + '"' +
                        ' data-fallback="' + escAttr(heroSwatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback"/>';
-  } else if (activeV) {
+  } else if (activeV || defaultV) {
     heroEl.innerHTML = heroSwatch;
   } else {
     heroEl.innerHTML = '<div class="detail-hero-nophoto">No photo</div>';
@@ -2228,7 +2253,7 @@ function renderDetail(p) {
   // only for a part with no partner listing AND no url saved.
   var affWrap = document.getElementById('detail-affiliate-wrap');
   if (window.affiliate) {
-    var block = window.affiliate.renderBlock(p.id);
+    var block = window.affiliate.renderBlock(p.id, { selectedVariantId: activeV ? activeV.id : undefined });
     affWrap.innerHTML = block || window.affiliate.renderEmpty();
   } else {
     affWrap.innerHTML = '';

@@ -1213,6 +1213,35 @@ prefix half of this rule (bold brand, then the name with a leading brand
 removed); it is on the same brand-line decision and is not flagged
 because it prints local variables.
 
+**The headline price follows the selected option** (Alex, 2026-10-30;
+`js/option-price.js`, `optionHeadline()`). Where a headline's number is an
+option's MSRP — a maker-only buy box in the catalog panel, the panel's own
+price, a build page's maker-only part — an option selected shows **that
+option's** price; nothing selected shows **"From $<lowest priced option>"**;
+a selected option with no price shows **no number**, in the one wording
+**"Check price"** (never "Price N/A", never a sibling option's MSRP). The
+catalog panel opens with nothing selected. **When every option costs the
+same there is no "From"** — the plain price; an option with no price keeps
+the "From", since it could cost more. **Cards follow it too**, so a part
+never shows two prices: the catalog grid card, the Armory picker card, the
+builder pages' picker card (`js/part-picker.js`) and the profile's Favorite
+parts card have nothing selected, so they print the panel's opening
+headline; the Armory's picked card and the builder's selected-part row are
+the chosen option. Card and panel text go through `optionPriceText()`
+(cents only when the price has them), and the catalog's row `price` — what
+sort and the price filter read — is that same number (`cardHeadline()`).
+**Beside a live retailer price the number is labelled for what it is**
+(Alex, 2026-10-30): a catalog card with a retailer row, and the panel of a
+product with a partner listing, read "MSRP from $X" / "MSRP $X"
+(`optionPriceText(h, { msrp: true })`), so the retailer's price beside Buy
+reads as the deal. It is the options' `product_variants.msrp`, the maker's
+list price (on 2026-10-30, 392 of 457 fresh retailer prices sat below it);
+the `products.lowest_price` fallback for a product with no options is a
+repricing-job number and is never labelled MSRP. A product with any partner
+listing keeps its retailer headline whatever is selected — the rule never
+touches a street price. `scripts/option-price.test.mjs` pins all of it,
+running the pages' own card functions.
+
 **Not in the JSON-LD.** A maker link with a hand-typed MSRP is not an offer
 we can stand behind in rich results; `product-page.mjs` filters maker rows
 out of `offers` explicitly.
@@ -1349,6 +1378,7 @@ Registered today:
 | `scripts/go-redirect.test.mjs` | `go.js` leaking `s`/`loc` into the outbound retailer URL, storing an unwhitelisted `loc`, not truncating `s` at 128, breaking the redirect over a refused insert, logging a `x-go-no-log` request, or losing the PGRST204 ladder (full → bot → legacy, descending only on PGRST204) — runs the edge function under Node with a stubbed Deno and fetch |
 | `scripts/fit-sections.test.mjs` | a product page's barrel/slide fit section listing a threaded barrel on a slide whose maker says no (or the reverse), an unapproved or discontinued part, a locked barrel without its heading and warning ("Only these slides", or "Only for specific <brand> slides" when none is listed or the fit read fails), a stale "From" price, or a heading over nothing — runs `product-page.mjs` against a stubbed fetch and pins both the one query it sends and the HTML |
 | `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
+| `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 

@@ -315,6 +315,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/display-name.js"></script>
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
+<script src="js/option-price.js"></script>
 <script src="js/frame-fit.js"></script>
 <script src="js/slide-fit.js"></script>
 <script src="js/nav.js"></script>
@@ -787,7 +788,9 @@ function partCardHtml(cat, p, meta) {
     ? '<img src="' + escAttr(img) + '" alt="' + escAttr(dispName) + '" loading="lazy"' +
         ' data-fallback="' + escAttr(swatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback" />'
     : swatch;
-  var price = dv && dv.msrp != null ? money(dv.msrp) : null;
+  // Nothing is picked on a picker card, so js/option-price.js's opening
+  // headline: "From" the lowest priced option, or the one option's price.
+  var head = window.optionHeadline(optionPrices(p), null);
   var disabled = !!(meta.tag && !meta.tag.selectable);
   return '<div class="part-card' + (disabled ? ' wont-fit' : '') + '" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
     '<div class="part-card-photo">' + photo + '</div>' +
@@ -800,7 +803,7 @@ function partCardHtml(cat, p, meta) {
       (disabled && meta.tag.reason ? '<span class="part-card-reason">' + esc(meta.tag.reason) + '</span>' : '') +
       (meta.note ? '<span class="part-card-note">' + esc(meta.note) + '</span>' : '') +
       (p.variants.length > 1 ? '<span class="part-card-variants">' + p.variants.length + ' colors / options</span>' : '') +
-      (price ? '<span class="part-card-price">' + price + '</span>' : '<span class="part-card-price na">Price n/a</span>') +
+      '<span class="part-card-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
     '</div>' +
     '<div class="part-card-actions"><button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '"' + (disabled ? ' disabled' : '') + '>' + (disabled ? 'Won’t fit' : 'Add to build') + '</button></div>' +
   '</div>';
@@ -953,9 +956,9 @@ function slotBanners(cat, picked) {
 function pickedHtml(cat, p) {
   var pick = STATE.picks[cat];
   var variant = p.variants.find(function (v) { return v.id === pick.variantId; }) || p.defaultVariant;
-  // The picked option's own price, or none — never the default variant's,
-  // which is a different option's number.
-  var price = variant && variant.msrp != null ? variant.msrp : null;
+  // The picked option's own price, or "Check price" — never the default
+  // variant's, which is a different option's number (js/option-price.js).
+  var head = window.optionHeadline(optionPrices(p), variant ? variant.id : null);
   var img = variant && variant.primary_image_url;
   var swatch = '<div class="swatch-wrap">' + window.variantMediaHtml({ color: variant && variant.color }, 'variant-media', p.brand) + '</div>';
   var thumb = img
@@ -992,7 +995,7 @@ function pickedHtml(cat, p) {
       '<span class="picked-name">' + esc(p.name) + '</span>' +
       tagRow +
       variantRow +
-      (price != null ? '<span class="picked-price">' + money(price) + '</span>' : '<span class="picked-price na">Price n/a</span>') +
+      '<span class="picked-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
     '</div>' +
     '<button type="button" class="picked-remove" data-remove="' + cat + '">Remove</button>' +
   '</div>';
@@ -1228,6 +1231,9 @@ document.getElementById('btn-save').addEventListener('click', saveGuide);
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function escAttr(s) { return esc(s); }
+function optionPrices(p) {
+  return (p.variants || []).map(function (v) { return { id: v.id, msrp: v.msrp }; });
+}
 function money(n) {
   if (n == null || isNaN(n)) return '—';
   var v = Number(n);

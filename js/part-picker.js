@@ -234,6 +234,16 @@
            '</div>';
   }
 
+  // A catalog item's price through js/option-price.js: on a picker card
+  // nothing is chosen yet ("From $<lowest>", or the plain price when every
+  // option costs the same); on a selected row, the chosen option's own price
+  // or "Check price" — never the default option's number. A part added
+  // before variants existed has no variantId and reads like a card.
+  function itemPriceText(item, variantId) {
+    var options = ((item && item.variants) || []).map(function (v) { return { id: v.id, msrp: v.msrp }; });
+    return global.optionPriceText(global.optionHeadline(options, variantId));
+  }
+
   // The one copy of the picker card. buildCategoryBlock() and filterCards()
   // both render these, on both pages — four call sites that used to be four
   // near-identical strings, and had already drifted: the search results
@@ -247,7 +257,7 @@
         '<div class="part-card-desc">'  + item.desc  + '</div>' +
       '</div>' +
       '<div class="part-card-footer">' +
-        (item.price ? '<div class="part-card-price">$' + item.price + '</div>' : '<div class="part-card-price">&mdash;</div>') +
+        '<div class="part-card-price">' + escAttr(itemPriceText(item, null)) + '</div>' +
         // "Choose color →" when a choice follows, "+ Add" when it does not.
         // A button promising an add and then asking a question is the small
         // dishonesty that makes people stop trusting a control.
@@ -300,8 +310,9 @@
   }
 
   // One row per added part: photo, brand, name, price, and a remove button.
-  // Price comes from the catalog, not from the part, so it is absent rather
-  // than wrong for a pending part or a product that has since lost its MSRP.
+  // Price comes from the catalog, not from the part: absent for a pending
+  // part, and the chosen option's own price or "Check price" otherwise
+  // (itemPriceText).
   function selectedPartHtml(part) {
     var item = findCatalogItem(part.refId);
     return '<div class="selected-part">' +
@@ -320,7 +331,7 @@
           : '') +
         (part.pending
           ? '<div class="selected-part-pending"><span class="selected-part-dot"></span>Pending review</div>'
-          : (item && item.price ? '<div class="selected-part-price">$' + item.price + '</div>' : '')) +
+          : (item ? '<div class="selected-part-price">' + escAttr(itemPriceText(item, part.variantId || null)) + '</div>' : '')) +
         // Free text, for a part with NO chosen variant: a product hydrated
         // from a snapshot that predates variants, or one with no variant
         // coverage, where a builder who owns it in a colour we do not carry
