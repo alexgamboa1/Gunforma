@@ -25,7 +25,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // Loaded in the order the pages load them, which check-script-order.mjs
 // enforces in the HTML.
 const win = { document: null };
-for (const f of ['js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js']) {
+for (const f of ['js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js', 'js/option-price.js']) {
   new Function('window', await readFile(join(ROOT, f), 'utf8'))(win);
 }
 // part-picker touches `document` at init only; the card layer does not.
@@ -173,7 +173,10 @@ test('a chosen variant shows its label and hides the free-text field', () => {
     variantColor: 'Gold', variantFinish: 'TiN', imageUrl: null }));
   assert.match(html, /<div class="selected-part-variant-label">Gold \/ TiN<\/div>/);
   assert.ok(!hasInput(html), 'free-text variant input still rendered next to a chosen variant');
-  assert.ok(html.includes('$299'), 'price line lost');
+  // The chosen option's own MSRP (js/option-price.js), never the item-level
+  // number ('299' in the fixture, which no option carries).
+  assert.ok(html.includes('<div class="selected-part-price">$100</div>'), 'price line lost or not the chosen option\'s');
+  assert.ok(!html.includes('$299'), 'the row printed an item-level price instead of the chosen option\'s');
 });
 
 test('a chosen variant with NO photo gets its swatch — never the default photo', () => {

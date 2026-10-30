@@ -62,12 +62,35 @@ test('optionHeadline: selected, nothing selected, selected with no price', () =>
   assert.equal(win.CHECK_PRICE, 'Check price');
 });
 
+test('every option at one price: the plain price, no "From" (Alex, 2026-10-30)', () => {
+  const h = win.optionHeadline;
+  const same = h([{ id: 'a', msrp: 199 }, { id: 'b', msrp: 199 }, { id: 'c', msrp: '199.00' }], null);
+  assert.equal(same.kind, 'option');
+  assert.equal(same.text, '$199.00');
+  assert.equal(h([{ id: 'a', msrp: 199 }, { id: 'b', msrp: 209 }], null).text, 'From $199.00', 'two prices: From the lower');
+  assert.equal(h([{ id: 'a', msrp: 199 }, { id: 'b', msrp: null }], null).text, 'From $199.00',
+    'an option with no price keeps the "From": it could cost more');
+  assert.equal(h([{ id: 'a', msrp: 199 }, { id: 'b', msrp: 199 }], 'b').text, '$199.00', 'a selection is unchanged');
+});
+
+test('optionPriceText: cents only when present; the MSRP label names the list price', () => {
+  const t = win.optionPriceText, h = win.optionHeadline;
+  assert.equal(t(h(opts, null)), 'From $449.99');
+  assert.equal(t(h(opts, null), { msrp: true }), 'MSRP from $449.99');
+  assert.equal(t(h([{ id: 'a', msrp: 189 }], null), { msrp: true }), 'MSRP $189');
+  assert.equal(t(h([{ id: 'a', msrp: 189 }, { id: 'b', msrp: 189 }], null), { msrp: true }), 'MSRP $189', 'same price: no "from"');
+  assert.equal(t(h(opts, 'v-black-gold'), { msrp: true }), 'Check price', 'no number is never labelled');
+  assert.equal(t(h([{ id: 'a', msrp: 353 }], null)), '$353');
+  assert.equal(t(null), 'Check price');
+});
+
 // ── the catalog buy box, run through affiliate.js ──────────────────────────
 const MAKER_PRODUCT = {
   category: 'frame', url: 'https://icarusprecision.com/axg-fuse', is_discontinued: false,
   manufacturers: { name: 'Icarus Precision', website_url: 'https://icarusprecision.com' },
 };
 const today = new Date().toISOString().slice(0, 10);
+const SAME = 'same-price';
 const RETAIL = 'retail-product';
 const RETAIL_PRODUCT = { category: 'optic', url: 'https://maker.example/optic', is_discontinued: false,
   manufacturers: { name: 'Maker', website_url: 'https://maker.example' } };
@@ -77,6 +100,8 @@ const ROWS = [
   ...OPTIONS.map((o) => ({ id: o.id, product_id: AXG, variant_label: null, color: o.color, finish: 'Anodized',
     manual_safety_variant: o.manual_safety_variant, is_default: !!o.is_default, primary_image_url: null,
     msrp: o.msrp, products: MAKER_PRODUCT, affiliate_links: [] })),
+  ...['Black', 'FDE'].map((c) => ({ id: 's-' + c, product_id: SAME, variant_label: null, color: c, finish: null,
+    is_default: c === 'Black', primary_image_url: null, msrp: 199, products: MAKER_PRODUCT, affiliate_links: [] })),
   { id: 'r-black', product_id: RETAIL, variant_label: null, color: 'Black', finish: null, is_default: true,
     primary_image_url: null, msrp: 399.99, products: RETAIL_PRODUCT,
     affiliate_links: [link('l-a', 349.99, 'OpticsPlanet (Awin)'), link('l-b', 359.99, 'Brownells')] },
@@ -87,7 +112,7 @@ const sb = { from() {
   const q = { select: () => q, is: () => q, in: () => Promise.resolve({ data: ROWS, error: null }) };
   return q;
 } };
-await win.affiliate.loadFor(sb, [AXG, RETAIL]);
+await win.affiliate.loadFor(sb, [AXG, SAME, RETAIL]);
 const headline = (block) => (block.match(/<div class="part-affiliate-info">([\s\S]*?)<\/div>/) || [])[1] || '';
 
 test('maker-only buy box: the headline follows the selected option', () => {
@@ -100,6 +125,9 @@ test('maker-only buy box: the headline follows the selected option', () => {
   const noPrice = box('v-black-gold');
   assert.match(noPrice, /Check price/, 'Black / Gold, no safety: no price');
   assert.doesNotMatch(noPrice, /\$/, 'and no number at all — not another option\'s');
+  const same = headline(win.affiliate.renderBlock(SAME));
+  assert.match(same, /MSRP \$199\.00/, 'every option at one price: the plain MSRP');
+  assert.doesNotMatch(same, /From/);
 });
 
 test('retailer-offer buy box: unchanged, whatever is selected', () => {
@@ -150,7 +178,7 @@ function pageScope(page, fns, extra) {
     new Function('window', read(f))(scope);
   }
   const body = fns.map((n) => liftFn(src, n)).join('\n') +
-    '\nreturn {' + fns.join(',') + '};';
+    '\nreturn {' + fns.join(',') + ', window: window};';
   return new Function('window', ...Object.keys(extra), 'with (window) {' + body + '}')(scope, ...Object.values(extra));
 }
 const cardPrice = (html, cls) => (html.match(new RegExp('<(?:div|span) class="' + cls + '( na)?">([^<]*)<')) || []).slice(1);
@@ -160,7 +188,6 @@ test('catalog grid card: "From $<lowest>" until an option is picked, the same nu
   const page = pageScope('gunforma-parts-catalog.html',
     ['cardHeadline', 'renderCard', 'swatchFallbackHtml', 'partCatLabel', 'esc', 'escAttr'],
     { FAVORITES: new Set(), PART_TYPES: {} });
-  page.affiliate = undefined;
   const card = (variants, lowest) => {
     const h = page.cardHeadline(variants, lowest);
     return { h, price: cardPrice(page.renderCard({ id: 'x', slug: 'part', name: 'Part', brand: 'Brand', category: 'frame',
@@ -177,11 +204,76 @@ test('catalog grid card: "From $<lowest>" until an option is picked, the same nu
   assert.deepEqual(card([{ id: 'a', msrp: null }, { id: 'b', msrp: null }]).price, [' na', 'Check price'], 'nothing priced');
   assert.deepEqual(card([], 89.5).price, [undefined, '$89.50'], 'no option rows: the product-level price');
   assert.deepEqual(card([], null).price, [' na', 'Check price']);
+  assert.deepEqual(card([{ id: 'a', msrp: 199 }, { id: 'b', msrp: 199 }]).price, [undefined, '$199'],
+    'every option at one price: plain, no "From"');
   // The panel opens on the same text the card shows.
   const src = read('gunforma-parts-catalog.html');
-  assert.match(src, /priceEl\.textContent = window\.optionPriceText\(headline\);/, 'the panel prints through the same formatter');
+  assert.match(src, /priceEl\.textContent = window\.optionPriceText\(headline,\s*\{ msrp: !!\(panelAff && panelAff\.partnerCount\) && variants\.length > 0 \}\);/,
+    'the panel prints through the same formatter, labelled MSRP beside a retailer listing as the card is');
   assert.match(src, /var priceHeadline = cardHeadline\(variants, r\.lowest_price\);\s*var price = priceHeadline\.amount;/,
     'the product row\'s price (sort, filter) is the card\'s headline');
+});
+
+test('catalog retailer card: the price line is labelled MSRP beside the live retailer price', () => {
+  const page = pageScope('gunforma-parts-catalog.html',
+    ['cardHeadline', 'renderCard', 'swatchFallbackHtml', 'partCatLabel', 'esc', 'escAttr'],
+    { FAVORITES: new Set(), PART_TYPES: {} });
+  const HERO = '<div class="part-affiliate-hero">$161.99 Buy at OpticsPlanet</div>';
+  const card = (variants, lowest, listed) => {
+    page.window.affiliate = { renderHero: () => (listed ? HERO : '') };
+    const h = page.cardHeadline(variants, lowest);
+    const html = page.renderCard({ id: 'x', slug: 'part', name: 'Part', brand: 'Brand', category: 'barrel',
+      variants, price: h.amount, priceHeadline: h });
+    return { price: cardPrice(html, 'part-card-price'), hero: html.includes(HERO) };
+  };
+  const cport = [{ id: 'a', msrp: 209, is_default: true }, { id: 'b', msrp: 189 }];
+  const retail = card(cport, null, true);
+  assert.deepEqual(retail.price, [undefined, 'MSRP from $189'], 'several options beside a retailer: "MSRP from"');
+  assert.ok(retail.hero, 'the retailer row stays on the card');
+  assert.deepEqual(card([{ id: 'a', msrp: 189 }, { id: 'b', msrp: 189 }], null, true).price, [undefined, 'MSRP $189'],
+    'same price beside a retailer: "MSRP $X"');
+  assert.deepEqual(card(cport, null, false).price, [undefined, 'From $189'], 'a maker-only card carries one number and no label');
+  assert.deepEqual(card([], 89.5, true).price, [undefined, '$89.50'],
+    'the no-options fallback is a repricing-job price, not MSRP, and is never labelled MSRP');
+});
+
+test('builder picker (js/part-picker.js): cards and selected rows follow the rule', () => {
+  const pw = { document: null, addCatalogPart() {}, removePart() {}, pickVariant() {}, cancelVariantPick() {} };
+  for (const f of ['js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js', 'js/option-price.js']) {
+    new Function('window', read(f))(pw);
+  }
+  pw.document = { getElementById: () => null, createElement: () => ({ setAttribute() {}, set textContent(_) {} }),
+    head: { appendChild() {} } };
+  new Function('window', 'document', read('js/part-picker.js'))(pw, pw.document);
+  const item = { id: 'axg', brand: 'Icarus Precision', name: 'AXG FUSE', desc: '', image: null,
+    price: 519.99, variants: axgVariants };
+  const same = { id: 'same', brand: 'B', name: 'Same', desc: '', image: null, price: 199,
+    variants: [{ id: 's1', msrp: 199, is_default: true }, { id: 's2', msrp: 199 }] };
+  pw.PartPicker.init({ catalog: () => ({ frame: [item, same] }), state: () => ({ parts: [] }), render() {} });
+  const price = (html, cls) => (html.match(new RegExp('<div class="' + cls + '">([^<]*)<')) || [])[1];
+  assert.equal(price(pw.PartPicker.partCardHtml('frame', item), 'part-card-price'), 'From $449.99',
+    'picker card: From the lowest, not the item-level default price');
+  assert.equal(price(pw.PartPicker.partCardHtml('frame', same), 'part-card-price'), '$199', 'same price: plain');
+  const row = (variantId) => price(pw.PartPicker.selectedPartHtml({ uid: 'u', refId: 'axg', category: 'frame',
+    brand: 'Icarus Precision', name: 'AXG FUSE', variantId }), 'selected-part-price');
+  assert.equal(row('v-fde-gold'), '$584.99', 'selected row: the chosen option\'s own price');
+  assert.equal(row('v-black-gold'), 'Check price', 'chosen option with no price: no number');
+  assert.equal(row(undefined), 'From $449.99', 'a part saved before variants reads like a card');
+  for (const page of ['gunforma-post-build.html', 'gunforma-admin-post.html']) {
+    const src = read(page);
+    assert.ok(src.indexOf('src="js/option-price.js"') !== -1 && src.indexOf('src="js/option-price.js"') < src.indexOf('src="js/part-picker.js"'),
+      page + ' loads js/option-price.js before js/part-picker.js');
+  }
+});
+
+test('profile Favorite parts card follows the rule', () => {
+  const page = pageScope('gunforma-profile.html', ['renderFavoritePartCard', 'escH'], {});
+  const fav = (variants) => (page.renderFavoritePartCard({ id: 'x', name: 'Part', manufacturers: { name: 'Brand' },
+    product_variants: variants }).match(/<div class="part-card-price">([^<]*)</) || [])[1];
+  assert.equal(fav(axgVariants), 'From $449.99', 'several options: From the lowest, not the default\'s');
+  assert.equal(fav([{ msrp: 199, is_default: true }, { msrp: 199 }]), '$199', 'same price: plain');
+  assert.equal(fav([{ msrp: 79.99, is_default: true }]), '$79.99');
+  assert.equal(fav([{ msrp: null, is_default: true }]), 'Check price', 'no price: the one wording, not an em dash');
 });
 
 test('Armory part cards: "From $<lowest>" on a picker card; the picked card follows the picked option', () => {

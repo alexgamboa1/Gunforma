@@ -282,6 +282,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/build-url.js"></script>
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
+<script src="js/option-price.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 
@@ -962,7 +963,12 @@ function renderFavoritePartCard(p) {
   const img = dv && dv.primary_image_url
     ? '<img src="'+escH(dv.primary_image_url)+'" alt="" data-fallback="'+escH(swatch)+'" onerror="this.parentElement.innerHTML=this.dataset.fallback"/>'
     : swatch;
-  const price = dv && dv.msrp != null ? '$'+Number(dv.msrp).toFixed(2) : '—';
+  // Nothing is chosen on a favourite, so js/option-price.js's opening
+  // headline: "From" the lowest priced option, or the plain price when there
+  // is one option or every option costs the same — the same number the
+  // catalog card shows, never the default option's alone.
+  const price = escH(window.optionPriceText(window.optionHeadline(
+    (p.product_variants || []).map(function(v){ return { id: v.id, msrp: v.msrp }; }), null)));
   return '<div class="part-card">'+
       '<div class="part-card-img">'+img+'</div>'+
       '<div class="part-card-body">'+

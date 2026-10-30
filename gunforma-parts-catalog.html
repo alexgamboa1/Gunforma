@@ -1925,8 +1925,17 @@ function cardHeadline(variants, lowestPrice) {
 
 function renderCard(r) {
   var isFav = FAVORITES.has(r.id);
+  // Compact affiliate hero — real street price + retailer + Buy button.
+  // Rendered on top of any card that has affiliate data. Skipped silently
+  // when the product isn't listed anywhere (no dead untracked link).
+  var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
+  // Beside a live retailer price the card's own number is named for what it
+  // is — the options' MSRP, the maker's list price ("MSRP from $X") — so the
+  // retailer's number reads as the deal. Only an option-row price is MSRP;
+  // the no-options fallback (lowest_price) is a repricing-job number and
+  // keeps no label.
   var priceHtml = '<div class="part-card-price' + (r.price != null ? '' : ' na') + '">' +
-    esc(window.optionPriceText(r.priceHeadline)) + '</div>';
+    esc(window.optionPriceText(r.priceHeadline, { msrp: !!affHtml && !!(r.variants && r.variants.length) })) + '</div>';
   // A product with no photo of any variant, or a dead image URL, shows the
   // default variant's colour swatch — never an empty "No photo" box.
   var cardDv = (r.variants || []).find(function (v) { return v.is_default; }) || (r.variants || [])[0] || null;
@@ -1938,10 +1947,6 @@ function renderCard(r) {
   // Whole card is clickable; the heart button stopPropagation's so favoriting
   // doesn't open the detail panel. openDetail is delegated (see below) rather
   // than inline so we don't accidentally trigger on the fav-btn click.
-  // Compact affiliate hero — real street price + retailer + Buy button.
-  // Rendered on top of any card that has affiliate data. Skipped silently
-  // when the product isn't listed anywhere (no dead untracked link).
-  var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
   // Colour count on the card. Without this the grid gives no hint that a
   // product has twelve finishes behind it, so nobody opens the panel to look.
   // Counts DISTINCT colours, not variants: the 311 has 12 variants across only
@@ -2127,7 +2132,11 @@ function renderDetail(p) {
   // Show cents whenever the price has them (optionPriceText). The old rule
   // dropped cents above $100, which read as a contradiction: the hero said
   // $400 while the selected row directly beneath it said $399.99.
-  priceEl.textContent = window.optionPriceText(headline);
+  // With a retailer listing in the buy box below, this number is labelled
+  // MSRP, the same as on the card that opened the panel.
+  var panelAff = window.affiliate ? window.affiliate.get(p.id) : null;
+  priceEl.textContent = window.optionPriceText(headline,
+    { msrp: !!(panelAff && panelAff.partnerCount) && variants.length > 0 });
   priceEl.classList.toggle('na', headline.kind === 'check');
   // Description: keep it simple — split on double-newline into paragraphs.
   var descEl = document.getElementById('detail-desc');
