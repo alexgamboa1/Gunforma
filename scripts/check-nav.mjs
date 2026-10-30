@@ -1,0 +1,179 @@
+// check-nav — every copy of the site nav carries the same links: the Armory
+// on the bar (right after Parts Catalog) and in the hamburger, and "Your
+// P365" as the hamburger's dropdown of gun hubs, held to GUN_HUBS.
+// ─────────────────────────────────────────────────────────────────────────
+// The nav exists in many places by design (CLAUDE.md, "The nav exists in 16
+// places"): every public page ships a static copy so crawlers see the links
+// in-source, js/nav.js renders two more variants, and three Netlify
+// functions hold server copies. That is exactly how the Armory link shipped
+// present on two pages and missing from every other copy (2026-10-29): the
+// #218 rebuild added it to the two pages it touched, and nothing checked
+// the rest. This holds every copy to one shape:
+//
+//   - desktop bar: Home, Builds, Parts Catalog, Armory — in that order,
+//     Armory active ONLY on gunforma-armory.html, and NO flat "Your P365"
+//     bar link anywhere
+//   - hamburger: Builds, the "Your P365" dropdown, Parts Catalog, Armory —
+//     and the dropdown is GUN_HUBS exactly (same hubs, same order, names
+//     from GUN_META, the /p365/ index link last), the same contract
+//     check-home-picker.mjs holds the homepage picker to
+//   - the dropdown's CSS block is present wherever the menu is styled —
+//     without it the <details> row renders as an unstyled browser default
+//
+// A failure renders perfectly in a browser — a page whose header quietly
+// lacks a link is the orphan shape this repo keeps paying for — which is
+// the entry criterion for scripts/check-all.sh. No network.
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { GUN_HUBS, GUN_META, hubPath, HUB_INDEX_PATH } from '../netlify/functions/_guide-meta.mjs';
+import { navHtml, navSubHtml } from '../netlify/functions/_page-chrome.mjs';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const read = (f) => fs.readFileSync(path.join(root, f), 'utf8');
+
+let failures = 0;
+const fail = (msg) => { console.error('FAIL  ' + msg); failures++; };
+const pass = (msg) => console.log('ok    ' + msg);
+
+// The public pages that ship the nav as static HTML. Admin screens carry
+// the Admin bar, sign-in/sign-up carry the stripped auth nav, and
+// post-build renders its nav from js/nav.js — none of those are here, but
+// post-build still styles the menu, so it is in CSS_FILES below.
+const STATIC_PAGES = [
+  'index.html', 'gunforma-builds.html', 'gunforma-parts-catalog.html',
+  'gunforma-build-detail.html', 'gunforma-profile.html',
+  'gunforma-notifications.html', 'field-notes.html',
+  'gunforma-gun-guides.html', 'gunforma-armory.html', 'privacy-policy.html',
+  'terms-of-service.html', 'builder-agreement.html', 'gunforma-legal.html',
+];
+const CSS_FILES = [
+  ...STATIC_PAGES, 'gunforma-post-build.html',
+  'netlify/functions/_page-chrome.mjs', 'netlify/functions/product-page.mjs',
+  'netlify/functions/parts-index.mjs',
+];
+
+const DESKTOP = [
+  ['/', 'Home'],
+  ['gunforma-builds.html', 'Builds'],
+  ['gunforma-parts-catalog.html', 'Parts Catalog'],
+  ['gunforma-armory.html', 'Armory'],
+];
+const DROPDOWN = [
+  ...GUN_HUBS.map((h) => [hubPath(h.gun), GUN_META[h.gun]]),
+  [HUB_INDEX_PATH, 'All P365 models →'],
+];
+
+// Anchors as they appear in page HTML and inside .js/.mjs string literals
+// alike: the markup text is the same, only the quoting around it differs.
+const links = (s) => [...s.matchAll(/href="([^"']+)"[^>]*>([^<']+)<\/a>/g)].map((m) => [m[1], m[2]]);
+const region = (s, from, to, file, label) => {
+  const a = s.indexOf(from);
+  const b = a === -1 ? -1 : s.indexOf(to, a);
+  if (a === -1 || b === -1) { fail(`${file}: no ${label} region (${from} … ${to})`); return null; }
+  return s.slice(a, b);
+};
+const sameList = (have, want, file, label) => {
+  const h = have.map((l) => l.join(' → ')), w = want.map((l) => l.join(' → '));
+  for (let i = 0; i < Math.max(h.length, w.length); i++) {
+    if (h[i] !== w[i]) { fail(`${file}: ${label} link ${i + 1}: expected "${w[i] ?? '(nothing)'}", found "${h[i] ?? '(nothing)'}"`); return false; }
+  }
+  return true;
+};
+
+// ── the static pages ──────────────────────────────────────────────────────
+for (const file of STATIC_PAGES) {
+  const t = read(file);
+  let good = true;
+
+  const bar = region(t, 'class="nav-links"', 'class="nav-right"', file, 'desktop bar');
+  if (bar) {
+    good = sameList(links(bar), DESKTOP, file, 'desktop') && good;
+    const armoryActive = /class="nav-link active" href="gunforma-armory\.html"/.test(bar);
+    const wantActive = file === 'gunforma-armory.html';
+    if (armoryActive !== wantActive) {
+      fail(`${file}: Armory bar link ${wantActive ? 'must be' : 'must NOT be'} active`); good = false;
+    }
+  } else good = false;
+
+  const menu = region(t, 'class="nav-menu"', '</nav>', file, 'hamburger menu');
+  if (menu) {
+    const sub = region(menu, '<details class="nav-sub">', '</details>', file, 'Your P365 dropdown');
+    if (sub) {
+      if ((menu.match(/<summary>Your P365<\/summary>/g) || []).length !== 1) { fail(`${file}: exactly one <summary>Your P365</summary>`); good = false; }
+      good = sameList(links(sub), DROPDOWN, file, 'dropdown') && good;
+      const around = links(menu.replace(sub + '</details>', '\u0000'));
+      good = sameList(around, [['gunforma-builds.html', 'Builds'], ['gunforma-parts-catalog.html', 'Parts Catalog'], ['gunforma-armory.html', 'Armory']], file, 'menu') && good;
+      if (menu.indexOf('Builds</a>') > menu.indexOf('<details') || menu.indexOf('</details>') > menu.indexOf('Parts Catalog</a>')) {
+        fail(`${file}: the dropdown sits between Builds and Parts Catalog`); good = false;
+      }
+    } else good = false;
+  } else good = false;
+
+  if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives — it lives only in the dropdown`); good = false; }
+  if (good) pass(`${file}: bar and menu carry the shape`);
+}
+
+// ── js/nav.js: the rendered variants ──────────────────────────────────────
+{
+  const file = 'js/nav.js';
+  const t = read(file);
+  let good = true;
+  const sub = region(t, '<details class="nav-sub">', '</details>', file, 'NAV_P365_SUB');
+  if (sub) good = sameList(links(sub), DROPDOWN, file, 'NAV_P365_SUB') && good; else good = false;
+  const menu = region(t, 'class="nav-menu"', '</div>\';', file, 'NAV_MENU');
+  if (menu) {
+    const idx = ['Builds</a>', 'NAV_P365_SUB', 'Parts Catalog</a>', 'Armory</a>'].map((m) => menu.indexOf(m));
+    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: NAV_MENU is not Builds, the dropdown, Parts Catalog, Armory`); good = false; }
+  } else good = false;
+  const armoryBars = (t.match(/activeIf\('gunforma-armory\.html'\) \+ '" href="gunforma-armory\.html">Armory<\/a>'/g) || []).length;
+  if (armoryBars !== 2) { fail(`${file}: the full and full-authed bars each carry Armory with activeIf (found ${armoryBars})`); good = false; }
+  if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
+  if (good) pass(`${file}: NAV_P365_SUB, NAV_MENU and both bar variants carry the shape`);
+}
+
+// ── _page-chrome.mjs: executed, not grepped ───────────────────────────────
+{
+  const file = 'netlify/functions/_page-chrome.mjs';
+  let good = true;
+  good = sameList(links(region(navSubHtml(), '<details', '</details>', file, 'navSubHtml') || ''), DROPDOWN, file, 'navSubHtml') && good;
+  const html = navHtml({ active: 'armory' });
+  const bar = region(html, 'class="nav-links"', 'class="nav-right"', file, 'desktop bar');
+  if (bar) {
+    good = sameList(links(bar), DESKTOP, file, 'desktop') && good;
+    if (!/class="nav-link active" href="gunforma-armory\.html"/.test(bar)) { fail(`${file}: active 'armory' does not light the Armory item`); good = false; }
+  } else good = false;
+  const menu = region(html, 'class="nav-menu"', '</nav>', file, 'hamburger menu');
+  if (!menu || !menu.includes('<summary>Your P365</summary>') || menu.indexOf('</details>') > menu.indexOf('Parts Catalog</a>') || menu.indexOf('Parts Catalog</a>') > menu.indexOf('Armory</a>')) {
+    fail(`${file}: navHtml menu is not Builds, the dropdown, Parts Catalog, Armory`); good = false;
+  }
+  if (html.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
+  if (good) pass(`${file}: navHtml() and navSubHtml() render the shape`);
+}
+
+// ── product-page.mjs and parts-index.mjs: their own copies ────────────────
+for (const file of ['netlify/functions/product-page.mjs', 'netlify/functions/parts-index.mjs']) {
+  const t = read(file);
+  let good = true;
+  const bar = region(t, 'class="nav-links"', 'class="nav-right"', file, 'desktop bar');
+  if (bar) good = sameList(links(bar), DESKTOP, file, 'desktop') && good; else good = false;
+  const menu = region(t, 'class="nav-menu" id="nav-menu"', '</nav>', file, 'hamburger menu');
+  if (menu) {
+    const idx = ['Builds</a>', 'navSubHtml()', 'Parts Catalog</a>', 'Armory</a>'].map((m) => menu.indexOf(m));
+    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: menu is not Builds, navSubHtml(), Parts Catalog, Armory`); good = false; }
+  } else good = false;
+  if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
+  if (good) pass(`${file}: bar and menu carry the shape`);
+}
+
+// ── the dropdown's CSS rides with every styled menu ───────────────────────
+for (const file of CSS_FILES) {
+  if (!read(file).includes('.nav-menu .nav-sub summary {')) fail(`${file}: the .nav-sub CSS block is missing — the dropdown renders as an unstyled browser default`);
+}
+pass('dropdown CSS present in every file that styles the menu (or failures above name them)');
+
+if (failures) {
+  console.error('\n' + failures + ' nav failure(s). Every nav copy must carry Home/Builds/Parts Catalog/Armory on the bar and the "Your P365" GUN_HUBS dropdown in the hamburger — see scripts/check-nav.mjs header.');
+  process.exit(1);
+}
+console.log('\nevery nav copy carries the Armory link and the Your P365 dropdown.');

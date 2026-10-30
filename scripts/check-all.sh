@@ -78,6 +78,7 @@ check "product display names"      scripts/display-name.test.mjs
 check "names go through the helper" scripts/check-display-name.mjs
 check "guide registry + content"   scripts/check-guide-content.mjs
 check "homepage picker = hubs"     scripts/check-home-picker.mjs
+check "nav copies carry one shape" scripts/check-nav.mjs
 check "DB failure is 503, not 404"  scripts/upstream-failure.test.mjs
 check "click bot classifier"       scripts/go-bot.test.mjs
 check "field notes registry+files" scripts/check-field-notes.mjs

@@ -20,6 +20,11 @@
 // -----------------------------------------------------------------------------
 
 import { CATEGORY_META } from './_category-meta.mjs';
+// The one shared piece of this page's otherwise-own nav copy: the "Your
+// P365" hamburger dropdown, built from GUN_HUBS in _page-chrome.mjs. The
+// rest of the nav deliberately stays this file's own — see CLAUDE.md, "The
+// nav exists in 16 places".
+import { navSubHtml } from './_page-chrome.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 // What a product is CALLED: "{brand} {name}" unless the name already
@@ -223,6 +228,11 @@ function renderPage(products) {
 '.nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }' +
 '.nav-profile svg { width: 19px; height: 19px; }' +
 '.nav-menu { display: none; }' +
+'.nav-menu .nav-sub summary { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; cursor: pointer; list-style: none; border-bottom: 0.5px solid #1a1b1e; }' +
+'.nav-menu .nav-sub summary::-webkit-details-marker { display: none; }' +
+'.nav-menu .nav-sub summary::after { content: " ▾"; color: #6a6b6e; }' +
+'.nav-menu .nav-sub[open] summary::after { content: " ▴"; }' +
+'.nav-menu .nav-sub a { padding-left: 44px; }' +
 '@media (max-width: 820px) {' +
 '  .nav-links { display: none; }' +
 '  .nav-signin-inline { display: none; }' +
@@ -240,8 +250,8 @@ function renderPage(products) {
   '<div class="nav-links">' +
     '<a class="nav-link" href="/">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
-    '<a class="nav-link" href="/p365/">Your P365</a>' +
     '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+    '<a class="nav-link" href="gunforma-armory.html">Armory</a>' +
   '</div>' +
   '<div class="nav-right">' +
     '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
@@ -251,8 +261,9 @@ function renderPage(products) {
   '</div>' +
 '<div class="nav-menu" id="nav-menu">' +
   '<a href="gunforma-builds.html">Builds</a>' +
-  '<a href="/p365/">Your P365</a>' +
+  navSubHtml() +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+  '<a href="gunforma-armory.html">Armory</a>' +
 '</div>' +
 '</nav>' +
 '<div class="page">' +

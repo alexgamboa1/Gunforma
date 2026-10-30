@@ -55,11 +55,32 @@ var NAV_TOGGLE =
     '<span></span><span></span><span></span>' +
   '</button>';
 
+// The "Your P365" dropdown in the three-line menu: the hubs, in GUN_HUBS
+// order, names from GUN_META, the index link last. This is a browser-side
+// literal copy of navSubHtml() in netlify/functions/_page-chrome.mjs — no
+// module loader here, same reason as every other nav copy — and
+// scripts/check-nav.mjs holds it to the registry on every deploy.
+var NAV_P365_SUB =
+  '<details class="nav-sub">' +
+    '<summary>Your P365</summary>' +
+    '<a href="/p365/p365">P365</a>' +
+    '<a href="/p365/p365-x">P365 X</a>' +
+    '<a href="/p365/p365-xl">P365 XL</a>' +
+    '<a href="/p365/p365-xmacro">P365 XMacro</a>' +
+    '<a href="/p365/p365-axg">P365 AXG Legion</a>' +
+    '<a href="/p365/p365-xf-dh3">P365 XF DH3</a>' +
+    '<a href="/p365/p365-xf-dh3-axg">P365 XF DH3 AXG</a>' +
+    '<a href="/p365/p365-fuse">P365 FUSE</a>' +
+    '<a href="/p365/p365-fuse-comp">P365 FUSE Comp</a>' +
+    '<a href="/p365/">All P365 models →</a>' +
+  '</details>';
+
 var NAV_MENU =
   '<div class="nav-menu" id="nav-menu">' +
     '<a href="gunforma-builds.html">Builds</a>' +
-    '<a href="/p365/">Your P365</a>' +
+    NAV_P365_SUB +
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+    '<a href="gunforma-armory.html">Armory</a>' +
   '</div>';
 
 // Admin entries. Convenience only — /admin and /admin-post are protected by
@@ -239,17 +260,6 @@ function ensureAccountNavStyles() {
     var linkFile = (href.split('/').pop() || '').toLowerCase();
     return currentFile === linkFile ? ' active' : '';
   }
-  // "Your P365" is a cluster of routes, not a file: /p365/ (the model
-  // index), /p365/<gun> (a hub) and /fit/p365/... (a fit guide). Those pages
-  // are server-rendered and carry their own nav (_page-chrome.mjs), so this
-  // only matters if nav.js is ever mounted on one — but the file test above
-  // would read /p365/ as index.html and light up Home, so the route test
-  // exists so that cannot happen.
-  function activeIfPath(prefix) {
-    var p = window.location.pathname;
-    return (p === prefix || p.indexOf(prefix) === 0 || p.indexOf('/fit/') === 0) ? ' active' : '';
-  }
-
   var html;
   if (variant === 'auth-signin') {
     html =
@@ -275,8 +285,8 @@ function ensureAccountNavStyles() {
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
-          '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+          '<a class="nav-link' + activeIf('gunforma-armory.html') + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" id="nav-signin">…</a>' +
@@ -293,8 +303,8 @@ function ensureAccountNavStyles() {
         '<div class="nav-links">' +
           '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
-          '<a class="nav-link' + activeIfPath('/p365/') + '" href="/p365/">Your P365</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
+          '<a class="nav-link' + activeIf('gunforma-armory.html') + '" href="gunforma-armory.html">Armory</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
