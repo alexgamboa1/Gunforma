@@ -95,6 +95,10 @@ const STATIC_PATHS = [
   '/',
   '/gunforma-builds.html',
   '/gunforma-parts-catalog.html',
+  // Back in the sitemap 2026-10-30 (Armory launch: noindex lifted, out of
+  // RETIRED in check-sitemap.mjs). gunforma-gun-guides.html is NOT listed:
+  // still noindex, launching on Alex's own go.
+  '/gunforma-armory.html',
   '/parts',
   '/field-notes.html',
 ];

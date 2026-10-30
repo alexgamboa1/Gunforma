@@ -3232,12 +3232,14 @@ state), so the **code deploys before the migration**, per the house rule.
 **The Armory got its nav link on 2026-10-29** (Alex's explicit request —
 the "Armory becomes a permanent header link" PR): every nav copy now
 carries it after Parts Catalog, desktop and hamburger, guarded by
-`scripts/check-nav.mjs`. **The rest of the launch has NOT happened**: both
-pages are still `noindex`, still out of `sitemap.mjs` (the Armory path is
-under `RETIRED` in `check-sitemap.mjs`), and `gunforma-gun-guides.html`
-still has no nav link of its own — it is reached from the Armory page.
-Lifting the two noindex lines and the sitemap exclusion is its own PR on
-Alex's go; do not fold it into something else.
+`scripts/check-nav.mjs`. **And on 2026-10-30 it launched for search**: the
+noindex is gone from `gunforma-armory.html`, the page is in `sitemap.mjs`'s
+`STATIC_PATHS`, and its path is out of `RETIRED` in `check-sitemap.mjs`, so
+the baseline guard covers it again. **Gun Guides has NOT launched**:
+`gunforma-gun-guides.html` is still `noindex`, still out of the sitemap,
+and has no nav link of its own — it is reached from the Armory page.
+Lifting that is its own PR on Alex's go; do not fold it into something
+else.
 
 **History — why the old Armory was parked** (kept because the reasoning still
 binds the rebuild): the pre-rebuild page worked — `#83`–`#86` fixed its
