@@ -154,6 +154,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
    the frame is right. */
 .part-card-img img { width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; background: #fff; }
 .part-card-img-fallback { font-size: 10px; color: #b8b5ac; }
+.part-card-swatch { display: block; width: 56px; height: 56px; border-radius: 50%; }
 .part-card-body { padding: 10px 12px 12px; }
 .part-card-brand { font-size: 9.5px; color: #888; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 2px; }
 .part-card-name { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; }
@@ -251,6 +252,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <script src="js/build-url.js"></script>
+<script src="js/variant-label.js"></script>
+<script src="js/variant-swatch.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 
@@ -900,7 +903,7 @@ async function loadFavoriteParts() {
   const panel = document.getElementById('panel-favorites');
   const { data, error } = await sb
     .from('part_favorites')
-    .select('product_id, products!inner(id,name,description,manufacturers(name),product_variants!product_variants_product_id_fkey(is_default,msrp,primary_image_url))')
+    .select('product_id, products!inner(id,name,description,manufacturers(name),product_variants!product_variants_product_id_fkey(is_default,msrp,primary_image_url,color))')
     // Two levels down: part_favorites -> products -> product_variants.
     .is('products.product_variants.retired_at', null)
     .eq('user_id', CURRENT_USER.id)
@@ -924,11 +927,14 @@ async function loadFavoriteParts() {
 
 function renderFavoritePartCard(p) {
   const dv = (p.product_variants || []).find(function(v){ return v.is_default; }) || (p.product_variants || [])[0];
-  const img = dv && dv.primary_image_url
-    ? '<img src="'+escH(dv.primary_image_url)+'" alt=""/>'
-    : '<div class="part-card-img-fallback">No photo</div>';
-  const price = dv && dv.msrp != null ? '$'+Number(dv.msrp).toFixed(2) : '—';
   const brand = p.manufacturers ? p.manufacturers.name : 'Unknown brand';
+  // No photo, or a dead one: the default variant's colour swatch
+  // (js/variant-swatch.js), never an empty "No photo" box.
+  const swatch = '<span class="part-card-swatch" style="'+window.variantSwatch(dv && dv.color, brand).css+'"></span>';
+  const img = dv && dv.primary_image_url
+    ? '<img src="'+escH(dv.primary_image_url)+'" alt="" data-fallback="'+escH(swatch)+'" onerror="this.parentElement.innerHTML=this.dataset.fallback"/>'
+    : swatch;
+  const price = dv && dv.msrp != null ? '$'+Number(dv.msrp).toFixed(2) : '—';
   return '<div class="part-card">'+
       '<div class="part-card-img">'+img+'</div>'+
       '<div class="part-card-body">'+

@@ -1345,26 +1345,31 @@ function renderPartCard(build, part, idx) {
   var thumbUrl = vr.imageUrl || null;
   var alt = window.displayProductName(part).replace(/"/g, '&quot;');
   var thumbHtml;
+  var hasColour = !!(chosenColor && (chosenColor.color || chosenColor.variant_label));
+  var fallbackInner = hasColour
+    ? '<span class="part-thumb-swatch-fill" style="'+window.variantSwatch(chosenColor.color, part.brand).css+'"></span>'
+    : '<div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div>';
   if (thumbUrl) {
     // A <button>, so Enter and Space come for free and it lands in the tab
     // order — the same choice .gallery-thumb makes, and for the same reason:
     // a div with a click handler is reachable by mouse only.
     //
-    // onerror does TWO things. Replacing the contents with the "No photo" slot
-    // is the old behaviour; clearing data-photo and disabling the button is
-    // new and necessary — a dead image URL is common in this catalog, and
-    // without it the box would stay clickable and open a lightbox onto the
-    // same broken URL.
+    // onerror does TWO things. It swaps in the same swatch a photo-less
+    // variant gets (or the label, for a part with no colour), and it clears
+    // data-photo and disables the button — a dead image URL is common in this
+    // catalog, and without that the box would stay clickable and open a
+    // lightbox onto the same broken URL.
     thumbHtml = '<button type="button" class="part-thumb part-thumb-btn" data-photo="'+escH(thumbUrl)+'"'+
         ' aria-label="'+alt+' — view larger"'+
         '><img src="'+thumbUrl+'" alt="'+alt+'" loading="lazy"'+
-        ' onerror="var b=this.parentElement;b.removeAttribute(\'data-photo\');b.disabled=true;b.removeAttribute(\'aria-label\');b.innerHTML=\'<div class=&quot;part-thumb-fallback&quot;>No photo</div>\'"'+
+        ' data-fallback="'+escH(fallbackInner)+'"'+
+        ' onerror="var b=this.parentElement;b.removeAttribute(\'data-photo\');b.disabled=true;b.removeAttribute(\'aria-label\');'+
+          (hasColour ? 'b.classList.add(\'part-thumb-swatch\');' : '')+'b.innerHTML=this.dataset.fallback"'+
         '/></button>';
-  } else if (chosenColor && (chosenColor.color || chosenColor.variant_label)) {
-    var sw = window.variantSwatch(chosenColor.color);
-    thumbHtml = '<div class="part-thumb part-thumb-swatch"><span class="part-thumb-swatch-fill" style="'+sw.css+'"></span></div>';
+  } else if (hasColour) {
+    thumbHtml = '<div class="part-thumb part-thumb-swatch">'+fallbackInner+'</div>';
   } else {
-    thumbHtml = '<div class="part-thumb"><div class="part-thumb-fallback">'+(part.pending ? 'Pending' : 'No photo')+'</div></div>';
+    thumbHtml = '<div class="part-thumb">'+fallbackInner+'</div>';
   }
 
   return '<div class="part-card">'+
@@ -1638,7 +1643,7 @@ function renderAffiliateRow(part, vr) {
     }
 
     return '<div class="part-affiliate-variant-row'+(mine ? ' is-chosen' : '')+'">'+
-        clickablePhoto(window.variantMediaHtml(v, 'variant-media'), v.primary_image_url, vLabel)+
+        clickablePhoto(window.variantMediaHtml(v, 'variant-media', part.brand), v.primary_image_url, vLabel)+
         '<div class="part-affiliate-variant-info">'+
           '<span class="part-affiliate-variant-label">'+escH(vLabel)+
             (mine ? '<span class="part-affiliate-variant-mine">On this build</span>' : '')+'</span>'+

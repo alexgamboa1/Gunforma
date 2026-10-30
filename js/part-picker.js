@@ -213,7 +213,8 @@
   // ===== CARD MARKUP =====
 
   // Product-thumbnail slot. Uses the default variant's primary_image_url when
-  // we have one, else the "Photo coming soon" placeholder.
+  // we have one, else the default variant's colour swatch — and a dead image
+  // URL degrades to that same swatch, never to an empty "No photo" box.
   //
   // Sizing and fit live entirely in the .part-card-img img rule below. This
   // used to carry style="...object-fit:cover..." inline, which silently
@@ -221,15 +222,15 @@
   // back — and note the admin page still carried that inline style two
   // releases after the post-build page dropped it.
   function partImageHtml(item) {
+    var dv = variantsOf(item)[0] || null;   // default first
+    var swatch = global.variantMediaHtml({ color: dv && dv.color }, 'part-card-swatch', item && item.brand);
     if (!item || !item.image) {
-      return '<div class="part-card-img"><div class="part-card-img-bg">' +
-               '<div class="part-card-img-label">Photo coming soon</div>' +
-             '</div></div>';
+      return '<div class="part-card-img">' + swatch + '</div>';
     }
     var alt = global.displayProductName(item).replace(/"/g, '&quot;');
     return '<div class="part-card-img">' +
              '<img src="' + item.image + '" alt="' + alt + '" loading="lazy" ' +
-               'onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-img-bg&quot;><div class=&quot;part-card-img-label&quot;>No photo</div></div>\'"/>' +
+               'data-fallback="' + escAttr(swatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback"/>' +
            '</div>';
   }
 
@@ -281,20 +282,20 @@
         color:             part.variantColor || null,
         finish:            part.variantFinish || null,
         variant_label:     part.variantLabel || null,
-      }, 'selected-part-thumb');
+      }, 'selected-part-thumb', part.brand);
     }
     var src = part.imageUrl || (item && item.image) || null;
-    if (!src) {
-      if (part.variantColor) {
-        return global.variantMediaHtml({ color: part.variantColor }, 'selected-part-thumb');
-      }
-      return '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' +
-               (part.pending ? 'Pending' : 'No photo') + '</div></div>';
-    }
+    // No variant chosen, so a colour is known only if the snapshot kept one;
+    // with none there is nothing honest to draw but the label.
+    var fallback = part.variantColor
+      ? global.variantMediaHtml({ color: part.variantColor }, 'selected-part-thumb', part.brand)
+      : '<div class="selected-part-thumb"><div class="selected-part-thumb-label">' +
+          (part.pending ? 'Pending' : 'No photo') + '</div></div>';
+    if (!src) return fallback;
     var alt = global.displayProductName(part).replace(/"/g, '&quot;');
     return '<div class="selected-part-thumb">' +
              '<img src="' + src + '" alt="' + alt + '" loading="lazy" ' +
-               'onerror="this.parentElement.innerHTML=\'<div class=&quot;selected-part-thumb-label&quot;>No photo</div>\'"/>' +
+               'data-fallback="' + escAttr(fallback) + '" onerror="this.parentElement.outerHTML=this.dataset.fallback"/>' +
            '</div>';
   }
 
@@ -491,7 +492,7 @@
     var specs = global.variantSpecs(v);
     return '<button type="button" class="variant-row" ' +
              'onclick="pickVariant(\'' + catKey + '\',\'' + escAttr(item.id) + '\',\'' + escAttr(v.id) + '\')">' +
-        global.variantMediaHtml(v, 'variant-media') +
+        global.variantMediaHtml(v, 'variant-media', item.brand) +
         '<span class="variant-row-body">' +
           '<span class="variant-row-label">' + (label || 'This color') + '</span>' +
           // What tells two rows with the same label apart. Absent, not
@@ -1105,6 +1106,8 @@
 .part-card-img img { width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; background: #fff; display: block; }
 .part-card-img-bg { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 4px; }
 .part-card-img-label { font-size: 9px; color: #bbb; letter-spacing: 0.06em; text-transform: uppercase; }
+.part-card-swatch { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; }
+.part-card-swatch-swatch { display: block; width: 56px; height: 56px; border-radius: 50%; }
 .part-card.added .part-card-img { background: #e8f5ee; }
 .part-card-added-badge { position: absolute; top: 8px; right: 8px; background: #22a06b; color: #fff; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.04em; text-transform: uppercase; }
 
