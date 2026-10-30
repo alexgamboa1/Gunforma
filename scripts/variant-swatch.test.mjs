@@ -52,6 +52,29 @@ test('both copies agree on swatchFor for every name', () => {
   }
 });
 
+test('both copies agree with a brand, for every name', () => {
+  for (const brand of ['Icarus Precision', 'icarus  precision', 'Sharps Bros', '', null, undefined]) {
+    for (const name of NAMES) {
+      assert.deepEqual(server.swatchFor(name, brand), browser.variantSwatch(name, brand),
+        'swatchFor(' + JSON.stringify(name) + ', ' + JSON.stringify(brand) + ')');
+    }
+  }
+});
+
+test('Icarus colours are frame/panel: the swatch is the frame (Alex, 2026-10-30)', () => {
+  // the AXG FUSE's variants, every two-part shape
+  assert.deepEqual(server.swatchFor('FDE/Gold', 'Icarus Precision'), server.swatchFor('FDE'));
+  assert.deepEqual(server.swatchFor('ODG/Hogue', 'Icarus Precision'), server.swatchFor('ODG'));
+  assert.deepEqual(server.swatchFor('Gray/Black', 'Icarus Precision'), server.swatchFor('Gray'));
+  assert.deepEqual(server.swatchFor('Black/Gold', 'Icarus Precision'), server.swatchFor('Black'));
+  assert.equal(server.swatchFor('FDE/Gold', 'Icarus Precision').kind, 'solid');
+  // another maker's two-tone grip is still one object in two colours
+  assert.equal(server.swatchFor('Black/Cherry', 'Sharps Bros').kind, 'split');
+  assert.equal(server.swatchFor('FDE/Gold').kind, 'split', 'no brand: the old rule');
+  // and a one-part Icarus colour is unchanged
+  assert.deepEqual(server.swatchFor('Black', 'Icarus Precision'), server.swatchFor('Black'));
+});
+
 test('the rules the pages rely on', () => {
   assert.equal(server.swatchFor('Black').kind, 'solid');
   assert.equal(server.swatchFor('Black/Gold').kind, 'split');

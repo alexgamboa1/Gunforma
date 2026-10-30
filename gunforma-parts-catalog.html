@@ -108,6 +108,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-photo { position: relative; aspect-ratio: 4/3; background: #f4f3ee; overflow: hidden; }
 .part-card-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .part-card-nophoto { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 10.5px; color: #b8b5ac; letter-spacing: 0.06em; text-transform: uppercase; }
+.part-card-swatch { width: 64px; height: 64px; border-radius: 50%; display: block; }
 .part-card-cat { position: absolute; top: 8px; left: 8px; font-size: 9px; color: #1d6fb8; background: #eaf4fc; border: 0.5px solid #a7cdec; padding: 3px 7px; border-radius: 20px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
 .part-card-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
 .part-card-brand { font-size: 10px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
@@ -1889,14 +1890,28 @@ function applyFiltersAndRender() {
   container.innerHTML = '<div class="parts-grid">' + list.map(renderCard).join('') + '</div>';
 }
 
+// The colour-swatch slot that stands in for a missing or dead photo, centred
+// in its box. Built once and handed to an img's onerror through a data
+// attribute, so the dead-URL path and the no-URL path draw the same thing.
+function swatchFallbackHtml(color, brand, cls) {
+  var sw = window.variantSwatch(color, brand);
+  return '<div class="part-card-nophoto"><span class="' + cls + '" style="' + sw.css + '"' +
+         ' role="img" aria-label="' + escAttr(color || 'Colour') + '"></span></div>';
+}
+
 function renderCard(r) {
   var isFav = FAVORITES.has(r.id);
   var priceHtml = r.price != null
     ? '<div class="part-card-price">$' + r.price.toFixed(r.price < 100 ? 2 : 0) + '</div>'
     : '<div class="part-card-price na">Price N/A</div>';
+  // A product with no photo of any variant, or a dead image URL, shows the
+  // default variant's colour swatch — never an empty "No photo" box.
+  var cardDv = (r.variants || []).find(function (v) { return v.is_default; }) || (r.variants || [])[0] || null;
+  var cardSwatch = swatchFallbackHtml(cardDv && cardDv.color, r.brand, 'part-card-swatch');
   var photoHtml = r.image
-    ? '<img src="' + escAttr(r.image) + '" alt="' + escAttr(window.displayProductName(r)) + '" loading="lazy" onerror="this.parentElement.innerHTML=\'<div class=&quot;part-card-nophoto&quot;>No photo</div>\'"/>'
-    : '<div class="part-card-nophoto">No photo</div>';
+    ? '<img src="' + escAttr(r.image) + '" alt="' + escAttr(window.displayProductName(r)) + '" loading="lazy"' +
+        ' data-fallback="' + escAttr(cardSwatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback"/>'
+    : cardSwatch;
   // Whole card is clickable; the heart button stopPropagation's so favoriting
   // doesn't open the detail panel. openDetail is delegated (see below) rather
   // than inline so we don't accidentally trigger on the fav-btn click.
@@ -2075,7 +2090,9 @@ function renderDetail(p) {
   var activeV   = variants[DETAIL_STATE.activeVariantIdx] || variants[0] || null;
   // A variant's own msrp beats the product-level rollup — picking "Gold" should
   // show what Gold costs, not the cheapest colour in the family.
-  var shownPrice = (activeV && activeV.msrp != null) ? Number(activeV.msrp) : p.price;
+  // A chosen variant with no MSRP shows no price — never the product's, which
+  // is the default variant's and a different option's number.
+  var shownPrice = activeV ? (activeV.msrp != null ? Number(activeV.msrp) : null) : p.price;
   var priceEl = document.getElementById('detail-price');
   // Show cents whenever the price has them. The old rule dropped cents above
   // $100, which now reads as a contradiction: the hero said $400 while the
@@ -2106,11 +2123,15 @@ function renderDetail(p) {
   // variant to choose.
   var heroEl = document.getElementById('detail-hero');
   var heroSrc = activeV ? activeV.primary_image_url : p.image;
+  var heroColor = activeV ? activeV.color : null;
+  var heroSwatch = '<span class="detail-hero-swatch" style="' + window.variantSwatch(heroColor, p.brand).css + '"' +
+                   ' role="img" aria-label="' + escAttr(heroColor || 'Colour') + '"></span>';
   if (heroSrc) {
-    heroEl.innerHTML = '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(window.displayProductName(p)) + '"/>';
-  } else if (activeV && activeV.color && window.variantSwatch) {
-    heroEl.innerHTML = '<span class="detail-hero-swatch" style="' + window.variantSwatch(activeV.color).css + '"' +
-                       ' role="img" aria-label="' + escAttr(activeV.color) + '"></span>';
+    // A dead image URL degrades to the same swatch as no URL at all.
+    heroEl.innerHTML = '<img id="detail-hero-img" src="' + escAttr(heroSrc) + '" alt="' + escAttr(window.displayProductName(p)) + '"' +
+                       ' data-fallback="' + escAttr(heroSwatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback"/>';
+  } else if (activeV) {
+    heroEl.innerHTML = heroSwatch;
   } else {
     heroEl.innerHTML = '<div class="detail-hero-nophoto">No photo</div>';
   }
@@ -2134,7 +2155,7 @@ function renderDetail(p) {
     vRows.innerHTML = variants.map(function (v, i) {
       var label = (window.variantLabel ? window.variantLabel(v) : '') || v.color || 'Option ' + (i + 1);
       var media = window.variantMediaHtml
-        ? window.variantMediaHtml(v, 'detail-variant-media')
+        ? window.variantMediaHtml(v, 'detail-variant-media', p.brand)
         : '<div class="detail-variant-media"></div>';
       var price = (v.msrp != null)
         ? '<span class="detail-variant-price">$' + Number(v.msrp).toFixed(2) + '</span>'

@@ -706,6 +706,13 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     const imgs = (withImg.variant_images || []).slice().sort((a, b) => a.position - b.position);
     return imgs.length ? imgs[0].url : null;
   })();
+  // A part with no photo of any variant — or a dead image URL — shows the
+  // default variant's colour swatch (_variant-swatch.mjs), never an empty
+  // "No photo yet" box. Same colour the buy rows below draw for it.
+  const heroVariant = variants.find((v) => v.is_default) || variants[0] || null;
+  const heroSwatchHtml = '<div class="hero-placeholder"><span class="hero-swatch" style="' +
+    swatchFor(heroVariant && heroVariant.color, brand.name).css + '" role="img" aria-label="' +
+    esc((heroVariant && heroVariant.color) || 'Colour') + '"></span></div>';
 
   // "Magpul AMAG 15 SG9 P365 9mm 15rd Magazine | Gunforma", and "Holosun
   // 507K X2 | Gunforma" — not "… by Holosun", which named the brand twice
@@ -823,7 +830,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   // scripts/variant-swatch.test.mjs holds the two copies equal). A dead
   // image URL degrades to the swatch, not to a blank box.
   const variantMediaHtml = (v, label) => {
-    const sw = swatchFor(v && v.color);
+    const sw = swatchFor(v && v.color, brand.name);
     const swatch = '<span class="variant-media-swatch" style="' + sw.css + '"></span>';
     if (v && v.primary_image_url) {
       return '<div class="variant-media">' +
@@ -935,6 +942,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '@media (max-width: 640px) { .page { grid-template-columns: 1fr; } }' +
 '.hero-img { width: 100%; border-radius: 8px; border: 0.5px solid #e5e5e5; background: #fff; object-fit: contain; aspect-ratio: 1; }' +
 '.hero-placeholder { width: 100%; aspect-ratio: 1; border-radius: 8px; border: 0.5px dashed #d9d6cc; background: #fff; display: flex; align-items: center; justify-content: center; color: #bbb; font-size: 12px; }' +
+'.hero-swatch { display: block; width: 40%; aspect-ratio: 1; border-radius: 50%; }' +
 '.eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #4a9edd; font-weight: 700; margin-bottom: 6px; }' +
 'h1 { font-size: 26px; line-height: 1.25; margin-bottom: 14px; }' +
 '.price-line { font-size: 20px; font-weight: 700; margin-bottom: 16px; }' +
@@ -1029,8 +1037,10 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '</div>' +
 '<div class="page">' +
   '<div>' + (heroImage
-    ? '<img class="hero-img" src="' + esc(heroImage) + '" alt="' + esc(shownName) + '" loading="eager" />'
-    : '<div class="hero-placeholder">No photo yet</div>') + '</div>' +
+    ? '<img class="hero-img" src="' + esc(heroImage) + '" alt="' + esc(shownName) + '" loading="eager"' +
+        ' onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'" />' +
+      heroSwatchHtml.replace('class="hero-placeholder"', 'class="hero-placeholder" style="display:none"')
+    : heroSwatchHtml) + '</div>' +
   '<div>' +
     '<div class="eyebrow">' + esc(categorySingular) + ' &middot; Sig Sauer P365</div>' +
     '<h1>' + esc(shownName) + '</h1>' +

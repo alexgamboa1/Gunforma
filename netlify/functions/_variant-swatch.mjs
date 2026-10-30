@@ -108,10 +108,22 @@
     return null;
   }
 
+  // Makers whose two-part colour names a FRAME and an ACCENT, not an object in
+  // two colours. Icarus Precision writes "<frame>/<panel>" — "FDE/Gold" is an
+  // FDE grip module with a brass panel, "ODG/Hogue" an ODG one with a Hogue
+  // G10 panel — so the swatch is the frame colour alone (Alex, 2026-10-30).
+  // Keyed by brand, not category: Sharps Bros grips are frames too, and
+  // their "Black/Cherry" is a real second colour that must still split.
+  var FRAME_COLOUR_BRANDS = {
+    'icarus precision': true,
+  };
+
   // Returns {kind, css} describing the swatch, or kind 'unknown' when the name
   // resolves to nothing. Exposed separately from the markup so a caller can
-  // decide its own size and shape.
-  function swatchFor(color) {
+  // decide its own size and shape. `brand` is optional; it only matters for
+  // FRAME_COLOUR_BRANDS.
+  function swatchFor(color, brand) {
+    if (FRAME_COLOUR_BRANDS[norm(brand)]) color = parts(color)[0] || color;
     var special = specialFor(color);
     if (special === 'iridescent') {
       return { kind: 'iridescent',
