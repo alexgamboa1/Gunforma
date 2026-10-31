@@ -663,6 +663,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/supabase-client.js"></script>
 <script src="js/category-map.js"></script>
+<script src="js/part-redirects.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <!-- Before affiliate.js: it calls window.variantLabel at render time. -->
@@ -916,7 +917,9 @@ async function loadEverything() {
   // Flatten single-row spec embeds ([{...}] -> {...} or null) so downstream
   // reads are `product.slide_specs.optic_cut`, not `[0].optic_cut`.
   var SPEC_KEYS = ['slide_specs','barrel_specs','compensator_specs','frame_specs','magwell_specs','optic_specs'];
-  PRODUCTS = (prodRes.data || []).map(function (r) {
+  // A row whose address 301s (js/part-redirects.js) was never a product of
+  // its own: not even the "Show discontinued" toggle lists it.
+  PRODUCTS = (prodRes.data || []).filter(function (r) { return !window.isRedirectedPart(r.category, r.slug); }).map(function (r) {
     var variants = r.product_variants || [];
     var dv = variants.find(function (v) { return v.is_default; }) || variants[0] || null;
     var priceHeadline = cardHeadline(variants, r.lowest_price);

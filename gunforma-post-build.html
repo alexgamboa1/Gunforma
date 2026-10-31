@@ -405,6 +405,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <!-- The section list, order and group headings. Read at parse time by the
      page code below, so it has to come first. -->
 <script src="js/category-map.js"></script>
+<script src="js/part-redirects.js"></script>
 <script src="js/build-categories.js"></script>
 <!-- Before the page code: loadCatalog calls window.variantLabel. -->
 <script src="js/variant-label.js"></script>
@@ -603,7 +604,7 @@ async function loadCatalog(platformId) {
     .select(
       // base_price was removed from the products table; pricing now comes
       // from the default variant's msrp. lowest_price is a stale-safe fallback.
-      'id, category, name, description, lowest_price, is_discontinued, manufacturers(name), '+
+      'id, slug, category, name, description, lowest_price, is_discontinued, manufacturers(name), '+
       'product_platforms!inner(platform_id), '+
       // Named FK to avoid the products↔product_variants ambiguity from
       // products.lowest_price_variant_id also referencing product_variants.id.
@@ -624,7 +625,9 @@ async function loadCatalog(platformId) {
     // Discontinued parts are offered too — an owner still has the part they
     // are posting — after the live ones and tagged "Discontinued" on the card
     // (js/part-picker.js). Array sort is stable, so live order is untouched.
-    const rows = (data || []).filter(function(r) { return cat.dbCategory.indexOf(r.category) !== -1; })
+    // A row whose address 301s (js/part-redirects.js) was never a product
+    // of its own — it is not offered beside the part it was merged into.
+    const rows = (data || []).filter(function(r) { return cat.dbCategory.indexOf(r.category) !== -1 && !window.isRedirectedPart(r.category, r.slug); })
       .sort(function(a, b) { return (a.is_discontinued === true) - (b.is_discontinued === true); });
     if (!rows.length) return;
     grouped[cat.key] = rows.map(function(r) {

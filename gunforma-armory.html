@@ -333,6 +333,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/supabase-client.js"></script>
 <script src="js/category-map.js"></script>
+<script src="js/part-redirects.js"></script>
 <script src="js/build-categories.js"></script>
 <script src="js/display-name.js"></script>
 <script src="js/variant-label.js"></script>
@@ -508,7 +509,9 @@ async function loadAll() {
   PLATFORMS.forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
   GUNS = r[1].data || [];
 
-  PRODUCTS = (r[2].data || []).filter(function (row) { return row.is_approved === true; }).map(function (row) {
+  // Approved only, and never a row whose address 301s (js/part-redirects.js):
+  // it was never a product of its own.
+  PRODUCTS = (r[2].data || []).filter(function (row) { return row.is_approved === true && !window.isRedirectedPart(row.category, row.slug); }).map(function (row) {
     var variants = (row.product_variants || []).slice().sort(function (a, b) {
       return (b.is_default === true) - (a.is_default === true);
     });

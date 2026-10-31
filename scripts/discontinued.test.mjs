@@ -209,4 +209,20 @@ test('PART_REDIRECTS is exactly the /parts/ 301s in netlify.toml', async () => {
   assert.ok(froms.size > 0);
   assert.deepEqual([...PART_REDIRECTS].sort(), [...froms].sort(),
     'a /parts/ 301 in netlify.toml must be in _part-redirects.mjs, and nothing else may be');
+  // The browser copy, path for path.
+  const g = {};
+  new Function('window', await read('js/part-redirects.js'))(g);
+  assert.deepEqual([...g.PART_REDIRECTS].sort(), [...froms].sort(), 'js/part-redirects.js agrees');
+  g.productPath = (c, s) => '/parts/' + ({ trigger: 'triggers', light: 'lights' }[c]) + '/' + s;
+  assert.equal(g.isRedirectedPart('trigger', 'ramm-tactical-leverage-c-p365'), true);
+  assert.equal(g.isRedirectedPart('light', 'streamlight-tlr-7-sub'), false, 'a real discontinued part is not a redirect');
+});
+
+test('every surface that loads discontinued parts drops the rows that 301', async () => {
+  for (const f of ['gunforma-post-build.html', 'gunforma-admin-post.html', 'gunforma-admin-queue.html',
+                   'gunforma-parts-catalog.html', 'gunforma-armory.html']) {
+    const src = await read(f);
+    assert.match(src, /<script src="js\/part-redirects\.js"><\/script>/, f + ': loads the list');
+    assert.match(src, /!window\.isRedirectedPart\(\w+\.category, \w+\.slug\)/, f + ': and filters by it');
+  }
 });

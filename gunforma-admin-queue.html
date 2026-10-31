@@ -376,6 +376,7 @@ button.detail-photo-btn:focus-visible { outline: 2px solid #4a9edd; outline-offs
 <script src="js/build-url.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/category-map.js"></script>
+<script src="js/part-redirects.js"></script>
 <script src="js/build-categories.js"></script>
 <script src="js/variant-label.js"></script>
 <!-- Which part a correction belongs to: by the part's own id. -->
@@ -1761,7 +1762,7 @@ async function loadFits(platformId) {
   const { data, error } = await sb
     .from('products')
     .select(
-      'id, category, name, is_discontinued, manufacturers(name), product_platforms!inner(platform_id), '+
+      'id, slug, category, name, is_discontinued, manufacturers(name), product_platforms!inner(platform_id), '+
       'product_variants!product_variants_product_id_fkey(id, is_default, primary_image_url, color, finish, variant_label, '+
       'reticle, reticle_color, battery_type, mount_system)'
     )
@@ -1770,7 +1771,8 @@ async function loadFits(platformId) {
     .order('is_discontinued')
     .order('name');
   if (error) throw new Error(error.message);
-  FITS[platformId] = (data || []).map(function (r) {
+  // A row whose address 301s (js/part-redirects.js) is never offered.
+  FITS[platformId] = (data || []).filter(function (r) { return !window.isRedirectedPart(r.category, r.slug); }).map(function (r) {
     return {
       id: r.id, category: r.category, name: r.name, discontinued: r.is_discontinued === true,
       brand: r.manufacturers ? r.manufacturers.name : 'Unknown brand',
