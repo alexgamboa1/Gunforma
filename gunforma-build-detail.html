@@ -1440,8 +1440,8 @@ function discontinuedRowHtml(part) {
   var firstV = (VARIANTS_BY_PRODUCT_ID[part.refId] || [])[0];
   var prod = firstV && firstV.products;
   var href = (prod && typeof window.productPath === 'function') ? window.productPath(prod.category, prod.slug) : null;
-  return '<div class="part-affiliate part-disc-row">No longer sold.' +
-    (href ? ' <a href="'+escH(href)+'">See the replacement or similar parts &rarr;</a>' : '') + '</div>';
+  return '<div class="part-affiliate part-disc-row"><span>No longer sold.' +
+    (href ? ' <a href="'+escH(href)+'">See the replacement or similar parts &rarr;</a>' : '') + '</span></div>';
 }
 
 // The part's name, linked to its /parts/ page when the catalog can address
