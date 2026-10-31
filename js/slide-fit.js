@@ -51,7 +51,8 @@
 // scripts/slide-fit.test.mjs pins all 30 cells of the signed-off matrix plus
 // every label, colour and reason; scripts/fits-on.test.mjs pins the grids.
 //
-// Global: window.SlideFit = { tag, sortRank, TAGS, TIER_INDEX, TIER_LABEL }.
+// Global: window.SlideFit = { tag, sortRank, TAGS, TIER_INDEX, TIER_LABEL,
+// NEEDS_COMP_REASON }.
 (function (global) {
   var TIER_INDEX = { short: 0, xmacro: 1, fuse: 2 };
   var TIER_LABEL = { short: 'Short', xmacro: 'XMacro', fuse: 'FUSE' };
@@ -89,6 +90,15 @@
     return x && TIER_INDEX.hasOwnProperty(x.fit_tier) ? TIER_INDEX[x.fit_tier] : null;
   }
 
+  // The needs_comp reason is the one sentence that depends on where it is
+  // read: a builder (the Armory, the catalog) is finishing a build; a product
+  // page is describing a part. Same verdict, so it is a wording option on
+  // tag(), not a second copy of the rule.
+  var NEEDS_COMP_REASON = {
+    builder: 'Add a threaded barrel and comp to finish this build.',
+    page:    'Needs a threaded barrel and add-on comp to cover the grip.',
+  };
+
   function cantCover(slide, grip) {
     return 'A ' + TIER_LABEL[slide.fit_tier] + ' slide can’t cover a ' +
            TIER_LABEL[grip.fit_tier] + ' grip, even with a comp.';
@@ -103,8 +113,12 @@
   //             null. Ignored unless the slide's comp_style is 'none' — the
   //             pages never offer a comp on a comp slide, and a stale pick
   //             must not move the verdict.
+  //   opts      optional { context: 'builder' | 'page' } — wording only, never
+  //             the verdict. Default 'builder' (the Armory and the catalog);
+  //             product-page.mjs passes 'page'.
   // Returns { key, label, color, selectable, reason }.
-  function tag(slide, grip, addOnComp) {
+  function tag(slide, grip, addOnComp, opts) {
+    var context = opts && NEEDS_COMP_REASON.hasOwnProperty(opts.context) ? opts.context : 'builder';
     var st = tierOf(slide), gt = tierOf(grip);
     if (st === null || gt === null) return make('unconfirmed');
     var d = st - gt;
@@ -126,7 +140,7 @@
     if (d > 0) return make('extended');
     if (d === -1) {
       if (style === 'none') {
-        return make('needs_comp', 'Add a threaded barrel and comp to finish this build.');
+        return make('needs_comp', NEEDS_COMP_REASON[context]);
       }
       if (style === 'short_barrel' || style === 'ported_barrel') {
         return make('wont_fit', 'This comp slide can’t take an add-on comp, so it can’t cover a ' +
@@ -143,5 +157,6 @@
     TAGS: TAGS,
     TIER_INDEX: TIER_INDEX,
     TIER_LABEL: TIER_LABEL,
+    NEEDS_COMP_REASON: NEEDS_COMP_REASON,
   };
 })(window);

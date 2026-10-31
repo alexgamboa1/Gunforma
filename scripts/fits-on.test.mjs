@@ -13,7 +13,12 @@
 //   - a grip page of each tier reproduces its matrix column, all ten rows;
 //   - a part with no tier reads "Fit not confirmed" — a line, not an empty
 //     grid — and a P320 part (no tier model) gets no section at all;
-//   - tiers are names: no tier label or grip cell carries inches;
+//   - grip tiers are names: no tier label or grip cell carries inches;
+//   - slides lead with their size (Alex, 2026-10-30): every grip-page row is
+//     Alex's label verbatim, its slide size the row's bold lead, and a slide
+//     page names its own slide the same way in the intro;
+//   - "Needs comp" reads the product-page wording of the shared rule ("…to
+//     cover the grip"), never the builders' "…to finish this build";
 //   - a failed read or a missing spec row leaves the page a 200 without
 //     the section, and x-fits-on says which;
 //   - the rule is not copied: no server file restates it, and the function
@@ -47,6 +52,22 @@ const MATRIX = {
 const ROW_ORDER = ['short/none', 'short/none+comp', 'xmacro/short_barrel', 'xmacro/none', 'xmacro/none+comp',
   'xmacro/ported_barrel', 'fuse/short_barrel', 'fuse/none', 'fuse/none+comp', 'fuse/ported_barrel'];
 const TIERS = ['short', 'xmacro', 'fuse'];
+// Alex's ten labels, verbatim (2026-10-30), in ROW_ORDER, split where the
+// bold slide size ends.
+const LABELS = [
+  ['Short slide 3.1"', ''],
+  ['Short slide 3.1"', ' + add-on comp'],
+  ['XL slide 3.7"',    ', internally ported short barrel (3.1" barrel: XMacro Comp, Spectre)'],
+  ['XL slide 3.7"',    ''],
+  ['XL slide 3.7"',    ' + add-on comp'],
+  ['XL slide 3.7"',    ', ported barrel comp (3.7" barrel)'],
+  ['FUSE slide 4.3"',  ', internally ported short barrel (3.7" barrel: FUSE Comp)'],
+  ['FUSE slide 4.3"',  ''],
+  ['FUSE slide 4.3"',  ' + add-on comp'],
+  ['FUSE slide 4.3"',  ', ported barrel comp (4.3" barrel)'],
+];
+const SIZE_OF = { short: 'Short slide 3.1"', xmacro: 'XL slide 3.7"', fuse: 'FUSE slide 4.3"' };
+const PAGE_NEEDS = 'Needs a threaded barrel and add-on comp to cover the grip.';
 
 function product(category) {
   return {
@@ -97,7 +118,10 @@ const section = (html, title) => {
 const decode = (s) => s.replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const rows = (sec) => [...sec.matchAll(/<tr><th scope="row">([\s\S]*?)<\/th>([\s\S]*?)<\/tr>/g)]
   .map((m) => ({ head: decode(m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()),
-                 cells: [...m[2].matchAll(/<span class="fit-tag[^"]*">([^<]+)<\/span>/g)].map((c) => c[1]) }));
+                 text: decode(m[1].replace(/<[^>]+>/g, '')),
+                 lead: (m[1].match(/^<span class="fiton-size">([^<]+)<\/span>/) || [])[1],
+                 cells: [...m[2].matchAll(/<span class="fit-tag[^"]*">([^<]+)<\/span>/g)].map((c) => c[1]),
+                 reasons: [...m[2].matchAll(/<span class="fit-reason">([^<]+)<\/span>/g)].map((c) => decode(c[1])) }));
 
 test('a slide page of every kind reproduces its matrix row, and a plain slide its add-on-comp row', async () => {
   for (const key of ROW_ORDER.filter((k) => !k.endsWith('+comp'))) {
@@ -109,6 +133,8 @@ test('a slide page of every kind reproduces its matrix row, and a plain slide it
     assert.ok(sec, key + ': section rendered');
     const got = rows(sec);
     assert.deepEqual(got.map((x) => x.head.split(' ')[0]), ['Short', 'XMacro', 'FUSE'], key + ': one row per grip tier, in order');
+    assert.ok(sec.includes('This <strong>' + SIZE_OF[fit_tier].replace(/"/g, '&quot;') + '</strong> on each length of grip'),
+      key + ': the intro names the slide by its size');
     assert.deepEqual(got.map((x) => x.cells[0]), MATRIX[key], key + ': this slide on each grip tier');
     if (comp_style === 'none') {
       assert.match(sec, /<th scope="col">With an add-on comp<\/th>/);
@@ -136,30 +162,46 @@ test('a grip page of every tier reproduces its matrix column, all ten setups', a
     const got = rows(sec);
     assert.equal(got.length, 10, tier + ': ten slide setups');
     assert.deepEqual(got.map((x) => x.cells[0]), ROW_ORDER.map((k) => MATRIX[k][i]), tier + ' grip: the matrix column');
-    assert.deepEqual(got.map((x) => x.head), mod.FITS_ON_SETUPS.map((s) => s.label));
+    assert.deepEqual(got.map((x) => x.text), LABELS.map(([a, b]) => a + b), tier + ': Alex’s labels, verbatim');
+    assert.deepEqual(got.map((x) => decode(x.lead || '')), LABELS.map(([a]) => a), tier + ': each row leads with the slide size');
   }
+  // the size is the row's most visible part: bold, the rest of the label not
+  const css = (await render('frame', { tierRow: { fit_tier: 'xmacro' } })).html;
+  assert.match(css, /\.fiton-size \{ font-weight: 700;/);
+  assert.match(css, /\.fiton-rest \{ font-weight: 400;/);
 });
 
 test('the setups the grip page lists are the matrix rows, in order', () => {
   const keys = mod.FITS_ON_SETUPS.map((s) => s.slide.fit_tier + '/' + s.slide.comp_style + (s.comp ? '+comp' : ''));
   assert.deepEqual(keys, ROW_ORDER);
-  // the two comp-slide kinds carry their signed-off labels verbatim
-  const label = (k) => mod.FITS_ON_SETUPS[ROW_ORDER.indexOf(k)].label;
-  assert.equal(label('xmacro/short_barrel'), 'XL slide, internally ported short barrel');
-  assert.equal(label('fuse/short_barrel'), 'FUSE slide, internally ported short barrel');
-  assert.equal(label('xmacro/ported_barrel'), '3.7" ported barrel comp');
-  assert.equal(label('fuse/ported_barrel'), '4.3" ported barrel comp');
+  assert.deepEqual(mod.FITS_ON_SETUPS.map((s) => [s.size, s.rest]), LABELS);
+  // a setup's size is the size of its tier's slide — the one a slide page names
+  for (const s of mod.FITS_ON_SETUPS) assert.equal(s.size, mod.FITS_ON_SLIDE_SIZE[s.slide.fit_tier]);
+  assert.deepEqual(mod.FITS_ON_SLIDE_SIZE, SIZE_OF);
 });
 
-test('tiers are names: no tier label, grip cell or plain-slide label carries inches', async () => {
+test('grip tiers are names: no grip label or grip intro carries inches', async () => {
   const r = await render('slide', { tierRow: { fit_tier: 'xmacro', comp_style: 'none' } });
   for (const x of rows(section(r.html, 'Fits on'))) assert.doesNotMatch(x.head, /\d\.\d|"|″/, x.head);
-  const g = await render('frame', { tierRow: { fit_tier: 'fuse' } });
-  const intro = section(g.html, 'Slides on this grip');
-  assert.match(intro, /This grip is <strong>FUSE<\/strong> length/);
-  for (const s of mod.FITS_ON_SETUPS.filter((s) => s.slide.comp_style !== 'ported_barrel')) {
-    assert.doesNotMatch(s.label, /\d|"/, s.label);
+  for (const g of mod.FITS_ON_GRIP_TIERS) assert.doesNotMatch(g.grips, /\d\.\d|"|″/, g.grips);
+  for (const tier of TIERS) {
+    const g = await render('frame', { tierRow: { fit_tier: tier } });
+    const intro = section(g.html, 'Slides on this grip').split('<table')[0];
+    assert.match(intro, /This grip is <strong>(Short|XMacro|FUSE)<\/strong> length/);
+    assert.doesNotMatch(intro, /\d\.\d|&quot;|″/, tier + ' grip intro');
   }
+});
+
+test('"Needs comp" on a product page reads the page wording, not the builder’s', async () => {
+  const slide = await render('slide', { tierRow: { fit_tier: 'short', comp_style: 'none' } });
+  const s = section(slide.html, 'Fits on');
+  assert.ok(s.includes(PAGE_NEEDS), 'slide page: a Short slide on an XMacro grip');
+  const grip = await render('frame', { tierRow: { fit_tier: 'fuse' } });
+  const gr = rows(section(grip.html, 'Slides on this grip'));
+  const xl = gr[ROW_ORDER.indexOf('xmacro/none')];
+  assert.equal(xl.cells[0], NEEDS);
+  assert.deepEqual(xl.reasons, [PAGE_NEEDS], 'grip page: an XL slide on a FUSE grip');
+  for (const html of [slide.html, grip.html]) assert.doesNotMatch(html, /finish this build/);
 });
 
 test('no tier reads "Fit not confirmed" — a line, never an empty grid', async () => {
@@ -215,6 +257,7 @@ test('the rule is js/slide-fit.js itself: loaded, not copied, and shipped with t
       const src = await readFile(join(ROOT, dir, f), 'utf8');
       assert.doesNotMatch(src, /short:\s*0,\s*xmacro:\s*1/, dir + '/' + f + ' carries a copy of the tier index');
       assert.doesNotMatch(src, /can’t cover a/, dir + '/' + f + ' carries a copy of the rule’s reasons');
+      assert.doesNotMatch(src, /threaded barrel and (add-on )?comp/, dir + '/' + f + ' carries a copy of the needs-comp sentence');
     }
   }
 

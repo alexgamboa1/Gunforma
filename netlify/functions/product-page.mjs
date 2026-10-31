@@ -486,9 +486,13 @@ async function fetchFitSection(category, productId, raw) {
 // SlideFit.tag() from js/slide-fit.js (loaded by _slide-fit.mjs, not
 // copied), so a cell here can never disagree with the Armory's tag.
 //
-// Tiers are names, never inches (Alex, 2026-10-29). The ten slide setups a
-// grip page lists are the rows of the signed-off matrix (fitment ship prompt
-// §2); the two comp-slide kinds use their signed-off labels verbatim.
+// GRIP tiers are names, never inches (Alex, 2026-10-29). SLIDES lead with
+// their size (Alex, 2026-10-30): the ten setups a grip page lists are the
+// rows of the signed-off matrix (fitment ship prompt §2), each label opening
+// with the slide size — rendered as the row's most visible part — and the
+// rest of Alex's label verbatim after it. A slide page names its own slide
+// the same way (SLIDE_SIZE). The needs_comp sentence is the page wording of
+// the shared rule (SlideFit.tag's context option), not the builders'.
 //
 // P365 only: P320 parts keep js/frame-fit.js and carry no tier, so the grid
 // is not drawn for them rather than reading "Fit not confirmed". A P365 part
@@ -499,20 +503,25 @@ const GRIP_TIERS = [
   { tier: 'fuse',   grips: 'Full-length aftermarket FUSE grips' },
 ];
 const ADD_ON_COMP = {};   // a comp with no fit_result: no maker publishes one
+const ON_PAGE = { context: 'page' };
+// What a slide of each tier is called, size first. A comp slide is named by
+// where it ENDS (an XMacro Comp is an XL slide 3.7" over a 3.1" barrel).
+const SLIDE_SIZE = { short: 'Short slide 3.1"', xmacro: 'XL slide 3.7"', fuse: 'FUSE slide 4.3"' };
 const SLIDE_SETUPS = [
-  { label: 'Short slide',                                slide: { fit_tier: 'short',  comp_style: 'none' } },
-  { label: 'Short slide + add-on comp',                  slide: { fit_tier: 'short',  comp_style: 'none' }, comp: true },
-  { label: 'XL slide, internally ported short barrel',   slide: { fit_tier: 'xmacro', comp_style: 'short_barrel' } },
-  { label: 'XMacro slide',                               slide: { fit_tier: 'xmacro', comp_style: 'none' } },
-  { label: 'XMacro slide + add-on comp',                 slide: { fit_tier: 'xmacro', comp_style: 'none' }, comp: true },
-  { label: '3.7" ported barrel comp',                    slide: { fit_tier: 'xmacro', comp_style: 'ported_barrel' } },
-  { label: 'FUSE slide, internally ported short barrel', slide: { fit_tier: 'fuse',   comp_style: 'short_barrel' } },
-  { label: 'FUSE slide',                                 slide: { fit_tier: 'fuse',   comp_style: 'none' } },
-  { label: 'FUSE slide + add-on comp',                   slide: { fit_tier: 'fuse',   comp_style: 'none' }, comp: true },
-  { label: '4.3" ported barrel comp',                    slide: { fit_tier: 'fuse',   comp_style: 'ported_barrel' } },
+  { size: SLIDE_SIZE.short,  rest: '',                                                           slide: { fit_tier: 'short',  comp_style: 'none' } },
+  { size: SLIDE_SIZE.short,  rest: ' + add-on comp',                                             slide: { fit_tier: 'short',  comp_style: 'none' }, comp: true },
+  { size: SLIDE_SIZE.xmacro, rest: ', internally ported short barrel (3.1" barrel: XMacro Comp, Spectre)', slide: { fit_tier: 'xmacro', comp_style: 'short_barrel' } },
+  { size: SLIDE_SIZE.xmacro, rest: '',                                                           slide: { fit_tier: 'xmacro', comp_style: 'none' } },
+  { size: SLIDE_SIZE.xmacro, rest: ' + add-on comp',                                             slide: { fit_tier: 'xmacro', comp_style: 'none' }, comp: true },
+  { size: SLIDE_SIZE.xmacro, rest: ', ported barrel comp (3.7" barrel)',                         slide: { fit_tier: 'xmacro', comp_style: 'ported_barrel' } },
+  { size: SLIDE_SIZE.fuse,   rest: ', internally ported short barrel (3.7" barrel: FUSE Comp)',  slide: { fit_tier: 'fuse',   comp_style: 'short_barrel' } },
+  { size: SLIDE_SIZE.fuse,   rest: '',                                                           slide: { fit_tier: 'fuse',   comp_style: 'none' } },
+  { size: SLIDE_SIZE.fuse,   rest: ' + add-on comp',                                             slide: { fit_tier: 'fuse',   comp_style: 'none' }, comp: true },
+  { size: SLIDE_SIZE.fuse,   rest: ', ported barrel comp (4.3" barrel)',                         slide: { fit_tier: 'fuse',   comp_style: 'ported_barrel' } },
 ];
 export const FITS_ON_SETUPS = SLIDE_SETUPS;   // for the test
 export const FITS_ON_GRIP_TIERS = GRIP_TIERS;
+export const FITS_ON_SLIDE_SIZE = SLIDE_SIZE;
 
 // { state, grid }. state is what x-fits-on reports: n/a (not a slide or a
 // grip) | no-spec | not-p365 | no-rule | unconfirmed | tier:<tier>[/<comp
@@ -541,12 +550,12 @@ async function fetchFitsOn(category, productId) {
     return {
       state: 'tier:' + slide.fit_tier + '/' + (slide.comp_style || 'unstated'),
       grid: {
-        kind: 'slide', unconfirmed, takesComp,
+        kind: 'slide', unconfirmed, takesComp, size: SLIDE_SIZE[slide.fit_tier],
         compSlide: slide.comp_style === 'short_barrel' || slide.comp_style === 'ported_barrel',
         rows: GRIP_TIERS.map((g) => ({
           tier: SlideFit.TIER_LABEL[g.tier], grips: g.grips,
-          tag: SlideFit.tag(slide, { fit_tier: g.tier }, null),
-          comp: takesComp ? SlideFit.tag(slide, { fit_tier: g.tier }, ADD_ON_COMP) : null,
+          tag: SlideFit.tag(slide, { fit_tier: g.tier }, null, ON_PAGE),
+          comp: takesComp ? SlideFit.tag(slide, { fit_tier: g.tier }, ADD_ON_COMP, ON_PAGE) : null,
         })),
       },
     };
@@ -556,7 +565,9 @@ async function fetchFitsOn(category, productId) {
     state: 'tier:' + grip.fit_tier,
     grid: {
       kind: 'frame', unconfirmed, tier: SlideFit.TIER_LABEL[grip.fit_tier],
-      rows: SLIDE_SETUPS.map((s) => ({ label: s.label, tag: SlideFit.tag(s.slide, grip, s.comp ? ADD_ON_COMP : null) })),
+      rows: SLIDE_SETUPS.map((s) => ({
+        size: s.size, rest: s.rest, tag: SlideFit.tag(s.slide, grip, s.comp ? ADD_ON_COMP : null, ON_PAGE),
+      })),
     },
   };
 }
@@ -570,7 +581,6 @@ function fitTagHtml(tag, sameAs) {
     (reason ? '<span class="fit-reason">' + esc(reason) + '</span>' : '');
 }
 
-const FITS_ON_LENGTHS = 'Slide lengths: Short is the P365 and P365 X length, XMacro the P365 XL and XMacro length, FUSE the P365 FUSE length.';
 const FITS_ON_COMP_NOTE = 'No comp maker publishes exactly how its comp lines up with a grip, so a comp that fills the gap reads “Comp flush / partially flush”.';
 
 function fitsOnHtml(grid) {
@@ -583,7 +593,7 @@ function fitsOnHtml(grid) {
       ' isn’t confirmed yet.</span></div>';
   }
   const intro = '<div class="fiton-intro">Every P365 slide goes on every P365 grip, fire control unit permitting. ' +
-    (grid.kind === 'slide' ? 'This is where this slide ends on each length of grip.'
+    (grid.kind === 'slide' ? 'This <strong>' + esc(grid.size) + '</strong> on each length of grip — where its front ends.'
                            : 'This grip is <strong>' + esc(grid.tier) + '</strong> length; this is where each kind of slide ends on it.') +
     '</div>';
   if (grid.kind === 'slide') {
@@ -601,9 +611,11 @@ function fitsOnHtml(grid) {
   }
   return '<div class="section-title">' + title + '</div>' + intro +
     '<table class="fiton"><thead><tr><th scope="col">Slide</th><th scope="col">On this grip</th></tr></thead><tbody>' +
-      grid.rows.map((r) => '<tr><th scope="row">' + esc(r.label) + '</th><td>' + fitTagHtml(r.tag) + '</td></tr>').join('') +
+      grid.rows.map((r) => '<tr><th scope="row"><span class="fiton-size">' + esc(r.size) + '</span>' +
+        (r.rest ? '<span class="fiton-rest">' + esc(r.rest) + '</span>' : '') +
+        '</th><td>' + fitTagHtml(r.tag) + '</td></tr>').join('') +
     '</tbody></table>' +
-    '<div class="fitguide-note">' + esc(FITS_ON_LENGTHS) + ' ' + esc(FITS_ON_COMP_NOTE) + '</div>';
+    '<div class="fitguide-note">' + esc(FITS_ON_COMP_NOTE) + '</div>';
 }
 
 // Stale prices are excluded from a "from" price, and in-stock listings win
@@ -1118,6 +1130,8 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.fiton tbody th { font-weight: 600; color: #1a1a1a; width: 38%; }' +
 '.fiton-tier { display: block; }' +
 '.fiton-sub { display: block; font-size: 11.5px; font-weight: 400; color: #888; margin-top: 2px; }' +
+'.fiton-size { font-weight: 700; color: #1a1a1a; white-space: nowrap; }' +
+'.fiton-rest { font-weight: 400; color: #666; }' +
 '.fit-tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }' +
 '.fit-tag-green { background: #e3f3e8; color: #1d6b37; }' +
 '.fit-tag-neutral { background: #eef0f2; color: #3d4650; }' +
