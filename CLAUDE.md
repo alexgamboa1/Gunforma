@@ -1018,21 +1018,69 @@ the `where retired_at is null` reads.
 
 A whole **product** leaving the catalog is `products.is_discontinued = true` —
 not `retired_at`, which is per variant and per link, and never a delete.
-Every browse surface filters it: the catalog (and so its search), both build
-pickers, the Armory, the fit guides, `sitemap.mjs` and `parts-index.mjs`.
 
-**The product page does not.** `/parts/<category>/<slug>` still renders a
-discontinued part at 200, so an existing build that lists it keeps a working
-link. When a part has a successor, add an exact-path `301` in `netlify.toml`
-**above** the `/parts/*` rewrite, put the old path in `RETIRED` in
+**A discontinued part is never hidden or deleted** (Alex, 2026-10-30;
+`supabase/migrations/*_discontinued_replaced_by.sql`). Owners still have
+it, builds still list it, and its page keeps its search traffic. So:
+
+- **Its page stays live and in the sitemap.** `product-page.mjs` renders a
+  **"Discontinued"** badge, no price, no buy rows and no JSON-LD offers,
+  the options it came in (photo or swatch and label only), its fit tags,
+  and, where the Buy section was, **"Replaced by"** or **"Similar parts"**.
+  `sitemap.mjs` lists it; `/parts` links it in a collapsed "Discontinued
+  parts" list after the live catalog, so it is never orphaned.
+- **"Replaced by" only when the maker names the successor**
+  (`products.replaced_by_id`; Alex, 2026-10-31). A successor we chose
+  ourselves is a claim the maker never made, so without one the page shows
+  **Similar parts**: same category, same platform, the same fit key
+  (slide/grip `fit_tier`, barrel length, optic footprint, a light's
+  `light_compatibility` guns), approved and not discontinued — fresh-priced
+  first, four at most. The successor card carries the successor's own hero
+  buy row under the listing rules. A successor that is itself discontinued
+  or unapproved is not offered; the page falls back to similar parts. The
+  column may only be set on a discontinued part
+  (`products_replaced_by_discontinued`), and it is read in a query of its
+  own, so before the migration every discontinued page says "similar".
+  `x-discontinued` reports `n/a`, `replaced:<slug>`, `similar:<n>` or
+  `failed`.
+- **Builds and guides keep it**, with its photo and fit tags, marked
+  "Discontinued": the build page (and its `build-og.mjs` mirror), where a
+  line pointing at its page replaces the buy row, and the opened Gun Guide.
+  The Armory opens a guide holding one with the part in place.
+- **The build pickers offer it** (both builder pages and the review
+  queue's + Add a part) — after the live parts, tagged "Discontinued" —
+  because an owner is posting the part they have.
+- **The catalog and the Armory hide it by default** behind a **"Show
+  discontinued"** toggle; fit rules apply as ever. My Favorites shows a
+  saved one regardless. The fit guides, hubs and the barrel/slide lists
+  stay live-only: they are buying lists.
+- **Approval does not ask a discontinued part for a price or a buy link**:
+  `product_data_status()` reports a blank `url` and a missing MSRP under
+  `optional_blank` for it, not `missing`.
+- `scripts/discontinued.test.mjs` pins all of it on every deploy;
+  `check-routes.mjs` walks every discontinued page on the wire and
+  `check-sitemap.mjs` requires each one listed.
+
+**Four discontinued rows are not discontinuations and still 301**: RAMM's
+comp and non-comp Leverage kits (merged into
+`ramm-tactical-leverage-trigger-p365`), the duplicate SIG manual-safety kit,
+and Icarus's "311 FUSE SL", which Icarus never made. Nobody owns those, so
+their addresses 301 to the real product. **A part that 301s is the only
+kind left out**: `netlify/functions/_part-redirects.mjs` (`PART_REDIRECTS`)
+holds every `/parts/` 301 in `netlify.toml`, with a browser copy in
+`js/part-redirects.js` (`window.isRedirectedPart`) — `discontinued.test.mjs`
+fails when the three differ. The sitemap and `/parts` skip those addresses,
+and the catalog, the Armory, both builder pickers and the review queue drop
+those rows, so a merged duplicate is never offered beside its original. To
+merge a row into another: the exact-path `301` in `netlify.toml` **above**
+the `/parts/*` rewrite, its line in both copies of the list, and the pair in
+`check-routes.mjs`'s redirect block.
+
+**A part that moves category takes the same steps** — the 301 above the
+rewrite, its line in both copies of the redirect list, the old path in `RETIRED` in
 `scripts/check-sitemap.mjs` (its baseline pins every URL the old static
-sitemap had), and add the pair to the redirect block in
-`scripts/check-routes.mjs`. Worked example: RAMM's comp and non-comp P365
-Leverage kits, merged into `ramm-tactical-leverage-trigger-p365`.
-
-**A part that moves category takes the same three steps** — the 301 above
-the rewrite, the old path in `RETIRED`, the pair in `check-routes.mjs` — and
-nothing else: the product is live, only its address changed. The sitemap
+sitemap had), the pair in `check-routes.mjs` — and nothing else: the
+product is live, only its address changed. The sitemap
 lists the new address on its own, since it is built from `products.category`.
 Worked example: `tti-xmacro-completed-mag-w-basepad`, filed as a basepad
 before the magazine category existed and moved by
@@ -1381,6 +1429,7 @@ Registered today:
 | `scripts/fit-sections.test.mjs` | a product page's barrel/slide fit section listing a threaded barrel on a slide whose maker says no (or the reverse), an unapproved or discontinued part, a locked barrel without its heading and warning ("Only these slides", or "Only for specific <brand> slides" when none is listed or the fit read fails), a stale "From" price, or a heading over nothing — runs `product-page.mjs` against a stubbed fetch and pins both the one query it sends and the HTML |
 | `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
 | `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
+| `scripts/discontinued.test.mjs` | a discontinued part hidden or sold — its page showing a price, a buy row or a JSON-LD offer, missing its "Discontinued" badge, offering a successor the database does not name or one that is discontinued or unapproved, suggesting an unapproved or discontinued "similar" part, or reading `replaced_by_id` for a live part; a builder picker, the review queue, the catalog or the Armory filtering discontinued parts out of its read again, the catalog's or the Armory's "Show discontinued" toggle starting on, a guide or build no longer marking one; the sitemap or `/parts` dropping discontinued pages, or listing an address that 301s; `PART_REDIRECTS` or `js/part-redirects.js` drifting from the `/parts/` 301s in `netlify.toml`, or a catalog surface offering a row that 301s — runs `product-page.mjs` against a stubbed catalog and reads the pages' sources |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |

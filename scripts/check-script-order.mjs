@@ -39,6 +39,10 @@ const RULES = [
   // addPartWithVariant(), and the build page in resolveVariant().
   { global: 'variantSpecs', defines: 'js/variant-label.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
+  // The /parts/ addresses that 301. The catalog, the Armory, both builder
+  // pages and the review queue call window.isRedirectedPart inline when they
+  // load the catalog; a missing tag throws there and the picker stays empty.
+  { global: 'isRedirectedPart', defines: 'js/part-redirects.js', consumers: [] },
   // What a build costs: the homepage and the gallery call
   // window.buildPriceTotal / window.priceTotalText inline from their card
   // renderers (the server copy is in _build-cards.mjs). A missing tag

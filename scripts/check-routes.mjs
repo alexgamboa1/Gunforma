@@ -72,6 +72,7 @@ async function get(path, headers) {
     fnFits: res.headers.get('x-field-note-fits'),
     fitSection: res.headers.get('x-fit-section'),
     fitsOn: res.headers.get('x-fits-on'),
+    discontinued: res.headers.get('x-discontinued'),
     canon: [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map(m => m[1]),
     hasOg: /property=["']og:image["']/.test(body),
   };
@@ -919,6 +920,50 @@ for (const [label, path, want] of [
     ok(loc === to, `  -> ${to}`, r.location);
     const t = await get(to);
     ok(t.status === 200, `  and ${to} answers 200`, t.status);
+  }
+}
+
+// ── discontinued parts stay live ───────────────────────────────────────
+// Alex's policy (2026-10-30): a discontinued part's page answers 200, says
+// "Discontinued", sells nothing, and names the maker's successor
+// (products.replaced_by_id) or similar parts — and /parts links it, in its
+// collapsed Discontinued list. Every discontinued part whose address does
+// not 301 is walked. A replaced part's card must link the successor the
+// database names; before the column exists every page says similar.
+{
+  console.log('\n── discontinued parts stay live');
+  const { PART_REDIRECTS } = await import(new URL('../netlify/functions/_part-redirects.mjs', import.meta.url));
+  const { CATEGORY_META } = await import(new URL('../netlify/functions/_category-meta.mjs', import.meta.url));
+  const H = { headers: { apikey: SB_ANON, Authorization: `Bearer ${SB_ANON}` } };
+  const rest = async (q) => { const r = await fetch(`${SB_URL}/rest/v1/${q}`, H); return r.ok ? r.json() : null; };
+  const disc = await rest('products?select=id,slug,category&is_discontinued=eq.true&order=slug.asc');
+  ok(Array.isArray(disc), 'discontinued parts readable with the public key', (disc || []).length);
+  // replaced_by_id may not exist yet (code ships before the migration).
+  const succ = await rest('products?select=id,replaced_by_id&is_discontinued=eq.true&replaced_by_id=not.is.null');
+  const slugById = new Map(((await rest('products?select=id,slug,category')) || []).map((p) => [p.id, p]));
+  note('replaced_by_id', Array.isArray(succ) ? succ.length + ' set' : 'column not there yet');
+  const index = await get('/parts');
+  const discList = (index.body.match(/<details class="category discontinued"[\s\S]*?<\/details>/) || [''])[0];
+  for (const p of disc || []) {
+    const meta = CATEGORY_META[p.category];
+    if (!meta || !p.slug) continue;
+    const path = '/parts/' + meta[0] + '/' + p.slug;
+    if (PART_REDIRECTS.has(path)) continue;            // a merged or never-real row: asserted as a 301 above
+    const r = await get(path + '?v=' + Date.now());
+    ok(r.status === 200, `${path}: 200`, r.status);
+    ok(/<div class="disc-badge">Discontinued<\/div>/.test(r.body), '  says Discontinued');
+    ok(!/<div class="section-title">Buy<\/div>/.test(r.body) && !r.body.includes('/go/part/' + p.id),
+      '  and sells nothing of its own');
+    const row = Array.isArray(succ) ? succ.find((x) => x.id === p.id) : null;
+    const s = row ? slugById.get(row.replaced_by_id) : null;
+    if (s) {
+      const want = '/parts/' + CATEGORY_META[s.category][0] + '/' + s.slug;
+      ok(r.discontinued === 'replaced:' + s.slug, '  replaced by the successor the database names', r.discontinued);
+      ok(r.body.includes('<a class="successor-name" href="' + want + '"'), '  its card links ' + want);
+    } else {
+      ok(/^similar:\d+$/.test(r.discontinued || ''), '  no successor: similar parts', r.discontinued);
+    }
+    ok(discList.includes('href="' + path + '"'), '  /parts links it in its Discontinued list');
   }
 }
 

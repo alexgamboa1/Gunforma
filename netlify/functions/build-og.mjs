@@ -399,7 +399,7 @@ async function fetchLinkedProducts(build) {
   )];
   if (!ids.length) return {};
   try {
-    const rows = await pgRows('products?id=in.(' + ids.join(',') + ')&select=id,slug,category');
+    const rows = await pgRows('products?id=in.(' + ids.join(',') + ')&select=id,slug,category,is_discontinued');
     const map = {};
     for (const r of rows) if (r && r.id) map[r.id] = r;
     return map;
@@ -577,6 +577,9 @@ function serverPartsHtml(build, productsById) {
           : esc(nameTxt)) +
         (variantTxt ? ' — ' + esc(variantTxt) : '') +
       '</div>' +
+      // A discontinued part stays on the build, marked — the same tag the
+      // page's own render draws (gunforma-build-detail.html, renderPartCard).
+      (prod && prod.is_discontinued === true ? '<div class="part-tags"><span class="part-tag part-tag-disc">Discontinued</span></div>' : '') +
       // The builder's own words about this part. For a crawler this is the
       // one text on the page no other site has.
       (p.details ? '<div class="part-details"><span class="part-details-label">Builder\'s notes</span>' + esc(String(p.details)) + '</div>' : '') +

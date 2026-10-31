@@ -20,6 +20,7 @@
 // -----------------------------------------------------------------------------
 
 import { CATEGORY_META } from './_category-meta.mjs';
+import { PART_REDIRECTS } from './_part-redirects.mjs';
 // The one shared piece of this page's otherwise-own nav copy: the "Your
 // P365" hamburger dropdown, built from GUN_HUBS in _page-chrome.mjs. The
 // rest of the nav deliberately stays this file's own — see CLAUDE.md, "The
@@ -78,7 +79,7 @@ async function fetchAllProducts() {
   // the product page itself is for; this page's job is being a link
   // manifest, not a second copy of the catalog.
   const cols = [
-    'id', 'slug', 'name', 'category',
+    'id', 'slug', 'name', 'category', 'is_discontinued',
     'manufacturers!products_brand_id_fkey(name)',
   ].join(',');
   // PostgREST caps a response at its configured max-rows (1000 by default)
@@ -93,9 +94,9 @@ async function fetchAllProducts() {
   for (let offset = 0; ; offset += PAGE) {
     const page = await pgGet(
       'products?select=' + encodeURIComponent(cols) +
-      // Discontinued parts are hidden everywhere a reader browses — catalog,
-      // pickers, sitemap — so this manifest leaves them out as well.
-      '&is_discontinued=eq.false' +
+      // Discontinued parts included: renderPage() lists them apart, after
+      // the live catalog, so their pages keep an inbound link (CLAUDE.md,
+      // "Discontinued parts").
       '&order=name.asc&limit=' + PAGE + '&offset=' + offset
     );
     all.push(...page);
@@ -116,7 +117,20 @@ function groupByCategory(products) {
   return byCategory;
 }
 
-function renderPage(products) {
+function renderPage(allProducts) {
+  // Live parts are the index; discontinued ones follow in a collapsed list of
+  // their own ("hidden by default") — their pages stay live and still need an
+  // inbound link. A row whose address 301s (PART_REDIRECTS) is in neither.
+  const pathOf = (p) => '/parts/' + (CATEGORY_META[p.category] || [p.category])[0] + '/' + p.slug;
+  const products = allProducts.filter((p) => p.is_discontinued !== true);
+  const discontinued = allProducts
+    .filter((p) => p.is_discontinued === true && p.slug && CATEGORY_META[p.category] && !PART_REDIRECTS.has(pathOf(p)));
+  const discontinuedHtml = discontinued.length
+    ? '<details class="category discontinued" id="discontinued"><summary><h2>Discontinued parts <span class="count">(' + discontinued.length + ')</span></h2></summary>' +
+        '<p class="disc-note">No longer sold. Each page names the maker&rsquo;s replacement or similar parts.</p>' +
+        '<ul>' + discontinued.map((p) => '<li><a href="' + esc(pathOf(p)) + '">' + esc(shownName(p)) + '</a></li>').join('') + '</ul>' +
+      '</details>'
+    : '';
   const byCategory = groupByCategory(products);
 
   // Iterate CATEGORY_META's own key order (matches the products.category
@@ -216,6 +230,9 @@ function renderPage(products) {
 '.category { margin-bottom: 26px; }' +
 '.category h2 { font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #1a1a1a; margin-bottom: 10px; padding-top: 8px; border-top: 0.5px solid #ececec; }' +
 '.category h2 .count { color: #999; font-weight: 400; text-transform: none; letter-spacing: 0; }' +
+'.discontinued summary { cursor: pointer; list-style: none; } .discontinued summary::-webkit-details-marker { display: none; }' +
+'.discontinued summary h2 { display: inline-block; width: 100%; } .discontinued summary h2::after { content: " ▾"; color: #999; } .discontinued[open] summary h2::after { content: " ▴"; }' +
+'.disc-note { font-size: 12.5px; color: #777; margin: 0 0 8px; }' +
 '.category ul { list-style: none; }' +
 '.category li { font-size: 13px; padding: 6px 0; border-bottom: 0.5px solid #f2f2f2; }' +
 '.category a { color: #1a1a1a; text-decoration: none; }' +
@@ -286,6 +303,7 @@ function renderPage(products) {
   '</div>' +
   '<div class="jump-nav">' + jumpNavHtml + '</div>' +
   sectionsHtml +
+  discontinuedHtml +
 '</div>' +
 '<div class="footer-bar">' +
   '<span>&copy; 2026 Gunforma &middot; All rights reserved</span>' +

@@ -173,6 +173,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-btn.add:disabled { background: #cfd8e0; border-color: #cfd8e0; cursor: default; }
 .part-card-reason { font-size: 10px; color: #b24a2a; line-height: 1.35; }
 .part-card-note { font-size: 10px; color: #8a6d3b; line-height: 1.35; }
+.part-card-disc { display: inline-block; align-self: flex-start; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 3px; padding: 1px 6px; }
+.disc-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #666; margin: 0 0 10px; cursor: pointer; }
 .part-card-badge { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #1e7a4d; background: #e7f6ee; border: 0.5px solid #9edbbb; border-radius: 3px; padding: 1px 6px; }
 .picked-fit { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
 .picked-fit-reason { font-size: 11px; color: #8a6d3b; line-height: 1.4; }
@@ -331,6 +333,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/supabase-client.js"></script>
 <script src="js/category-map.js"></script>
+<script src="js/part-redirects.js"></script>
 <script src="js/build-categories.js"></script>
 <script src="js/display-name.js"></script>
 <script src="js/variant-label.js"></script>
@@ -421,6 +424,9 @@ var SLOT_GROUPS = BC.GROUPED_CATEGORIES.map(function (g) {
   };
 }).filter(function (g) { return g.slots.length; });
 
+// The pickers' "Show discontinued parts" toggle — off by default, and not
+// part of a build's identity, so "Start a new build" leaves it alone.
+var SHOW_DISCONTINUED = false;
 var STATE = {
   platform: null,
   gun: null,              // guns row, or null = "custom / FCU / not sure"
@@ -477,13 +483,15 @@ async function loadAll() {
     sb.from('guns').select('id, slug, name, housing_class, slide_length_in, integrated_comp, platform_id').order('name'),
     sb.from('products')
       .select(
-        'id, slug, name, category, is_approved,' +
+        'id, slug, name, category, is_approved, is_discontinued,' +
         'brands:manufacturers(id, name),' +
         'product_platforms(platform_id),' +
         'product_variants!product_variants_product_id_fkey(id, variant_label, color, finish, msrp, is_default, primary_image_url, retired_at)'
       )
-      .is('product_variants.retired_at', null)
-      .eq('is_discontinued', false),
+      // Discontinued parts load too: a guide that holds one opens with it
+      // (picksFromSnapshot), and the pickers offer them behind the "Show
+      // discontinued" toggle (SHOW_DISCONTINUED) — fit rules apply as ever.
+      .is('product_variants.retired_at', null),
     sb.from('slide_specs').select('product_id, barrel_length_in, integrated_comp, internally_ported, threaded_barrel_ok, port_style'),
     sb.from('barrel_specs').select('product_id, barrel_length_in, barrel_type, thread_pitch, requires_slide_text, port_style'),
     sb.from('compensator_specs').select('product_id, mounting_type, requires_threaded_barrel, thread_pitch, comes_with_barrel, barrel_length_in'),
@@ -501,7 +509,9 @@ async function loadAll() {
   PLATFORMS.forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
   GUNS = r[1].data || [];
 
-  PRODUCTS = (r[2].data || []).filter(function (row) { return row.is_approved === true; }).map(function (row) {
+  // Approved only, and never a row whose address 301s (js/part-redirects.js):
+  // it was never a product of its own.
+  PRODUCTS = (r[2].data || []).filter(function (row) { return row.is_approved === true && !window.isRedirectedPart(row.category, row.slug); }).map(function (row) {
     var variants = (row.product_variants || []).slice().sort(function (a, b) {
       return (b.is_default === true) - (a.is_default === true);
     });
@@ -510,6 +520,7 @@ async function loadAll() {
       id: row.id, slug: row.slug || null, name: row.name || '',
       category: row.category,
       brand: (row.brands && row.brands.name) || 'Unknown',
+      discontinued: row.is_discontinued === true,
       variants: variants,
       defaultVariant: dv,
       platform_ids: (row.product_platforms || []).map(function (pp) { return pp.platform_id; }),
@@ -809,7 +820,7 @@ function renderPlatformRow() {
     btn.addEventListener('click', function () { selectPlatform(btn.dataset.id); });
   });
   if (STATE.platform) {
-    var count = productsForPlatform().length;
+    var count = productsForPlatform().filter(function (p) { return !p.discontinued; }).length;
     note.textContent = count ? count + ' parts in the catalog' : '— catalog coming soon';
   } else { note.textContent = ''; }
   renderModelRow();
@@ -886,6 +897,7 @@ function partCardHtml(cat, p, meta) {
     '<div class="part-card-body">' +
       '<span class="part-card-brand">' + esc(p.brand) + '</span>' +
       '<span class="part-card-name">' + esc(p.name) + '</span>' +
+      (p.discontinued ? '<span class="part-card-disc">Discontinued</span>' : '') +
       (meta.tag || meta.recommended
         ? '<span class="part-card-tags">' + (meta.recommended ? '<span class="part-card-badge">Recommended</span> ' : '') + fitTagHtml(meta.tag) + '</span>'
         : '') +
@@ -956,7 +968,9 @@ function slotHtml(slot) {
     }
   }
 
-  var options = availableFor(cat);
+  // Discontinued parts are hidden from the picker unless the toggle is on.
+  // A picked one stays picked: it is drawn by pickedHtml, not from here.
+  var options = availableFor(cat).filter(function (p) { return SHOW_DISCONTINUED || !p.discontinued; });
   var metas = null;
   if (tierMode() && (cat === 'frame' || cat === 'slide' || cat === 'barrel')) {
     metas = {};
@@ -1082,6 +1096,7 @@ function pickedHtml(cat, p) {
     '<div class="picked-body">' +
       '<span class="picked-brand">' + esc(p.brand) + '</span>' +
       '<span class="picked-name">' + esc(p.name) + '</span>' +
+      (p.discontinued ? '<span class="part-card-disc">Discontinued</span>' : '') +
       tagRow +
       variantRow +
       '<span class="picked-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
@@ -1100,13 +1115,21 @@ function renderParts() {
     container.innerHTML = '<div class="card"><div class="empty"><div class="empty-title">Catalog coming soon</div>No ' + esc(STATE.platform.name) + ' parts yet.</div></div>';
     return;
   }
-  container.innerHTML = SLOT_GROUPS.map(function (g) {
+  var anyDiscontinued = productsForPlatform().some(function (p) { return p.discontinued; });
+  container.innerHTML = (anyDiscontinued
+    ? '<label class="disc-toggle"><input type="checkbox" id="show-discontinued"' + (SHOW_DISCONTINUED ? ' checked' : '') + ' /> Show discontinued parts</label>'
+    : '') + SLOT_GROUPS.map(function (g) {
     var inner = g.slots.map(slotHtml).join('');
     if (!inner) return '';
     return '<div class="group-head"><div class="group-head-label">' + esc(g.group.label) + '</div><div class="group-head-blurb">' + esc(g.group.blurb) + '</div></div>' +
            '<div class="section-card">' + inner + '</div>';
   }).join('');
 
+  var discToggle = document.getElementById('show-discontinued');
+  if (discToggle) discToggle.addEventListener('change', function () {
+    SHOW_DISCONTINUED = discToggle.checked;
+    renderAll();
+  });
   container.querySelectorAll('button[data-toggle]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var cat = btn.dataset.toggle;

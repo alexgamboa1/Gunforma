@@ -87,6 +87,7 @@ check "field note guide blocks"    scripts/guide-blocks.test.mjs
 check "go section tracking"        scripts/go-redirect.test.mjs
 check "barrel/slide fit sections"  scripts/fit-sections.test.mjs
 check "fits on grids"              scripts/fits-on.test.mjs
+check "discontinued parts stay"   scripts/discontinued.test.mjs
 check "gun guide parts build order" scripts/guide-part-order.test.mjs
 check "headline price follows option" scripts/option-price.test.mjs
 check "guide editor writes"       scripts/guide-editor.test.mjs

@@ -65,6 +65,7 @@
 // -----------------------------------------------------------------------------
 
 import { CATEGORY_META } from './_category-meta.mjs';
+import { PART_REDIRECTS } from './_part-redirects.mjs';
 import { buildUrl } from './_build-url.mjs';
 // Guide URLS COME FROM THE SAME REGISTRY guide-page.mjs SERVES — same
 // principle as buildUrl() above: the sitemap and the page's canonical are
@@ -197,17 +198,19 @@ function fieldNoteUrls() {
 async function productUrls() {
   const rows = await pgAll((limit, offset) =>
     'products?select=' + encodeURIComponent('slug,category,updated_at') +
-    // A discontinued part is out of the catalog and the build pickers, so it
-    // is out of here too. Its page may 301 to a successor (netlify.toml), and
-    // a sitemap must not list a URL that redirects.
-    '&is_discontinued=eq.false' +
+    // Discontinued parts INCLUDED (Alex, 2026-10-30): the page stays live —
+    // "Discontinued", with the maker's successor or similar parts — and it
+    // keeps its search traffic. What stays out is an address that 301s
+    // (PART_REDIRECTS): a sitemap must not list a URL that redirects.
     '&order=name.asc&limit=' + limit + '&offset=' + offset);
   const out = [];
   for (const p of rows) {
     if (!p.slug) continue;                       // unlinked product, same as the catalog
     const meta = CATEGORY_META[p.category];
     if (!meta) continue;                         // category this map doesn't know — see CLAUDE.md
-    out.push({ loc: SITE + '/parts/' + meta[0] + '/' + p.slug, lastmod: lastmod(p.updated_at) });
+    const path = '/parts/' + meta[0] + '/' + p.slug;
+    if (PART_REDIRECTS.has(path)) continue;      // a merged or never-real row; its address 301s
+    out.push({ loc: SITE + path, lastmod: lastmod(p.updated_at) });
   }
   return out;
 }
