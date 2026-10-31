@@ -1752,25 +1752,27 @@ async function doToggleAdd(buildId) {
     if (ADD.buildId === buildId) rerenderBuild(buildId);
   }
 }
-// Live, not-discontinued catalog parts that fit this pistol, with their live
-// variants: the builder page's own query.
+// Catalog parts that fit this pistol, with their live variants: the builder
+// page's own query — discontinued parts included, after the live ones and
+// marked, because the builder may well own one (CLAUDE.md, "Discontinued
+// parts").
 async function loadFits(platformId) {
   if (FITS[platformId]) return FITS[platformId];
   const { data, error } = await sb
     .from('products')
     .select(
-      'id, category, name, manufacturers(name), product_platforms!inner(platform_id), '+
+      'id, category, name, is_discontinued, manufacturers(name), product_platforms!inner(platform_id), '+
       'product_variants!product_variants_product_id_fkey(id, is_default, primary_image_url, color, finish, variant_label, '+
       'reticle, reticle_color, battery_type, mount_system)'
     )
     .is('product_variants.retired_at', null)
-    .eq('is_discontinued', false)
     .eq('product_platforms.platform_id', platformId)
+    .order('is_discontinued')
     .order('name');
   if (error) throw new Error(error.message);
   FITS[platformId] = (data || []).map(function (r) {
     return {
-      id: r.id, category: r.category, name: r.name,
+      id: r.id, category: r.category, name: r.name, discontinued: r.is_discontinued === true,
       brand: r.manufacturers ? r.manufacturers.name : 'Unknown brand',
       // Default variant first, as the builder's colour step offers them.
       variants: (r.product_variants || []).slice().sort(function (a, c) { return (c.is_default ? 1 : 0) - (a.is_default ? 1 : 0); }),
@@ -1802,7 +1804,7 @@ function addResultsHtml(b, sec) {
     var img = v0 && v0.primary_image_url;
     return '<label class="link-result' + (on ? ' on' : '') + '"><input type="radio" name="add-product"' + (on ? ' checked' : '') + ' onchange="addPick(\'' + r.id + '\')" />' +
       (img ? '<img src="' + escH(img) + '" alt="" />' : '') +
-      '<span><strong>' + escH(r.brand) + '</strong> — ' + escH(r.name) + '</span></label>';
+      '<span><strong>' + escH(r.brand) + '</strong> — ' + escH(r.name) + (r.discontinued ? ' <em>(discontinued)</em>' : '') + '</span></label>';
   }).join('') + (list.length > 30 ? '<div class="catalog-reason">' + (list.length - 30) + ' more: narrow the search.</div>' : '');
 }
 function addSearch(q) {

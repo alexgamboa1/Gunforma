@@ -254,6 +254,9 @@
       '<div class="part-card-body">' +
         '<div class="part-card-brand">' + item.brand + '</div>' +
         '<div class="part-card-name">'  + item.name  + '</div>' +
+        // A discontinued part is still pickable — owners have them — and says
+        // what it is, so nobody mistakes it for one they can still buy.
+        (item.discontinued ? '<div class="part-disc">Discontinued</div>' : '') +
         '<div class="part-card-desc">'  + item.desc  + '</div>' +
       '</div>' +
       '<div class="part-card-footer">' +
@@ -320,6 +323,7 @@
       '<div class="selected-part-body">' +
         '<div class="selected-part-brand">' + part.brand + '</div>' +
         '<div class="selected-part-name">'  + part.name  + '</div>' +
+        (item && item.discontinued ? '<div class="part-disc">Discontinued</div>' : '') +
         // The colour they picked, under the name — the photo alone does not
         // say "Gold / TiN", and a swatch says even less.
         (part.variantLabel
@@ -1123,6 +1127,7 @@
 .part-card-added-badge { position: absolute; top: 8px; right: 8px; background: #22a06b; color: #fff; font-size: 9px; font-weight: 700; padding: 3px 8px; border-radius: 20px; letter-spacing: 0.04em; text-transform: uppercase; }
 
 .part-card-body { padding: 10px 12px; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+.part-disc { display: inline-block; align-self: flex-start; font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 3px; padding: 2px 6px; margin: 3px 0 2px; }
 .part-card-brand { font-size: 9px; color: #2a7bbd; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
 .part-card-name { font-size: 13px; font-weight: 700; line-height: 1.3; color: #1a1a1a; }
 .part-card-desc { font-size: 11px; color: #777; line-height: 1.5; flex: 1; }

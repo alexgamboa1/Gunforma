@@ -118,6 +118,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .gdetail-name a { color: inherit; text-decoration: none; }
 .gdetail-name a:hover { color: #2a7bbd; text-decoration: underline; }
 .gdetail-variant { font-size: 11px; color: #888; font-weight: 500; }
+.gdetail-disc { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 3px; padding: 1px 6px; vertical-align: 1px; }
 .gdetail-price { flex-shrink: 0; font-size: 12px; font-weight: 700; color: #1a1a1a; }
 .gdetail-close { margin-top: 10px; font-family: inherit; font-size: 11px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
 .gdetail-close:hover { color: #1a1a1a; border-color: #b9b6aa; }
@@ -262,6 +263,9 @@ var COMMUNITY = [], CURATED = [];
 var OPEN_ID = null;
 var THUMBS_ON_CARD = 5;
 var VARIANTS_BY_ID = {}, DEFAULT_VARIANT_BY_PRODUCT = {};
+// Product ids of the discontinued parts guides name: such a part still shows,
+// with its photo, marked "Discontinued" (CLAUDE.md, "Discontinued parts").
+var DISCONTINUED = {};
 var ME = null, IS_ADMIN = false;
 var THEME_LABELS = {};               // guide_themes key -> label, once it exists
 var EDITING_LIVE = false;            // guide_themes readable = the migration is applied
@@ -337,11 +341,15 @@ async function loadPhotos(rows) {
     .select('id, product_id, is_default, color, primary_image_url')
     .in('product_id', list)
     .is('retired_at', null);
-  if (res.error) { console.warn('[gun-guides] photo read failed', res.error); return; }
+  if (res.error) { console.warn('[gun-guides] photo read failed', res.error); }
   (res.data || []).forEach(function (v) {
     VARIANTS_BY_ID[v.id] = v;
     if (v.is_default) DEFAULT_VARIANT_BY_PRODUCT[v.product_id] = v;
   });
+  // Which of them are discontinued. A failure marks none — the parts still show.
+  var disc = await sb.from('products').select('id').in('id', list).eq('is_discontinued', true);
+  if (disc.error) { console.warn('[gun-guides] discontinued read failed', disc.error); return; }
+  (disc.data || []).forEach(function (p) { DISCONTINUED[p.id] = 1; });
 }
 
 // The photo and swatch colour for one snapshot part. A part saved with a
@@ -526,7 +534,8 @@ function detailRowHtml(p) {
     '<span class="gdetail-photo">' + partMediaHtml(p) + '</span>' +
     '<span class="gdetail-cat">' + esc(detailCatLabel(p.category)) + '</span>' +
     '<span class="gdetail-name">' + (href ? '<a href="' + escAttr(href) + '">' + esc(name) + '</a>' : esc(name)) +
-      (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') + '</span>' +
+      (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') +
+      (p.refId && DISCONTINUED[p.refId] ? ' <span class="gdetail-disc">Discontinued</span>' : '') + '</span>' +
     '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) : '') + '</span>' +
   '</div>';
 }

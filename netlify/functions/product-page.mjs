@@ -290,6 +290,12 @@ function notFound(slug) {
 }
 
 async function fetchProduct(slug) {
+  return fetchProductWhere('slug=eq.' + encodeURIComponent(slug));
+}
+
+// The same read by any one-row filter — the page's own part by slug, a
+// discontinued part's successor by id (fetchSuccessor).
+async function fetchProductWhere(filter) {
   const cols = [
     'id', 'slug', 'name', 'category', 'description', 'best_for', 'pros', 'cons',
     'material', 'material_family', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
@@ -312,7 +318,7 @@ async function fetchProduct(slug) {
   const retiredFilters =
     '&product_variants.retired_at=is.null' +
     '&product_variants.affiliate_links.retired_at=is.null';
-  const rows = await pgGet('products?slug=eq.' + encodeURIComponent(slug) + '&select=' + encodeURIComponent(cols) + retiredFilters + '&limit=1');
+  const rows = await pgGet('products?' + filter + '&select=' + encodeURIComponent(cols) + retiredFilters + '&limit=1');
   return Array.isArray(rows) && rows.length ? rows[0] : null;
 }
 
@@ -639,6 +645,126 @@ async function fetchRestrictedStates(productId) {
   return Array.isArray(v) ? v.map(String).filter(Boolean) : [];
 }
 
+// ── A discontinued part: where the reader goes instead ─────────────────────
+// Alex's policy (2026-10-30): a discontinued part's page stays live — owners
+// have the part, builds link to it — but it sells nothing. It says
+// "Discontinued", shows no buy button, and sends the reader on:
+//
+//   Replaced by   products.replaced_by_id, the successor THE MAKER NAMES.
+//                 Only then: a successor we picked ourselves is a claim the
+//                 maker never made, so without one the page shows
+//   Similar parts same category, same platform, the same fit key (below),
+//                 approved and not discontinued — what the reader can buy
+//                 that does the same job on the same gun.
+//
+// replaced_by_id is read in a query of its own, never in fetchProduct's
+// select, for the restricted_states reason: a column the database does not
+// have yet fails every product page, and the house order is code first
+// (supabase/migrations/*_discontinued_replaced_by.sql). Until it is applied
+// that read answers 400, and every discontinued page shows Similar parts.
+async function fetchReplacedById(productId) {
+  const rows = await pgGet('products?id=eq.' + productId + '&select=replaced_by_id&limit=1');
+  return rows.length && rows[0].replaced_by_id ? String(rows[0].replaced_by_id) : null;
+}
+
+// The successor, read like the page's own part so its buy row follows the
+// same listing rules. Null — and the page falls back to similar parts — when
+// the successor is itself discontinued or not approved: "Replaced by" must
+// point at something the reader can buy.
+async function fetchSuccessor(id) {
+  const p = await fetchProductWhere('id=eq.' + encodeURIComponent(id) + '&is_discontinued=is.false');
+  if (!p) return null;
+  const ok = await pgGet('products?id=eq.' + encodeURIComponent(id) + '&select=is_approved&limit=1');
+  return ok.length && ok[0].is_approved === true ? p : null;
+}
+
+// What "fits the same way" means per category, as the set of product ids
+// sharing this part's fit key — or null where the category has no key and
+// category + platform is the whole match. A part whose own key is unknown
+// (a null tier, no spec row) gets no narrowing rather than a guess.
+//   slide, frame  same fit_tier (where the slide ends / which grip length)
+//   barrel        same barrel_length_in
+//   optic         same footprint
+//   light         a light_compatibility row on one of the same guns
+const SIMILAR_KEYS = {
+  slide:  { table: 'slide_specs',  col: 'fit_tier' },
+  frame:  { table: 'frame_specs',  col: 'fit_tier' },
+  barrel: { table: 'barrel_specs', col: 'barrel_length_in' },
+  optic:  { table: 'optic_specs',  col: 'footprint_id' },
+};
+async function similarCandidateIds(category, productId) {
+  if (category === 'light') {
+    const mine = await pgGet('light_compatibility?light_product_id=eq.' + productId + '&gun_id=not.is.null&select=gun_id');
+    const guns = [...new Set(mine.map((r) => r.gun_id))];
+    if (!guns.length) return null;
+    const rows = await pgGet('light_compatibility?gun_id=in.(' + guns.join(',') + ')&select=light_product_id');
+    return new Set(rows.map((r) => r.light_product_id));
+  }
+  const key = SIMILAR_KEYS[category];
+  if (!key) return null;
+  const mine = await pgGet(key.table + '?product_id=eq.' + productId + '&select=' + key.col + '&limit=1');
+  const v = mine.length ? mine[0][key.col] : null;
+  if (v == null) return null;
+  const rows = await pgGet(key.table + '?' + key.col + '=eq.' + encodeURIComponent(v) + '&select=product_id');
+  return new Set(rows.map((r) => r.product_id));
+}
+
+const SIMILAR_LIMIT = 4;
+async function fetchSimilar(product) {
+  const plats = await pgGet('product_platforms?product_id=eq.' + product.id + '&select=platform_id');
+  const platformIds = [...new Set(plats.map((r) => r.platform_id))];
+  if (!platformIds.length) return [];
+  const ids = await similarCandidateIds(product.category, product.id);
+  if (ids) ids.delete(product.id);
+  if (ids && !ids.size) return [];
+  const cols = 'id,slug,name,category,is_approved,' +
+    'manufacturers!products_brand_id_fkey(name),' +
+    'product_platforms!inner(platform_id),' +
+    'product_variants!product_variants_product_id_fkey(is_default,primary_image_url,' +
+      'affiliate_links(street_price,in_stock,last_checked,op_last_matched_by))';
+  const rows = await pgGet('products?category=eq.' + encodeURIComponent(product.category) +
+    '&is_discontinued=is.false&id=neq.' + product.id +
+    (ids ? '&id=in.(' + [...ids].join(',') + ')' : '') +
+    '&product_platforms.platform_id=in.(' + platformIds.join(',') + ')' +
+    '&product_variants.retired_at=is.null&product_variants.affiliate_links.retired_at=is.null' +
+    '&select=' + encodeURIComponent(cols) + '&order=slug.asc&limit=200');
+  const out = [];
+  for (const p of rows) {
+    if (!p || p.is_approved !== true) continue;    // a missing field never reads as approval
+    const variants = p.product_variants || [];
+    const listings = variants.flatMap((v) => (v.affiliate_links || []).map((l) => ({
+      price: l.street_price != null ? Number(l.street_price) : null, stale: isStalePrice(l), in_stock: l.in_stock })));
+    const prices = freshPriceSet(listings);
+    const dv = variants.find((v) => v.is_default && v.primary_image_url) || variants.find((v) => v.primary_image_url);
+    out.push({
+      slug: p.slug,
+      name: displayProductName({ name: p.name, brand: (p.manufacturers || {}).name }),
+      href: '/parts/' + (CATEGORY_META[p.category] || [p.category])[0] + '/' + p.slug,
+      photo: dv ? dv.primary_image_url : null,
+      priceFrom: prices.length ? Math.min(...prices) : null,
+    });
+  }
+  // A part with a price we can state first (the reader came here to buy
+  // something), then by name — deterministic, so the cached page and the
+  // next one agree.
+  out.sort((a, b) => ((a.priceFrom == null) - (b.priceFrom == null)) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  return out.slice(0, SIMILAR_LIMIT);
+}
+
+// { state, successor, similar } for x-discontinued: n/a (a live part) |
+// replaced:<slug> | similar:<n> | failed. Non-fatal: a failed read leaves
+// the page saying "Discontinued" with nothing to send the reader to.
+async function fetchDiscontinued(product) {
+  if (!product.is_discontinued) return { state: 'n/a', successor: null, similar: [] };
+  let successorId = null;
+  try { successorId = await fetchReplacedById(product.id); }
+  catch (err) { console.error('[product-page] replaced_by read failed (column not there yet?)', err); }
+  const successor = successorId ? await fetchSuccessor(successorId) : null;
+  if (successor) return { state: 'replaced:' + successor.slug, successor, similar: [] };
+  const similar = await fetchSimilar(product);
+  return { state: 'similar:' + similar.length, successor: null, similar };
+}
+
 // Which DECLARED fit pages cover this optic, by walking the same chain
 // guide-page.mjs walks, in reverse: the product's footprint, the cuts that
 // footprint mounts on, the guns carrying those cuts, then the registry.
@@ -780,7 +906,11 @@ function fitSectionHtml(fit) {
     foot;
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn }) {
+// A product's buy rows, sorted: partner listings first under the shared
+// listing rules, then one row per unlisted variant. rows[0] is the hero —
+// the listing whose price a headline quotes. Used for the page's own part
+// and for a discontinued part's successor card, so both follow one rule.
+function buyRowsFor(product) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -832,8 +962,82 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   partnerRows.sort(compareListingRows);
   otherRows.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0));
   const rows = partnerRows.concat(otherRows);
-  const hasPartner = partnerRows.some((r) => r.url);
-  const hasMaker = otherRows.some((r) => r.maker);
+  return { rows, hasPartner: partnerRows.some((r) => r.url), hasMaker: otherRows.some((r) => r.maker) };
+}
+
+// A buy row's price text. Three cases, and the order matters:
+//   fresh price        → the number
+//   stale price        → "Check price". NOT the MSRP fallback: a listing
+//                        we last saw at $233 would otherwise advertise its
+//                        $365 list price, which is a worse lie than saying
+//                        nothing.
+//   no listing at all  → MSRP, which is all we have and is still true.
+function rowPriceText(r) {
+  return r.price != null
+    ? (r.stale ? 'Check price' : '$' + r.price.toFixed(2))
+    : (r.v.msrp ? 'MSRP $' + Number(r.v.msrp).toFixed(2) : 'Check price');
+}
+
+// A buy row's button. Three kinds: a partner listing (sponsored, through
+// /go/<link>), the part's own store (NOT sponsored — nobody pays for it —
+// through /go/part/<product>), or no link at all when products.url is empty.
+function rowButtonHtml(r) {
+  return r.url
+    ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' +
+        (r.partnerName ? 'Buy at ' + esc(r.partnerName) + ' ↗' : 'View listing ↗') + '</a>'
+    : r.maker
+      ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="' + MAKER_REL + '">' +
+          esc(r.maker.label) + ' ↗</a>'
+      : '<span class="buy-btn disabled">No listing yet</span>';
+}
+
+// What a discontinued page shows where the Buy section was. The successor
+// card carries the successor's hero buy row — its price under the same rules
+// and its own button — and a link to its page; similar parts are links with
+// a "From $X" only when a fresh price exists (the fit-list rule).
+function discontinuedHtml(disc) {
+  if (disc && disc.successor) {
+    const s = disc.successor;
+    const sBrand = s.manufacturers || {};
+    const name = displayProductName({ name: s.name, brand: sBrand.name });
+    const href = '/parts/' + (CATEGORY_META[s.category] || [s.category])[0] + '/' + s.slug;
+    const { rows, hasPartner, hasMaker } = buyRowsFor(s);
+    const hero = rows[0] || null;
+    const sv = (s.product_variants || []);
+    const photoV = (hero && hero.v && hero.v.primary_image_url) ? hero.v
+      : sv.find((v) => v.is_default && v.primary_image_url) || sv.find((v) => v.primary_image_url);
+    const discl = hero ? buyDisclosure(!!hero.url, !!hero.maker) : null;
+    return '<div class="section-title">Replaced by</div>' +
+      '<div class="successor">' +
+        (photoV ? '<a class="successor-media" href="' + esc(href) + '"><img src="' + esc(photoV.primary_image_url) + '" alt="' + esc(name) + '" loading="lazy"/></a>' : '') +
+        '<div class="successor-body">' +
+          '<a class="successor-name" href="' + esc(href) + '">' + esc(name) + '</a>' +
+          '<span class="successor-note">The maker&rsquo;s replacement for this part.</span>' +
+          (hero ? '<span class="variant-sub">' + rowPriceText(hero) + (hero.partnerName ? ' at <strong>' + esc(hero.partnerName) + '</strong>' : '') + '</span>' : '') +
+          '<div class="successor-actions">' + (hero ? rowButtonHtml(hero) : '') +
+            '<a class="successor-link" href="' + esc(href) + '">See the part &rarr;</a></div>' +
+        '</div>' +
+      '</div>' +
+      (discl && (hasPartner || hasMaker) ? '<div class="disclosure">' + esc(discl) + '</div>' : '');
+  }
+  if (disc && disc.similar && disc.similar.length) {
+    return '<div class="section-title">Similar parts</div>' +
+      '<ul class="fit-list">' + disc.similar.map((it) => '<li class="fit-row"><span><a href="' + esc(it.href) + '">' + esc(it.name) + '</a></span>' +
+        (it.priceFrom != null ? '<span class="fit-price">From $' + it.priceFrom.toFixed(2) + '</span>' : '') + '</li>').join('') + '</ul>' +
+      '<div class="fitguide-note">Same kind of part, on the same pistol, matched the same way it fits.</div>';
+  }
+  return '';
+}
+
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn, disc }) {
+  const brand = product.manufacturers || {};
+  const variants = product.product_variants || [];
+  const discontinued = product.is_discontinued === true;
+  // A discontinued part sells nothing: no buy rows, no price, no offers.
+  const built = discontinued ? { rows: [], hasPartner: false, hasMaker: false } : buyRowsFor(product);
+  const rows = built.rows;
+  const hasPartner = built.hasPartner;
+  const hasMaker = built.hasMaker;
 
   // Stale prices are excluded from the range — the headline "$X–$Y" must not
   // be anchored on a number no feed has confirmed.
@@ -869,7 +1073,14 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   const descBase = product.description
     ? product.description.replace(/\s+/g, ' ').trim().slice(0, 220)
     : (categorySingular + ' for the Sig Sauer P365' + (brand.name ? ' from ' + brand.name : '') + '.');
-  const metaDescription = descBase + (priceText ? ' Priced ' + priceText + '.' : '');
+  // A discontinued part's snippet says so — and names the maker's successor —
+  // instead of a price it no longer has.
+  const successorName = discontinued && disc && disc.successor
+    ? displayProductName({ name: disc.successor.name, brand: (disc.successor.manufacturers || {}).name }) : null;
+  // First, not appended: descBase is cut at 220 characters, often mid-sentence.
+  const metaDescription = discontinued
+    ? 'Discontinued' + (successorName ? ' — replaced by the ' + successorName : '') + '. ' + descBase
+    : descBase + (priceText ? ' Priced ' + priceText + '.' : '');
   const canonical = SITE + '/parts/' + categorySegment + '/' + product.slug;
 
   const jsonLd = {
@@ -889,7 +1100,8 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     // MAKER ROWS ARE NOT OFFERS. A link to the maker's store with a hand-typed
     // MSRP is not a price we can stand behind in rich results, so the
     // structured data is exactly what it was before those rows existed.
-    offers: rows.filter((r) => !r.maker && r.url).map((r) => ({
+    // A discontinued part makes no offer at all (it has no buy rows).
+    offers: discontinued ? undefined : rows.filter((r) => !r.maker && r.url).map((r) => ({
       '@type': 'Offer',
       ...(r.price != null && !r.stale
             ? { price: r.price.toFixed(2), priceCurrency: 'USD' }
@@ -986,29 +1198,11 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     return '<div class="variant-media">' + swatch + '</div>';
   };
   const variantRowsHtml = rows.map((r) => {
-    // Three cases, and the order matters:
-    //   fresh price        → the number
-    //   stale price        → "Check price". NOT the MSRP fallback: a listing
-    //                        we last saw at $233 would otherwise advertise its
-    //                        $365 list price, which is a worse lie than saying
-    //                        nothing.
-    //   no listing at all  → MSRP, which is all we have and is still true.
-    const price = r.price != null
-      ? (r.stale ? 'Check price' : '$' + r.price.toFixed(2))
-      : (r.v.msrp ? 'MSRP $' + Number(r.v.msrp).toFixed(2) : 'Check price');
+    const price = rowPriceText(r);
     const stock = r.in_stock === true ? '<span class="stock in">In stock</span>'
       : r.in_stock === false ? '<span class="stock out">Out of stock</span>' : '';
     const partner = r.partnerName ? ' at <strong>' + esc(r.partnerName) + '</strong>' : '';
-    // Three buttons: a partner listing (sponsored, through /go/<link>), the
-    // part's own store (NOT sponsored — nobody pays for it — through
-    // /go/part/<product>), or no link at all when products.url is empty.
-    const btn = r.url
-      ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="noopener sponsored nofollow">' +
-          (r.partnerName ? 'Buy at ' + esc(r.partnerName) + ' ↗' : 'View listing ↗') + '</a>'
-      : r.maker
-        ? '<a class="buy-btn" href="' + esc(r.goUrl) + '" target="_blank" rel="' + MAKER_REL + '">' +
-            esc(r.maker.label) + ' ↗</a>'
-        : '<span class="buy-btn disabled">No listing yet</span>';
+    const btn = rowButtonHtml(r);
     return '<div class="variant-row">' +
         '<div class="variant-left">' +
           variantMediaHtml(r.v, r.label) +
@@ -1108,6 +1302,16 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.stock.in { color: #1e7d32; margin-left: 6px; } .stock.out { color: #b23; margin-left: 6px; }' +
 '.buy-btn { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; padding: 8px 14px; border-radius: 6px; text-decoration: none; white-space: nowrap; }' +
 '.buy-btn.disabled { background: #ddd; color: #888; }' +
+'.disc-badge { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 4px; padding: 4px 9px; margin: -6px 0 14px; }' +
+'.successor { display: flex; gap: 14px; align-items: flex-start; padding: 12px; border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; }' +
+'.successor-media { flex: 0 0 88px; width: 88px; height: 88px; border-radius: 6px; overflow: hidden; background: #fff; border: 0.5px solid #ececec; }' +
+'.successor-media img { width: 100%; height: 100%; object-fit: contain; display: block; }' +
+'.successor-body { display: flex; flex-direction: column; gap: 4px; min-width: 0; }' +
+'.successor-name { font-size: 15px; font-weight: 700; color: #1a1a1a; text-decoration: none; } .successor-name:hover { color: #1d6fb8; }' +
+'.successor-note { font-size: 12px; color: #777; }' +
+'.successor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 6px; }' +
+'.successor-link { font-size: 12px; color: #1d6fb8; text-decoration: none; } .successor-link:hover { text-decoration: underline; }' +
+'@media (max-width: 480px) { .successor-media { flex-basis: 64px; width: 64px; height: 64px; } }' +
 '.restricted { font-size: 13px; font-weight: 600; line-height: 1.45; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 6px; padding: 9px 12px; margin-bottom: 10px; }' +
 '.fitguides { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 2px; }' +
 '.fitguide { display: flex; flex-direction: column; gap: 2px; padding: 9px 13px; border: 0.5px solid #e5e5e5; border-radius: 7px; background: #fff; text-decoration: none; }' +
@@ -1216,6 +1420,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   '<div>' +
     '<div class="eyebrow">' + esc(categorySingular) + ' &middot; Sig Sauer P365</div>' +
     '<h1>' + esc(shownName) + '</h1>' +
+    (discontinued ? '<div class="disc-badge">Discontinued</div>' : '') +
     (priceText ? '<div class="price-line">' + esc(priceText) + '</div>' : '') +
     (product.description ? '<div class="desc">' + esc(product.description) + '</div>' : '') +
     bestForHtml +
@@ -1225,16 +1430,28 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     commonSpecs + specRowsHtml +
     fitGuidesHtml +
     magazineHubsHtml +
-    '<div class="section-title">Buy</div>' +
-    // Capacity-restricted states, directly above the buttons they are
-    // about. One line that wraps on a phone; the codes are the maker's.
-    (restrictedStates && restrictedStates.length
-      ? '<div class="restricted">Not available in: ' + esc(restrictedStates.join(', ')) + '</div>'
-      : '') +
-    variantRowsHtml +
-    // Says what is true of the links above it: partner-only, maker-only,
-    // both — or nothing at all when there is no link to disclose.
-    (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
+    (discontinued
+      // No Buy section: where the reader goes instead, then the options the
+      // part came in — photo or swatch and label, no price, no button — so an
+      // owner can still find theirs.
+      ? discontinuedHtml(disc) +
+        (variants.length
+          ? '<div class="section-title">Options</div>' +
+            variants.map((v) => ({ v, label: variantLabel(v) }))
+              .sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0))
+              .map((o) => '<div class="variant-row"><div class="variant-left">' + variantMediaHtml(o.v, o.label) +
+                '<div class="variant-info"><span class="variant-label">' + esc(o.label) + '</span></div></div></div>').join('')
+          : '')
+      : '<div class="section-title">Buy</div>' +
+        // Capacity-restricted states, directly above the buttons they are
+        // about. One line that wraps on a phone; the codes are the maker's.
+        (restrictedStates && restrictedStates.length
+          ? '<div class="restricted">Not available in: ' + esc(restrictedStates.join(', ')) + '</div>'
+          : '') +
+        variantRowsHtml +
+        // Says what is true of the links above it: partner-only, maker-only,
+        // both — or nothing at all when there is no link to disclose.
+        (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '')) +
     // What fits this part, after the buy rows so a long list never pushes
     // them down. Nothing renders when nothing is listed.
     fitsOnHtml(fitsOn) +
@@ -1364,7 +1581,18 @@ export default async (req) => {
     fitsOn = { state: 'failed', grid: null };
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid });
+  // A discontinued part's successor or similar parts. Non-fatal like the
+  // reads above; x-discontinued says which: n/a | replaced:<slug> |
+  // similar:<n> | failed.
+  let disc = { state: 'n/a', successor: null, similar: [] };
+  try {
+    disc = await fetchDiscontinued(product);
+  } catch (err) {
+    console.error('[product-page] discontinued lookup failed', err);
+    disc = { state: 'failed', successor: null, similar: [] };
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid, disc });
   return new Response(html, {
     status: 200,
     headers: {
@@ -1372,6 +1600,7 @@ export default async (req) => {
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
       'x-fit-section': fitState,
       'x-fits-on': fitsOn.state,
+      'x-discontinued': disc.state,
       // Durable, shared across every edge node — see _cache.mjs for the
       // measurement that put it here.
       'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,

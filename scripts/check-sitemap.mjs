@@ -167,16 +167,10 @@ const RETIRED = new Set([
   // Both are discontinued and 301 to ramm-tactical-leverage-trigger-p365.
   '/parts/triggers/ramm-tactical-leverage-c-p365',
   '/parts/triggers/ramm-tactical-leverage-nc-p365',
-  // PR #154 — four lights discontinued in the database on 2026-10-07
-  // (is_discontinued = true; deliberate). The sitemap drops a discontinued
-  // product and the product page still answers 200, by design — see
-  // CLAUDE.md, "Discontinued parts". No 301s: none has a successor in the
-  // catalog yet. The TLR-7 X Sub is logged for add-a-part; whoever adds it
-  // adds the 301 in netlify.toml and the pair in check-routes.mjs then.
-  '/parts/lights/olight-pl-pro-valkyrie',
-  '/parts/lights/olight-pl-turbo-valkyrie',
-  '/parts/lights/olight-pl-mini-3-valkyrie',
-  '/parts/lights/streamlight-tlr-7-sub',
+  // (The four lights discontinued on 2026-10-07 — #154 — were here until
+  // 2026-10-31. A discontinued part's page is listed again now: it stays
+  // live, says "Discontinued" and names the maker's successor or similar
+  // parts. CLAUDE.md, "Discontinued parts". The baseline covers them again.)
   // Moved, not discontinued: filed as a basepad before the magazine category
   // existed (supabase/migrations_archive/magazine_category.sql). The sitemap lists it under
   // /parts/magazines/ now, and the old path 301s there (netlify.toml; the
@@ -200,6 +194,28 @@ const baseline = JSON.parse(await readFile(join(ROOT, 'scripts/sitemap-baseline.
 const missing = baseline.filter((p) => !locs.includes(SITE + p));
 ok(missing.length === 0, `all ${baseline.length} URLs from the static sitemap are still present (${RETIRED.size} retired)`,
    missing.length ? missing.slice(0, 5).join(', ') + (missing.length > 5 ? ` …(+${missing.length - 5})` : '') : 'none missing');
+
+// ── discontinued parts ─────────────────────────────────────────────────
+// Every discontinued part is listed — its page stays live (CLAUDE.md,
+// "Discontinued parts") — except a row whose address 301s, which no sitemap
+// may list (PART_REDIRECTS, held to netlify.toml by discontinued.test.mjs).
+{
+  const { PART_REDIRECTS } = await import(join(ROOT, 'netlify/functions/_part-redirects.mjs'));
+  const { CATEGORY_META } = await import(join(ROOT, 'netlify/functions/_category-meta.mjs'));
+  const SBU = 'https://lagjjcpclvzrjlrswojt.supabase.co';
+  const KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4';
+  const r = await fetch(SBU + '/rest/v1/products?select=slug,category&is_discontinued=eq.true',
+    { headers: { apikey: KEY, Authorization: 'Bearer ' + KEY } });
+  const disc = r.ok ? await r.json() : null;
+  ok(Array.isArray(disc), 'read the discontinued parts', r.status);
+  const paths = (disc || []).filter((p) => p.slug && CATEGORY_META[p.category])
+    .map((p) => '/parts/' + CATEGORY_META[p.category][0] + '/' + p.slug);
+  const live = paths.filter((p) => !PART_REDIRECTS.has(p));
+  const unlisted = live.filter((p) => !locs.includes(SITE + p));
+  ok(unlisted.length === 0, `every discontinued part's page is listed (${live.length})`, unlisted.join(', ') || 'all listed');
+  const redirected = [...PART_REDIRECTS].filter((p) => locs.includes(SITE + p));
+  ok(redirected.length === 0, 'no address that 301s is listed', redirected.join(', ') || 'none');
+}
 
 // ── builds ─────────────────────────────────────────────────────────────
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';

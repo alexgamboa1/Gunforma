@@ -502,7 +502,7 @@ async function loadCatalog(platformId) {
     .select(
       // base_price was removed from the products table; pricing now comes
       // from the default variant's msrp. lowest_price is a stale-safe fallback.
-      'id, category, name, description, lowest_price, manufacturers(name), '+
+      'id, category, name, description, lowest_price, is_discontinued, manufacturers(name), '+
       'product_platforms!inner(platform_id), '+
       // Named FK to avoid the products↔product_variants ambiguity from
       // products.lowest_price_variant_id also referencing product_variants.id.
@@ -513,7 +513,6 @@ async function loadCatalog(platformId) {
     // Retired variants are not offerable on a new build, so they stay out of
     // the picker's price/image lookup too.
     .is('product_variants.retired_at', null)
-    .eq('is_discontinued', false)
     .eq('product_platforms.platform_id', platformId);
   catalogLoadingFor = null;
   if (error) { console.error('loadCatalog error', error); CATALOG = {}; catalogLoadedFor = platformId; return; }
@@ -521,7 +520,11 @@ async function loadCatalog(platformId) {
   const grouped = {};
   CATEGORIES.forEach(function(cat) {
     if (!cat.dbCategory) return;
-    const rows = (data || []).filter(function(r) { return cat.dbCategory.indexOf(r.category) !== -1; });
+    // Discontinued parts are offered too — an owner still has the part they
+    // are posting — after the live ones and tagged "Discontinued" on the card
+    // (js/part-picker.js). Array sort is stable, so live order is untouched.
+    const rows = (data || []).filter(function(r) { return cat.dbCategory.indexOf(r.category) !== -1; })
+      .sort(function(a, b) { return (a.is_discontinued === true) - (b.is_discontinued === true); });
     if (!rows.length) return;
     grouped[cat.key] = rows.map(function(r) {
       // Default variant carries the canonical display image + MSRP.
@@ -537,6 +540,7 @@ async function loadCatalog(platformId) {
         desc:  r.description || '',
         price: price,
         image: dv && dv.primary_image_url ? dv.primary_image_url : null,
+        discontinued: r.is_discontinued === true,
         // The default variant's identity, written into parts_snapshot when
         // this item is added. PR A has no picker, so every catalog pick
         // records the default; PR B lets the builder choose another and only

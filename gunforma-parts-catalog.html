@@ -73,6 +73,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .search-input { flex: 1; min-width: 200px; font-family: inherit; font-size: 13px; padding: 8px 12px; border: 0.5px solid #e5e5e5; border-radius: 4px; background: #fafaf8; }
 .search-input:focus { outline: none; border-color: #4a9edd; background: #fff; }
 .result-count { font-size: 11px; color: #888; }
+.disc-toggle { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; color: #666; cursor: pointer; white-space: nowrap; }
+.disc-toggle input { margin: 0; }
+.disc-tag { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 3px; padding: 2px 6px; }
+.detail-disc { font-size: 13px; color: #555; line-height: 1.5; padding: 10px 12px; border: 0.5px solid #f0c9ad; background: #fffaf6; border-radius: 6px; }
+.detail-disc a { color: #1d6fb8; }
 .clear-filters { font-family: inherit; font-size: 11px; padding: 6px 12px; background: transparent; border: 0.5px solid #d5d3ca; color: #666; border-radius: 4px; cursor: pointer; }
 .clear-filters:hover:not(:disabled) { color: #a25334; border-color: #eec2ae; }
 .clear-filters:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -586,6 +591,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
           <option value="brand">Brand A → Z</option>
         </select>
       </div>
+      <label class="disc-toggle"><input type="checkbox" id="show-discontinued" /> Show discontinued</label>
       <button type="button" class="clear-filters" id="clear-filters" disabled>Clear filters</button>
     </div>
 
@@ -783,6 +789,7 @@ var F = {
   priceMax:   null,
   search:     '',
   favsOnly:   false,            // tab-controlled, not a sidebar filter
+  showDiscontinued: false,      // the "Show discontinued" toggle; off by default
   sort:       'newest',         // 'newest' | 'price_asc' | 'price_desc' | 'brand'
   // Dynamic per-spec-key filter state. Shape per key:
   //   { type: 'strings',  values: Set<string> }
@@ -826,7 +833,7 @@ async function loadEverything() {
   var productsQ = sb
     .from('products')
     .select(
-      'id, slug, name, family, description, category, brand_id, url, lowest_price, created_at, material, material_family,' +
+      'id, slug, name, family, description, category, brand_id, url, lowest_price, created_at, material, material_family, is_discontinued,' +
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(' +
@@ -842,8 +849,11 @@ async function loadEverything() {
     )
     // Embed filter: the product stays, its retired variants drop out. Prices
     // and variant axes downstream read only what survives this.
-    .is('product_variants.retired_at', null)
-    .eq('is_discontinued', false);
+    .is('product_variants.retired_at', null);
+  // Discontinued parts are loaded and hidden by default (F.showDiscontinued,
+  // the "Show discontinued" toggle): an owner looking for the part they have
+  // can still find it, with its fit badges, and nobody browsing to buy trips
+  // over one. CLAUDE.md, "Discontinued parts".
   var platformsQ = sb.from('platforms').select('id, name, slug').order('name');
   // Compatibility whitelists — populated pairs mean "only these fit".
   var bsrQ = sb.from('barrel_slide_requirements')
@@ -928,6 +938,7 @@ async function loadEverything() {
       image: (dv && dv.primary_image_url) ||
              (variants.filter(function (v) { return v.primary_image_url; })[0] || {}).primary_image_url || null,
       buy_url: r.url || null,
+      discontinued: r.is_discontinued === true,
       variants: variants,
       created_at: r.created_at,
       platform_ids: (r.product_platforms || []).map(function (pp) { return pp.platform_id; }),
@@ -975,6 +986,10 @@ async function loadFavoritesAndRender(skipRender) {
 
 // ─── CONTROLS ────────────────────────────────────────────
 function wireControls() {
+  document.getElementById('show-discontinued').addEventListener('change', function (e) {
+    F.showDiscontinued = !!e.target.checked;
+    applyFiltersAndRender();
+  });
   document.getElementById('search').addEventListener('input', function (e) {
     F.search = (e.target.value || '').trim().toLowerCase();
     applyFiltersAndRender();
@@ -1102,7 +1117,7 @@ function setTab(favsOnly) {
 }
 
 function updateTabCounts() {
-  document.getElementById('tab-all-count').textContent  = '(' + PRODUCTS.length + ')';
+  document.getElementById('tab-all-count').textContent  = '(' + PRODUCTS.filter(function (r) { return !r.discontinued; }).length + ')';
   document.getElementById('tab-favs-count').textContent = CURRENT_USER ? ('(' + FAVORITES.size + ')') : '';
 }
 
@@ -1862,6 +1877,9 @@ function matchesAllExcept(r, excludeKey) {
   if (!matchesFitment(r)) return false;
   // The favorites-only view is a tab, not a sidebar filter — always apply.
   if (F.favsOnly && !FAVORITES.has(r.id)) return false;
+  // Discontinued parts are hidden unless the toggle is on — except under My
+  // Favorites, where a part the reader saved never vanishes on them.
+  if (r.discontinued && !F.showDiscontinued && !F.favsOnly) return false;
   return true;
 }
 function matchesAll(r) { return matchesAllExcept(r, null); }
@@ -1928,14 +1946,18 @@ function renderCard(r) {
   // Compact affiliate hero — real street price + retailer + Buy button.
   // Rendered on top of any card that has affiliate data. Skipped silently
   // when the product isn't listed anywhere (no dead untracked link).
-  var affHtml = (window.affiliate ? window.affiliate.renderHero(r.id) : '') || '';
+  // A discontinued part sells nothing: no retailer row, and "Discontinued"
+  // where the price was.
+  var affHtml = r.discontinued ? '' : ((window.affiliate ? window.affiliate.renderHero(r.id) : '') || '');
   // Beside a live retailer price the card's own number is named for what it
   // is — the options' MSRP, the maker's list price ("MSRP from $X") — so the
   // retailer's number reads as the deal. Only an option-row price is MSRP;
   // the no-options fallback (lowest_price) is a repricing-job number and
   // keeps no label.
-  var priceHtml = '<div class="part-card-price' + (r.price != null ? '' : ' na') + '">' +
-    esc(window.optionPriceText(r.priceHeadline, { msrp: !!affHtml && !!(r.variants && r.variants.length) })) + '</div>';
+  var priceHtml = r.discontinued
+    ? '<div class="part-card-price na"><span class="disc-tag">Discontinued</span></div>'
+    : '<div class="part-card-price' + (r.price != null ? '' : ' na') + '">' +
+        esc(window.optionPriceText(r.priceHeadline, { msrp: !!affHtml && !!(r.variants && r.variants.length) })) + '</div>';
   // A product with no photo of any variant, or a dead image URL, shows the
   // default variant's colour swatch — never an empty "No photo" box.
   var cardDv = (r.variants || []).find(function (v) { return v.is_default; }) || (r.variants || [])[0] || null;
@@ -2252,7 +2274,13 @@ function renderDetail(p) {
   // ask for a partnership. The muted "No retailer listings" fallback is now
   // only for a part with no partner listing AND no url saved.
   var affWrap = document.getElementById('detail-affiliate-wrap');
-  if (window.affiliate) {
+  if (p.discontinued) {
+    // No buy rows for a discontinued part: its page names the maker's
+    // replacement, or similar parts, and links on to buy those.
+    var discHref = p.slug && window.productPath ? window.productPath(p.category, p.slug) : null;
+    affWrap.innerHTML = '<div class="detail-disc"><span class="disc-tag">Discontinued</span> No longer sold.' +
+      (discHref ? ' <a href="' + escAttr(discHref) + '">See its page</a> for the maker&rsquo;s replacement or similar parts.' : '') + '</div>';
+  } else if (window.affiliate) {
     var block = window.affiliate.renderBlock(p.id, { selectedVariantId: activeV ? activeV.id : undefined });
     affWrap.innerHTML = block || window.affiliate.renderEmpty();
   } else {

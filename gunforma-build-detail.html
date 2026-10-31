@@ -206,6 +206,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-tag { font-size: 9px; color: #666; background: #f4f3ee; border: 0.5px solid #e5e2d8; padding: 2px 7px; border-radius: 20px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; }
 /* Variant note reads as the builder's own words, so it keeps its casing
    rather than being upper-cased like the structural tags beside it. */
+.part-tag-disc { color: #8a3b12; background: #fff4ec; border-color: #f0c9ad; }
+.part-disc-row { font-size: 12px; color: #777; }
+.part-disc-row a { color: #1d6fb8; }
 .part-tag-variant { color: #2a7bbd; background: #f2f8fd; border-color: #cfe0f0; text-transform: none; letter-spacing: 0; font-size: 9.5px; font-weight: 600; }
 /* The variant the builder actually picked, from the catalog — distinct from
    .part-tag-variant, which is their free-text note for a colour the catalog
@@ -1351,7 +1354,12 @@ function renderPartCard(build, part, idx) {
   // variant is gone still gets a label here, off the snapshot.
   var chosenTag = vr.label
     ? '<span class="part-tag part-tag-chosen'+(vr.live ? '' : ' part-tag-archived')+'">'+escH(vr.label)+'</span>' : '';
-  var affiliateHtml = renderAffiliateRow(part, vr);
+  // A discontinued part stays on the build with its photo, marked — and
+  // sells nothing: in place of a buy row, a line pointing at its own page,
+  // which names the maker's replacement or similar parts.
+  var discontinued = isDiscontinuedPart(part);
+  var discTag = discontinued ? '<span class="part-tag part-tag-disc">Discontinued</span>' : '';
+  var affiliateHtml = discontinued ? discontinuedRowHtml(part) : renderAffiliateRow(part, vr);
 
   // Thumbnail, in strict preference order:
   //   1. the CHOSEN variant's own photo — live first, so a re-photographed
@@ -1409,7 +1417,7 @@ function renderPartCard(build, part, idx) {
         '<div class="part-type">'+escH(categoryLabel(part.category))+'</div>'+
         '<div class="part-brand">'+escH(part.brand||'Unknown brand')+'</div>'+
         '<div class="part-model">'+partModelHtml(part)+'</div>'+
-        ((pendingTag || variantTag || chosenTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+'</div>' : '')+
+        ((pendingTag || variantTag || chosenTag || discTag) ? '<div class="part-tags">'+chosenTag+variantTag+pendingTag+discTag+'</div>' : '')+
         // "2 MOA · Red dot" under the chosen-variant tag — the label alone
         // does not say which of three "Black · Anodized" optics this is.
         (vr.specs ? '<div class="part-variant-specs">'+escH(vr.specs)+'</div>' : '')+
@@ -1420,6 +1428,20 @@ function renderPartCard(build, part, idx) {
     '</div>'+
     affiliateHtml+
   '</div>';
+}
+
+// Whether a catalog part is discontinued, off the same variants read that
+// carries its slug. Unknown (no live variant came back) reads as live.
+function isDiscontinuedPart(part) {
+  var firstV = part.refId ? (VARIANTS_BY_PRODUCT_ID[part.refId] || [])[0] : null;
+  return !!(firstV && firstV.products && firstV.products.is_discontinued === true);
+}
+function discontinuedRowHtml(part) {
+  var firstV = (VARIANTS_BY_PRODUCT_ID[part.refId] || [])[0];
+  var prod = firstV && firstV.products;
+  var href = (prod && typeof window.productPath === 'function') ? window.productPath(prod.category, prod.slug) : null;
+  return '<div class="part-affiliate part-disc-row">No longer sold.' +
+    (href ? ' <a href="'+escH(href)+'">See the replacement or similar parts &rarr;</a>' : '') + '</div>';
 }
 
 // The part's name, linked to its /parts/ page when the catalog can address
