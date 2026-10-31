@@ -66,6 +66,9 @@ import { displayProductName } from './_display-name.mjs';
 import { buildPath } from './_build-url.mjs';
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
+// The P365 slide-on-grip rule — js/slide-fit.js itself, read and evaluated,
+// never copied. See _slide-fit.mjs.
+import { loadSlideFit } from './_slide-fit.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
@@ -474,6 +477,147 @@ async function fetchFitSection(category, productId, raw) {
   };
 }
 
+// ---- "Fits on": where a P365 slide ends on a grip ---------------------------
+//
+// Every P365 slide goes on every P365 grip (fire control unit permitting);
+// what changes is where the front of the slide ends. A slide page shows that
+// against each grip TIER, a grip page shows it for each kind of slide — the
+// question people search as "will X sit flush on Y". Every verdict is
+// SlideFit.tag() from js/slide-fit.js (loaded by _slide-fit.mjs, not
+// copied), so a cell here can never disagree with the Armory's tag.
+//
+// GRIP tiers are names, never inches (Alex, 2026-10-29). SLIDES lead with
+// their size (Alex, 2026-10-30): the ten setups a grip page lists are the
+// rows of the signed-off matrix (fitment ship prompt §2), each label opening
+// with the slide size — rendered as the row's most visible part — and the
+// rest of Alex's label verbatim after it. A slide page names its own slide
+// the same way (SLIDE_SIZE). The needs_comp sentence is the page wording of
+// the shared rule (SlideFit.tag's context option), not the builders'.
+//
+// P365 only: P320 parts keep js/frame-fit.js and carry no tier, so the grid
+// is not drawn for them rather than reading "Fit not confirmed". A P365 part
+// with no tier reads "Fit not confirmed" — never a guess, never an empty grid.
+const GRIP_TIERS = [
+  { tier: 'short',  grips: 'P365, P365 X and P365 XL grips' },
+  { tier: 'xmacro', grips: 'XMacro, AXG and factory FUSE grips' },
+  { tier: 'fuse',   grips: 'Full-length aftermarket FUSE grips' },
+];
+const ADD_ON_COMP = {};   // a comp with no fit_result: no maker publishes one
+const ON_PAGE = { context: 'page' };
+// What a slide of each tier is called, size first. A comp slide is named by
+// where it ENDS (an XMacro Comp is an XL slide 3.7" over a 3.1" barrel).
+const SLIDE_SIZE = { short: 'Short slide 3.1"', xmacro: 'XL slide 3.7"', fuse: 'FUSE slide 4.3"' };
+const SLIDE_SETUPS = [
+  { size: SLIDE_SIZE.short,  rest: '',                                                           slide: { fit_tier: 'short',  comp_style: 'none' } },
+  { size: SLIDE_SIZE.short,  rest: ' + add-on comp',                                             slide: { fit_tier: 'short',  comp_style: 'none' }, comp: true },
+  { size: SLIDE_SIZE.xmacro, rest: ', internally ported short barrel (3.1" barrel: XMacro Comp, Spectre)', slide: { fit_tier: 'xmacro', comp_style: 'short_barrel' } },
+  { size: SLIDE_SIZE.xmacro, rest: '',                                                           slide: { fit_tier: 'xmacro', comp_style: 'none' } },
+  { size: SLIDE_SIZE.xmacro, rest: ' + add-on comp',                                             slide: { fit_tier: 'xmacro', comp_style: 'none' }, comp: true },
+  { size: SLIDE_SIZE.xmacro, rest: ', ported barrel comp (3.7" barrel)',                         slide: { fit_tier: 'xmacro', comp_style: 'ported_barrel' } },
+  { size: SLIDE_SIZE.fuse,   rest: ', internally ported short barrel (3.7" barrel: FUSE Comp)',  slide: { fit_tier: 'fuse',   comp_style: 'short_barrel' } },
+  { size: SLIDE_SIZE.fuse,   rest: '',                                                           slide: { fit_tier: 'fuse',   comp_style: 'none' } },
+  { size: SLIDE_SIZE.fuse,   rest: ' + add-on comp',                                             slide: { fit_tier: 'fuse',   comp_style: 'none' }, comp: true },
+  { size: SLIDE_SIZE.fuse,   rest: ', ported barrel comp (4.3" barrel)',                         slide: { fit_tier: 'fuse',   comp_style: 'ported_barrel' } },
+];
+export const FITS_ON_SETUPS = SLIDE_SETUPS;   // for the test
+export const FITS_ON_GRIP_TIERS = GRIP_TIERS;
+export const FITS_ON_SLIDE_SIZE = SLIDE_SIZE;
+
+// { state, grid }. state is what x-fits-on reports: n/a (not a slide or a
+// grip) | no-spec | not-p365 | no-rule | unconfirmed | tier:<tier>[/<comp
+// style>]. grid is null unless something renders.
+async function fetchFitsOn(category, productId) {
+  if (category !== 'slide' && category !== 'frame') return { state: 'n/a', grid: null };
+  const table = category === 'slide' ? 'slide_specs' : 'frame_specs';
+  const cols = category === 'slide' ? 'fit_tier,comp_style' : 'fit_tier';
+  const [specRows, platRows, SlideFit] = await Promise.all([
+    pgGet(table + '?product_id=eq.' + productId + '&select=' + cols + '&limit=1'),
+    pgGet('product_platforms?product_id=eq.' + productId + '&select=' + encodeURIComponent('platforms(slug)')),
+    loadSlideFit(),
+  ]);
+  const spec = specRows.length ? specRows[0] : null;
+  if (!spec) return { state: 'no-spec', grid: null };
+  if (!platRows.some((r) => r.platforms && r.platforms.slug === 'p365')) return { state: 'not-p365', grid: null };
+  if (!SlideFit) return { state: 'no-rule', grid: null };
+  const unconfirmed = SlideFit.TAGS.unconfirmed.label;
+  const known = Object.prototype.hasOwnProperty.call(SlideFit.TIER_INDEX, spec.fit_tier);
+  if (!known) return { state: 'unconfirmed', grid: { kind: category, unconfirmed } };
+
+  if (category === 'slide') {
+    const slide = { fit_tier: spec.fit_tier, comp_style: spec.comp_style || null };
+    // Only a plain slide takes an add-on comp; a comp slide's comp is inside.
+    const takesComp = slide.comp_style === 'none';
+    return {
+      state: 'tier:' + slide.fit_tier + '/' + (slide.comp_style || 'unstated'),
+      grid: {
+        kind: 'slide', unconfirmed, takesComp, size: SLIDE_SIZE[slide.fit_tier],
+        compSlide: slide.comp_style === 'short_barrel' || slide.comp_style === 'ported_barrel',
+        rows: GRIP_TIERS.map((g) => ({
+          tier: SlideFit.TIER_LABEL[g.tier], grips: g.grips,
+          tag: SlideFit.tag(slide, { fit_tier: g.tier }, null, ON_PAGE),
+          comp: takesComp ? SlideFit.tag(slide, { fit_tier: g.tier }, ADD_ON_COMP, ON_PAGE) : null,
+        })),
+      },
+    };
+  }
+  const grip = { fit_tier: spec.fit_tier };
+  return {
+    state: 'tier:' + grip.fit_tier,
+    grid: {
+      kind: 'frame', unconfirmed, tier: SlideFit.TIER_LABEL[grip.fit_tier],
+      rows: SLIDE_SETUPS.map((s) => ({
+        size: s.size, rest: s.rest, tag: SlideFit.tag(s.slide, grip, s.comp ? ADD_ON_COMP : null, ON_PAGE),
+      })),
+    },
+  };
+}
+
+// `sameAs` is the neighbouring cell's tag: its reason is not said twice in
+// one row (a Short slide on a FUSE grip won't fit with or without a comp,
+// for the same reason).
+function fitTagHtml(tag, sameAs) {
+  const reason = tag.reason && !(sameAs && sameAs.reason === tag.reason) ? tag.reason : '';
+  return '<span class="fit-tag fit-tag-' + esc(tag.color) + '">' + esc(tag.label) + '</span>' +
+    (reason ? '<span class="fit-reason">' + esc(reason) + '</span>' : '');
+}
+
+const FITS_ON_COMP_NOTE = 'No comp maker publishes exactly how its comp lines up with a grip, so a comp that fills the gap reads “Comp flush / partially flush”.';
+
+function fitsOnHtml(grid) {
+  if (!grid) return '';
+  const title = grid.kind === 'slide' ? 'Fits on' : 'Slides on this grip';
+  if (grid.unconfirmed && !grid.rows) {
+    return '<div class="section-title">' + title + '</div>' +
+      '<div class="fiton-none"><span class="fit-tag fit-tag-muted">' + esc(grid.unconfirmed) + '</span>' +
+      '<span class="fit-reason">Where ' + (grid.kind === 'slide' ? 'this slide ends on each grip' : 'each slide ends on this grip') +
+      ' isn’t confirmed yet.</span></div>';
+  }
+  const intro = '<div class="fiton-intro">Every P365 slide goes on every P365 grip, fire control unit permitting. ' +
+    (grid.kind === 'slide' ? 'This <strong>' + esc(grid.size) + '</strong> on each length of grip — where its front ends.'
+                           : 'This grip is <strong>' + esc(grid.tier) + '</strong> length; this is where each kind of slide ends on it.') +
+    '</div>';
+  if (grid.kind === 'slide') {
+    return '<div class="section-title">' + title + '</div>' + intro +
+      '<table class="fiton"><thead><tr><th scope="col">Grip</th><th scope="col">This slide</th>' +
+        (grid.takesComp ? '<th scope="col">With an add-on comp</th>' : '') + '</tr></thead><tbody>' +
+        grid.rows.map((r) => '<tr><th scope="row"><span class="fiton-tier">' + esc(r.tier) + '</span>' +
+          '<span class="fiton-sub">' + esc(r.grips) + '</span></th>' +
+          '<td>' + fitTagHtml(r.tag) + '</td>' +
+          (grid.takesComp ? '<td>' + fitTagHtml(r.comp, r.tag) + '</td>' : '') + '</tr>').join('') +
+      '</tbody></table>' +
+      '<div class="fitguide-note">' +
+        (grid.compSlide ? 'A comp slide carries its comp inside and takes no add-on comp. ' : '') +
+        (grid.takesComp ? esc(FITS_ON_COMP_NOTE) : '') + '</div>';
+  }
+  return '<div class="section-title">' + title + '</div>' + intro +
+    '<table class="fiton"><thead><tr><th scope="col">Slide</th><th scope="col">On this grip</th></tr></thead><tbody>' +
+      grid.rows.map((r) => '<tr><th scope="row"><span class="fiton-size">' + esc(r.size) + '</span>' +
+        (r.rest ? '<span class="fiton-rest">' + esc(r.rest) + '</span>' : '') +
+        '</th><td>' + fitTagHtml(r.tag) + '</td></tr>').join('') +
+    '</tbody></table>' +
+    '<div class="fitguide-note">' + esc(FITS_ON_COMP_NOTE) + '</div>';
+}
+
 // Stale prices are excluded from a "from" price, and in-stock listings win
 // when there are any — the rule the headline price line uses, shared so a
 // row on another page can never quote a number this page would not.
@@ -636,7 +780,7 @@ function fitSectionHtml(fit) {
     foot;
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
 
@@ -979,6 +1123,24 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.fit-row a { color: #1a1a1a; text-decoration: none; font-weight: 600; } .fit-row a:hover { color: #1d6fb8; }' +
 '.fit-price { color: #555; white-space: nowrap; }' +
 '.fit-note { display: block; font-size: 11.5px; font-weight: 400; color: #888; margin-top: 2px; }' +
+'.fiton-intro { font-size: 13px; line-height: 1.5; color: #555; margin: 0 0 8px; }' +
+'.fiton { width: 100%; border-collapse: collapse; font-size: 13px; }' +
+'.fiton th, .fiton td { text-align: left; vertical-align: top; padding: 8px 8px 8px 0; border-bottom: 0.5px solid #ececec; }' +
+'.fiton thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #888; }' +
+'.fiton tbody th { font-weight: 600; color: #1a1a1a; width: 38%; }' +
+'.fiton-tier { display: block; }' +
+'.fiton-sub { display: block; font-size: 11.5px; font-weight: 400; color: #888; margin-top: 2px; }' +
+'.fiton-size { font-weight: 700; color: #1a1a1a; white-space: nowrap; }' +
+'.fiton-rest { font-weight: 400; color: #666; }' +
+'.fit-tag { display: inline-block; font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 20px; white-space: nowrap; }' +
+'.fit-tag-green { background: #e3f3e8; color: #1d6b37; }' +
+'.fit-tag-neutral { background: #eef0f2; color: #3d4650; }' +
+'.fit-tag-amber { background: #fff1d6; color: #8a5a00; }' +
+'.fit-tag-red { background: #fde8e7; color: #a8261c; }' +
+'.fit-tag-muted { background: #f3f3f1; color: #7a7a7a; border: 0.5px dashed #cfcfc9; }' +
+'.fit-reason { display: block; font-size: 11.5px; color: #777; margin-top: 4px; line-height: 1.4; }' +
+'.fiton-none { font-size: 13px; }' +
+'.fiton-none .fit-reason { display: inline; margin-left: 8px; }' +
 '.builds-row { display: flex; gap: 12px; flex-wrap: wrap; }' +
 '.build-card { display: flex; flex-direction: column; gap: 4px; width: 160px; text-decoration: none; color: #1a1a1a; }' +
 '.build-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; border-radius: 6px; border: 0.5px solid #e5e5e5; }' +
@@ -1075,6 +1237,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
     // What fits this part, after the buy rows so a long list never pushes
     // them down. Nothing renders when nothing is listed.
+    fitsOnHtml(fitsOn) +
     fitHtml +
     buildsHtml +
   '</div>' +
@@ -1191,13 +1354,24 @@ export default async (req) => {
     }
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit });
+  // Slide-on-grip fit by tier. Non-fatal like the reads above; x-fits-on
+  // says what happened (see fetchFitsOn), and failed when a read threw.
+  let fitsOn = { state: 'n/a', grid: null };
+  try {
+    fitsOn = await fetchFitsOn(product.category, product.id);
+  } catch (err) {
+    console.error('[product-page] fits-on lookup failed', err);
+    fitsOn = { state: 'failed', grid: null };
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid });
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
       'x-fit-section': fitState,
+      'x-fits-on': fitsOn.state,
       // Durable, shared across every edge node — see _cache.mjs for the
       // measurement that put it here.
       'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,

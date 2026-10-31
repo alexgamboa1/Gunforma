@@ -119,6 +119,15 @@ test('wont_fit carries its reason; the two shapes read differently', () => {
   // needs_comp says what finishes the build
   const needs = SlideFit.tag(slide('short', 'none'), XMACRO, null);
   assert.equal(needs.reason, 'Add a threaded barrel and comp to finish this build.');
+  // …in the builders. A product page describes the part instead; the context
+  // option changes that one sentence and nothing else about the verdict.
+  const onPage = SlideFit.tag(slide('short', 'none'), XMACRO, null, { context: 'page' });
+  assert.equal(onPage.reason, 'Needs a threaded barrel and add-on comp to cover the grip.');
+  assert.deepEqual({ ...onPage, reason: '' }, { ...needs, reason: '' });
+  assert.equal(SlideFit.tag(slide('short', 'none'), XMACRO, null, { context: 'nonsense' }).reason,
+    needs.reason, 'an unknown context reads as the builder');
+  assert.equal(SlideFit.tag(slide('short', 'none'), FUSE, null, { context: 'page' }).reason,
+    twoShort.reason, 'only the needs_comp sentence has a page wording');
   // the selectable tags carry no reason — there is nothing to warn about
   assert.equal(SlideFit.tag(slide('short', 'none'), SHORT, null).reason, '');
 });

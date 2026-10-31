@@ -58,6 +58,13 @@
 [functions."build-og"]
   included_files = ["gunforma-build-detail.html"]
 
+# product-page judges slide-on-grip fit for its "Fits on" grid with the
+# browser's own rule, js/slide-fit.js — read from disk and evaluated by
+# _slide-fit.mjs, never copied. Without this the grid is skipped and the page
+# answers x-fits-on: no-rule, which check-routes.mjs fails on.
+[functions."product-page"]
+  included_files = ["js/slide-fit.js"]
+
 # home-page and builds-page serve the static homepage and gallery with the
 # newest approved builds rendered into them (the served HTML held no /b/
 # link at all before 2026-10-22). Same shape as build-og above: the page
