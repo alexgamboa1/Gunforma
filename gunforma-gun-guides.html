@@ -150,6 +150,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .gdetail-total { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid #e8e6df; font-size: 12.5px; color: #444; }
 .gdetail-total strong { font-size: 14px; color: #1a1a1a; }
 .gdetail-disclosure { font-size: 10px; color: #a8a5a0; padding: 6px 0 0; }
+.gdetail-start { display: inline-block; margin: 10px 10px 0 0; font-size: 11px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; border-radius: 4px; padding: 7px 12px; text-decoration: none; }
+.gdetail-start:hover { background: #1e63a0; }
 .gdetail-close { margin-top: 10px; font-family: inherit; font-size: 11px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
 .gdetail-close:hover { color: #1a1a1a; border-color: #b9b6aa; }
 
@@ -625,6 +627,9 @@ function detailHtml(row) {
     return '<div class="gdetail-group">' + esc(g.group.label) + '</div>' + g.parts.map(detailRowHtml).join('');
   }).join('');
   html += detailFootHtml(row);
+  // The start of the reader's OWN build: ?from= loads the parts and nothing
+  // else — never ?edit=, which adopts a saved guide's identity.
+  html += '<a class="gdetail-start" href="gunforma-armory.html?from=' + escAttr(row.id) + '">Customize this build in the Armory →</a>';
   html += '<button type="button" class="gdetail-close">Close</button></div>';
   return html;
 }

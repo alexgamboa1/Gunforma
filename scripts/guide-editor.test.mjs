@@ -245,6 +245,89 @@ test('picksFromSnapshot: lists what cannot come back instead of dropping it sile
   ]);
 });
 
+// ── Start from a guide (?from=) ────────────────────────────────────────────
+// A guide loaded as the START of the reader's own build: parts in, identity
+// out. The stub emulates the database's side of the published filter, so a
+// passing test also proves the page SENT .eq('is_published', true).
+const publishedOnly = (rows) => (call) => {
+  if (call.table === 'guides') {
+    const asked = call.filters.some(([c, v]) => c === 'is_published' && v === true);
+    return { data: asked ? rows.filter((r) => r.is_published === true && call.filters.some(([c, v]) => c === 'id' && v === r.id)) : [], error: null };
+  }
+  if (call.table === 'gun_guides') return { data: [], error: null };
+};
+
+test('openFromGuide: a published guide starts a NEW build — parts in, identity out', async () => {
+  const { ctx } = armory();
+  // A slide without a spec row is reconciled away (availableFor), so the
+  // fixture carries one, as every catalog slide does.
+  set(ctx, `SPEC.slide['slide-1'] = { product_id: 'slide-1', barrel_length_in: 3.7 };`);
+  const row = { id: GUIDE_ID, title: 'Sig P365 Concealed Carry', category: 'concealed_carry', is_published: true,
+    platform_id: PLAT, parts_snapshot: [
+      { refId: 'slide-1', category: 'slide', brand: 'Maker', name: 'Slide One', variantId: 'sv2' },
+      { refId: 'gone', category: 'optic', brand: 'Gone Co', name: 'Old Optic' },
+    ] };
+  ctx.sb.answer = publishedOnly([row]);
+  await ctx.openFromGuide(GUIDE_ID);
+  assert.equal(ctx.STATE.savedId, null, 'never adopts the guide as the save target');
+  assert.equal(ctx.STATE.draftOf, null);
+  assert.equal(ctx.STATE.ownerId, null);
+  assert.equal(ctx.STATE.target, 'community', 'never curated — the save can’t reach guides');
+  assert.equal(ctx.STATE.title, '', 'the title is the reader’s to type');
+  assert.equal(ctx.STATE.startedFrom, 'Sig P365 Concealed Carry', 'the guide’s name is only the placeholder');
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.STATE.picks)),
+    { slide: { productId: 'slide-1', variantId: 'sv2' } }, 'the saved option comes over');
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.STATE.dropped)),
+    [{ name: 'Gone Co Old Optic', why: 'not in the catalog for this pistol' }],
+    'what cannot come back is listed, never silently dropped');
+
+  // The save after loading a guide is an INSERT to gun_guides, the reader's own.
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
+  const plan = ctx.savePlan([]);
+  assert.equal(plan.table, 'gun_guides');
+  assert.equal(plan.op, 'insert');
+  assert.equal(plan.payload.user_id, JOE.id);
+});
+
+test('openFromGuide: an unpublished guide is refused — a draft is never a template', async () => {
+  const { ctx, els } = armory();
+  const row = { id: GUIDE_ID, title: 'WIP draft', category: 'duty', is_published: false, platform_id: PLAT,
+    parts_snapshot: [{ refId: 'trig-1', category: 'trigger', brand: 'Maker', name: 'Trigger One' }] };
+  ctx.sb.answer = publishedOnly([row]);
+  await ctx.openFromGuide(GUIDE_ID);
+  assert.equal(Object.keys(ctx.STATE.picks).length, 0, 'the builder stays empty');
+  assert.equal(ctx.STATE.savedId, null);
+  assert.equal(ctx.STATE.startedFrom, '');
+  assert.match(els['toast-msg'].textContent, /isn’t available/);
+});
+
+test('openFromGuide: declining the replace prompt leaves the build untouched', async () => {
+  const { ctx } = armory({ confirm: () => false });
+  set(ctx, `STATE.gun = null; STATE.title = 'Mine';
+    STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } }; persistDraft();`);
+  const row = { id: GUIDE_ID, title: 'Sig P365 Concealed Carry', category: 'concealed_carry', is_published: true,
+    platform_id: PLAT, parts_snapshot: [{ refId: 'slide-1', category: 'slide', brand: 'Maker', name: 'Slide One' }] };
+  ctx.sb.answer = publishedOnly([row]);
+  await ctx.openFromGuide(GUIDE_ID);
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.STATE.picks)),
+    { trigger: { productId: 'trig-1', variantId: 'tv1' } }, 'the picks are byte-identical');
+  assert.equal(ctx.STATE.title, 'Mine');
+  assert.equal(ctx.STATE.savedId, null);
+  assert.equal(ctx.STATE.startedFrom, '');
+});
+
+test('startFromGuide: the card does what ?from= does, and never adopts an identity', () => {
+  const { ctx } = armory();
+  set(ctx, `START_GUIDES = [{ id: '${GUIDE_ID}', title: 'Sig P365 Duty', category: 'duty', is_published: true,
+    platform_id: '${PLAT}', parts_snapshot: [{ refId: 'trig-1', category: 'trigger', brand: 'Maker', name: 'Trigger One' }] }];`);
+  ctx.startFromGuide(GUIDE_ID);
+  assert.equal(ctx.STATE.savedId, null);
+  assert.equal(ctx.STATE.draftOf, null);
+  assert.equal(ctx.STATE.target, 'community');
+  assert.equal(ctx.STATE.title, '');
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.STATE.picks)), { trigger: { productId: 'trig-1', variantId: 'tv1' } });
+});
+
 test('openForEdit: a Gunforma guide opens only for an admin, and adopts its identity', async () => {
   const row = { id: GUIDE_ID, title: 'Sig P365 Duty', category: 'duty', is_published: false, platform_id: PLAT,
     parts_snapshot: [{ refId: 'trig-1', category: 'trigger', brand: 'Maker', name: 'Trigger One' }] };
