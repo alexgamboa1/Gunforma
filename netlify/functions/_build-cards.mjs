@@ -24,8 +24,43 @@ import { pgRows } from './_pg.mjs';
 import { buildPath } from './_build-url.mjs';
 import { isStalePrice } from './_listing-rules.mjs';
 import { GUN_META, hubPath, isLiveGunHub } from './_guide-meta.mjs';
+import { displayProductName } from './_display-name.mjs';
 
 export const PHOTO_BASE = 'https://lagjjcpclvzrjlrswojt.supabase.co/storage/v1/object/public/build-photos/';
+
+// One line, no markup, no newlines — a description is an attribute value.
+export function clampLine(s, max) {
+  const t = String(s || '').replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  // A cut that lands after a name already ending in "…" must not print "……".
+  return t.slice(0, max - 1).replace(/\s+\S*$/, '').replace(/…$/, '') + '…';
+}
+
+// Up to `max` parts worth naming in a title or description, most searched-for
+// categories first — what a build (build-og.mjs) or a Gun Guide
+// (guide-share.mjs) is CALLED to a search engine and in a share card.
+// Nobody searches a caption; they search the parts. parts_snapshot carries
+// two vocabularies (section keys like 'optics' and raw products.category
+// values like 'optic' — see js/build-categories.js), so both spellings are
+// listed. This is a priority ORDER over keys, not a key→label map — labels
+// stay in _category-meta.mjs. `row` is anything with a parts_snapshot.
+const HEADLINE_PRIORITY = [
+  'optics', 'optic', 'slides', 'slide', 'barrels', 'barrel', 'compensator',
+  'grips', 'frame', 'lights', 'light', 'triggers', 'trigger',
+];
+export function headlineParts(row, max, maxLen = 38) {
+  const parts = Array.isArray(row.parts_snapshot) ? row.parts_snapshot : [];
+  const rank = (p) => {
+    const i = HEADLINE_PRIORITY.indexOf(p && p.category);
+    return i === -1 ? HEADLINE_PRIORITY.length : i;
+  };
+  return parts
+    .map((p, i) => ({ p, i }))
+    .filter((x) => displayProductName(x.p))
+    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)   // stable: snapshot order breaks ties
+    .slice(0, max)
+    .map((x) => clampLine(displayProductName(x.p), maxLen));
+}
 
 // The newest builds a crawler is shown on the homepage and the gallery.
 // Twenty-four is the brief's number; past it the page says "See all".

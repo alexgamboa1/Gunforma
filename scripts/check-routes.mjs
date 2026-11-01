@@ -492,6 +492,55 @@ for (const [label, path, want] of [
   }
 }
 
+// ── /gg/ — every Gun Guide's own page ───────────────────────────────────
+// One PUBLISHED Gunforma guide, asked of PostgREST with the public key (the
+// read guide-share.mjs and the sitemap make), on the wire: both URL shapes
+// 200 with one apex canonical built from the title, indexable, a real H1,
+// /parts/ links, buy rows through /go/ only, the live total, and the Guides
+// item active. Then the refusals: a uuid no guide has is a 404, and a path
+// with no uuid is a 404 — never a 200 under a URL we did not mean to serve.
+// A miss on the read is a FAIL, not a skip: four guides are published.
+{
+  console.log('\n── /gg/ Gun Guide pages');
+  const { gunGuidePath, gunGuideUrl } = await import('../netlify/functions/_guide-url.mjs');
+  const res = await fetch(`${SB_URL}/rest/v1/guides?select=id,title,parts_snapshot&is_published=eq.true&order=title.asc&limit=1`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : null;
+  const g = Array.isArray(rows) && rows[0];
+  ok(!!g, 'a published Gunforma guide is readable with the public key', res.status);
+  if (g) {
+    const path = gunGuidePath(g.id, g.title);
+    const canon = gunGuideUrl(g.id, g.title);
+    for (const p of [path, '/gg/' + g.id]) {
+      const r = await fetch(origin + p, { redirect: 'manual' });
+      const body = await r.text();
+      const canons = [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map((m) => m[1]);
+      ok(r.status === 200, `${p}: 200`, r.status);
+      ok(canons.length === 1 && canons[0] === canon, `${p}: one canonical, the apex /gg/<slug>-<uuid> from the title`, canons.join(' '));
+      ok(r.headers.get('x-guide-share') === 'curated' && r.headers.get('x-guide-share-index') === 'index' &&
+         !/name=["']robots["'][^>]*noindex/.test(body),
+         `${p}: a published Gunforma guide is indexable`, r.headers.get('x-guide-share') + '/' + r.headers.get('x-guide-share-index'));
+      ok(body.includes('<h1>' + escHtml(g.title) + '</h1>'), `${p}: the H1 is the guide's title`);
+      ok(/class="nav-link active" href="gunforma-gun-guides\.html">Guides</.test(body), `${p}: Guides is the active nav item`);
+      const parts = Number(r.headers.get('x-guide-share-parts'));
+      const buys = Number(r.headers.get('x-guide-share-buy'));
+      const snapshot = Array.isArray(g.parts_snapshot) ? g.parts_snapshot.filter(Boolean).length : 0;
+      ok(parts === snapshot, `${p}: every saved part is served`, parts + ' of ' + snapshot);
+      ok((body.match(/href="\/parts\//g) || []).length >= 1, `${p}: parts link to their /parts/ pages`);
+      const buyAnchors = [...body.matchAll(/<a [^>]*rel="[^"]*nofollow[^"]*"[^>]*>/g)].map((m) => m[0]);
+      ok(buyAnchors.length === buys && buyAnchors.every((a) => /href="\/go\//.test(a)),
+         `${p}: every buy row goes through /go/`, buyAnchors.length + ' anchors, header says ' + buys);
+      const priced = r.headers.get('x-guide-share-priced');
+      ok(priced === 'none' || body.includes('<strong>' + escHtml(priced) + '</strong>'),
+         `${p}: the live total the header claims is on the page`, priced);
+    }
+    const missing = await fetch(origin + '/gg/no-such-guide-00000000-0000-4000-8000-000000000000', { redirect: 'manual' });
+    ok(missing.status === 404, '/gg/<unknown uuid>: 404', missing.status);
+    const noId = await fetch(origin + '/gg/not-a-guide', { redirect: 'manual' });
+    ok(noId.status === 404, '/gg/<no uuid>: 404', noId.status);
+  }
+}
+
 // ── /p365/ — the gun hubs ──────────────────────────────────────────────
 // The hubs are what un-orphan the /fit/ pages, so the assertion that
 // matters is not just "the hub renders" but "the hub links DOWN to its

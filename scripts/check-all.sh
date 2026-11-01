@@ -90,6 +90,8 @@ check "fits on grids"              scripts/fits-on.test.mjs
 check "discontinued parts stay"   scripts/discontinued.test.mjs
 check "gun guide parts build order" scripts/guide-part-order.test.mjs
 check "gun guide buy rows"        scripts/gun-guide-buy.test.mjs
+check "guide-url copies agree"    scripts/guide-url.test.mjs
+check "gun guide share pages"     scripts/guide-share.test.mjs
 check "headline price follows option" scripts/option-price.test.mjs
 check "guide editor writes"       scripts/guide-editor.test.mjs
 

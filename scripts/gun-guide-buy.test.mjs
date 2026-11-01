@@ -55,7 +55,7 @@ function loadContext() {
   vm.createContext(ctx);
   for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js',
     'js/variant-label.js', 'js/variant-swatch.js', 'js/maker-link.js', 'js/option-price.js',
-    'js/affiliate.js', 'js/build-total.js']) {
+    'js/affiliate.js', 'js/build-total.js', 'js/guide-url.js']) {
     vm.runInContext(read(f), ctx, { filename: f });
   }
   const html = read('gunforma-gun-guides.html');

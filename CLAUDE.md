@@ -471,8 +471,8 @@ The reader is **`netlify/functions/_pg.mjs`**: `pgRows(path)` resolves only
 to an array (possibly empty — the one real not-found) and throws
 `UpstreamError` on everything else, with a per-attempt timeout so a hung
 connection cannot eat the retry's turn; `unavailable()` is the one 503.
-`build-og.mjs`, `product-page.mjs`, `guide-page.mjs`, `gun-hub.mjs` and
-`field-note.mjs` read through it. Do not add a local `pgGet` back to any of them, and do not write
+`build-og.mjs`, `product-page.mjs`, `guide-page.mjs`, `gun-hub.mjs`,
+`field-note.mjs` and `guide-share.mjs` read through it. Do not add a local `pgGet` back to any of them, and do not write
 `Array.isArray(rows) && rows.length ? rows[0] : null` as a way of surviving
 a bad body: that line is exactly how a 2xx proxy page used to become a 404.
 (`parts-index.mjs` and `profile-og.mjs` still carry their own copies, logged
@@ -489,7 +489,51 @@ stubbed `fetch` that fails each of those ways and requires the 503, the
 header, the retry count, and that an empty array alone yields the 404/410.
 `scripts/field-notes.test.mjs` does the same for `field-note.mjs`, where an
 empty array is a 200 that names the missing part, not a 404 — the page is
-the prose; the catalog only decorates it.
+the prose; the catalog only decorates it. `scripts/guide-share.test.mjs`
+does it for `/gg/`, where not-found takes zero rows from BOTH tables.
+
+### Gun Guide pages: `/gg/<slug>-<uuid>`
+
+`netlify/functions/guide-share.mjs` (2026-11-01) gives every Gun Guide its
+own page — before it a guide lived only inside `gunforma-gun-guides.html`,
+drawn in the browser, with nothing to link to and nothing a crawler could
+read. It copies `build-og.mjs`'s URL shape and `gun-hub.mjs`'s chrome:
+
+- **The uuid at the END resolves; the slug (from the title) is
+  decoration.** `_guide-url.mjs` ↔ `js/guide-url.js` is the pair, the same
+  split as `_build-url.mjs` ↔ `js/build-url.js`, held by
+  `scripts/guide-url.test.mjs` — and its slug rule IS `buildSlug()`. The
+  canonical, the sitemap URL, the card title links on Gun Guides and the
+  Share buttons all come from it.
+- **One uuid space, two tables**: a published Gunforma guide (`guides`,
+  `is_published=eq.true`) is read first, then a community guide
+  (`gun_guides`, `is_removed=eq.false`) — both filters redundant with RLS,
+  on purpose. A draft is never served. Zero rows from both is the 404; any
+  failed read is `_pg.mjs`'s 503.
+- **Published Gunforma guides are indexable and in the sitemap**
+  (`/sitemap-guides.xml`, no lastmod — `guides` has no `updated_at`).
+  **Community guides are served but `noindex`** (meta and `X-Robots-Tag`)
+  and never submitted, until titles can be reported (loadouts-spec §7.5).
+- **Embeds name every FK**: `gun_guides` carries TWO to `guns` (`gun_id`
+  and the composite), so a bare `guns(...)` there is PGRST201. The
+  builder's username is a separate, non-fatal read (`gun_guides.user_id`
+  references `auth.users`, not `profiles`).
+- **Prices through the shared modules only**: each part's buy row is its
+  SAVED option's listings (`_listing-rules.mjs`, `_maker-link.mjs`),
+  falling back to the product's like `js/affiliate.js`'s `getFor()`, with a
+  maker-only part whose saved option is gone reading "Check price"; the
+  total is `_build-cards.mjs`'s `priceTotal()`. Discontinued and typed
+  parts are never sold.
+- **The share card is built from the data** — title, `headlineParts()`
+  (moved into `_build-cards.mjs`, shared with `build-og.mjs`), the count and
+  today's total. **og:image is `og-default.png`** until the collage
+  (loadouts-spec §5) ships.
+- **Cache**: `CDN_CACHE_BUILD` on the 200 — an unpublished or taken-down
+  guide leaves every reader within the hour.
+- **Observable**: `x-guide-share` (`curated` | `community`),
+  `-index`, `-parts`, `-buy`, `-priced`. `check-routes.mjs` walks one
+  published guide on the wire; `check-sitemap.mjs` holds every submitted
+  `/gg/` URL to the canonical it serves and refuses a noindex on one.
 
 ### Field Notes articles: `/field-notes/<slug>`
 
@@ -1434,6 +1478,8 @@ Registered today:
 | `scripts/frame-fit.test.mjs` | the catalog telling a P365 FUSE owner that the FUSE's own factory grip "may not fit", or hiding it from the grip filter; a grip whose maker is silent on the FUSE reading ✗ (it is unjudged, in words) or ✓ (it is not a confirmed fit); an XMacro owner being offered a FUSE-size grip — pins the nine cells (FUSE, FUSE Comp, XMacro × the OEM module, Armory Craft, ECM R11 Fuse) and the silent-maker case |
 | `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
 | `scripts/discontinued.test.mjs` | a discontinued part hidden or sold — its page showing a price, a buy row or a JSON-LD offer, missing its "Discontinued" badge, offering a successor the database does not name or one that is discontinued or unapproved, suggesting an unapproved or discontinued "similar" part, or reading `replaced_by_id` for a live part; a builder picker, the review queue, the catalog or the Armory filtering discontinued parts out of its read again, the catalog's or the Armory's "Show discontinued" toggle starting on, a guide or build no longer marking one; the sitemap or `/parts` dropping discontinued pages, or listing an address that 301s; `PART_REDIRECTS` or `js/part-redirects.js` drifting from the `/parts/` 301s in `netlify.toml`, or a catalog surface offering a row that 301s — runs `product-page.mjs` against a stubbed catalog and reads the pages' sources |
+| `scripts/guide-url.test.mjs` | `js/guide-url.js` and `_guide-url.mjs` drifting apart — a Share button or card link naming a different `/gg/` URL from the canonical the page declares — or the guide slug rule drifting from `buildSlug()` |
+| `scripts/guide-share.test.mjs` | a `/gg/` page answering 404 when PostgREST failed (503 + Retry-After after one retry, for a failed guides, gun_guides or parts read), answering anything but 404 for zero rows from both tables or for a path with no uuid, serving a Gunforma draft or a taken-down community guide (the published/removed filters must be SENT), a canonical not built from the title, a community guide without noindex or a published one with it, the share card not carrying the count and today's total, a buy row off `/go/`, a stale price stated, a sibling option's listing standing in for the saved one, a discontinued or typed part sold, or an unnamed embed off `gun_guides` — runs `guide-share.mjs` against a stubbed fetch |
 | `scripts/gun-guide-buy.test.mjs` | an open Gun Guide selling a part dishonestly — a stale price stated as a number or falling back to MSRP (the buy row must read "Check price"), a sibling option's listing standing in for the SAVED option (a gone saved option falls back to the product block, and a maker-only one then reads "Check price", never a sibling's MSRP), a maker-only part without its `/go/part/<id>` button or with `sponsored` on it, a discontinued or typed part given a buy row, the live total drifting from `js/build-total.js`'s number (the one a build's page shows), per-block disclosures where the guide says ONE line, or the catalog panel's own `renderBlock` losing its disclosure — runs `js/affiliate.js`'s real ingestion and the page's own inline script over a stubbed catalog |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |

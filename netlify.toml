@@ -234,6 +234,16 @@
   to = "/.netlify/functions/build-og?id=:splat"
   status = 200
 
+# Shareable Gun Guide URLs, /gg/<slug>-<uuid> — the /b/* shape above for the
+# same reasons: a rewrite (the address bar keeps /gg/, which is the canonical
+# guide-share.mjs emits), :splat rather than a named placeholder, and the
+# function reads the id from the ORIGINAL pathname, so ?id= is inert in
+# production. Nothing above matches /gg/*, and no catch-all below.
+[[redirects]]
+  from = "/gg/*"
+  to = "/.netlify/functions/guide-share?id=:splat"
+  status = 200
+
 # The legacy build URL, server-rendered by the same function so BOTH shapes
 # get the injected per-build canonical and the static id-less one stripped.
 # Without this, gunforma-build-detail.html?id=… declares the id-less canonical

@@ -17,6 +17,9 @@
 //                           /parts, legal …)
 //   /sitemap-hubs.xml       /p365/ and every declared gun hub
 //   /sitemap-fit.xml        every declared /fit/ guide
+//   /sitemap-guides.xml     every PUBLISHED Gunforma guide, /gg/<slug>-<uuid>
+//                           (community guides are served noindex, never
+//                           submitted — loadouts-spec §7.5)
 //   /sitemap-builds.xml     every approved build, /b/<slug>-<uuid>
 //   /sitemap-profiles.xml   every profile with at least one approved build
 //   /sitemap-parts.xml      every live /parts/<category>/<slug>
@@ -67,6 +70,7 @@
 import { CATEGORY_META } from './_category-meta.mjs';
 import { PART_REDIRECTS } from './_part-redirects.mjs';
 import { buildUrl } from './_build-url.mjs';
+import { gunGuideUrl } from './_guide-url.mjs';
 // Guide URLS COME FROM THE SAME REGISTRY guide-page.mjs SERVES — same
 // principle as buildUrl() above: the sitemap and the page's canonical are
 // derived from one module, so they cannot disagree by construction. A page
@@ -114,9 +118,12 @@ const STATIC_PATHS = [
 // empty child is a sitemap that says nothing, and check-sitemap.mjs refuses
 // an empty one. The list is computed at module load, so it is one fact
 // here and in the guard that imports it.
+// 'guides' (2026-11-01): every PUBLISHED Gunforma guide at its /gg/ URL.
+// Community guides are served but never submitted — loadouts-spec §7.5,
+// until titles can be reported (guide-share.mjs marks them noindex).
 export const SITEMAP_CHILDREN = ['static', 'hubs', 'fit',
   ...(liveFieldNotes().length ? ['field-notes'] : []),
-  'builds', 'profiles', 'parts'];
+  'guides', 'builds', 'profiles', 'parts'];
 
 export function childPath(key) {
   return '/sitemap-' + key + '.xml';
@@ -198,6 +205,18 @@ function fieldNoteUrls() {
   return liveFieldNotes().map((a) => ({ loc: SITE + fieldNotePath(a.slug), lastmod: a.updated || a.published }));
 }
 
+// Published Gunforma guides, by gunGuideUrl() — the module guide-share.mjs
+// builds its canonical with, so the two cannot disagree (the same reasoning
+// as buildUrl() for /b/). is_published=eq.true is redundant with RLS, on
+// purpose: a draft must never be submitted. No lastmod: guides carries no
+// updated_at, and an invented date is the lie this file's header rules out.
+async function guideUrls() {
+  const rows = await pgAll((limit, offset) =>
+    'guides?select=' + encodeURIComponent('id,title') +
+    '&is_published=eq.true&order=title.asc&limit=' + limit + '&offset=' + offset);
+  return rows.filter((g) => g.id).map((g) => ({ loc: gunGuideUrl(g.id, g.title) }));
+}
+
 async function productUrls() {
   const rows = await pgAll((limit, offset) =>
     'products?select=' + encodeURIComponent('slug,category,updated_at') +
@@ -265,6 +284,7 @@ async function childEntries(key) {
     case 'hubs':     return hubUrls();
     case 'fit':      return fitUrls();
     case 'field-notes': return fieldNoteUrls();
+    case 'guides':   return guideUrls();
     case 'parts':    return productUrls();
     case 'builds':   return (await buildAndProfileUrls()).builds;
     case 'profiles': return (await buildAndProfileUrls()).profiles;
@@ -358,8 +378,8 @@ export default async (req) => {
   // whole index rather than an index pointing at a child that will 503.
   let children;
   try {
-    const [products, { builds, profiles }] = await Promise.all([productUrls(), buildAndProfileUrls()]);
-    const sets = { static: staticUrls(), hubs: hubUrls(), fit: fitUrls(), 'field-notes': fieldNoteUrls(), builds, profiles, parts: products };
+    const [products, { builds, profiles }, guides] = await Promise.all([productUrls(), buildAndProfileUrls(), guideUrls()]);
+    const sets = { static: staticUrls(), hubs: hubUrls(), fit: fitUrls(), 'field-notes': fieldNoteUrls(), guides, builds, profiles, parts: products };
     children = SITEMAP_CHILDREN.map((key) => ({
       key,
       loc: SITE + childPath(key),

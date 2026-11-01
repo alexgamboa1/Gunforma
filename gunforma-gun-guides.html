@@ -152,6 +152,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .gdetail-disclosure { font-size: 10px; color: #a8a5a0; padding: 6px 0 0; }
 .gdetail-start { display: inline-block; margin: 10px 10px 0 0; font-size: 11px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; border-radius: 4px; padding: 7px 12px; text-decoration: none; }
 .gdetail-start:hover { background: #1e63a0; }
+.gdetail-share { margin: 10px 10px 0 0; font-family: inherit; font-size: 11px; font-weight: 700; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
+.gdetail-share:hover { background: #eaf4fc; }
+.gcard-title a { color: inherit; text-decoration: none; }
+.gcard-title a:hover { color: #2a7bbd; text-decoration: underline; }
 .gdetail-close { margin-top: 10px; font-family: inherit; font-size: 11px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
 .gdetail-close:hover { color: #1a1a1a; border-color: #b9b6aa; }
 
@@ -270,6 +274,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/option-price.js"></script>
 <script src="js/affiliate.js"></script>
 <script src="js/build-total.js"></script>
+<script src="js/guide-url.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
@@ -365,7 +370,7 @@ async function loadAll() {
   var r = await Promise.all([
     sb.from('platforms').select('id, name'),
     sb.from('guns').select('id, name'),
-    sb.from('gun_guides').select('id, user_id, title, platform_id, gun_id, parts_snapshot, created_at').order('created_at', { ascending: false }),
+    sb.from('gun_guides').select('id, user_id, title, platform_id, gun_id, parts_snapshot, is_removed, created_at').order('created_at', { ascending: false }),
     curatedQ.order('title'),
   ]);
   (r[0].data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
@@ -498,7 +503,9 @@ function cardHtml(row, kind) {
     thumbsHtml(row) +
     '<div class="gcard-body">' +
       '<div class="gcard-kicker' + (kind === 'curated' ? ' curated' : '') + '">' + kickerHtml(row, kind) + '</div>' +
-      '<div class="gcard-title">' + esc(row.title || 'Untitled build') + '</div>' +
+      '<div class="gcard-title">' + (sharePath(row, kind)
+        ? '<a href="' + escAttr(sharePath(row, kind)) + '">' + esc(row.title || 'Untitled build') + '</a>'
+        : esc(row.title || 'Untitled build')) + '</div>' +
       '<div class="gcard-partsline">' + esc(partsLine) + '</div>' +
     '</div>' +
     '<div class="gcard-foot">' +
@@ -524,6 +531,31 @@ function themeLabel(key) {
   if (THEME_LABELS[key]) return THEME_LABELS[key];
   var s = String(key || '').replace(/_/g, ' ');
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// A guide's own page, /gg/<slug>-<uuid> (js/guide-url.js; guide-share.mjs
+// serves it). Only for a guide that page will serve — a published Gunforma
+// guide or a community guide not taken down — so an admin's draft card
+// never links to a 404.
+function kindOf(row) {
+  return CURATED.some(function (r) { return r.id === row.id; }) ? 'curated' : 'community';
+}
+function sharePath(row, kind) {
+  if (kind === 'curated' && row.is_published === false) return null;
+  if (kind === 'community' && row.is_removed === true) return null;
+  return window.gunGuidePath(row.id, row.title);
+}
+// The apex URL to the clipboard — the canonical the page declares, never
+// location.origin. A browser without clipboard access gets the link in a
+// prompt to copy by hand.
+async function copyShareLink(row) {
+  var url = window.gunGuideUrl(row.id, row.title);
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Link copied — ' + url);
+  } catch (e) {
+    window.prompt('Copy this link to share the guide:', url);
+  }
 }
 
 function canEdit(row, kind) {
@@ -630,6 +662,9 @@ function detailHtml(row) {
   // The start of the reader's OWN build: ?from= loads the parts and nothing
   // else — never ?edit=, which adopts a saved guide's identity.
   html += '<a class="gdetail-start" href="gunforma-armory.html?from=' + escAttr(row.id) + '">Customize this build in the Armory →</a>';
+  if (sharePath(row, kindOf(row))) {
+    html += '<button type="button" class="gdetail-share" data-share="1">Share</button>';
+  }
   html += '<button type="button" class="gdetail-close">Close</button></div>';
   return html;
 }
@@ -740,6 +775,12 @@ function wireCards(grid) {
       if (del) { deleteGuide(card.dataset.kind, card.dataset.id, del); return; }
       var unpub = e.target.closest('button[data-unpublish]');
       if (unpub) { unpublishGuide(card.dataset.id, unpub); return; }
+      if (e.target.closest('button[data-share]')) {
+        var rows = card.dataset.kind === 'curated' ? CURATED : COMMUNITY;
+        var sharing = rows.find(function (r) { return r.id === card.dataset.id; });
+        if (sharing) copyShareLink(sharing);
+        return;
+      }
       var key = card.dataset.kind + ':' + card.dataset.id;
       if (e.target.closest('.gdetail-close')) { OPEN_ID = null; renderAll(); return; }
       if (OPEN_ID === key) return;

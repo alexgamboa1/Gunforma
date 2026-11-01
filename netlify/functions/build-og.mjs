@@ -59,7 +59,7 @@ import { pgRows, unavailable } from './_pg.mjs';
 // What the build is CALLED (its factory model, FCU, or the bare platform),
 // the "More <model> builds" cards and their CSS — shared with the hubs,
 // the homepage and the gallery so one build is named one way everywhere.
-import { buildModel, modelBuildPhrase, fetchBuilds, fetchPriceTotals, priceTotalText, miniCardHtml, miniCardsCss, orderedPhotos } from './_build-cards.mjs';
+import { buildModel, modelBuildPhrase, fetchBuilds, fetchPriceTotals, priceTotalText, miniCardHtml, miniCardsCss, orderedPhotos, clampLine, headlineParts } from './_build-cards.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
 
@@ -150,13 +150,9 @@ function esc(s) {
   ));
 }
 
-// One line, no markup, no newlines — a description is an attribute value.
-function clamp(s, max) {
-  const t = String(s || '').replace(/\s+/g, ' ').trim();
-  if (t.length <= max) return t;
-  // A cut that lands after a name already ending in "…" must not print "……".
-  return t.slice(0, max - 1).replace(/\s+\S*$/, '').replace(/…$/, '') + '…';
-}
+// One line, no markup, no newlines — clampLine() in _build-cards.mjs,
+// shared with guide-share.mjs's share card.
+const clamp = clampLine;
 
 // ── What a build is CALLED, to a search engine ─────────────────────────────
 // Nobody searches a builder's caption ("My X Macro. Love this EDC."). They
@@ -172,28 +168,10 @@ function clamp(s, max) {
 // a snapshot part carries the same {brand, name} pair a product row does.
 const partDisplayName = displayProductName;
 
-// Up to `max` parts worth naming in a title or description, most searched-for
-// categories first. parts_snapshot carries two vocabularies (section keys
-// like 'optics' and raw products.category values like 'optic' — see
-// js/build-categories.js), so both spellings are listed. This is a priority
-// ORDER over keys, not a key→label map — labels stay in _category-meta.mjs.
-const HEADLINE_PRIORITY = [
-  'optics', 'optic', 'slides', 'slide', 'barrels', 'barrel', 'compensator',
-  'grips', 'frame', 'lights', 'light', 'triggers', 'trigger',
-];
-function headlineParts(build, max, maxLen = 38) {
-  const parts = Array.isArray(build.parts_snapshot) ? build.parts_snapshot : [];
-  const rank = (p) => {
-    const i = HEADLINE_PRIORITY.indexOf(p && p.category);
-    return i === -1 ? HEADLINE_PRIORITY.length : i;
-  };
-  return parts
-    .map((p, i) => ({ p, i }))
-    .filter((x) => partDisplayName(x.p))
-    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)   // stable: snapshot order breaks ties
-    .slice(0, max)
-    .map((x) => clamp(partDisplayName(x.p), maxLen));
-}
+// Up to `max` parts worth naming in a title or description, most
+// searched-for categories first: headlineParts() in _build-cards.mjs, shared
+// with guide-share.mjs so a build and a Gun Guide name their parts by one
+// priority order.
 
 // "P365 XMacro build: Holosun 507K X2, Zaffiri Precision ZPS.3 Slide,
 // Icarus Precision 311 — by Wraythe | Gunforma". The MODEL opens it and is

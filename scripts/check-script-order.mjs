@@ -39,6 +39,11 @@ const RULES = [
   // addPartWithVariant(), and the build page in resolveVariant().
   { global: 'variantSpecs', defines: 'js/variant-label.js', consumers: ['js/part-picker.js'] },
   { global: 'buildPath',    defines: 'js/build-url.js',     consumers: [] },
+  // A Gun Guide's /gg/ URL: Gun Guides' card title links and Share button,
+  // and the Armory's Share button after a save, call it inline. A missing
+  // tag throws inside the card render and the gallery stays empty.
+  { global: 'gunGuideUrl',  defines: 'js/guide-url.js',     consumers: [] },
+  { global: 'gunGuidePath', defines: 'js/guide-url.js',     consumers: [] },
   // The /parts/ addresses that 301. The catalog, the Armory, both builder
   // pages and the review queue call window.isRedirectedPart inline when they
   // load the catalog; a missing tag throws there and the picker stays empty.

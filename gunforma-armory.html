@@ -338,6 +338,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         <input type="text" class="build-title-input" id="build-title" maxlength="80" placeholder="Name this build" autocomplete="off" hidden />
         <div class="save-opts" id="save-opts" hidden></div>
         <button type="button" class="btn-block primary" id="btn-save" disabled>Save to Gun Guides →</button>
+        <button type="button" class="btn-block ghost" id="btn-share" hidden>Share this guide</button>
         <a class="btn-block ghost" href="gunforma-gun-guides.html">Browse Gun Guides</a>
       </div>
     </aside>
@@ -356,6 +357,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
 <script src="js/option-price.js"></script>
+<script src="js/guide-url.js"></script>
 <script src="js/frame-fit.js"></script>
 <script src="js/slide-fit.js"></script>
 <script src="js/nav.js"></script>
@@ -1281,6 +1283,28 @@ function renderSidebar() {
   btn.textContent = needsComp
     ? 'Add a comp to finish this build'
     : saveLabel();
+  var share = document.getElementById('btn-share');
+  if (share) share.hidden = !shareableId();
+}
+
+// A SAVED community guide is the only thing here with a page of its own
+// (/gg/, guide-share.mjs): a Gunforma guide being worked on is a draft,
+// which that page never serves, and publishing one lets the builder go.
+function shareableId() {
+  return STATE.target === 'community' && STATE.savedId ? STATE.savedId : null;
+}
+// The apex /gg/ URL to the clipboard. The slug is decoration — the uuid
+// resolves — so an unsaved rename still copies a working link.
+async function shareGuide() {
+  var id = shareableId();
+  if (!id) return;
+  var url = window.gunGuideUrl(id, (STATE.title || '').trim() || defaultBuildName());
+  try {
+    await navigator.clipboard.writeText(url);
+    toast('Link copied — anyone can open your guide at that address.');
+  } catch (e) {
+    window.prompt('Copy this link to share your guide:', url);
+  }
 }
 
 function saveLabel() {
@@ -1933,6 +1957,7 @@ async function ensureNewTheme(label) {
 }
 
 document.getElementById('btn-save').addEventListener('click', saveGuide);
+document.getElementById('btn-share').addEventListener('click', shareGuide);
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
