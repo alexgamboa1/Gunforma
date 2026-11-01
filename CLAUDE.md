@@ -1433,7 +1433,7 @@ Registered today:
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
-| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; and on the gallery, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub |
+| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -3402,8 +3402,35 @@ rule):
   tell whether it is applied, and until then an admin-only save or delete
   says it isn't switched on yet instead of sending a write RLS would refuse.
   `scripts/guide-editor.test.mjs` pins what each page sends.
-- An admin also sees **unpublished** Gunforma guides in the gallery, marked
-  "Unpublished"; every Gunforma guide card now names its theme.
+- An admin's **Gunforma guides tab is two sections, Drafts and
+  Published**; every Gunforma guide card names its theme.
+
+**Drafts and published** (Alex, 2026-11-01). Two things shipped wrong in
+the editor above, and both looked fine in a browser:
+
+- **"Build yours in the Armory" opened the last guide an admin had edited,
+  in edit mode.** The identity lived in the localStorage draft, and every
+  plain visit restored it — so the next thing typed into a "new" build was
+  one Save away from rewriting a live guide. **The identity is now adopted
+  only through `?edit=`**: the URL carries it while a saved guide is open
+  (set on open and after each save, cleared by "Start a new build"), and a
+  plain visit restores a new, unsaved build or nothing.
+- **A published guide was edited in place**, so every save was public at
+  once. **Now a published Gunforma guide is never a save target.** Edit on
+  one ("Edit as draft" on its card) opens a **draft**: a separate
+  unpublished `guides` row whose `draft_of` names the live guide
+  (`supabase/migrations/20261101120000_guide_drafts.sql` — one draft per
+  live guide, a draft is always unpublished). Reopening finds the same
+  draft. **Publishing a draft of a live guide copies it onto the live row**
+  (same id) and deletes the draft; publishing a plain draft flips
+  `is_published`. Either way the Armory then lets go of the build — a
+  published guide is locked. **Every update to a Gunforma guide carries
+  `.eq('is_published', false)`**, so a stale identity matches no row
+  instead of writing to a live guide. **Unpublish** on a live card moves it
+  to Drafts. New Gunforma guides start unpublished. Before the migration
+  both pages probe for `draft_of` and the draft's link to its live guide
+  lives in the editing browser only. Community guides (`gun_guides`) have
+  no publish state and are unchanged.
 
 **History — why the old Armory was parked** (kept because the reasoning still
 binds the rebuild): the pre-rebuild page worked — `#83`–`#86` fixed its
