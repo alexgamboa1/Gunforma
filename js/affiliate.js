@@ -18,8 +18,18 @@
 // has no entry, as before, and the catalog panel shows renderEmpty().
 //
 // API (namespaced on window.affiliate):
-//   loadFor(sb, productIds)      → Promise; populates the internal cache
+//   loadFor(sb, productIds)      → Promise; populates the internal cache.
+//                                  Resolves to the RAW product_variants rows
+//                                  (null on a failed read): a superset of
+//                                  PRICE_TOTAL_SELECT, so a page that needs
+//                                  js/build-total.js's number can feed it
+//                                  these rows instead of running a second
+//                                  query — Gun Guides does.
 //   get(productId)               → the aggregate object or null
+//   getFor(productId, variantId) → the aggregate scoped to ONE option when
+//                                  that option has rows of its own, else the
+//                                  product aggregate — the saved-option rule
+//                                  Gun Guides renders by
 //   renderHero(productId)        → compact one-row HTML (price + partner
 //                                  + stock + Buy button); '' if no PARTNER
 //                                  listing — grid cards never carry a maker
@@ -101,11 +111,11 @@
   }
 
   async function loadFor(sb, productIds) {
-    if (!Array.isArray(productIds) || !productIds.length) return;
+    if (!Array.isArray(productIds) || !productIds.length) return [];
     // De-dup + filter falsy — callers may hand us raw parts_snapshot arrays.
     var seen = {}, ids = [];
     productIds.forEach(function (id) { if (id && !seen[id]) { seen[id] = 1; ids.push(id); } });
-    if (!ids.length) return;
+    if (!ids.length) return [];
 
     // products.url, is_discontinued and the maker's website feed the maker
     // row; msrp is the only number a maker row has to show. The
@@ -124,7 +134,7 @@
       .is('retired_at', null)
       .is('affiliate_links.retired_at', null)
       .in('product_id', ids);
-    if (res.error) { console.error('[affiliate] load failed', res.error); return; }
+    if (res.error) { console.error('[affiliate] load failed', res.error); return null; }
 
     // Group into (variant, link) rows per product. A variant with no links
     // becomes a maker row when the product has a usable url; a variant with
@@ -225,9 +235,43 @@
         variantsWithListings: new Set(partner.map(function (l) { return l.variantId; })).size,
       };
     });
+    return res.data || [];
   }
 
   function get(productId) { return AFFILIATE_BY_PRODUCT_ID[productId] || null; }
+
+  // The aggregate for ONE saved option: the product's listings filtered to
+  // that variant, their order preserved — they were sorted once, in loadFor,
+  // so this introduces no second copy of the sort or stale rules. Null when
+  // the option has no row at all (retired, or carrying neither a listing nor
+  // a maker url), and getFor then falls back to the product aggregate the
+  // way the catalog panel behaves with an option selected: a partner
+  // product keeps its product-level headline, and a maker-only headline
+  // goes through optionHeadline with the selected id, which reads "Check
+  // price" — never a sibling option's number as if it were this one.
+  function scopedAff(aff, variantId) {
+    var listings = aff.listings.filter(function (l) { return l.variantId === variantId; });
+    if (!listings.length) return null;
+    var partner = listings.filter(function (l) { return !l.maker; });
+    var priced = partner.filter(function (l) { return l.price != null && !l.stale; });
+    var inStock = priced.filter(function (l) { return l.in_stock === true; });
+    var priceSet = (inStock.length ? inStock : priced).map(function (l) { return l.price; });
+    return {
+      hero: listings[0],
+      listings: listings,
+      partnerCount: partner.length,
+      makerCount: listings.length - partner.length,
+      minPrice: priceSet.length ? Math.min.apply(null, priceSet) : null,
+      maxPrice: priceSet.length ? Math.max.apply(null, priceSet) : null,
+      anyInStock: listings.some(function (l) { return l.in_stock === true; }),
+    };
+  }
+
+  function getFor(productId, variantId) {
+    var aff = get(productId);
+    if (!aff) return null;
+    return (variantId && scopedAff(aff, variantId)) || aff;
+  }
 
   // Shared hero-row markup used by both renderHero and renderBlock. Uses
   // the .part-affiliate* classes that build-detail already ships — pages
@@ -317,15 +361,21 @@
   }
 
   // opts.selectedVariantId — see heroRowHtml.
+  // opts.scopeToVariant: render the SAVED option's own listings (getFor)
+  //   rather than the product aggregate — Gun Guides' rule.
+  // opts.disclosure === false: suppress the per-block disclosure, for a page
+  //   that says one line under several blocks (the guide detail list).
   function renderBlock(productId, opts) {
-    var aff = get(productId);
+    opts = opts || {};
+    var aff = opts.scopeToVariant ? getFor(productId, opts.selectedVariantId) : get(productId);
     if (!aff || !aff.hero) return '';
-    var main = heroRowHtml(aff, { selectedVariantId: opts && opts.selectedVariantId });
+    var main = heroRowHtml(aff, { selectedVariantId: opts.selectedVariantId });
     var multi = aff.listings.length > 1;
     // Says what is true of the buttons in this block: partner-only,
     // maker-only, or both. Never absent here — a block exists only when
     // there is at least one button.
-    var disclosureText = global.buyDisclosure(aff.partnerCount > 0, aff.makerCount > 0);
+    var disclosureText = opts.disclosure === false ? null
+      : global.buyDisclosure(aff.partnerCount > 0, aff.makerCount > 0);
     var disclosure = disclosureText
       ? '<div class="part-affiliate-disclosure">' + esc(disclosureText) + '</div>'
       : '';
@@ -371,6 +421,7 @@
   global.affiliate = {
     loadFor: loadFor,
     get: get,
+    getFor: getFor,
     renderHero: renderHero,
     renderBlock: renderBlock,
     renderEmpty: renderEmpty,
