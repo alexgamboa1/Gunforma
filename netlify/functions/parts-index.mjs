@@ -273,10 +273,10 @@ function renderPage(allProducts) {
 '<nav class="nav">' +
   '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
-    '<a class="nav-link" href="/">Home</a>' +
     '<a class="nav-link" href="gunforma-builds.html">Builds</a>' +
     '<a class="nav-link active" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
     '<a class="nav-link" href="gunforma-armory.html">Armory</a>' +
+    '<a class="nav-link" href="gunforma-gun-guides.html">Guides</a>' +
   '</div>' +
   '<div class="nav-right">' +
     '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
@@ -288,6 +288,7 @@ function renderPage(allProducts) {
   '<a href="gunforma-builds.html">Builds</a>' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '<a href="gunforma-armory.html">Armory</a>' +
+  '<a href="gunforma-gun-guides.html">Guides</a>' +
   navSubHtml() +
   '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
   '<a class="anon" href="gunforma-signup.html">Create account</a>' +

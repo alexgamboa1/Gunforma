@@ -10,11 +10,13 @@
 // #218 rebuild added it to the two pages it touched, and nothing checked
 // the rest. This holds every copy to one shape:
 //
-//   - desktop bar: Home, Builds, Parts Catalog, Armory — in that order,
-//     Armory active ONLY on gunforma-armory.html, and NO flat "Your P365"
-//     bar link anywhere
+//   - desktop bar: Builds, Parts Catalog, Armory, Guides — in that order,
+//     NO Home item (Alex, 2026-10-31, the Gun Guides launch: the logo
+//     already links home), Armory active ONLY on gunforma-armory.html,
+//     Guides active ONLY on gunforma-gun-guides.html, and NO flat
+//     "Your P365" bar link anywhere
 //   - hamburger, in three groups (Alex, 2026-10-29): Builds / Parts
-//     Catalog / Armory (desktop order), then the "Your P365" dropdown as
+//     Catalog / Armory / Guides (desktop order), then the "Your P365" dropdown as
 //     its own group framed by two blue dividers (its own borders), the
 //     account items nav.js appends landing below the second line — and the
 //     dropdown is GUN_HUBS exactly (same hubs, same order, names from
@@ -61,10 +63,10 @@ const CSS_FILES = [
 ];
 
 const DESKTOP = [
-  ['/', 'Home'],
   ['gunforma-builds.html', 'Builds'],
   ['gunforma-parts-catalog.html', 'Parts Catalog'],
   ['gunforma-armory.html', 'Armory'],
+  ['gunforma-gun-guides.html', 'Guides'],
 ];
 const DROPDOWN = [
   ...GUN_HUBS.map((h) => [hubPath(h.gun), GUN_META[h.gun]]),
@@ -82,6 +84,7 @@ const MENU_AROUND = [
   ['gunforma-builds.html', 'Builds'],
   ['gunforma-parts-catalog.html', 'Parts Catalog'],
   ['gunforma-armory.html', 'Armory'],
+  ['gunforma-gun-guides.html', 'Guides'],
   ['gunforma-signin.html', 'Sign in'],
   ['gunforma-signup.html', 'Create account'],
 ];
@@ -129,6 +132,11 @@ for (const file of STATIC_PAGES) {
     if (armoryActive !== wantActive) {
       fail(`${file}: Armory bar link ${wantActive ? 'must be' : 'must NOT be'} active`); good = false;
     }
+    const guidesActive = /class="nav-link active" href="gunforma-gun-guides\.html"/.test(bar);
+    const wantGuides = file === 'gunforma-gun-guides.html';
+    if (guidesActive !== wantGuides) {
+      fail(`${file}: Guides bar link ${wantGuides ? 'must be' : 'must NOT be'} active`); good = false;
+    }
   } else good = false;
 
   const menu = region(t, 'class="nav-menu"', '</nav>', file, 'hamburger menu');
@@ -139,8 +147,8 @@ for (const file of STATIC_PAGES) {
       good = sameList(links(sub), DROPDOWN, file, 'dropdown') && good;
       const around = links(menu.replace(sub + '</details>', '\u0000'));
       good = sameList(around, MENU_AROUND, file, 'menu') && good;
-      if (menu.indexOf('Armory</a>') > menu.indexOf('<details')) {
-        fail(`${file}: the dropdown is its own group after Builds / Parts Catalog / Armory`); good = false;
+      if (menu.indexOf('Guides</a>') > menu.indexOf('<details')) {
+        fail(`${file}: the dropdown is its own group after Builds / Parts Catalog / Armory / Guides`); good = false;
       }
       good = checkAnonRows(menu, file) && good;
     } else good = false;
@@ -159,8 +167,8 @@ for (const file of STATIC_PAGES) {
   if (sub) good = sameList(links(sub), DROPDOWN, file, 'NAV_P365_SUB') && good; else good = false;
   const menu = region(t, 'class="nav-menu"', '</div>\';', file, 'NAV_MENU');
   if (menu) {
-    const idx = ['Builds</a>', 'Parts Catalog</a>', 'Armory</a>', 'NAV_P365_SUB', 'Sign in</a>', 'Create account</a>'].map((m) => menu.indexOf(m));
-    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: NAV_MENU is not Builds, Parts Catalog, Armory, the dropdown, the signed-out rows`); good = false; }
+    const idx = ['Builds</a>', 'Parts Catalog</a>', 'Armory</a>', 'Guides</a>', 'NAV_P365_SUB', 'Sign in</a>', 'Create account</a>'].map((m) => menu.indexOf(m));
+    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: NAV_MENU is not Builds, Parts Catalog, Armory, Guides, the dropdown, the signed-out rows`); good = false; }
   } else good = false;
   // Both states: the signed-in paint must remove the anon rows, and the
   // anon branch must restore them, or a sign-in shows both groups at once
@@ -173,6 +181,9 @@ for (const file of STATIC_PAGES) {
   }
   const armoryBars = (t.match(/activeIf\('gunforma-armory\.html'\) \+ '" href="gunforma-armory\.html">Armory<\/a>'/g) || []).length;
   if (armoryBars !== 2) { fail(`${file}: the full and full-authed bars each carry Armory with activeIf (found ${armoryBars})`); good = false; }
+  const guideBars = (t.match(/activeIf\('gunforma-gun-guides\.html'\) \+ '" href="gunforma-gun-guides\.html">Guides<\/a>'/g) || []).length;
+  if (guideBars !== 2) { fail(`${file}: the full and full-authed bars each carry Guides with activeIf (found ${guideBars})`); good = false; }
+  if (t.includes('href="/">Home</a>')) { fail(`${file}: a Home bar link survives — the logo is the way home (Alex, 2026-10-31)`); good = false; }
   if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
   if (good) pass(`${file}: NAV_P365_SUB, NAV_MENU and both bar variants carry the shape`);
 }
@@ -188,9 +199,12 @@ for (const file of STATIC_PAGES) {
     good = sameList(links(bar), DESKTOP, file, 'desktop') && good;
     if (!/class="nav-link active" href="gunforma-armory\.html"/.test(bar)) { fail(`${file}: active 'armory' does not light the Armory item`); good = false; }
   } else good = false;
+  if (!/class="nav-link active" href="gunforma-gun-guides\.html"/.test(navHtml({ active: 'guides' }))) {
+    fail(`${file}: active 'guides' does not light the Guides item`); good = false;
+  }
   const menu = region(html, 'class="nav-menu"', '</nav>', file, 'hamburger menu');
-  if (!menu || !menu.includes('<summary>Your P365</summary>') || menu.indexOf('Parts Catalog</a>') > menu.indexOf('Armory</a>') || menu.indexOf('Armory</a>') > menu.indexOf('<details')) {
-    fail(`${file}: navHtml menu is not Builds, Parts Catalog, Armory, the dropdown`); good = false;
+  if (!menu || !menu.includes('<summary>Your P365</summary>') || menu.indexOf('Parts Catalog</a>') > menu.indexOf('Armory</a>') || menu.indexOf('Armory</a>') > menu.indexOf('Guides</a>') || menu.indexOf('Guides</a>') > menu.indexOf('<details')) {
+    fail(`${file}: navHtml menu is not Builds, Parts Catalog, Armory, Guides, the dropdown`); good = false;
   }
   if (menu) good = checkAnonRows(menu, file) && good;
   if (html.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
@@ -205,8 +219,8 @@ for (const file of ['netlify/functions/product-page.mjs', 'netlify/functions/par
   if (bar) good = sameList(links(bar), DESKTOP, file, 'desktop') && good; else good = false;
   const menu = region(t, 'class="nav-menu" id="nav-menu"', '</nav>', file, 'hamburger menu');
   if (menu) {
-    const idx = ['Builds</a>', 'Parts Catalog</a>', 'Armory</a>', 'navSubHtml()', 'Sign in</a>', 'Create account</a>'].map((m) => menu.indexOf(m));
-    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: menu is not Builds, Parts Catalog, Armory, navSubHtml(), the signed-out rows`); good = false; }
+    const idx = ['Builds</a>', 'Parts Catalog</a>', 'Armory</a>', 'Guides</a>', 'navSubHtml()', 'Sign in</a>', 'Create account</a>'].map((m) => menu.indexOf(m));
+    if (idx.some((i) => i === -1) || idx.some((i, n) => n && i < idx[n - 1])) { fail(`${file}: menu is not Builds, Parts Catalog, Armory, Guides, navSubHtml(), the signed-out rows`); good = false; }
   } else good = false;
   if (t.includes('>Your P365</a>')) { fail(`${file}: a flat "Your P365" link survives`); good = false; }
   if (good) pass(`${file}: bar and menu carry the shape`);
@@ -340,7 +354,7 @@ for (const file of CSS_FILES) {
 pass('the three-line button and its desktop panel exist in every copy (or failures above name them)');
 
 if (failures) {
-  console.error('\n' + failures + ' nav failure(s). Every nav copy must carry Home/Builds/Parts Catalog/Armory on the bar and the "Your P365" GUN_HUBS dropdown in the hamburger — see scripts/check-nav.mjs header.');
+  console.error('\n' + failures + ' nav failure(s). Every nav copy must carry Builds/Parts Catalog/Armory/Guides on the bar (no Home — the logo links home) and the "Your P365" GUN_HUBS dropdown in the hamburger — see scripts/check-nav.mjs header.');
   process.exit(1);
 }
 console.log('\nevery nav copy carries the Armory link and the Your P365 dropdown.');
