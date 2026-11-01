@@ -200,6 +200,17 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .summary-total-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
 .summary-total { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-top: 2px; }
 .summary-total-sub { font-size: 10.5px; color: #999; margin-top: 2px; }
+/* Start from a guide — one small card per published Gunforma guide */
+.guide-start-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.guide-start-card { flex: 1 1 180px; max-width: 240px; text-align: left; font-family: inherit; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 6px; padding: 10px 12px; cursor: pointer; transition: border-color 0.12s; }
+.guide-start-card:hover { border-color: #4a9edd; }
+.gs-thumbs { display: flex; gap: 4px; margin-bottom: 8px; }
+.gs-thumb { width: 36px; aspect-ratio: 4/3; background: #f4f3ee; border-radius: 3px; overflow: hidden; }
+.gs-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gs-thumb .gsmedia-swatch { display: block; width: 100%; height: 100%; }
+.gs-title { font-size: 12.5px; font-weight: 700; color: #1a1a1a; }
+.gs-meta { font-size: 10.5px; color: #888; margin-top: 2px; }
+.guide-start-or { font-size: 11px; color: #888; margin-top: 10px; }
 .build-title-input { width: 100%; font-family: inherit; font-size: 13px; color: #1a1a1a; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 10px; margin-top: 10px; }
 .build-title-input:focus { outline: none; border-color: #4a9edd; }
 .btn-block { display: block; width: 100%; font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 10px 12px; border-radius: 4px; cursor: pointer; text-align: center; text-decoration: none; margin-top: 8px; border: 0.5px solid; transition: all 0.15s; }
@@ -293,6 +304,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="armory">
   <div class="build-layout">
     <div class="build-main">
+      <div class="card" id="guide-start" hidden>
+        <div class="card-title">Start from a guide <span class="card-hint">load a Gunforma build, then make it yours</span></div>
+        <div class="guide-start-row" id="guide-start-row"></div>
+        <div class="guide-start-or">…or start from scratch below.</div>
+      </div>
       <div class="card">
         <div class="card-title">Pistol <span class="card-hint" id="platform-note"></span></div>
         <div class="platform-row" id="platform-row"><span style="font-size:12px;color:#888;">Loading platforms…</span></div>
@@ -458,6 +474,8 @@ var STATE = {
   draftOf: null,          // the live guide this draft will replace when published
   draftOfTitle: '',       // ...and its title, for the banner
   dropped: [],            // parts an opened guide carried that the Armory can't
+  startedFrom: '',        // "Start from a guide": that guide's title, for the
+                          // name placeholder only — NEVER part of the identity
 };
 
 var DRAFT_KEY = 'gf-armory-picks-v1';
@@ -559,11 +577,28 @@ async function loadAll() {
       .push({ frame: row.frame_product_id, note: row.compatibility_note || '' });
   });
 
-  await Promise.all([loadFitTiers(), loadGuideThemes(), AUTH_READY]);
+  await Promise.all([loadFitTiers(), loadGuideThemes(), loadStartGuides(), AUTH_READY]);
   renderPlatformRow();
   var edit = editParam();
+  var from = fromParam();
   if (edit) await openForEdit(edit.kind, edit.id);
+  else if (from) await openFromGuide(from);
   else restoreDraft();
+  renderGuideStart();
+}
+
+// The published Gunforma guides, for "Start from a guide". Always the
+// PUBLIC read — is_published = true, whoever is looking: a draft is an
+// admin's workbench, never a template. select('*') because guides gains
+// columns by migration, and a column named here before it exists would
+// fail the read. A failure just means no section; the Armory works as
+// before.
+var START_GUIDES = [];
+async function loadStartGuides() {
+  try {
+    var r = await sb.from('guides').select('*').eq('is_published', true).order('title');
+    if (!r.error) START_GUIDES = r.data || [];
+  } catch (e) {}
 }
 
 // The theme list, read on its own: guide_themes arrives with the
@@ -890,6 +925,7 @@ function selectPlatform(id) {
     STATE.savedId = null;
     STATE.ownerId = null;
     STATE.dropped = [];
+    STATE.startedFrom = '';
   }
   STATE.platform = next;
   renderPlatformRow();
@@ -1229,6 +1265,9 @@ function renderSidebar() {
   var titleEl = document.getElementById('build-title');
   titleEl.hidden = !rows.length;
   titleEl.value = STATE.title;
+  // Started from a guide: the guide's name is the SUGGESTION, never the
+  // value — the build is the reader's to name.
+  titleEl.placeholder = STATE.startedFrom ? 'My ' + STATE.startedFrom : 'Name this build';
 
   renderEditBanner();
   renderSaveOpts(rows.length > 0);
@@ -1337,9 +1376,48 @@ function renderSaveOpts(hasParts) {
 }
 
 function renderAll() {
+  renderGuideStart();
   renderParts();
   renderSidebar();
   persistDraft();
+}
+
+// "Start from a guide": one small card per published Gunforma guide, shown
+// only over an EMPTY builder — once the build has parts (or a saved guide
+// is open) the section goes, because replacing work is openFromGuide's
+// confirm, not a row of tempting buttons.
+function renderGuideStart() {
+  var card = document.getElementById('guide-start');
+  if (!card) return;
+  var empty = !Object.keys(STATE.picks).length && !STATE.savedId && !STATE.draftOf;
+  if (!empty || !START_GUIDES.length) { card.hidden = true; return; }
+  card.hidden = false;
+  var row = document.getElementById('guide-start-row');
+  row.innerHTML = START_GUIDES.map(function (g) {
+    var parts = Array.isArray(g.parts_snapshot) ? g.parts_snapshot : [];
+    var thumbs = parts.slice(0, 4).map(function (part) {
+      var p = part && part.refId ? PRODUCTS_BY_ID[part.refId] : null;
+      var dv = p && p.defaultVariant;
+      return '<span class="gs-thumb">' + (dv && dv.primary_image_url
+        ? '<img src="' + escAttr(dv.primary_image_url) + '" alt="" loading="lazy" />'
+        : window.variantMediaHtml({ color: dv ? dv.color : null }, 'gsmedia', p ? p.brand : '')) + '</span>';
+    }).join('');
+    return '<button type="button" class="guide-start-card" data-id="' + escAttr(g.id) + '">' +
+      '<span class="gs-thumbs">' + thumbs + '</span>' +
+      '<span class="gs-title">' + esc(g.title || 'Untitled guide') + '</span>' +
+      '<span class="gs-meta">' + esc(themeLabel(g.category)) + ' · ' + parts.length + ' part' + (parts.length === 1 ? '' : 's') + '</span>' +
+    '</button>';
+  }).join('');
+  row.querySelectorAll('.guide-start-card').forEach(function (btn) {
+    btn.addEventListener('click', function () { startFromGuide(btn.dataset.id); });
+  });
+}
+
+function startFromGuide(id) {
+  var row = START_GUIDES.find(function (g) { return g.id === id; });
+  if (!row || !PLATFORMS_BY_ID[row.platform_id]) return;
+  if (!confirmStartFrom(readDraft(), row.title)) return;
+  adoptGuideAsNew(row);
 }
 
 // ─── DRAFT PERSISTENCE (localStorage) ──────────────────────────────────────
@@ -1366,6 +1444,7 @@ function persistDraft() {
       draftOf: STATE.draftOf,
       draftOfTitle: STATE.draftOfTitle,
       dropped: STATE.dropped,
+      startedFrom: STATE.startedFrom,
     }));
   } catch (e) { /* storage unavailable — build just won't survive a reload */ }
 }
@@ -1396,6 +1475,7 @@ function restoreDraft(opts) {
   STATE.draftOfTitle = adopt ? (draft.draftOfTitle || '') : '';
   STATE.curated = Object.assign({ theme: null, newTheme: '', published: false }, draft.curated || {});
   STATE.dropped = Array.isArray(draft.dropped) ? draft.dropped : [];
+  STATE.startedFrom = typeof draft.startedFrom === 'string' ? draft.startedFrom : '';
   STATE.picks = {};
   Object.keys(draft.picks || {}).forEach(function (cat) {
     var pick = draft.picks[cat];
@@ -1551,6 +1631,75 @@ function confirmReplace(draft, title) {
   if (!draft || !draft.picks || !Object.keys(draft.picks).length) return true;
   return window.confirm('Open “' + (title || 'this guide') + '” for editing? The build in progress here will be replaced.');
 }
+// Same gate, the start-from wording — a loaded guide is a starting point,
+// not an edit.
+function confirmStartFrom(draft, title) {
+  if (!draft || !draft.picks || !Object.keys(draft.picks).length) return true;
+  return window.confirm('Start from “' + (title || 'this guide') + '”? The build in progress here will be replaced.');
+}
+
+// ?from=<uuid> — gunforma-gun-guides.html's "Customize this build in the
+// Armory" button, and the guide-start cards' link form.
+function fromParam() {
+  var raw;
+  try { raw = new URLSearchParams(location.search).get('from'); } catch (e) { return null; }
+  var m = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.exec(raw || '');
+  return m ? raw.toLowerCase() : null;
+}
+
+// That guide's parts as the start of a NEW build of the reader's own. A
+// Gunforma guide must be PUBLISHED — the filter refuses a draft even for an
+// admin, since a draft is a workbench, never a template; a community guide
+// (public read) loads the same way. An unknown or unpublished id is a toast
+// over the empty builder. The param is cleared once handled, like ?edit=:
+// a reload keeps the reader's own build, not a fresh copy of the guide.
+async function openFromGuide(id) {
+  var res = await sb.from('guides').select('*').eq('id', id).eq('is_published', true);
+  var row = !res.error && res.data && res.data[0] || null;
+  if (!row) {
+    var com = await sb.from('gun_guides').select('*').eq('id', id);
+    row = !com.error && com.data && com.data[0] || null;
+  }
+  if (!row || !PLATFORMS_BY_ID[row.platform_id]) {
+    clearEditParam();
+    restoreDraft();
+    toast('That guide isn’t available to start from.');
+    return;
+  }
+  if (!confirmStartFrom(readDraft(), row.title)) { clearEditParam(); restoreDraft(); return; }
+  adoptGuideAsNew(row);
+}
+
+// A guide as the start of the reader's OWN build. The parts, pistol and
+// model come over; the IDENTITY does not — this is the deliberate opposite
+// of adoptRow (CLAUDE.md, "Replacing the builder's contents": decide on
+// purpose and say which). savedId, ownerId and draftOf stay null and target
+// stays 'community', so the first save INSERTS the reader's own gun_guides
+// row, and nothing done here can ever write to the guide it started from.
+// The title starts EMPTY — the build is theirs to name — with the guide's
+// name in the placeholder only. Parts the Armory cannot bring back are
+// listed in the sidebar (picksFromSnapshot + reconcilePicks), never
+// silently dropped.
+function adoptGuideAsNew(row) {
+  var got = picksFromSnapshot(row.parts_snapshot, row.platform_id);
+  STATE.platform = PLATFORMS_BY_ID[row.platform_id];
+  STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
+  STATE.title = '';
+  STATE.target = 'community';
+  STATE.savedId = null;
+  STATE.ownerId = null;
+  STATE.draftOf = null;
+  STATE.draftOfTitle = '';
+  STATE.curated = { theme: null, newTheme: '', published: false };
+  STATE.startedFrom = row.title || '';
+  STATE.picks = got.picks;
+  STATE.openCat = null;
+  var unfit = reconcilePicks({ quiet: true });
+  STATE.dropped = got.dropped.concat(unfit.map(function (n) { return { name: n, why: 'doesn’t fit with the rest' }; }));
+  clearEditParam();
+  renderPlatformRow();
+  renderAll();
+}
 
 function adoptRow(kind, row, id) {
   var got = picksFromSnapshot(row.parts_snapshot, row.platform_id);
@@ -1565,6 +1714,7 @@ function adoptRow(kind, row, id) {
   STATE.curated = kind === 'curated'
     ? { theme: row.category, newTheme: '', published: !!id.published }
     : { theme: null, newTheme: '', published: false };
+  STATE.startedFrom = '';
   STATE.picks = got.picks;
   STATE.openCat = null;
   var unfit = reconcilePicks({ quiet: true });
@@ -1586,6 +1736,7 @@ function resetBuild() {
   STATE.draftOfTitle = '';
   STATE.curated = { theme: null, newTheme: '', published: false };
   STATE.dropped = [];
+  STATE.startedFrom = '';
   STATE.openCat = null;
   clearEditParam();
   renderPlatformRow();
