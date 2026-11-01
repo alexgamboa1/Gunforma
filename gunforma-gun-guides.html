@@ -132,6 +132,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .gact.danger:hover { background: #fdeae4; }
 .gact:disabled { opacity: 0.5; cursor: default; }
 .gcard-kicker .draft { color: #8a6d3b; }
+/* DRAFTS / PUBLISHED — an admin's Gunforma guides tab, in two sections */
+.ggroup-head { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #555; padding: 6px 2px 0; }
+.ggroup-head:not(:first-child) { padding-top: 18px; }
+.ggroup-head .ggroup-count { font-weight: 600; color: #999; }
+.ggroup-head .ggroup-note { font-size: 11px; font-weight: 500; letter-spacing: 0; text-transform: none; color: #999; }
+.ggroup-empty { grid-column: 1 / -1; font-size: 12px; color: #999; padding: 4px 2px 6px; }
 
 .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #0e0f11; color: #fff; font-size: 12.5px; padding: 11px 18px; border-radius: 6px; opacity: 0; transition: all 0.25s; z-index: 300; max-width: 90vw; }
 .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
@@ -242,8 +248,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // opens the guide in the Armory (?edit=<kind>:<uuid>), which saves it back
 // in place; Delete asks first and checks a row came back, because an
 // RLS-refused delete matches nothing and returns no error. An admin also
-// sees unpublished Gunforma guides, marked, so a draft can be found and
-// published. The database decides all of it — guides' and gun_guides' RLS
+// sees unpublished Gunforma guides, so a draft can be found and published.
+//
+// DRAFTS AND PUBLISHED (Alex, 2026-11-01). An admin's Gunforma guides tab
+// is two sections. A published guide is never edited in place: its Edit
+// reads "Edit as draft" and opens a draft of it in the Armory, and the live
+// guide changes only when that draft is published (the Armory copies it
+// onto the live row). A published guide can be taken down with Unpublish,
+// which moves it to Drafts. Drafts carry Edit and Delete. The database decides all of it — guides' and gun_guides' RLS
 // (supabase/migrations/*_guides_admin_writes.sql); these checks only decide
 // what is offered.
 //
@@ -297,7 +309,12 @@ async function loadAll() {
   await Promise.all([loadViewer(), loadThemes()]);
   // An admin reads every Gunforma guide, published or not (RLS returns the
   // unpublished ones only to an admin); everyone else, published only.
-  var curatedQ = sb.from('guides').select('id, title, category, description, platform_id, parts_snapshot, is_published, created_at');
+  // An admin's read is select('*'): guides.draft_of arrives with
+  // *_guide_drafts.sql, and a column named here before it exists would fail
+  // the read. The public read names its columns, as it always did.
+  var curatedQ = IS_ADMIN
+    ? sb.from('guides').select('*')
+    : sb.from('guides').select('id, title, category, description, platform_id, parts_snapshot, is_published, created_at');
   if (!IS_ADMIN) curatedQ = curatedQ.eq('is_published', true);
   var r = await Promise.all([
     sb.from('platforms').select('id, name'),
@@ -448,8 +465,11 @@ function cardHtml(row, kind) {
 // published (nobody else is ever sent one).
 function kickerHtml(row, kind) {
   if (kind !== 'curated') return esc(modelName(row) || 'Build');
+  var live = row.draft_of && CURATED.find(function (r) { return r.id === row.draft_of; });
   return 'Gunforma guide' + (row.category ? ' · ' + esc(themeLabel(row.category)) : '') +
-    (row.is_published === false ? ' · <span class="draft">Unpublished</span>' : '');
+    (row.is_published === false
+      ? ' · <span class="draft">' + (live ? 'Draft of “' + esc(live.title) + '”' : 'Draft') + '</span>'
+      : '');
 }
 function themeLabel(key) {
   if (THEME_LABELS[key]) return THEME_LABELS[key];
@@ -465,10 +485,39 @@ function canEdit(row, kind) {
 
 function actionsHtml(row, kind) {
   if (!canEdit(row, kind)) return '';
+  var href = 'gunforma-armory.html?edit=' + kind + ':' + escAttr(row.id);
+  if (kind === 'curated' && row.is_published !== false) {
+    // Live: the Armory opens a draft of it (or the draft already started).
+    var hasDraft = CURATED.some(function (r) { return r.draft_of === row.id && r.is_published === false; });
+    return '<div class="gcard-actions">' +
+      '<a class="gact" href="' + href + '">' + (hasDraft ? 'Edit draft' : 'Edit as draft') + '</a>' +
+      '<button type="button" class="gact" data-unpublish="1">Unpublish</button>' +
+      '<button type="button" class="gact danger" data-delete="1">Delete</button>' +
+    '</div>';
+  }
   return '<div class="gcard-actions">' +
-    '<a class="gact" href="gunforma-armory.html?edit=' + kind + ':' + escAttr(row.id) + '">Edit</a>' +
+    '<a class="gact" href="' + href + '">Edit</a>' +
     '<button type="button" class="gact danger" data-delete="1">Delete</button>' +
   '</div>';
+}
+
+// Takes a live Gunforma guide off Gun Guides and puts it under Drafts.
+// Done only when a row comes back (an RLS-refused update matches nothing).
+async function unpublishGuide(id, btn) {
+  var row = CURATED.find(function (r) { return r.id === id; });
+  if (!row) return;
+  if (!EDITING_LIVE) { toast('Unpublishing isn’t switched on yet — it needs the database update.'); return; }
+  if (!window.confirm('Unpublish “' + (row.title || 'this guide') + '”? It comes off Gun Guides and moves to Drafts, where you can edit it.')) return;
+  btn.disabled = true;
+  var res = await sb.from('guides').update({ is_published: false }).eq('id', id).eq('is_published', true).select('id');
+  if (res.error || !Array.isArray(res.data) || res.data.length !== 1) {
+    btn.disabled = false;
+    toast('Couldn’t unpublish it' + (res.error ? ': ' + (res.error.message || 'unknown error') : ' — it may already be a draft, or you can no longer edit it.'));
+    return;
+  }
+  row.is_published = false;
+  renderAll();
+  toast('Unpublished “' + (row.title || 'the guide') + '” — it’s under Drafts now.');
 }
 
 async function deleteGuide(kind, id, btn) {
@@ -480,7 +529,10 @@ async function deleteGuide(kind, id, btn) {
     toast('Deleting ' + (kind === 'curated' ? 'Gunforma guides' : 'someone else’s guide') + ' isn’t switched on yet — it needs the database update.');
     return;
   }
-  if (!window.confirm('Delete “' + (row.title || 'this guide') + '”? It disappears from Gun Guides for everyone, and this can’t be undone.')) return;
+  var isDraft = kind === 'curated' && row.is_published === false;
+  if (!window.confirm(isDraft
+    ? 'Delete the draft “' + (row.title || 'this guide') + '”? This can’t be undone.'
+    : 'Delete “' + (row.title || 'this guide') + '”? It disappears from Gun Guides for everyone, and this can’t be undone.')) return;
   btn.disabled = true;
   var res = await sb.from(KIND_TABLE[kind]).delete().eq('id', id).select('id');
   // A refused delete matches zero rows and returns no error: only a row
@@ -543,6 +595,22 @@ function detailRowHtml(p) {
 function renderGrid(which, rows, kind) {
   var grid = document.getElementById(which + '-grid');
   var empty = document.getElementById(which + '-empty');
+  // An admin's Gunforma guides: Drafts first (what is being worked on),
+  // then Published (what readers see).
+  if (kind === 'curated' && IS_ADMIN) {
+    var drafts = rows.filter(function (r) { return r.is_published === false; });
+    var live = rows.filter(function (r) { return r.is_published !== false; });
+    empty.hidden = true;
+    grid.innerHTML =
+      groupHead('Drafts', drafts.length, 'only admins see these') +
+      (drafts.length ? drafts.map(function (row) { return cardHtml(row, kind); }).join('')
+        : '<div class="ggroup-empty">No drafts. Edit as draft on a published guide, or save one from the Armory.</div>') +
+      groupHead('Published', live.length, 'on Gun Guides — locked; edit as a draft') +
+      (live.length ? live.map(function (row) { return cardHtml(row, kind); }).join('')
+        : '<div class="ggroup-empty">Nothing published yet.</div>');
+    wireCards(grid);
+    return;
+  }
   if (!rows.length) {
     grid.innerHTML = '';
     if (empty.hidden) {
@@ -553,11 +621,22 @@ function renderGrid(which, rows, kind) {
   }
   empty.hidden = true;
   grid.innerHTML = rows.map(function (row) { return cardHtml(row, kind); }).join('');
+  wireCards(grid);
+}
+
+function groupHead(label, n, note) {
+  return '<div class="ggroup-head">' + esc(label) + ' <span class="ggroup-count">' + n + '</span>' +
+    ' <span class="ggroup-note">· ' + esc(note) + '</span></div>';
+}
+
+function wireCards(grid) {
   grid.querySelectorAll('.gcard').forEach(function (card) {
     card.addEventListener('click', function (e) {
       if (e.target.closest('a')) return;
       var del = e.target.closest('button[data-delete]');
       if (del) { deleteGuide(card.dataset.kind, card.dataset.id, del); return; }
+      var unpub = e.target.closest('button[data-unpublish]');
+      if (unpub) { unpublishGuide(card.dataset.id, unpub); return; }
       var key = card.dataset.kind + ':' + card.dataset.id;
       if (e.target.closest('.gdetail-close')) { OPEN_ID = null; renderAll(); return; }
       if (OPEN_ID === key) return;

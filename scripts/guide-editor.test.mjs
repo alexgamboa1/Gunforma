@@ -220,7 +220,9 @@ test('saveGuide: a new theme is added first, then the guide carries its key', as
 
   // The same name again reuses the theme instead of inserting a duplicate.
   ctx.sb.calls.length = 0;
-  set(ctx, `STATE.savedId = null; STATE.curated = { theme: NEW_THEME, newTheme: 'competition carry', published: true };`);
+  // (Publishing let go of the build, so the second guide is picked afresh.)
+  set(ctx, `STATE.target = 'curated'; STATE.savedId = null; STATE.curated = { theme: NEW_THEME, newTheme: 'competition carry', published: true };
+    STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
   await ctx.saveGuide();
   assert.deepEqual(ctx.sb.calls.map((c) => c.table), ['guides']);
 });
@@ -291,6 +293,107 @@ test('startNewBuild clears every part of the identity', () => {
     ['community', null, null, '', 0, 0]);
 });
 
+// ── Drafts and published (Alex, 2026-11-01) ──────────────────────────────
+
+const LIVE_ROW = { id: GUIDE_ID, title: 'Sig P365 Concealed Carry', category: 'concealed_carry', is_published: true, platform_id: PLAT,
+  parts_snapshot: [{ refId: 'trig-1', category: 'trigger', brand: 'Maker', name: 'Trigger One' }] };
+const DRAFT_ID = '99999999-0000-4000-8000-000000000009';
+
+test('a plain visit to the Armory never reopens a saved guide (the "Build yours" bug)', () => {
+  const { ctx, store } = armory();
+  // What an admin's browser held after editing Concealed Carry.
+  store['gf-armory-picks-v1'] = JSON.stringify({ platformId: PLAT, title: 'Sig P365 Concealed Carry',
+    picks: { trigger: { productId: 'trig-1', variantId: 'tv1' } }, target: 'curated', savedId: GUIDE_ID,
+    curated: { theme: 'concealed_carry', newTheme: '', published: true } });
+  ctx.restoreDraft();
+  assert.equal(ctx.STATE.savedId, null, 'not in edit mode');
+  assert.equal(ctx.STATE.target, 'community');
+  assert.deepEqual(Object.keys(ctx.STATE.picks), [], 'and not holding the guide\'s parts');
+
+  // A new, unsaved build in progress still survives (the sign-in round trip).
+  store['gf-armory-picks-v1'] = JSON.stringify({ platformId: PLAT, title: 'My WIP',
+    picks: { trigger: { productId: 'trig-1', variantId: 'tv1' } }, target: 'community', savedId: null });
+  ctx.restoreDraft();
+  assert.equal(ctx.STATE.title, 'My WIP');
+  assert.deepEqual(Object.keys(ctx.STATE.picks), ['trigger']);
+});
+
+test('Edit on a PUBLISHED Gunforma guide opens a new draft of it, never the live row', async () => {
+  const { ctx } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; GUIDE_EDITING_LIVE = true; DRAFT_OF_LIVE = true;`);
+  ctx.sb.answer = (call) => {
+    if (call.table !== 'guides') return undefined;
+    if (call.filters.some(([c]) => c === 'draft_of')) return { data: [], error: null };   // no draft yet
+    return { data: [LIVE_ROW], error: null };
+  };
+  await ctx.openForEdit('curated', GUIDE_ID);
+  const s = ctx.STATE;
+  assert.equal(s.savedId, null, 'nothing saved yet — the save will INSERT a draft');
+  assert.equal(s.draftOf, GUIDE_ID);
+  assert.equal(s.curated.published, false, 'a draft starts unpublished');
+  assert.deepEqual(Object.keys(s.picks), ['trigger'], 'with the live guide\'s parts');
+  const plan = ctx.savePlan([]);
+  assert.equal(plan.op, 'insert');
+  assert.equal(plan.payload.is_published, false);
+  assert.equal(plan.payload.draft_of, GUIDE_ID);
+
+  set(ctx, `DRAFT_OF_LIVE = false;`);
+  assert.ok(!('draft_of' in ctx.savePlan([]).payload), 'no draft_of before the migration adds the column');
+});
+
+test('Edit on a published guide reopens the draft already saved for it', async () => {
+  const { ctx } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; GUIDE_EDITING_LIVE = true; DRAFT_OF_LIVE = true;`);
+  const draftRow = { ...LIVE_ROW, id: DRAFT_ID, is_published: false, draft_of: GUIDE_ID, title: 'CC v2' };
+  ctx.sb.answer = (call) => {
+    if (call.table !== 'guides') return undefined;
+    if (call.filters.some(([c]) => c === 'draft_of')) return { data: [draftRow], error: null };
+    return { data: [LIVE_ROW], error: null };
+  };
+  await ctx.openForEdit('curated', GUIDE_ID);
+  assert.equal(ctx.STATE.savedId, DRAFT_ID);
+  assert.equal(ctx.STATE.draftOf, GUIDE_ID);
+  assert.equal(ctx.STATE.title, 'CC v2');
+});
+
+test('saving a draft only ever updates an unpublished row', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; GUIDE_EDITING_LIVE = true;
+    STATE.target = 'curated'; STATE.savedId = '${GUIDE_ID}';
+    STATE.curated = { theme: 'duty', newTheme: '', published: false };
+    STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
+  // The row turned out to be live (stale identity): the filter matches nothing.
+  ctx.sb.answer = (call) => (call.op === 'update' ? { data: [], error: null } : undefined);
+  await ctx.saveGuide();
+  const [upd] = ctx.sb.calls;
+  assert.deepEqual(upd.filters, [['id', GUIDE_ID], ['is_published', false]]);
+  assert.equal(ctx.sb.calls.length, 1, 'no fallback insert');
+  assert.match(els['toast-msg'].textContent, /published or deleted/);
+});
+
+test('publishing a draft of a live guide updates the live row, deletes the draft, and lets go', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; GUIDE_EDITING_LIVE = true; DRAFT_OF_LIVE = true;
+    STATE.target = 'curated'; STATE.savedId = '${DRAFT_ID}'; STATE.draftOf = '${GUIDE_ID}'; STATE.title = 'CC v2';
+    STATE.curated = { theme: 'concealed_carry', newTheme: '', published: true };
+    STATE.picks = { trigger: { productId: 'trig-2', variantId: 'tv2' } };`);
+  ctx.sb.answer = (call) => (call.op === 'update' ? { data: [{ id: GUIDE_ID }], error: null }
+    : call.op === 'delete' ? { data: [{ id: DRAFT_ID }], error: null } : undefined);
+  await ctx.saveGuide();
+  const [upd, del] = ctx.sb.calls;
+  assert.equal(upd.op, 'update');
+  assert.deepEqual(upd.filters, [['id', GUIDE_ID]], 'the LIVE row takes the draft\'s contents');
+  assert.equal(upd.payload.is_published, true);
+  assert.equal(upd.payload.title, 'CC v2');
+  assert.ok(!('draft_of' in upd.payload));
+  assert.equal(del.op, 'delete');
+  assert.deepEqual(del.filters, [['id', DRAFT_ID], ['is_published', false]]);
+  const s = ctx.STATE;
+  assert.deepEqual([s.savedId, s.draftOf, s.target, Object.keys(s.picks).length], [null, null, 'community', 0],
+    'published is locked: the builder starts fresh');
+  assert.match(els['toast-msg'].textContent, /Published/);
+});
+
 // ── The gallery ────────────────────────────────────────────────────────────
 
 function gallery() {
@@ -321,7 +424,7 @@ test('gallery: a Gunforma guide names its theme; an unpublished one says so', ()
   const { ctx } = gallery();
   set(ctx, `THEME_LABELS = { duty: 'Duty' };`);
   assert.match(ctx.kickerHtml(CURATED_ROW, 'curated'), /^Gunforma guide · Duty$/);
-  assert.match(ctx.kickerHtml({ ...CURATED_ROW, is_published: false }, 'curated'), /Unpublished/);
+  assert.match(ctx.kickerHtml({ ...CURATED_ROW, is_published: false }, 'curated'), /Draft/);
   assert.match(ctx.kickerHtml({ ...CURATED_ROW, category: 'competition_carry' }, 'curated'), /Competition carry/);
 });
 
@@ -351,4 +454,26 @@ test('gallery: before the migration an admin delete of a Gunforma guide sends no
   await ctx.deleteGuide('curated', GUIDE_ID, { disabled: false });
   assert.equal(ctx.sb.calls.length, 0);
   assert.match(els.toast.textContent, /isn’t switched on yet/);
+});
+
+test('gallery: an admin sees Drafts and Published; a live guide edits as a draft and can be unpublished', async () => {
+  const { ctx, els } = gallery();
+  const draft = { ...CURATED_ROW, id: 'abababab-0000-4000-8000-00000000000a', is_published: false, title: 'New duty' };
+  set(ctx, `ME = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; EDITING_LIVE = true;
+    CURATED = [${JSON.stringify(CURATED_ROW)}, ${JSON.stringify(draft)}]; COMMUNITY = [];`);
+  ctx.renderAll();
+  const html = els['curated-grid'].innerHTML;
+  assert.ok(html.indexOf('>Drafts ') < html.indexOf('New duty') && html.indexOf('New duty') < html.indexOf('>Published '),
+    'Drafts section holds the draft, then Published');
+  const live = ctx.cardHtml(CURATED_ROW, 'curated');
+  assert.match(live, />Edit as draft</);
+  assert.match(live, /data-unpublish/);
+  assert.doesNotMatch(ctx.cardHtml(draft, 'curated'), /data-unpublish/);
+
+  ctx.sb.answer = (call) => (call.op === 'update' ? { data: [{ id: GUIDE_ID }], error: null } : undefined);
+  await ctx.unpublishGuide(GUIDE_ID, { disabled: false });
+  const [upd] = ctx.sb.calls;
+  assert.deepEqual(JSON.parse(JSON.stringify([upd.table, upd.payload, upd.filters])), ['guides', { is_published: false }, [['id', GUIDE_ID], ['is_published', true]]]);
+  assert.equal(ctx.CURATED[0].is_published, false);
+  assert.match(els.toast.textContent, /under Drafts/);
 });

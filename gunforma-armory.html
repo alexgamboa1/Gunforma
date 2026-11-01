@@ -379,6 +379,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // gunforma-gun-guides.html links Edit as ?edit=<kind>:<uuid>. Opening one
 // ADOPTS that row's identity (STATE.target + savedId, below) so Save updates
 // it in place, from any device; "Start a new build" clears every part of it.
+//
+// DRAFTS AND PUBLISHED (Alex, 2026-11-01). A PUBLISHED Gunforma guide is
+// never edited in place. Edit on one opens a DRAFT of it — a separate,
+// unpublished guides row (draft_of = the live guide) — so the live guide
+// reads exactly as it did until the draft is published. Publishing a draft
+// of a live guide copies it ONTO the live row (same id) and deletes the
+// draft; publishing a plain draft just flips is_published. Every update to
+// a Gunforma guide carries .eq('is_published', false), so even a stale
+// identity cannot write to a live guide: the database matches no row.
+// And the plain Armory URL (no ?edit=) always starts a new build — the
+// saved identity lives in ?edit= while you edit, never in a draft alone,
+// which is how "Build yours in the Armory" used to land in edit mode on
+// the last guide an admin had opened.
 // Writes are refused by RLS, never trusted to this page — the checks here
 // only decide what to offer. Until supabase/migrations/*_guides_admin_writes
 // is applied, guide_themes does not exist, GUIDE_EDITING_LIVE stays false,
@@ -439,7 +452,10 @@ var STATE = {
   target: 'community',    // 'community' (gun_guides) | 'curated' (guides)
   savedId: null,          // that table's row id once saved; later saves update it
   ownerId: null,          // a community row's user_id — an admin's edit keeps it
-  curated: { theme: null, newTheme: '', published: true },
+  // A Gunforma guide starts as a draft; Published is a deliberate tick.
+  curated: { theme: null, newTheme: '', published: false },
+  draftOf: null,          // the live guide this draft will replace when published
+  draftOfTitle: '',       // ...and its title, for the banner
   dropped: [],            // parts an opened guide carried that the Armory can't
 };
 
@@ -449,6 +465,7 @@ var NEW_THEME = '__new__';
 var IS_ADMIN = false;
 var THEMES = [];                    // guide_themes rows, sort order
 var GUIDE_EDITING_LIVE = false;     // guide_themes readable = the migration is applied
+var DRAFT_OF_LIVE = false;          // guides.draft_of readable = the drafts migration is applied
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────
 // Admin is read from get_my_profile(), as the admin pages and nav.js do. It
@@ -558,6 +575,13 @@ async function loadGuideThemes() {
     THEMES = r.data || [];
     GUIDE_EDITING_LIVE = true;
   } catch (e) { GUIDE_EDITING_LIVE = false; }
+  // guides.draft_of, read on its own for the same reason: before
+  // *_guide_drafts.sql it does not exist, and a draft's link to its live
+  // guide is then kept in this browser only.
+  try {
+    var d = await sb.from('guides').select('draft_of').limit(1);
+    DRAFT_OF_LIVE = !d.error;
+  } catch (e) { DRAFT_OF_LIVE = false; }
 }
 function themeLabel(key) {
   var t = THEMES.find(function (x) { return x.key === key; });
@@ -1220,7 +1244,10 @@ function renderSidebar() {
 }
 
 function saveLabel() {
-  if (STATE.target === 'curated') return STATE.savedId ? 'Update Gunforma guide →' : 'Save as a Gunforma guide →';
+  if (STATE.target === 'curated') {
+    if (STATE.curated.published) return STATE.draftOf ? 'Publish changes →' : 'Publish Gunforma guide →';
+    return STATE.savedId ? 'Update draft →' : 'Save as a draft →';
+  }
   if (STATE.savedId) return STATE.ownerId && CURRENT_USER && STATE.ownerId !== CURRENT_USER.id ? 'Update this Gun Guide →' : 'Update your Gun Guide →';
   return 'Save to Gun Guides →';
 }
@@ -1229,11 +1256,21 @@ function saveLabel() {
 function renderEditBanner() {
   var el = document.getElementById('edit-banner');
   var dropEl = document.getElementById('edit-dropped');
-  if (!STATE.savedId) { el.hidden = true; } else {
+  if (!STATE.savedId && !STATE.draftOf) { el.hidden = true; } else {
     el.hidden = false;
-    var kind = STATE.target === 'curated' ? 'Gunforma guide' : 'Community Gun Guide';
-    el.innerHTML = '<span class="edit-banner-kind">Editing · ' + kind + '</span>' +
-      'Saving updates <b>' + esc(STATE.title || 'this guide') + '</b> in place.' +
+    var head, body;
+    if (STATE.draftOf) {
+      head = 'Draft · Gunforma guide';
+      body = 'A draft of <b>' + esc(STATE.draftOfTitle || 'a published guide') + '</b>. The live guide doesn’t change until you publish this draft' +
+        (STATE.savedId ? '.' : ' — nothing is saved yet.');
+    } else if (STATE.target === 'curated') {
+      head = 'Draft · Gunforma guide';
+      body = 'Saving updates the draft <b>' + esc(STATE.title || 'this guide') + '</b>. It isn’t on Gun Guides until you publish it.';
+    } else {
+      head = 'Editing · Community Gun Guide';
+      body = 'Saving updates <b>' + esc(STATE.title || 'this guide') + '</b> in place.';
+    }
+    el.innerHTML = '<span class="edit-banner-kind">' + head + '</span>' + body +
       '<br><button type="button" class="edit-banner-new" id="btn-new-build">Start a new build</button>';
     document.getElementById('btn-new-build').onclick = startNewBuild;
   }
@@ -1257,7 +1294,7 @@ function renderSaveOpts(hasParts) {
   if (!c.theme && themeKeys.length) c.theme = themeKeys[0];
 
   var html = '';
-  if (STATE.savedId) {
+  if (STATE.savedId || STATE.draftOf) {
     // A saved row stays in its own table: moving a guide between the two is
     // a new guide, not an edit.
     html += '<div class="save-opts-label">Saves to ' + (STATE.target === 'curated' ? 'Gunforma guides' : 'Community builds') + '</div>';
@@ -1276,7 +1313,13 @@ function renderSaveOpts(hasParts) {
       (c.theme === NEW_THEME
         ? '<input type="text" class="build-title-input" id="save-new-theme" maxlength="40" placeholder="Theme name, e.g. Competition carry" autocomplete="off" value="' + escAttr(c.newTheme) + '" />'
         : '') +
-      '<label class="save-check"><input type="checkbox" id="save-published"' + (c.published ? ' checked' : '') + '> Published — shown on Gun Guides</label>' +
+      '<label class="save-check"><input type="checkbox" id="save-published"' + (c.published ? ' checked' : '') + '> ' +
+        (STATE.draftOf
+          ? 'Publish — replaces “' + esc(STATE.draftOfTitle || 'the live guide') + '” on Gun Guides'
+          : 'Publish — show on Gun Guides') + '</label>' +
+      '<div class="save-opts-note">' + (c.published
+        ? 'Once published it’s locked. To change it later, Edit opens a draft.'
+        : 'Saved as a draft: only admins see it, and you can keep editing.') + '</div>' +
       (GUIDE_EDITING_LIVE ? '' : '<div class="save-opts-note">Saving Gunforma guides switches on with the next database update.</div>');
   }
   el.innerHTML = html;
@@ -1289,7 +1332,7 @@ function renderSaveOpts(hasParts) {
   var newTheme = document.getElementById('save-new-theme');
   if (newTheme) newTheme.oninput = function () { c.newTheme = newTheme.value; persistDraft(); };
   var pub = document.getElementById('save-published');
-  if (pub) pub.onchange = function () { c.published = pub.checked; persistDraft(); };
+  if (pub) pub.onchange = function () { c.published = pub.checked; renderSidebar(); persistDraft(); };
 }
 
 function renderAll() {
@@ -1302,6 +1345,11 @@ function renderAll() {
 // Sign-in is an OAuth round trip that leaves the page, so an in-progress
 // build has to survive it. Reads and writes are wrapped: private windows and
 // blocked storage must degrade to "no draft", never to a broken page.
+//
+// The stored draft carries the build's identity too, but the identity is
+// only ever ADOPTED through ?edit= (openForEdit). A plain visit to the
+// Armory restores a new, unsaved build and nothing else — so a link to the
+// Armory can never land in edit mode on a saved guide.
 function persistDraft() {
   try {
     if (!STATE.platform) { localStorage.removeItem(DRAFT_KEY); return; }
@@ -1314,6 +1362,8 @@ function persistDraft() {
       savedId: STATE.savedId,
       ownerId: STATE.ownerId,
       curated: STATE.curated,
+      draftOf: STATE.draftOf,
+      draftOfTitle: STATE.draftOfTitle,
       dropped: STATE.dropped,
     }));
   } catch (e) { /* storage unavailable — build just won't survive a reload */ }
@@ -1323,16 +1373,27 @@ function readDraft() {
   try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return null; }
 }
 
-function restoreDraft() {
+// A draft that belongs to a saved guide (or is a draft copy of one).
+function draftHasIdentity(draft) {
+  return !!(draft && (draft.savedId || draft.draftOf));
+}
+
+// opts.adopt: restore the saved identity as well — only openForEdit passes
+// it, once it has checked the draft is this ?edit= row's.
+function restoreDraft(opts) {
+  var adopt = !!(opts && opts.adopt);
   var draft = readDraft();
   if (!draft || !PLATFORMS_BY_ID[draft.platformId]) return;
+  if (!adopt && draftHasIdentity(draft)) return;   // a saved guide's edit: not reopened by a plain visit
   STATE.platform = PLATFORMS_BY_ID[draft.platformId];
   STATE.gun = GUNS.find(function (g) { return g.id === draft.gunId; }) || null;
   STATE.title = draft.title || '';
   STATE.target = draft.target === 'curated' ? 'curated' : 'community';
-  STATE.savedId = draft.savedId || null;
-  STATE.ownerId = draft.ownerId || null;
-  STATE.curated = Object.assign({ theme: null, newTheme: '', published: true }, draft.curated || {});
+  STATE.savedId = adopt ? (draft.savedId || null) : null;
+  STATE.ownerId = adopt ? (draft.ownerId || null) : null;
+  STATE.draftOf = adopt ? (draft.draftOf || null) : null;
+  STATE.draftOfTitle = adopt ? (draft.draftOfTitle || '') : '';
+  STATE.curated = Object.assign({ theme: null, newTheme: '', published: false }, draft.curated || {});
   STATE.dropped = Array.isArray(draft.dropped) ? draft.dropped : [];
   STATE.picks = {};
   Object.keys(draft.picks || {}).forEach(function (cat) {
@@ -1359,11 +1420,12 @@ function editParam() {
   return m ? { kind: m[1].toLowerCase(), id: m[2].toLowerCase() } : null;
 }
 
-// The param has done its job once read: the draft carries the identity from
-// here, so a reload neither re-asks nor re-reads over unsaved changes.
-function clearEditParam() {
-  try { history.replaceState(null, '', location.pathname); } catch (e) {}
+// While a saved guide is open, the URL says which one (?edit=), so a reload
+// reopens it and a plain Armory link does not. A new build has no ?edit=.
+function setEditParam(kind, id) {
+  try { history.replaceState(null, '', location.pathname + (id ? '?edit=' + kind + ':' + id : '')); } catch (e) {}
 }
+function clearEditParam() { setEditParam(null, null); }
 
 // A saved snapshot as Armory picks, one per catalog category. What cannot
 // come back is listed, never silently dropped: a part no longer in the live
@@ -1396,49 +1458,112 @@ function canEditRow(kind, row) {
   return IS_ADMIN || row.user_id === CURRENT_USER.id;
 }
 
+async function readGuideRow(kind, id) {
+  // select('*'): guides gains gun_id and draft_of with migrations, and a
+  // column named here before it exists would fail the read.
+  var res = await sb.from(EDIT_TABLE[kind]).select('*').eq('id', id);
+  return { row: !res.error && res.data && res.data[0] || null, error: res.error };
+}
+
 async function openForEdit(kind, id) {
-  clearEditParam();
   if (!CURRENT_USER) {
     restoreDraft();
-    toast('Sign in to edit this guide, then open Edit on it again.', 'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
+    toast('Sign in to edit this guide, then open Edit on it again.',
+      'gunforma-signin.html?next=' + encodeURIComponent('gunforma-armory.html?edit=' + kind + ':' + id), 'Sign in');
+    clearEditParam();
     return;
   }
-  // select('*'): guides gains gun_id with the migration, and a column named
-  // here before it exists would fail the read.
-  var res = await sb.from(EDIT_TABLE[kind]).select('*').eq('id', id);
-  var row = !res.error && res.data && res.data[0];
+  var got = await readGuideRow(kind, id);
+  var row = got.row;
   if (!row || !PLATFORMS_BY_ID[row.platform_id]) {
+    clearEditParam();
     restoreDraft();
-    toast(res.error ? 'Couldn’t open that guide: ' + (res.error.message || 'unknown error') : 'That guide isn’t there any more.');
+    toast(got.error ? 'Couldn’t open that guide: ' + (got.error.message || 'unknown error') : 'That guide isn’t there any more.');
     return;
   }
   if (!canEditRow(kind, row)) {
+    clearEditParam();
     restoreDraft();
     toast(kind === 'curated' ? 'Only admins can edit Gunforma guides.' : 'Only this guide’s owner can edit it.');
     return;
   }
 
-  // Ask before replacing work in progress — before touching anything, so a
-  // "no" leaves the builder exactly as it was. Re-opening the same guide is
-  // not a replacement.
   var draft = readDraft();
-  var sameRow = draft && draft.savedId === row.id && (draft.target || 'community') === kind;
-  if (draft && draft.picks && Object.keys(draft.picks).length && !sameRow &&
-      !window.confirm('Open “' + row.title + '” for editing? The build in progress here will be replaced.')) {
-    restoreDraft();
+  // A published Gunforma guide is never opened in place: Edit opens a draft.
+  if (kind === 'curated' && row.is_published !== false) return openDraftOf(row, draft);
+
+  // Reopening the same guide (a reload, or Edit again) keeps the unsaved
+  // changes made here; anything else is a replacement and asks first.
+  if (draft && draft.savedId === row.id && (draft.target || 'community') === kind) {
+    restoreDraft({ adopt: true });
+    setEditParam(kind, row.id);
     return;
   }
+  if (!confirmReplace(draft, row.title)) { clearEditParam(); restoreDraft(); return; }
 
+  var draftOfTitle = '';
+  if (kind === 'curated' && row.draft_of) {
+    var live = await readGuideRow('curated', row.draft_of);
+    draftOfTitle = live.row ? live.row.title : '';
+  }
+  adoptRow(kind, row, {
+    savedId: row.id,
+    draftOf: kind === 'curated' ? (row.draft_of || null) : null,
+    draftOfTitle: draftOfTitle,
+    published: false,
+  });
+  setEditParam(kind, row.id);
+}
+
+// Edit on a live Gunforma guide. Reopens the draft already being worked on
+// — this browser's copy in progress, or the saved draft_of row — or starts
+// a new, unsaved draft from the live guide's parts. The live row is never
+// the save target.
+async function openDraftOf(live, draft) {
+  var saved = null;
+  if (DRAFT_OF_LIVE) {
+    var r = await sb.from('guides').select('*').eq('draft_of', live.id).eq('is_published', false);
+    saved = !r.error && r.data && r.data[0] || null;
+  }
+  // This browser's copy in progress, unless another device has since saved
+  // a different draft of the same guide (one draft per live guide).
+  if (draft && draft.target === 'curated' && draft.draftOf === live.id &&
+      (!saved || draft.savedId === saved.id)) {
+    restoreDraft({ adopt: true });
+    setEditParam('curated', STATE.savedId || live.id);
+    return;
+  }
+  if (!confirmReplace(draft, live.title)) { clearEditParam(); restoreDraft(); return; }
+  adoptRow('curated', saved || live, {
+    savedId: saved ? saved.id : null,
+    draftOf: live.id,
+    draftOfTitle: live.title || '',
+    published: false,
+  });
+  setEditParam('curated', saved ? saved.id : live.id);
+  if (saved) toast('Opened the draft of “' + (live.title || 'this guide') + '” you started earlier.');
+}
+
+// Ask before replacing work in progress — before touching anything, so a
+// "no" leaves the builder exactly as it was.
+function confirmReplace(draft, title) {
+  if (!draft || !draft.picks || !Object.keys(draft.picks).length) return true;
+  return window.confirm('Open “' + (title || 'this guide') + '” for editing? The build in progress here will be replaced.');
+}
+
+function adoptRow(kind, row, id) {
   var got = picksFromSnapshot(row.parts_snapshot, row.platform_id);
   STATE.platform = PLATFORMS_BY_ID[row.platform_id];
   STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
   STATE.title = row.title || '';
   STATE.target = kind;
-  STATE.savedId = row.id;
+  STATE.savedId = id.savedId;
   STATE.ownerId = kind === 'community' ? row.user_id : null;
+  STATE.draftOf = id.draftOf || null;
+  STATE.draftOfTitle = id.draftOfTitle || '';
   STATE.curated = kind === 'curated'
-    ? { theme: row.category, newTheme: '', published: row.is_published !== false }
-    : { theme: null, newTheme: '', published: true };
+    ? { theme: row.category, newTheme: '', published: !!id.published }
+    : { theme: null, newTheme: '', published: false };
   STATE.picks = got.picks;
   STATE.openCat = null;
   var unfit = reconcilePicks({ quiet: true });
@@ -1447,21 +1572,29 @@ async function openForEdit(kind, id) {
   renderAll();
 }
 
-function startNewBuild() {
-  if (Object.keys(STATE.picks).length &&
-      !window.confirm('Start a new build? This clears your picks here. The saved guide isn’t changed.')) return;
+// Clears every part of the build's identity (CLAUDE.md, "Replacing the
+// builder's contents"). The platform stays: it is where the reader is.
+function resetBuild() {
   STATE.picks = {};
   STATE.gun = null;
   STATE.title = '';
   STATE.target = 'community';
   STATE.savedId = null;
   STATE.ownerId = null;
-  STATE.curated = { theme: null, newTheme: '', published: true };
+  STATE.draftOf = null;
+  STATE.draftOfTitle = '';
+  STATE.curated = { theme: null, newTheme: '', published: false };
   STATE.dropped = [];
   STATE.openCat = null;
   clearEditParam();
   renderPlatformRow();
   renderAll();
+}
+
+function startNewBuild() {
+  if (Object.keys(STATE.picks).length &&
+      !window.confirm('Start a new build? This clears your picks here. The saved guide isn’t changed.')) return;
+  resetBuild();
 }
 
 document.getElementById('build-title').addEventListener('input', function (e) {
@@ -1526,11 +1659,29 @@ async function saveGuide() {
     STATE.curated.newTheme = '';
   }
   var plan = savePlan(snapshot);
+  var published = STATE.target === 'curated' && STATE.curated.published;
+  var leftover = null;   // a draft row publishing could not remove
 
-  if (plan.op === 'update') {
+  if (plan.op === 'replace') {
+    // Publishing a draft of a live guide: the live row takes the draft's
+    // contents (same id — every link to it keeps working), then the draft
+    // row goes. Both are verified by a row coming back.
+    res = await sb.from('guides').update(plan.payload).eq('id', plan.liveId).select('id');
+    if (!res.error && (!res.data || !res.data.length)) {
+      res = { error: { message: 'the live guide was deleted, or you can no longer edit it' } };
+    }
+    if (!res.error && plan.deleteDraftId) {
+      var del = await sb.from('guides').delete().eq('id', plan.deleteDraftId).eq('is_published', false).select('id');
+      if (del.error || !del.data || del.data.length !== 1) leftover = plan.deleteDraftId;
+    }
+  } else if (plan.op === 'update') {
     // Verify the row came back: an RLS-refused update matches zero rows and
     // returns no error. (CLAUDE.md, "A green result is not evidence".)
-    res = await sb.from(plan.table).update(plan.payload).eq('id', STATE.savedId).select('id');
+    var q = sb.from(plan.table).update(plan.payload).eq('id', STATE.savedId);
+    // A Gunforma guide is only ever updated while it is a draft: a live one
+    // matches nothing here, whatever this page believes it is editing.
+    if (plan.onlyDrafts) q = q.eq('is_published', false);
+    res = await q.select('id');
     if (!res.error && (!res.data || !res.data.length)) {
       if (plan.reinsertOnMiss) {
         // The reader's own community guide is gone (deleted from another
@@ -1540,7 +1691,9 @@ async function saveGuide() {
       } else {
         // Never fall back to an insert on someone else's row or a Gunforma
         // guide: that would leave the original untouched and add a copy.
-        res = { error: { message: 'it was deleted, or you can no longer edit it' } };
+        res = { error: { message: plan.onlyDrafts
+          ? 'it was published or deleted — published guides can’t be edited; open it again to edit a draft'
+          : 'it was deleted, or you can no longer edit it' } };
       }
     }
   } else {
@@ -1553,13 +1706,24 @@ async function saveGuide() {
       ? 'Saving isn’t switched on yet — the Gun Guides table hasn’t been created.'
       : 'Couldn’t save: ' + (res.error.message || 'unknown error');
     toast(msg);
+  } else if (published) {
+    // Published is locked: the builder lets go of it and starts fresh, so
+    // nothing more typed here can reach the live guide.
+    var title = plan.payload.title;
+    try { localStorage.removeItem(DRAFT_KEY); } catch (e) {}
+    resetBuild();
+    toast(leftover
+      ? 'Published “' + title + '”, but its draft copy couldn’t be removed — delete it under Drafts.'
+      : 'Published — “' + title + '” is live.', 'gunforma-gun-guides.html', 'See it there');
+    return;
   } else {
     STATE.savedId = (res.data && res.data[0] && res.data[0].id) || STATE.savedId;
     if (STATE.target === 'community' && !STATE.ownerId) STATE.ownerId = CURRENT_USER.id;
     STATE.dropped = [];
+    setEditParam(STATE.target, STATE.savedId);
     persistDraft();
     toast(STATE.target === 'curated'
-      ? (STATE.curated.published ? 'Saved — the Gunforma guide is live.' : 'Saved as an unpublished Gunforma guide.')
+      ? 'Draft saved. It isn’t on Gun Guides until you publish it.'
       : 'Saved to Gun Guides.', 'gunforma-gun-guides.html', 'See it there');
   }
   renderSidebar();
@@ -1569,6 +1733,10 @@ async function saveGuide() {
 // scripts/guide-editor.test.mjs can hold it to the rules:
 //   * a Gunforma guide goes to guides with its theme and Published switch,
 //     and never a user_id (the table has none)
+//   * a Gunforma guide is updated only while it is a draft (onlyDrafts);
+//     publishing a draft of a live guide is op 'replace' — the live row
+//     takes its contents and the draft row is deleted
+//   * a draft of a live guide carries draft_of once that column exists
 //   * a community guide's UPDATE never sends user_id, so an admin's edit
 //     leaves the guide its owner's; only an INSERT names the saver
 //   * gun_id goes to guides only once the migration has added the column
@@ -1582,7 +1750,11 @@ function savePlan(snapshot) {
   if (STATE.target === 'curated') {
     var curated = Object.assign({}, base, { category: STATE.curated.theme, is_published: !!STATE.curated.published });
     if (GUIDE_EDITING_LIVE) curated.gun_id = gunId;
-    return { table: 'guides', op: STATE.savedId ? 'update' : 'insert', payload: curated, reinsertOnMiss: false };
+    if (STATE.draftOf && STATE.curated.published) {
+      return { table: 'guides', op: 'replace', liveId: STATE.draftOf, payload: curated, deleteDraftId: STATE.savedId || null };
+    }
+    if (STATE.draftOf && DRAFT_OF_LIVE) curated.draft_of = STATE.draftOf;
+    return { table: 'guides', op: STATE.savedId ? 'update' : 'insert', payload: curated, reinsertOnMiss: false, onlyDrafts: true };
   }
   var community = Object.assign({}, base, { gun_id: gunId });
   var insert = Object.assign({}, community, { user_id: CURRENT_USER.id });
