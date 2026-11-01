@@ -116,6 +116,40 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .gdetail-variant { font-size: 11px; color: #888; font-weight: 500; }
 .gdetail-disc { display: inline-block; font-size: 9.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 3px; padding: 1px 6px; vertical-align: 1px; }
 .gdetail-price { flex-shrink: 0; font-size: 12px; font-weight: 700; color: #1a1a1a; }
+/* The buy rows: js/affiliate.js markup, the catalog detail panel's classes
+   (its styles, sized down to the part-card variant). */
+.gdetail-buy { padding: 2px 0 10px 74px; }
+.part-affiliate { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0.5px solid #eee; background: #fafaf8; border-radius: 6px; }
+.part-affiliate-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-price { font-size: 13px; font-weight: 700; color: #1a1a1a; line-height: 1.1; }
+.part-affiliate-partner { font-size: 11px; color: #888; }
+.part-affiliate-partner strong { color: #444; font-weight: 600; }
+.part-affiliate-stock { display: inline-block; font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; padding: 2px 7px; border-radius: 20px; margin-left: 6px; }
+.part-affiliate-stock.in { color: #2f7a3d; background: #eaf5ec; border: 0.5px solid #b7dcbe; }
+.part-affiliate-stock.out { color: #a25334; background: #faece7; border: 0.5px solid #eec2ae; }
+.part-affiliate-btn { flex-shrink: 0; font-size: 10px; font-weight: 700; color: #fff; background: #2a7bbd; border: 0.5px solid #2a7bbd; padding: 6px 10px; border-radius: 4px; text-decoration: none; transition: background 0.15s; letter-spacing: 0.02em; }
+.part-affiliate-btn:hover { background: #1e63a0; }
+.part-affiliate-range { font-size: 11px; color: #666; font-weight: 500; margin-left: 6px; }
+.part-affiliate-options { border-top: 0.5px solid #eee; padding: 0; margin-top: 4px; }
+.part-affiliate-options-summary { list-style: none; cursor: pointer; padding: 10px 4px; font-size: 11px; color: #2a7bbd; font-weight: 600; user-select: none; }
+.part-affiliate-options-summary::-webkit-details-marker { display: none; }
+.part-affiliate-options-summary::after { content: ' ▾'; }
+.part-affiliate-options[open] .part-affiliate-options-summary::after { content: ' ▴'; }
+.part-affiliate-variant-list { display: flex; flex-direction: column; padding: 0 0 6px; background: #f4f3ee; border-radius: 6px; }
+.part-affiliate-variant-header { padding: 10px 14px 8px; border-bottom: 0.5px solid #dcdbd3; }
+.part-affiliate-variant-header-label { font-size: 10.5px; color: #555; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 700; }
+.part-affiliate-variant-header-note { font-size: 11.5px; color: #6b6a63; font-style: italic; margin-top: 5px; letter-spacing: 0; text-transform: none; font-weight: 400; line-height: 1.45; }
+.part-affiliate-variant-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 14px; border-top: 0.5px solid #e8e6df; }
+.part-affiliate-variant-row:first-child { border-top: none; }
+.part-affiliate-variant-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.part-affiliate-variant-label { font-size: 12px; color: #333; font-weight: 600; }
+.part-affiliate-variant-sub { font-size: 11px; color: #888; }
+.part-affiliate-variant-sub strong { color: #444; font-weight: 600; }
+.part-affiliate-variant-btn { flex-shrink: 0; font-size: 10.5px; font-weight: 600; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; padding: 6px 12px; border-radius: 4px; text-decoration: none; transition: background 0.15s; }
+.part-affiliate-variant-btn:hover { background: #eaf4fc; }
+.gdetail-total { margin-top: 10px; padding-top: 10px; border-top: 0.5px solid #e8e6df; font-size: 12.5px; color: #444; }
+.gdetail-total strong { font-size: 14px; color: #1a1a1a; }
+.gdetail-disclosure { font-size: 10px; color: #a8a5a0; padding: 6px 0 0; }
 .gdetail-close { margin-top: 10px; font-family: inherit; font-size: 11px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
 .gdetail-close:hover { color: #1a1a1a; border-color: #b9b6aa; }
 
@@ -152,6 +186,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .page-header, .wrap, .tab-row, .footer-bar { padding-left: 16px; padding-right: 16px; }
   .gdetail-cat { width: 84px; }
   .gdetail-photo { width: 52px; }
+  .gdetail-buy { padding-left: 0; }
   .gcard.open .gthumbs { grid-template-columns: repeat(3, 1fr); }
 }
 </style>
@@ -229,6 +264,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/display-name.js"></script>
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
+<script src="js/maker-link.js"></script>
+<script src="js/option-price.js"></script>
+<script src="js/affiliate.js"></script>
+<script src="js/build-total.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
@@ -238,7 +277,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 //   Gunforma guides  — the curated `guides` rows (is_published), which had no
 //                      surface since the old Armory was parked
 // Every part row links to its /parts/ page when the snapshot carries a slug;
-// totals are the MSRPs stored at save time, labelled as such.
+// card totals are the MSRPs stored at save time, labelled as such. The OPEN
+// guide also sells: every catalog part gets the catalog panel's buy row
+// (js/affiliate.js, scoped to the saved option), the foot shows the live
+// "Total at today's prices" (js/build-total.js — the build pages' number)
+// and the one disclosure line. scripts/gun-guide-buy.test.mjs pins it.
 //
 // Edit and Delete (2026-10-30): an admin sees both on every card, the owner
 // of a community guide on their own, nobody else on any (canEdit()). Edit
@@ -272,6 +315,10 @@ var COMMUNITY = [], CURATED = [];
 var OPEN_ID = null;
 var THUMBS_ON_CARD = 5;
 var VARIANTS_BY_ID = {}, DEFAULT_VARIANT_BY_PRODUCT = {};
+// The raw rows the one listings read returned (affiliate.loadFor), which is
+// what js/build-total.js prices a guide from. Empty on a failed read: the
+// open guide then shows no buy rows and no live total, and still renders.
+var LISTING_ROWS = [];
 // Product ids of the discontinued parts guides name: such a part still shows,
 // with its photo, marked "Discontinued" (CLAUDE.md, "Discontinued parts").
 var DISCONTINUED = {};
@@ -341,9 +388,14 @@ async function loadAll() {
   renderAll();
 }
 
-// Every variant of every product the guides name, in one read. A failure
-// leaves the maps empty and every part shows its swatch — the page still
-// renders, it just has no photos.
+// Every variant of every product the guides name, in one read — through
+// window.affiliate.loadFor(), whose select is a superset of the photo
+// columns this used to query itself. The one call fills the buy-row cache
+// (the open guide's buy buttons) and hands back the raw rows, which carry
+// the photos AND what js/build-total.js needs for the live total — so buy
+// rows cost no query the photos were not already paying. A failure leaves
+// the maps empty and every part shows its swatch, no buy row, no live
+// total — the page still renders.
 async function loadPhotos(rows) {
   var ids = {};
   rows.forEach(function (row) {
@@ -351,12 +403,10 @@ async function loadPhotos(rows) {
   });
   var list = Object.keys(ids);
   if (!list.length) return;
-  var res = await sb.from('product_variants')
-    .select('id, product_id, is_default, color, primary_image_url')
-    .in('product_id', list)
-    .is('retired_at', null);
-  if (res.error) { console.warn('[gun-guides] photo read failed', res.error); }
-  (res.data || []).forEach(function (v) {
+  var data = await window.affiliate.loadFor(sb, list);
+  if (!data) { console.warn('[gun-guides] listings read failed'); }
+  LISTING_ROWS = data || [];
+  LISTING_ROWS.forEach(function (v) {
     VARIANTS_BY_ID[v.id] = v;
     if (v.is_default) DEFAULT_VARIANT_BY_PRODUCT[v.product_id] = v;
   });
@@ -566,12 +616,15 @@ function detailCatLabel(cat) {
   return BC.categoryLabel(cat);
 }
 
-// Every part with its photo, under the build's group headings, in build order.
+// Every part with its photo, under the build's group headings, in build
+// order — each catalog part with its buy row — then the live total and the
+// one disclosure line.
 function detailHtml(row) {
   var html = '<div class="gdetail">';
   html += BC.groupParts(row.parts_snapshot).map(function (g) {
     return '<div class="gdetail-group">' + esc(g.group.label) + '</div>' + g.parts.map(detailRowHtml).join('');
   }).join('');
+  html += detailFootHtml(row);
   html += '<button type="button" class="gdetail-close">Close</button></div>';
   return html;
 }
@@ -585,8 +638,56 @@ function detailRowHtml(p) {
     '<span class="gdetail-name">' + (href ? '<a href="' + escAttr(href) + '">' + esc(name) + '</a>' : esc(name)) +
       (p.variantLabel ? ' <span class="gdetail-variant">· ' + esc(p.variantLabel) + '</span>' : '') +
       (p.refId && DISCONTINUED[p.refId] ? ' <span class="gdetail-disc">Discontinued</span>' : '') + '</span>' +
-    '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) : '') + '</span>' +
-  '</div>';
+    // The saved number, labelled for what it is: a live retailer price may
+    // sit right under it in the buy row (the option-price labelling rule).
+    '<span class="gdetail-price">' + (p.msrp != null ? money(Number(p.msrp)) + ' MSRP' : '') + '</span>' +
+  '</div>' +
+  partBuyHtml(p);
+}
+
+// The buy row for one catalog part: the catalog detail panel's own block
+// (window.affiliate.renderBlock — partner listings first under the shared
+// stale-price and sort rules, else the maker button through
+// /go/part/<product id>), scoped to the part's SAVED option when the
+// snapshot names one. A saved option that is retired or has no listing
+// falls back to the product block the way the catalog panel does — a
+// maker-only headline then reads "Check price", never a sibling option's
+// number as if it were this one. A discontinued part keeps its mark and
+// its /parts/ link and is never sold; a typed part has no refId and no row.
+// Each block's own disclosure is off: the guide says ONE line, in
+// detailFootHtml, about all the buttons above it.
+function partBuyHtml(p) {
+  if (!p.refId || DISCONTINUED[p.refId]) return '';
+  var block = window.affiliate.renderBlock(p.refId, {
+    selectedVariantId: p.variantId || undefined,
+    scopeToVariant: true,
+    disclosure: false,
+  });
+  return block ? '<div class="gdetail-buy">' + block + '</div>' : '';
+}
+
+// "Total at today's prices" is the build pages' own number —
+// window.buildPriceTotal (js/build-total.js) over the rows the one listings
+// read returned: the cheapest fresh partner price in stock first, MSRP only
+// for a part with no listing, nothing for a stale price or a typed part,
+// and a "+" when some part priced to nothing. The card's MSRP total above
+// is untouched. Under it, the one disclosure line says what is true of the
+// buy buttons in this guide: partner, maker, or both (window.buyDisclosure).
+function detailFootHtml(row) {
+  var html = '';
+  var text = window.priceTotalText(window.buildPriceTotal(row.parts_snapshot, LISTING_ROWS));
+  if (text) html += '<div class="gdetail-total">Total at today’s prices: <strong>' + text + '</strong></div>';
+  var hasPartner = false, hasMaker = false;
+  (row.parts_snapshot || []).forEach(function (p) {
+    if (!p || !p.refId || DISCONTINUED[p.refId]) return;
+    var aff = window.affiliate.getFor(p.refId, p.variantId || undefined);
+    if (!aff || !aff.hero) return;
+    if (aff.partnerCount > 0) hasPartner = true;
+    if (aff.makerCount > 0) hasMaker = true;
+  });
+  var d = window.buyDisclosure(hasPartner, hasMaker);
+  if (d) html += '<div class="gdetail-disclosure">' + esc(d) + '</div>';
+  return html;
 }
 
 function renderGrid(which, rows, kind) {

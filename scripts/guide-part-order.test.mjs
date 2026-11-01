@@ -41,10 +41,13 @@ const element = () => ({
 });
 
 function loadContext({ withPage = false } = {}) {
-  const ctx = { console };
+  // URL: js/maker-link.js parses hosts with it; without it every maker link
+  // is silently null.
+  const ctx = { console, URL };
   ctx.window = ctx;
   vm.createContext(ctx);
-  for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js', 'js/variant-label.js', 'js/variant-swatch.js']) {
+  for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js', 'js/variant-label.js', 'js/variant-swatch.js',
+    'js/maker-link.js', 'js/option-price.js', 'js/affiliate.js', 'js/build-total.js']) {
     vm.runInContext(read(f), ctx, { filename: f });
   }
   if (withPage) {
