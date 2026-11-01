@@ -80,6 +80,7 @@ var NAV_MENU =
     '<a href="gunforma-builds.html">Builds</a>' +
     '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
     '<a href="gunforma-armory.html">Armory</a>' +
+    '<a href="gunforma-gun-guides.html">Guides</a>' +
     NAV_P365_SUB +
     '<a class="anon" href="gunforma-signin.html">Sign in</a>' +
     '<a class="anon" href="gunforma-signup.html">Create account</a>' +
@@ -283,10 +284,10 @@ function ensureAccountNavStyles() {
       '<nav class="nav">' +
         '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<div class="nav-links">' +
-          '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
           '<a class="nav-link' + activeIf('gunforma-armory.html') + '" href="gunforma-armory.html">Armory</a>' +
+          '<a class="nav-link' + activeIf('gunforma-gun-guides.html') + '" href="gunforma-gun-guides.html">Guides</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" id="nav-signin">…</a>' +
@@ -301,10 +302,10 @@ function ensureAccountNavStyles() {
       '<nav class="nav">' +
         '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
         '<div class="nav-links">' +
-          '<a class="nav-link' + activeIf('index.html') + '" href="/">Home</a>' +
           '<a class="nav-link' + activeIf('gunforma-builds.html') + '" href="gunforma-builds.html">Builds</a>' +
           '<a class="nav-link' + activeIf('gunforma-parts-catalog.html') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
           '<a class="nav-link' + activeIf('gunforma-armory.html') + '" href="gunforma-armory.html">Armory</a>' +
+          '<a class="nav-link' + activeIf('gunforma-gun-guides.html') + '" href="gunforma-gun-guides.html">Guides</a>' +
         '</div>' +
         '<div class="nav-right">' +
           '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +

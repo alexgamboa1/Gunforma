@@ -719,7 +719,11 @@ it touched — `gunforma-armory.html` and `gunforma-gun-guides.html` — and
 every other copy still reflected the park, so the link appeared only while
 you were already on those pages. The fix made the bar **Home / Builds /
 Parts Catalog / Armory** everywhere (Armory `active` only on its own page)
-and moved **"Your P365" into the hamburger as a dropdown**: a
+and moved **"Your P365" into the hamburger as a dropdown**. Since
+2026-10-31 (the Gun Guides launch, Alex's call) the bar is **Builds /
+Parts Catalog / Armory / Guides**: Home is gone — the logo already links
+home — and Guides (`gunforma-gun-guides.html`) is `active` only on its own
+page; the hamburger's first group follows the same order. The dropdown: a
 `<details class="nav-sub">` row listing every `GUN_HUBS` hub (names from
 `GUN_META`, order from the registry, the `/p365/` index link last — the
 same contract the homepage picker is held to). The dropdown exists once per
@@ -3356,11 +3360,14 @@ carries it after Parts Catalog, desktop and hamburger, guarded by
 `scripts/check-nav.mjs`. **And on 2026-10-30 it launched for search**: the
 noindex is gone from `gunforma-armory.html`, the page is in `sitemap.mjs`'s
 `STATIC_PATHS`, and its path is out of `RETIRED` in `check-sitemap.mjs`, so
-the baseline guard covers it again. **Gun Guides has NOT launched**:
-`gunforma-gun-guides.html` is still `noindex`, still out of the sitemap,
-and has no nav link of its own — it is reached from the Armory page.
-Lifting that is its own PR on Alex's go; do not fold it into something
-else.
+the baseline guard covers it again. **Gun Guides launched 2026-10-31**
+(Alex's go, the guides launch plan): the noindex is gone from
+`gunforma-gun-guides.html`, the page is in `sitemap.mjs`'s `STATIC_PATHS`
+(it was never in the pinned baseline, so no `RETIRED` entry to clear), and
+**"Guides" replaced "Home" on the nav bar** — the logo already links home —
+in every copy, desktop and hamburger, guarded by `check-nav.mjs`. The other
+entry points in the launch plan (Armory "Start from a guide", per-hub guide
+links, a homepage guide row) are separate PRs, not shipped with the launch.
 
 **The Armory is also the guide editor** (2026-10-30, Alex's call — no
 separate admin form; it already has the picker, the photos and every fit

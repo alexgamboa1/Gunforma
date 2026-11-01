@@ -49,10 +49,10 @@ export function navHtml({ active } = {}) {
 '<nav class="nav">' +
   '<a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>' +
   '<div class="nav-links">' +
-    '<a class="nav-link' + on('home') + '" href="/">Home</a>' +
     '<a class="nav-link' + on('builds') + '" href="gunforma-builds.html">Builds</a>' +
     '<a class="nav-link' + on('parts') + '" href="gunforma-parts-catalog.html">Parts Catalog</a>' +
     '<a class="nav-link' + on('armory') + '" href="gunforma-armory.html">Armory</a>' +
+    '<a class="nav-link' + on('guides') + '" href="gunforma-gun-guides.html">Guides</a>' +
   '</div>' +
   '<div class="nav-right">' +
     '<a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>' +
@@ -64,6 +64,7 @@ export function navHtml({ active } = {}) {
   '<a href="gunforma-builds.html">Builds</a>' +
   '<a href="gunforma-parts-catalog.html">Parts Catalog</a>' +
   '<a href="gunforma-armory.html">Armory</a>' +
+  '<a href="gunforma-gun-guides.html">Guides</a>' +
   navSubHtml() +
   // The signed-out bottom group, under the dropdown's second blue line.
   // class="anon" is what nav.js's signed-in paint removes (navScript()
