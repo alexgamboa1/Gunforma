@@ -161,6 +161,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-footer { display: flex; align-items: center; justify-content: space-between; }
 .part-card-price { font-size: 12px; font-weight: 700; color: #2a7bbd; }
 
+/* PANEL HEAD — a tab's title with its "Open in the Armory →" link */
+.panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.panel-head .panel-title { margin-bottom: 0; }
+.panel-head-link { font-size: 12px; font-weight: 700; color: #2a7bbd; text-decoration: none; white-space: nowrap; }
+.panel-head-link:hover { text-decoration: underline; }
+.panel-head + .ab-grid, .panel-head + .parts-grid, .panel-head + .empty { margin-top: 14px; }
+
 /* EMPTY STATE */
 .empty { text-align: center; padding: 48px 20px; background: #fff; border: 0.5px dashed #d5d3ca; border-radius: 6px; }
 .empty-title { font-size: 14px; font-weight: 700; color: #1a1a1a; margin-bottom: 6px; }
@@ -281,9 +288,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </div>
 
 <script src="js/build-url.js"></script>
+<script src="js/category-map.js"></script>
+<script src="js/build-categories.js"></script>
 <script src="js/variant-label.js"></script>
 <script src="js/variant-swatch.js"></script>
 <script src="js/option-price.js"></script>
+<script src="js/build-total.js"></script>
+<script src="js/guide-url.js"></script>
+<script src="js/armory-builds.js"></script>
 <script src="js/supabase-client.js"></script>
 <script src="js/nav.js"></script>
 
@@ -323,6 +335,7 @@ let IS_OWN_PROFILE = false;   // true only on the bare, no-?u= dashboard
 let MY_BUILDS = [];
 let SAVED_BUILDS = [];
 let FAVORITE_PARTS = [];
+let ARMORY_BUILDS = null;     // js/armory-builds.js load() result
 
 // Which profile is being viewed. /u/<username> is the canonical public URL
 // (rewritten to the profile-og function, which injects OG meta and serves
@@ -389,7 +402,7 @@ async function renderShell() {
   const tabsHtml = IS_OWN_PROFILE
     ? [
         ['overview','Overview'], ['my-builds','My builds'], ['saved','Saved builds'],
-        ['favorites','Favorite parts'], ['account','Account'],
+        ['armory','Armory builds'], ['favorites','Favorite parts'], ['account','Account'],
       ]
     : [ ['overview','Overview'], ['my-builds','Builds'] ];
 
@@ -423,6 +436,7 @@ async function renderShell() {
       '<div class="tab-panel active" id="panel-overview"><div class="gate">Loading…</div></div>'+
       '<div class="tab-panel" id="panel-my-builds"><div class="gate">Loading…</div></div>'+
       (IS_OWN_PROFILE ? '<div class="tab-panel" id="panel-saved"><div class="gate">Loading…</div></div>' : '')+
+      (IS_OWN_PROFILE ? '<div class="tab-panel" id="panel-armory"><div class="gate">Loading…</div></div>' : '')+
       (IS_OWN_PROFILE ? '<div class="tab-panel" id="panel-favorites"><div class="gate">Loading…</div></div>' : '')+
       (IS_OWN_PROFILE ? '<div class="tab-panel" id="panel-account"></div>' : '')+
     '</div>';
@@ -434,14 +448,14 @@ async function renderShell() {
   // and anything else falls through to the default — a raw param must never
   // select the element or drive switchTab().
   //
-  // The second check is not redundant: `saved`, `favorites` and `account`
+  // The second check is not redundant: `saved`, `armory`, `favorites` and `account`
   // are real tab names but only exist on your OWN profile, so a link
   // carrying one to somebody else's profile must fall through too.
   //
   // Added for gunforma-post-build.html, which sends a builder here after a
   // submit. Overview filters status=approved, so a just-submitted PENDING
   // build is not on it; `my-builds` is the tab that shows one.
-  var ALLOWED_TABS = ['overview', 'my-builds', 'saved', 'favorites', 'account'];
+  var ALLOWED_TABS = ['overview', 'my-builds', 'saved', 'armory', 'favorites', 'account'];
   var wantedTab = new URLSearchParams(window.location.search).get('tab');
   if (ALLOWED_TABS.indexOf(wantedTab) !== -1 &&
       document.querySelector('.tab-btn[data-tab="' + wantedTab + '"]')) {
@@ -452,6 +466,7 @@ async function renderShell() {
   await loadMyBuilds();
   if (IS_OWN_PROFILE) {
     await loadSavedBuilds();
+    await loadArmoryBuilds();
     await loadFavoriteParts();
     renderAccountPanel();
   }
@@ -925,6 +940,49 @@ window.unsaveBuild = async function(buildId) {
 };
 
 // ============================================================
+// ARMORY BUILDS TAB (private) — the builds this member saved in the Armory
+// (gun_guides). The read and the card are js/armory-builds.js, the same one
+// the Armory's My builds tab draws, so the two lists cannot drift. Here
+// it is the summary: Open (back into the Armory, ?edit=community:<id>) and
+// Share. Deleting one is the Armory's job, on its My builds tab.
+// ============================================================
+async function loadArmoryBuilds() {
+  const panel = document.getElementById('panel-armory');
+  ARMORY_BUILDS = await window.ArmoryBuilds.load(sb, CURRENT_USER.id);
+  const head = function(n) {
+    return '<div class="panel-head"><div class="panel-title">Armory builds'+(n == null ? '' : ' ('+n+')')+'</div>'+
+      '<a class="panel-head-link" href="gunforma-armory.html#my-builds">Open in the Armory →</a></div>';
+  };
+  if (ARMORY_BUILDS.error) {
+    console.error('loadArmoryBuilds', ARMORY_BUILDS.error);
+    panel.innerHTML = head(null)+'<div class="empty"><div class="empty-title">Couldn\'t load your Armory builds</div>'+
+      '<div class="empty-sub">Refresh the page to try again.</div></div>';
+    return;
+  }
+  const rows = ARMORY_BUILDS.rows;
+  panel.innerHTML = head(rows.length)+
+    (rows.length
+      ? '<div class="ab-grid">'+rows.map(function(row){ return window.ArmoryBuilds.cardHtml(row, ARMORY_BUILDS, armoryActionsHtml(row)); }).join('')+'</div>'
+      : '<div class="empty"><div class="empty-title">No Armory builds yet</div>'+
+          '<div class="empty-sub">Spec a build part by part in the Armory and hit Save &amp; share — it shows up here with its own page to share.</div>'+
+          '<a class="empty-cta" href="gunforma-armory.html">Open the Armory</a></div>');
+}
+
+function armoryActionsHtml(row) {
+  return '<a class="ab-act" href="gunforma-armory.html?edit=community:'+escH(row.id)+'">Open</a>'+
+    (window.ArmoryBuilds.shareable(row)
+      ? '<button type="button" class="ab-act" data-id="'+escH(row.id)+'" onclick="shareArmoryBuild(this.dataset.id)">Share</button>'
+      : '');
+}
+
+window.shareArmoryBuild = async function(id) {
+  const row = ARMORY_BUILDS && ARMORY_BUILDS.rows.find(function(r){ return r.id === id; });
+  if (!row) return;
+  await window.ArmoryBuilds.copyLink(row);
+  showToast('Link copied — anyone can open “'+(row.title || 'your build')+'” at that address.');
+};
+
+// ============================================================
 // FAVORITE PARTS TAB — reads from the existing live table part_favorites
 // (not a table this migration creates — it already exists and is already
 // wired to the heart button in the parts catalog / Armory).
@@ -947,7 +1005,8 @@ async function loadFavoriteParts() {
   FAVORITE_PARTS = data || [];
 
   panel.innerHTML =
-    '<div class="panel-title">Favorite parts ('+FAVORITE_PARTS.length+')</div>'+
+    '<div class="panel-head"><div class="panel-title">Favorite parts ('+FAVORITE_PARTS.length+')</div>'+
+      '<a class="panel-head-link" href="gunforma-armory.html#saved-parts">Open in the Armory →</a></div>'+
     (FAVORITE_PARTS.length
       ? '<div class="parts-grid">'+FAVORITE_PARTS.map(function(r){ return renderFavoritePartCard(r.products); }).join('')+'</div>'
       : '<div class="empty"><div class="empty-title">No favorite parts yet</div>'+

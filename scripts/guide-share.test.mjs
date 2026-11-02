@@ -257,7 +257,14 @@ test('community guide: served 200, but noindex (meta + header), with its builder
   assert.equal(res.headers.get('x-robots-tag'), 'noindex');
   assert.match(html, /<meta name="robots" content="noindex"\/>/);
   assert.equal((html.match(/rel="canonical" href="([^"]+)"/) || [])[1], CANON);
-  assert.match(html, /Community build &middot; by wraythe/);
+  // A reader's build is an Armory build, by its builder — never a "community
+  // guide" — and its crumb leads back to the Armory, not to Gun Guides
+  // (which lists Gunforma's own guides only).
+  assert.match(html, /<div class="eyebrow">Armory build by @wraythe<\/div>/);
+  assert.doesNotMatch(html, /community/i);
+  assert.match(html, /<div class="breadcrumb"><a href="\/">Home<\/a> \/ <a href="\/gunforma-armory\.html">Armory<\/a> \//);
+  assert.match(html, /"name":"Armory","item":"https:\/\/gunforma\.com\/gunforma-armory\.html"/);
+  assert.match(html, /og:image:alt" content="Armory build: /);
   assert.match(html, /P365 XMacro &middot; 6 parts/);
 });
 

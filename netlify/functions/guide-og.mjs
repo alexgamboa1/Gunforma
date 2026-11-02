@@ -4,7 +4,7 @@
 // the large card (1200x630, ~1.91:1 — CLAUDE.md, "SEO invariants": the card
 // is chosen from the image's real pixels): a header band with the Gunforma
 // logo (sized to read at ~500px wide, how iMessage and Reddit show it) and
-// "GUN GUIDE" or "COMMUNITY GUIDE"; under it the guide's parts in build
+// "GUN GUIDE" or "ARMORY BUILD"; under it the guide's parts in build
 // order (BuildCategories.orderParts, the browser's own file —
 // _build-categories.mjs), up to six tiles with a "+N" tile for the rest,
 // and beside them the title, the model, the part count and "$X today" from
@@ -294,8 +294,11 @@ function swatchFill(sw, id) {
 
 // The header band: the Gunforma logo, left, at a height that still reads
 // when the card is shown ~500px wide (iMessage, Reddit: 60px → 25px), and
-// what kind of guide this is, right. A community guide says so here, so its
-// author's title never reads as a Gunforma guide.
+// what kind of guide this is, right. A reader's Armory build says so here,
+// so its author's title never reads as a Gunforma guide.
+export function bandLabel(kind) {
+  return kind === 'curated' ? 'GUN GUIDE' : 'ARMORY BUILD';
+}
 // The band label and the model line are the card's smallest text; 36px is
 // 15px at 500px wide, the floor for reading them on a phone.
 const SMALL_TEXT = 36;
@@ -386,7 +389,7 @@ export function collageSvg(model, photos, assets, measure) {
   const LH = BAND.logoH, LW = Math.round(LH * LOGO_RATIO);
   body.push('<image x="' + GRID.x + '" y="' + Math.round((BAND.h - LH) / 2) + '" width="' + LW + '" height="' + LH +
     '" href="' + assets.logoUri + '"/>');
-  const label = model.kind === 'curated' ? 'GUN GUIDE' : 'COMMUNITY GUIDE';
+  const label = bandLabel(model.kind);
   body.push('<text x="' + (GG_OG_W - 40) + '" y="' + Math.round(BAND.h / 2 + BAND.labelSize * 0.36) + '" text-anchor="end" font-family="' +
     FONT_FAMILY + '" font-weight="500" font-size="' + BAND.labelSize + '" letter-spacing="4" fill="' + C.muted + '">' + label + '</text>');
   body.push('<rect x="' + GRID.x + '" y="' + BAND.h + '" width="' + (GG_OG_W - 2 * GRID.x) + '" height="2" fill="' + C.tileEdge + '"/>');

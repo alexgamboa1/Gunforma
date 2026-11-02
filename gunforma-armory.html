@@ -219,6 +219,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .btn-block.primary:disabled { background: #cfd8e0; border-color: #cfd8e0; cursor: default; }
 .btn-block.ghost { background: #fff; color: #333; border-color: #d5d3ca; }
 .btn-block.ghost:hover { border-color: #4a9edd; color: #2a7bbd; }
+/* .btn-block's display: block outranks the [hidden] attribute. */
+.btn-block[hidden] { display: none; }
 
 /* EDITING — the guide this build saves back to, and an admin's save options */
 .edit-banner { font-size: 11.5px; line-height: 1.45; color: #1d5f94; background: #eaf4fc; border: 0.5px solid #c3def4; border-radius: 4px; padding: 8px 10px; margin-bottom: 12px; }
@@ -237,6 +239,35 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .save-check { display: flex; align-items: center; gap: 7px; font-size: 12px; color: #333; cursor: pointer; }
 .save-opts-note { font-size: 11px; color: #999; line-height: 1.4; }
 
+/* TABS — Build | My builds | Saved parts. The tab bar is Gun Guides' own
+   (.tab-row / .tab-btn, same values), scrolling sideways when it can't fit.
+   Each tab is a link to its hash, so Back/Forward and reload keep it. */
+.tab-row { max-width: 1240px; margin: 18px auto 0; padding: 0 32px; display: flex; gap: 4px; border-bottom: 0.5px solid #e5e5e5; overflow-x: auto; scrollbar-width: none; }
+.tab-row::-webkit-scrollbar { display: none; }
+.tab-btn { flex-shrink: 0; white-space: nowrap; text-decoration: none; font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+           padding: 10px 14px; background: transparent; border: none; cursor: pointer; color: #888;
+           border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: color 0.15s, border-color 0.15s; }
+.tab-btn:hover { color: #1a1a1a; }
+.tab-btn.active { color: #1a1a1a; border-bottom-color: #4a9edd; }
+.armory[hidden] { display: none; }
+
+/* MY BUILDS / SAVED PARTS — full-width grids of js/armory-builds.js cards
+   (the Gun Guides card). Empty and signed-out states as Gun Guides draws its. */
+.tab-empty { text-align: center; padding: 60px 16px; color: #999; font-size: 12.5px; }
+.tab-empty-title { font-size: 15px; font-weight: 700; color: #555; margin-bottom: 6px; }
+.tab-empty a:not(.tab-empty-btn) { color: #2a7bbd; font-weight: 700; text-decoration: none; }
+.tab-empty-btn { display: inline-block; margin-top: 12px; font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; padding: 9px 16px; border-radius: 4px; text-decoration: none; }
+.tab-empty-btn:hover { background: #2a7bbd; }
+.tab-foot { font-size: 11px; color: #999; margin-top: 14px; }
+.tab-foot a { color: #2a7bbd; text-decoration: none; }
+.sp-card .fit-tag { align-self: flex-start; }
+.sp-reason { font-size: 11px; color: #b24a2a; line-height: 1.4; }
+.sp-note { font-size: 11px; color: #8a6d3b; line-height: 1.4; }
+.sp-gone { font-size: 12px; color: #999; padding: 14px; line-height: 1.5; }
+/* The slot a saved part just landed in, for a moment after Add to build. */
+.slot.just-added { animation: just-added 1.6s ease-out; border-radius: 6px; }
+@keyframes just-added { 0% { background: #e7f6ee; } 100% { background: transparent; } }
+
 /* EMPTY / LOADING */
 .empty { text-align: center; padding: 40px 16px; color: #999; font-size: 12.5px; }
 .empty-title { font-size: 14px; font-weight: 700; color: #555; margin-bottom: 4px; }
@@ -253,7 +284,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .footer-txt a:hover { color: #2a7bbd; }
 
 @media (max-width: 600px) {
-  .page-header, .armory, .footer-bar { padding-left: 16px; padding-right: 16px; }
+  .page-header, .tab-row, .armory, .footer-bar { padding-left: 16px; padding-right: 16px; }
+  .tab-btn { padding-left: 10px; padding-right: 10px; }
 }
 </style>
 </head>
@@ -301,7 +333,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   <div class="page-sub">Spec a build before you own the parts. Pick your pistol, then choose from every compatible part in the catalog — the Armory only shows combinations that actually fit together.</div>
 </div>
 
-<div class="armory">
+<div class="tab-row" role="tablist">
+  <a class="tab-btn active" id="tab-build" href="#build" role="tab" aria-selected="true" aria-controls="panel-build">Build</a>
+  <a class="tab-btn" id="tab-my-builds" href="#my-builds" role="tab" aria-selected="false" aria-controls="panel-my-builds">My builds</a>
+  <a class="tab-btn" id="tab-saved-parts" href="#saved-parts" role="tab" aria-selected="false" aria-controls="panel-saved-parts">Saved parts</a>
+</div>
+
+<div class="armory" id="panel-my-builds" role="tabpanel" hidden></div>
+<div class="armory" id="panel-saved-parts" role="tabpanel" hidden></div>
+
+<div class="armory" id="panel-build" role="tabpanel">
   <div class="build-layout">
     <div class="build-main">
       <div class="card" id="guide-start" hidden>
@@ -337,8 +378,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
         </div>
         <input type="text" class="build-title-input" id="build-title" maxlength="80" placeholder="Name this build" autocomplete="off" hidden />
         <div class="save-opts" id="save-opts" hidden></div>
-        <button type="button" class="btn-block primary" id="btn-save" disabled>Save to Gun Guides →</button>
-        <button type="button" class="btn-block ghost" id="btn-share" hidden>Share this guide</button>
+        <button type="button" class="btn-block primary" id="btn-save" disabled>Save &amp; share →</button>
+        <button type="button" class="btn-block ghost" id="btn-share" hidden>Share this build</button>
         <a class="btn-block ghost" href="gunforma-gun-guides.html">Browse Gun Guides</a>
       </div>
     </aside>
@@ -358,6 +399,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/variant-swatch.js"></script>
 <script src="js/option-price.js"></script>
 <script src="js/guide-url.js"></script>
+<script src="js/build-total.js"></script>
+<script src="js/armory-builds.js"></script>
 <script src="js/frame-fit.js"></script>
 <script src="js/slide-fit.js"></script>
 <script src="js/nav.js"></script>
@@ -411,6 +454,21 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // saved identity lives in ?edit= while you edit, never in a draft alone,
 // which is how "Build yours in the Armory" used to land in edit mode on
 // the last guide an admin had opened.
+//
+// NAMES (Alex, 2026-11-02). A reader's saved build (gun_guides) is an
+// "Armory build" on every surface, never a "community guide"; "Gun Guides"
+// are Gunforma's own guides only. STATE.target and ?edit= keep the word
+// 'community' — it is an identifier, not copy.
+//
+// TABS (2026-11-02): Build | My builds | Saved parts, each its own hash
+// (#build, #my-builds, #saved-parts) so the profile and toasts link straight
+// to one and Back/Forward and reload keep it. My builds is the signed-in
+// reader's own Armory builds (Open, Share, Delete); Saved parts is their
+// part_favorites, READ ONLY — the catalog's heart is where a part is saved
+// or unsaved. Open and "Add to build" land on the Build tab. "Add to build"
+// puts a saved part into the build on screen only when the pickers would
+// offer it, says why not otherwise, and never touches the build's identity.
+//
 // Writes are refused by RLS, never trusted to this page — the checks here
 // only decide what to offer. Until supabase/migrations/*_guides_admin_writes
 // is applied, guide_themes does not exist, GUIDE_EDITING_LIVE stays false,
@@ -480,6 +538,21 @@ var STATE = {
                           // name placeholder only — NEVER part of the identity
 };
 
+// The My builds and Saved parts tabs: the signed-in reader's own saved
+// builds and saved parts. Not part of the build on screen — opening, adding
+// or deleting from them goes through the same identity rules as everything
+// else here.
+var TABS = ['build', 'my-builds', 'saved-parts'];
+var CURRENT_TAB = 'build';
+var MY = {
+  started: false,         // loadAll has finished: the catalog is here to judge parts against
+  userId: null,           // whose rows these are
+  loading: false,
+  builds: null,           // ArmoryBuilds.load() result, or null until read
+  parts: null,            // part_favorites rows, or null until read
+  partsError: null,
+};
+
 var DRAFT_KEY = 'gf-armory-picks-v1';
 var NEW_THEME = '__new__';
 
@@ -511,6 +584,9 @@ sb.auth.onAuthStateChange(function (event, session) {
   // lock across it); hop out first.
   setTimeout(function () {
     refreshAdmin().then(function () { if (STATE.platform) renderSidebar(); });
+    // Signed in or out on another tab, or the session arrived late: My
+    // Armory is whoever is signed in now, never the last reader's rows.
+    if (MY.started && (CURRENT_USER ? CURRENT_USER.id : null) !== MY.userId) loadMyArmory();
   }, 0);
 });
 
@@ -587,6 +663,7 @@ async function loadAll() {
   else if (from) await openFromGuide(from);
   else restoreDraft();
   renderGuideStart();
+  loadMyArmory();
 }
 
 // The published Gunforma guides, for "Start from a guide". Always the
@@ -1287,7 +1364,7 @@ function renderSidebar() {
   if (share) share.hidden = !shareableId();
 }
 
-// A SAVED community guide is the only thing here with a page of its own
+// A SAVED Armory build is the only thing here with a page of its own
 // (/gg/, guide-share.mjs): a Gunforma guide being worked on is a draft,
 // which that page never serves, and publishing one lets the builder go.
 function shareableId() {
@@ -1301,9 +1378,9 @@ async function shareGuide() {
   var url = window.gunGuideUrl(id, (STATE.title || '').trim() || defaultBuildName());
   try {
     await navigator.clipboard.writeText(url);
-    toast('Link copied — anyone can open your guide at that address.');
+    toast('Link copied — anyone can open your build at that address.');
   } catch (e) {
-    window.prompt('Copy this link to share your guide:', url);
+    window.prompt('Copy this link to share your build:', url);
   }
 }
 
@@ -1312,8 +1389,8 @@ function saveLabel() {
     if (STATE.curated.published) return STATE.draftOf ? 'Publish changes →' : 'Publish Gunforma guide →';
     return STATE.savedId ? 'Update draft →' : 'Save as a draft →';
   }
-  if (STATE.savedId) return STATE.ownerId && CURRENT_USER && STATE.ownerId !== CURRENT_USER.id ? 'Update this Gun Guide →' : 'Update your Gun Guide →';
-  return 'Save to Gun Guides →';
+  if (STATE.savedId) return STATE.ownerId && CURRENT_USER && STATE.ownerId !== CURRENT_USER.id ? 'Update this Armory build →' : 'Update your Armory build →';
+  return 'Save & share →';
 }
 
 // What this build saves back to, once it is a saved row — and the way out.
@@ -1331,8 +1408,8 @@ function renderEditBanner() {
       head = 'Draft · Gunforma guide';
       body = 'Saving updates the draft <b>' + esc(STATE.title || 'this guide') + '</b>. It isn’t on Gun Guides until you publish it.';
     } else {
-      head = 'Editing · Community Gun Guide';
-      body = 'Saving updates <b>' + esc(STATE.title || 'this guide') + '</b> in place.';
+      head = 'Editing · Armory build';
+      body = 'Saving updates <b>' + esc(STATE.title || 'this build') + '</b> in place.';
     }
     el.innerHTML = '<span class="edit-banner-kind">' + head + '</span>' + body +
       '<br><button type="button" class="edit-banner-new" id="btn-new-build">Start a new build</button>';
@@ -1340,14 +1417,15 @@ function renderEditBanner() {
   }
   if (!STATE.dropped.length) { dropEl.hidden = true; return; }
   dropEl.hidden = false;
-  dropEl.innerHTML = 'Left out of this guide: ' + STATE.dropped.map(function (d) {
+  var noun = STATE.target === 'curated' ? 'guide' : 'build';
+  dropEl.innerHTML = 'Left out of this ' + noun + ': ' + STATE.dropped.map(function (d) {
     return '<b>' + esc(d.name) + '</b> (' + esc(d.why) + ')';
-  }).join(', ') + '. Saving updates the guide without ' + (STATE.dropped.length === 1 ? 'it' : 'them') + '.';
+  }).join(', ') + '. Saving updates the ' + noun + ' without ' + (STATE.dropped.length === 1 ? 'it' : 'them') + '.';
 }
 
 // An admin's save step: where it goes, and for a Gunforma guide its theme
 // and whether it is published. Nobody else sees this block — a signed-in
-// reader only ever saves a community guide.
+// reader only ever saves an Armory build.
 function renderSaveOpts(hasParts) {
   var el = document.getElementById('save-opts');
   if (!IS_ADMIN || !hasParts) { el.hidden = true; el.innerHTML = ''; return; }
@@ -1361,10 +1439,10 @@ function renderSaveOpts(hasParts) {
   if (STATE.savedId || STATE.draftOf) {
     // A saved row stays in its own table: moving a guide between the two is
     // a new guide, not an edit.
-    html += '<div class="save-opts-label">Saves to ' + (STATE.target === 'curated' ? 'Gunforma guides' : 'Community builds') + '</div>';
+    html += '<div class="save-opts-label">Saves to ' + (STATE.target === 'curated' ? 'Gunforma guides' : 'Armory builds') + '</div>';
   } else {
     html += '<div class="save-opts-label">Save to</div><div class="save-target">' +
-      '<label class="' + (STATE.target === 'community' ? 'on' : '') + '"><input type="radio" name="save-target" value="community"' + (STATE.target === 'community' ? ' checked' : '') + '> Community</label>' +
+      '<label class="' + (STATE.target === 'community' ? 'on' : '') + '"><input type="radio" name="save-target" value="community"' + (STATE.target === 'community' ? ' checked' : '') + '> Armory build</label>' +
       '<label class="' + (STATE.target === 'curated' ? 'on' : '') + '"><input type="radio" name="save-target" value="curated"' + (STATE.target === 'curated' ? ' checked' : '') + '> Gunforma guide</label>' +
     '</div>';
   }
@@ -1403,6 +1481,7 @@ function renderAll() {
   renderGuideStart();
   renderParts();
   renderSidebar();
+  renderMyTabs();        // a saved part's "Add to build" follows the picks
   persistDraft();
 }
 
@@ -1453,23 +1532,28 @@ function startFromGuide(id) {
 // only ever ADOPTED through ?edit= (openForEdit). A plain visit to the
 // Armory restores a new, unsaved build and nothing else — so a link to the
 // Armory can never land in edit mode on a saved guide.
+function draftSnapshot() {
+  if (!STATE.platform) return null;
+  return {
+    platformId: STATE.platform.id,
+    gunId: STATE.gun ? STATE.gun.id : null,
+    picks: STATE.picks,
+    title: STATE.title,
+    target: STATE.target,
+    savedId: STATE.savedId,
+    ownerId: STATE.ownerId,
+    curated: STATE.curated,
+    draftOf: STATE.draftOf,
+    draftOfTitle: STATE.draftOfTitle,
+    dropped: STATE.dropped,
+    startedFrom: STATE.startedFrom,
+  };
+}
 function persistDraft() {
   try {
-    if (!STATE.platform) { localStorage.removeItem(DRAFT_KEY); return; }
-    localStorage.setItem(DRAFT_KEY, JSON.stringify({
-      platformId: STATE.platform.id,
-      gunId: STATE.gun ? STATE.gun.id : null,
-      picks: STATE.picks,
-      title: STATE.title,
-      target: STATE.target,
-      savedId: STATE.savedId,
-      ownerId: STATE.ownerId,
-      curated: STATE.curated,
-      draftOf: STATE.draftOf,
-      draftOfTitle: STATE.draftOfTitle,
-      dropped: STATE.dropped,
-      startedFrom: STATE.startedFrom,
-    }));
+    var d = draftSnapshot();
+    if (!d) { localStorage.removeItem(DRAFT_KEY); return; }
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
   } catch (e) { /* storage unavailable — build just won't survive a reload */ }
 }
 
@@ -1527,8 +1611,9 @@ function editParam() {
 
 // While a saved guide is open, the URL says which one (?edit=), so a reload
 // reopens it and a plain Armory link does not. A new build has no ?edit=.
+// The tab's hash rides along: it is which tab is showing, not the build.
 function setEditParam(kind, id) {
-  try { history.replaceState(null, '', location.pathname + (id ? '?edit=' + kind + ':' + id : '')); } catch (e) {}
+  try { history.replaceState(null, '', location.pathname + (id ? '?edit=' + kind + ':' + id : '') + (location.hash || '')); } catch (e) {}
 }
 function clearEditParam() { setEditParam(null, null); }
 
@@ -1570,41 +1655,51 @@ async function readGuideRow(kind, id) {
   return { row: !res.error && res.data && res.data[0] || null, error: res.error };
 }
 
-async function openForEdit(kind, id) {
+// Resolves true once the row is the build on screen (opened, or already
+// open), falsy otherwise.
+// opts.inPage: My builds' Open, on a page that already has a build on
+// screen. The prompt then asks about THAT build (STATE, not the stored
+// draft — which can hold an old guide's edit a plain visit never showed),
+// and every way of not opening leaves the page exactly as it was: the
+// build, its identity and its ?edit= untouched. A page LOAD with ?edit=
+// has nothing on screen yet, so it falls back to the stored draft as before.
+async function openForEdit(kind, id, opts) {
+  var inPage = !!(opts && opts.inPage);
+  var noun = kind === 'curated' ? 'guide' : 'build';
+  function stay() { if (!inPage) { clearEditParam(); restoreDraft(); } }
   if (!CURRENT_USER) {
-    restoreDraft();
-    toast('Sign in to edit this guide, then open Edit on it again.',
+    if (!inPage) restoreDraft();
+    toast('Sign in to edit this ' + noun + ', then open it again.',
       'gunforma-signin.html?next=' + encodeURIComponent('gunforma-armory.html?edit=' + kind + ':' + id), 'Sign in');
-    clearEditParam();
+    if (!inPage) clearEditParam();
     return;
   }
   var got = await readGuideRow(kind, id);
   var row = got.row;
   if (!row || !PLATFORMS_BY_ID[row.platform_id]) {
-    clearEditParam();
-    restoreDraft();
-    toast(got.error ? 'Couldn’t open that guide: ' + (got.error.message || 'unknown error') : 'That guide isn’t there any more.');
+    stay();
+    toast(got.error ? 'Couldn’t open that ' + noun + ': ' + (got.error.message || 'unknown error') : 'That ' + noun + ' isn’t there any more.');
     return;
   }
   if (!canEditRow(kind, row)) {
-    clearEditParam();
-    restoreDraft();
-    toast(kind === 'curated' ? 'Only admins can edit Gunforma guides.' : 'Only this guide’s owner can edit it.');
+    stay();
+    toast(kind === 'curated' ? 'Only admins can edit Gunforma guides.' : 'Only this build’s owner can edit it.');
     return;
   }
 
-  var draft = readDraft();
+  var draft = inPage ? draftSnapshot() : readDraft();
   // A published Gunforma guide is never opened in place: Edit opens a draft.
   if (kind === 'curated' && row.is_published !== false) return openDraftOf(row, draft);
 
   // Reopening the same guide (a reload, or Edit again) keeps the unsaved
   // changes made here; anything else is a replacement and asks first.
   if (draft && draft.savedId === row.id && (draft.target || 'community') === kind) {
-    restoreDraft({ adopt: true });
+    if (!inPage) restoreDraft({ adopt: true });
     setEditParam(kind, row.id);
-    return;
+    if (inPage) toast('“' + (row.title || 'That build') + '” is already open here.');
+    return true;
   }
-  if (!confirmReplace(draft, row.title)) { clearEditParam(); restoreDraft(); return; }
+  if (!confirmReplace(draft, row.title)) { stay(); return false; }
 
   var draftOfTitle = '';
   if (kind === 'curated' && row.draft_of) {
@@ -1618,6 +1713,7 @@ async function openForEdit(kind, id) {
     published: false,
   });
   setEditParam(kind, row.id);
+  return true;
 }
 
 // Edit on a live Gunforma guide. Reopens the draft already being worked on
@@ -1769,7 +1865,7 @@ function resetBuild() {
 
 function startNewBuild() {
   if (Object.keys(STATE.picks).length &&
-      !window.confirm('Start a new build? This clears your picks here. The saved guide isn’t changed.')) return;
+      !window.confirm('Start a new build? This clears your picks here. Anything you saved isn’t changed.')) return;
   resetBuild();
 }
 
@@ -1803,7 +1899,7 @@ async function saveGuide() {
   if (!GUIDE_EDITING_LIVE && (STATE.target === 'curated' || foreign)) {
     toast(STATE.target === 'curated'
       ? 'Saving Gunforma guides isn’t switched on yet — it needs the database update.'
-      : 'Editing someone else’s Gun Guide isn’t switched on yet — it needs the database update.');
+      : 'Editing someone else’s Armory build isn’t switched on yet — it needs the database update.');
     return;
   }
   if (STATE.target === 'curated' && !IS_ADMIN) { toast('Only admins can save Gunforma guides.'); return; }
@@ -1879,7 +1975,7 @@ async function saveGuide() {
   if (res.error) {
     console.error('[armory] save failed', res.error);
     var msg = /relation .*gun_guides|schema cache/i.test(res.error.message || '')
-      ? 'Saving isn’t switched on yet — the Gun Guides table hasn’t been created.'
+      ? 'Saving isn’t switched on yet — the Armory builds table hasn’t been created.'
       : 'Couldn’t save: ' + (res.error.message || 'unknown error');
     toast(msg);
   } else if (published) {
@@ -1893,14 +1989,25 @@ async function saveGuide() {
       : 'Published — “' + title + '” is live.', 'gunforma-gun-guides.html', 'See it there');
     return;
   } else {
+    var firstSave = !STATE.savedId;
     STATE.savedId = (res.data && res.data[0] && res.data[0].id) || STATE.savedId;
     if (STATE.target === 'community' && !STATE.ownerId) STATE.ownerId = CURRENT_USER.id;
     STATE.dropped = [];
     setEditParam(STATE.target, STATE.savedId);
     persistDraft();
-    toast(STATE.target === 'curated'
-      ? 'Draft saved. It isn’t on Gun Guides until you publish it.'
-      : 'Saved to Gun Guides.', 'gunforma-gun-guides.html', 'See it there');
+    if (STATE.target === 'curated') {
+      toast('Draft saved. It isn’t on Gun Guides until you publish it.', 'gunforma-gun-guides.html', 'See it there');
+    } else {
+      // An Armory build has its own page, not a place on Gun Guides. "Save &
+      // share" copies that page's link on the first save; later saves just
+      // say so — the Share button is there for the link.
+      var copied = false;
+      if (firstSave) {
+        try { await navigator.clipboard.writeText(window.gunGuideUrl(STATE.savedId, plan.payload.title)); copied = true; } catch (e) {}
+      }
+      toast(copied ? 'Saved — link copied, ready to share.' : 'Saved.', '#my-builds', 'See My builds');
+    }
+    loadMyArmory();
   }
   renderSidebar();
 }
@@ -1958,6 +2065,347 @@ async function ensureNewTheme(label) {
 
 document.getElementById('btn-save').addEventListener('click', saveGuide);
 document.getElementById('btn-share').addEventListener('click', shareGuide);
+
+// ─── TABS: Build | My builds | Saved parts ─────────────────────────────────
+// Two reads, both the signed-in reader's own rows and nobody else's:
+//   my-builds    gun_guides where user_id = them (js/armory-builds.js)
+//   saved-parts  part_favorites where user_id = them — READ ONLY. The heart
+//                in the Parts Catalog is where a part is saved and unsaved;
+//                this page never writes the table.
+// Signed out, both tabs still show and say to sign in, with a button.
+//
+// The hash IS the tab. A tab is a link to its hash, so a click, Back/Forward
+// and a reload all arrive through hashchange / tabFromHash(); goTab() is how
+// code moves to one (Open, Add to build). No hash is the Build tab.
+function tabFromHash() {
+  var h = '';
+  try { h = (location.hash || '').replace(/^#/, ''); } catch (e) {}
+  return TABS.indexOf(h) !== -1 ? h : 'build';
+}
+function showTab(tab) {
+  if (TABS.indexOf(tab) === -1) tab = 'build';
+  CURRENT_TAB = tab;
+  TABS.forEach(function (t) {
+    var btn = document.getElementById('tab-' + t);
+    var panel = document.getElementById('panel-' + t);
+    if (btn) {
+      btn.classList.toggle('active', t === tab);
+      btn.setAttribute('aria-selected', String(t === tab));
+    }
+    if (panel) panel.hidden = t !== tab;
+  });
+  renderMyTabs();
+}
+// Moves to a tab as a click on it would: a new history entry, so Back
+// returns to the tab the reader came from.
+function goTab(tab) {
+  try { if (location.hash !== '#' + tab) location.hash = tab; } catch (e) {}
+  showTab(tab);
+}
+
+async function loadMyArmory() {
+  MY.started = true;
+  var uid = CURRENT_USER ? CURRENT_USER.id : null;
+  MY.userId = uid;
+  MY.builds = null;
+  MY.parts = null;
+  MY.partsError = null;
+  if (!uid) { MY.loading = false; renderMyTabs(); return; }
+  MY.loading = true;
+  renderMyTabs();
+  var got = await Promise.all([
+    window.ArmoryBuilds.load(sb, uid),
+    sb.from('part_favorites')
+      .select('product_id, created_at, products(id, name, manufacturers!products_brand_id_fkey(name))')
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false }),
+  ]);
+  if (MY.userId !== uid) return;      // signed out or switched while reading
+  MY.loading = false;
+  MY.builds = got[0];
+  if (got[1].error) { MY.partsError = got[1].error; MY.parts = []; }
+  else MY.parts = got[1].data || [];
+  renderMyTabs();
+}
+
+function myCounts() {
+  var b = MY.builds && !MY.builds.error ? MY.builds.rows.length : null;
+  var p = MY.parts && !MY.partsError ? MY.parts.length : null;
+  return { builds: b, parts: p };
+}
+
+// The two tab labels (with counts only when signed in and read), and the
+// one of the two panels that is showing.
+function renderMyTabs() {
+  var c = myCounts();
+  var signedIn = !!CURRENT_USER;
+  var tb = document.getElementById('tab-my-builds');
+  var tp = document.getElementById('tab-saved-parts');
+  if (tb) tb.textContent = 'My builds' + (signedIn && c.builds != null ? ' (' + c.builds + ')' : '');
+  if (tp) tp.textContent = 'Saved parts' + (signedIn && c.parts != null ? ' (' + c.parts + ')' : '');
+  if (CURRENT_TAB === 'my-builds') renderMyBuildsTab();
+  if (CURRENT_TAB === 'saved-parts') renderSavedPartsTab();
+}
+
+function signInHtml(what) {
+  return '<div class="tab-empty"><div class="tab-empty-title">Sign in to see your saved ' + what + '</div>' +
+    '<a class="tab-empty-btn" href="gunforma-signin.html?next=gunforma-armory.html">Sign in</a></div>';
+}
+function loadingHtml() {
+  return '<div class="tab-empty">Loading…</div>';
+}
+
+// ── My builds ──────────────────────────────────────────────────────────────
+// Open is ?edit=community:<id> — this reader's own row, never a Gunforma
+// guide — and asks before replacing the build on screen (openForEdit).
+function savedBuildActionsHtml(row) {
+  return '<a class="ab-act" href="gunforma-armory.html?edit=community:' + escAttr(row.id) + '#build" data-ma-open="' + escAttr(row.id) + '">Open</a>' +
+    (window.ArmoryBuilds.shareable(row) ? '<button type="button" class="ab-act" data-ma-share="' + escAttr(row.id) + '">Share</button>' : '') +
+    '<button type="button" class="ab-act danger" data-ma-delete="' + escAttr(row.id) + '">Delete</button>';
+}
+// Before the first read the session is not known yet either: "Loading…",
+// never a sign-in prompt flashed at a signed-in reader.
+function savedBuildsHtml() {
+  if (!MY.started) return loadingHtml();
+  if (!CURRENT_USER) return signInHtml('builds');
+  if (MY.loading || !MY.builds) return loadingHtml();
+  var data = MY.builds;
+  if (data.error) {
+    return '<div class="tab-empty">Couldn’t load your saved builds: ' + esc(data.error.message || 'unknown error') + '</div>';
+  }
+  if (!data.rows.length) {
+    return '<div class="tab-empty"><div class="tab-empty-title">No saved builds yet.</div>' +
+      '<a href="#build">Build one →</a></div>';
+  }
+  return '<div class="ab-grid">' + data.rows.map(function (row) {
+    return window.ArmoryBuilds.cardHtml(row, data, savedBuildActionsHtml(row));
+  }).join('') + '</div>';
+}
+function renderMyBuildsTab() {
+  var panel = document.getElementById('panel-my-builds');
+  if (!panel) return;
+  panel.innerHTML = savedBuildsHtml();
+  panel.querySelectorAll('a[data-ma-open]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      // A modified click opens the link in a new tab, as any link does.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button) return;
+      e.preventDefault();
+      openSavedBuild(a.dataset.maOpen);
+    });
+  });
+  panel.querySelectorAll('button[data-ma-share]').forEach(function (b) {
+    b.addEventListener('click', function () { shareArmoryBuild(b.dataset.maShare); });
+  });
+  panel.querySelectorAll('button[data-ma-delete]').forEach(function (b) {
+    b.addEventListener('click', function () { deleteArmoryBuild(b.dataset.maDelete, b); });
+  });
+}
+
+// Open lands on the Build tab with that build loaded — after the same
+// prompt as any replacement. A "no" stays on My builds with nothing changed.
+async function openSavedBuild(id) {
+  var opened = await openForEdit('community', id, { inPage: true });
+  if (opened) goTab('build');
+  return !!opened;
+}
+
+function myBuildRow(id) {
+  return MY.builds && MY.builds.rows ? MY.builds.rows.find(function (r) { return r.id === id; }) || null : null;
+}
+
+async function shareArmoryBuild(id) {
+  var row = myBuildRow(id);
+  if (!row || !window.ArmoryBuilds.shareable(row)) return;
+  await window.ArmoryBuilds.copyLink(row);
+  toast('Link copied — anyone can open “' + (row.title || 'your build') + '” at that address.');
+}
+
+// Deleted only when a row comes back: a delete RLS refuses matches nothing
+// and returns no error (CLAUDE.md, "A green result is not evidence").
+async function deleteArmoryBuild(id, btn) {
+  var row = myBuildRow(id);
+  if (!row || !CURRENT_USER) return;
+  if (!window.confirm('Delete “' + (row.title || 'this build') + '”? Its page and share link stop working, and this can’t be undone.')) return;
+  if (btn) btn.disabled = true;
+  var res = await sb.from('gun_guides').delete().eq('id', id).eq('user_id', CURRENT_USER.id).select('id');
+  if (res.error || !Array.isArray(res.data) || res.data.length !== 1) {
+    if (btn) btn.disabled = false;
+    toast('Couldn’t delete it' + (res.error ? ': ' + (res.error.message || 'unknown error') : ' — it may already be gone. Reload and try again.'));
+    return;
+  }
+  MY.builds.rows = MY.builds.rows.filter(function (r) { return r.id !== id; });
+  // The build on screen WAS that row. Its picks and name are the reader's
+  // work and stay; the identity goes (CLAUDE.md, "Replacing the builder's
+  // contents" — decided on purpose: it is no longer a saved build), so the
+  // next save makes a new row instead of quietly re-creating the deleted one.
+  if (STATE.target === 'community' && STATE.savedId === id) {
+    STATE.savedId = null;
+    STATE.ownerId = null;
+    STATE.draftOf = null;
+    STATE.draftOfTitle = '';
+    STATE.dropped = [];
+    clearEditParam();
+    renderAll();
+    toast('Deleted “' + (row.title || 'the build') + '”. Its parts are still on the Build tab as a new, unsaved build.', '#build', 'Build');
+    return;
+  }
+  renderMyTabs();
+  toast('Deleted “' + (row.title || 'the build') + '”.');
+}
+
+// ── Saved parts ────────────────────────────────────────────────────────────
+// Whether a saved part can go into the build on screen, by the Armory's own
+// rules — the same availableFor() the pickers list from and the same fit
+// tags they draw — and in words when it can't. Never a reason the pickers
+// would not give.
+function slotCategories() {
+  var cats = {};
+  SLOT_GROUPS.forEach(function (g) { g.slots.forEach(function (s) { cats[s.cat] = 1; }); });
+  return cats;
+}
+function savedPartVerdict(p) {
+  if (!STATE.platform) return { ok: false, reason: 'Pick a pistol on the Build tab first.' };
+  if (p.platform_ids.indexOf(STATE.platform.id) === -1) return { ok: false, reason: 'Not a ' + STATE.platform.name + ' part.' };
+  var cat = p.category;
+  if (!slotCategories()[cat]) return { ok: false, reason: 'The Armory has no ' + window.categorySingular(cat).toLowerCase() + ' slot.' };
+  var cur = STATE.picks[cat];
+  if (cur && cur.productId === p.id) return { ok: false, inBuild: true, reason: null };
+  var meta = cardMeta(cat, p);
+  var tag = meta && meta.tag || null;
+  if (!availableFor(cat).some(function (a) { return a.id === p.id; })) {
+    return { ok: false, tag: tag, reason: whyNotAvailable(cat, p) };
+  }
+  if (tag && !tag.selectable) return { ok: false, tag: tag, reason: tag.reason || tag.label };
+  var curP = cur ? PRODUCTS_BY_ID[cur.productId] : null;
+  return { ok: true, tag: tag,
+    note: curP ? 'Replaces ' + displayProductName({ brand: curP.brand, name: curP.name }) + '.' : (meta && meta.note) || null };
+}
+
+// Which pick (or the model) keeps a part out: try the build without each
+// one in turn. Restores STATE before returning, whatever happens.
+function whyNotAvailable(cat, p) {
+  if (cat === 'compensator') { var hidden = compHiddenReason(); if (hidden) return hidden; }
+  if (cat === 'barrel' && tierMode()) {
+    var kit = pickedProduct('slide');
+    if (kit && (FIT.slide[kit.id] || {}).includes_barrel === true) return 'Your slide kit comes with its own barrel.';
+  }
+  if (SPEC[cat] && !SPEC[cat][p.id]) return 'No fit data for this part yet, so the Armory can’t place it.';
+  var picks = STATE.picks, gun = STATE.gun, culprit = null;
+  try {
+    Object.keys(picks).some(function (other) {
+      if (other === cat) return false;
+      var without = Object.assign({}, picks);
+      delete without[other];
+      STATE.picks = without;
+      if (availableFor(cat).some(function (a) { return a.id === p.id; })) {
+        var op = PRODUCTS_BY_ID[picks[other].productId];
+        culprit = op ? displayProductName({ brand: op.brand, name: op.name }) : 'your ' + window.categorySingular(other).toLowerCase();
+        return true;
+      }
+      return false;
+    });
+    if (!culprit && gun) {
+      STATE.picks = picks;
+      STATE.gun = null;
+      if (availableFor(cat).some(function (a) { return a.id === p.id; })) culprit = 'the ' + gun.name;
+    }
+  } finally {
+    STATE.picks = picks;
+    STATE.gun = gun;
+  }
+  return culprit ? 'Doesn’t fit with ' + culprit + '.' : 'Doesn’t fit this build.';
+}
+
+function savedPartsHtml() {
+  if (!MY.started) return loadingHtml();
+  if (!CURRENT_USER) return signInHtml('parts');
+  if (MY.loading || !MY.parts) return loadingHtml();
+  if (MY.partsError) {
+    return '<div class="tab-empty">Couldn’t load your saved parts: ' + esc(MY.partsError.message || 'unknown error') + '</div>';
+  }
+  if (!MY.parts.length) {
+    return '<div class="tab-empty"><a href="gunforma-parts-catalog.html">Heart parts in the Parts Catalog to save them here →</a></div>';
+  }
+  return '<div class="ab-grid">' + MY.parts.map(savedPartHtml).join('') + '</div>' +
+    '<div class="tab-foot">Saved with the ♥ in the <a href="gunforma-parts-catalog.html">Parts Catalog</a> — tap it there to remove one.</div>';
+}
+function renderSavedPartsTab() {
+  var panel = document.getElementById('panel-saved-parts');
+  if (!panel) return;
+  window.ArmoryBuilds.ensureCss();
+  panel.innerHTML = savedPartsHtml();
+  panel.querySelectorAll('button[data-ma-add]').forEach(function (b) {
+    b.addEventListener('click', function () { addSavedPart(b.dataset.maAdd); });
+  });
+}
+
+// One saved part as a card in the My builds grid's design: its photo (the
+// default option's, or that option's swatch), category, name, price under
+// the picker card's rule, the fit tag the pickers would draw, and why not.
+function savedPartHtml(fav) {
+  var p = PRODUCTS_BY_ID[fav.product_id];
+  if (!p) {
+    // Not in the Armory's catalog (unapproved, or merged into another part):
+    // named, never offered.
+    var fp = fav.products || {};
+    var gone = displayProductName({ brand: (fp.manufacturers && fp.manufacturers.name) || '', name: fp.name || 'A saved part' });
+    return '<div class="ab-card sp-card"><div class="sp-gone"><b>' + esc(gone) + '</b><br>Not in the Armory’s catalog right now.</div></div>';
+  }
+  var dv = p.defaultVariant;
+  var dispName = displayProductName({ brand: p.brand, name: p.name });
+  var swatch = window.variantMediaHtml({ color: dv && dv.color }, 'ab-media', p.brand);
+  var photo = dv && dv.primary_image_url
+    ? '<img src="' + escAttr(dv.primary_image_url) + '" alt="' + escAttr(dispName) + '" loading="lazy"' +
+        ' data-fallback="' + escAttr(swatch) + '" onerror="this.parentElement.innerHTML=this.dataset.fallback" />'
+    : swatch;
+  // Nothing is picked on a saved part: the picker card's headline.
+  var head = window.optionHeadline(optionPrices(p), null);
+  var v = savedPartVerdict(p);
+  var label = v.ok ? 'Add to build' : (v.inBuild ? 'In your build' : 'Can’t add');
+  return '<div class="ab-card sp-card" data-ma-part="' + escAttr(p.id) + '">' +
+    '<div class="ab-photo">' + photo + '</div>' +
+    '<div class="ab-body">' +
+      '<div class="ab-kicker">' + esc(window.categorySingular(p.category)) + (p.discontinued ? ' · Discontinued' : '') + '</div>' +
+      '<div class="ab-title">' + esc(dispName) + '</div>' +
+      (v.tag ? fitTagHtml(v.tag) : '') +
+      (!v.ok && v.reason ? '<div class="sp-reason">' + esc(v.reason) + '</div>' : '') +
+      (v.ok && v.note ? '<div class="sp-note">' + esc(v.note) + '</div>' : '') +
+    '</div>' +
+    '<div class="ab-foot"><span class="ab-total' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span></div>' +
+    '<div class="ab-actions"><button type="button" class="ab-act primary" data-ma-add="' + escAttr(p.id) + '"' + (v.ok ? '' : ' disabled') + '>' + label + '</button></div>' +
+  '</div>';
+}
+
+// Adds one part to the build on screen, then shows it there: the Build tab,
+// scrolled to the part's slot. Not a replacement of the builder's contents:
+// the build keeps its identity (target, savedId, ownerId, draft links), so
+// a saved build stays the row the next save updates.
+function addSavedPart(productId) {
+  var p = PRODUCTS_BY_ID[productId];
+  if (!p) return false;
+  var v = savedPartVerdict(p);
+  if (!v.ok) { if (v.reason) toast(v.reason); return false; }   // the button is disabled; belt and braces
+  STATE.picks[p.category] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
+  STATE.openCat = null;
+  // A pick the new part pushes out (a comp under a built-in-comp slide, say)
+  // goes as it does from the picker — said in the same toast, not a second
+  // one that would replace it.
+  var removed = reconcilePicks({ quiet: true });
+  renderAll();
+  goTab('build');
+  var slot = document.querySelector('.slot[data-cat="' + p.category + '"]');
+  if (slot) {
+    if (slot.scrollIntoView) slot.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    slot.classList.add('just-added');
+    setTimeout(function () { slot.classList.remove('just-added'); }, 1700);
+  }
+  toast('Added ' + displayProductName({ brand: p.brand, name: p.name }) + ' to your build' +
+    (removed.length ? ' — removed ' + removed.join(', ') + ', which no longer fits.' : '.'));
+  return true;
+}
+
+window.addEventListener && window.addEventListener('hashchange', function () { showTab(tabFromHash()); });
+showTab(tabFromHash());
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }

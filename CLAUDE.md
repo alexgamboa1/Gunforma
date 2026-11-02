@@ -515,8 +515,12 @@ read. It copies `build-og.mjs`'s URL shape and `gun-hub.mjs`'s chrome:
   failed read is `_pg.mjs`'s 503.
 - **Published Gunforma guides are indexable and in the sitemap**
   (`/sitemap-guides.xml`, no lastmod — `guides` has no `updated_at`).
-  **Community guides are served but `noindex`** (meta and `X-Robots-Tag`)
-  and never submitted, until titles can be reported (loadouts-spec §7.5).
+  **Armory builds — a reader's `gun_guides` row, called a "community
+  guide" until 2026-11-02 — are served but `noindex`** (meta and
+  `X-Robots-Tag`) and never submitted, until titles can be reported
+  (loadouts-spec §7.5). Their page reads "Armory build by @username" and
+  its crumb leads to the Armory, not to Gun Guides (which lists Gunforma's
+  own guides only).
 - **Embeds name every FK**: `gun_guides` carries TWO to `guns` (`gun_id`
   and the composite), so a bare `guns(...)` there is PGRST201. The
   builder's username is a separate, non-fatal read (`gun_guides.user_id`
@@ -548,7 +552,8 @@ read. It copies `build-og.mjs`'s URL shape and `gun-hub.mjs`'s chrome:
 collage at 1200x630 — the ~1.91:1 shape scrapers give the large card (see
 **SEO invariants**): a header band with the Gunforma logo
 (`assets/gunforma-logo.png`, 60px tall so it still reads when the card is
-shown ~500px wide) and "GUN GUIDE" or "COMMUNITY GUIDE" — a community
+shown ~500px wide) and "GUN GUIDE" or "ARMORY BUILD" (`bandLabel()`;
+`COLLAGE_VERSION` 4 moved every card off "COMMUNITY GUIDE") — a reader's
 title never reads as a Gunforma guide — then the parts in build order
 (`BuildCategories.orderParts`, the browser file evaluated by
 `_build-categories.mjs`, never a server copy), up to six tiles with five
@@ -1538,13 +1543,13 @@ Registered today:
 | `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
 | `scripts/discontinued.test.mjs` | a discontinued part hidden or sold — its page showing a price, a buy row or a JSON-LD offer, missing its "Discontinued" badge, offering a successor the database does not name or one that is discontinued or unapproved, suggesting an unapproved or discontinued "similar" part, or reading `replaced_by_id` for a live part; a builder picker, the review queue, the catalog or the Armory filtering discontinued parts out of its read again, the catalog's or the Armory's "Show discontinued" toggle starting on, a guide or build no longer marking one; the sitemap or `/parts` dropping discontinued pages, or listing an address that 301s; `PART_REDIRECTS` or `js/part-redirects.js` drifting from the `/parts/` 301s in `netlify.toml`, or a catalog surface offering a row that 301s — runs `product-page.mjs` against a stubbed catalog and reads the pages' sources |
 | `scripts/guide-url.test.mjs` | `js/guide-url.js` and `_guide-url.mjs` drifting apart — a Share button or card link naming a different `/gg/` URL from the canonical the page declares — or the guide slug rule drifting from `buildSlug()` |
-| `scripts/guide-share.test.mjs` | a `/gg/` page answering 404 when PostgREST failed (503 + Retry-After after one retry, for a failed guides, gun_guides or parts read), answering anything but 404 for zero rows from both tables or for a path with no uuid, serving a Gunforma draft or a taken-down community guide (the published/removed filters must be SENT), a canonical not built from the title, a community guide without noindex or a published one with it, the share card not carrying the count and today's total, a buy row off `/go/`, a stale price stated, a sibling option's listing standing in for the saved one, a discontinued or typed part sold, or an unnamed embed off `gun_guides`; also og:image not naming the collage at its declared 1200x630 image/png — runs `guide-share.mjs` against a stubbed fetch |
-| `scripts/guide-og.test.mjs` | a Gun Guide's share image that is not 1200x630 in its own bytes; a JPEG, PNG or WebP photo loaded but not DRAWN (pixels read off the render — resvg draws a WebP as nothing); a photo that fails (status, reject, timeout, not an image) taking the card down, not drawing as its swatch, or being cached durably; a failed render or read serving anything but og-default.png's bytes; a stale hash not 301ing to the current one; the hash not moving with a part, an option, the title, a photo or today's total; the logo not drawn in the header band, or a corner wordmark back; the hash not moving with `COLLAGE_VERSION`; tiles out of build order, past six without "+N", borrowing another option's photo or fetching a snapshot's URL; the `/gg/` page naming a URL the image function does not answer 200 on, or not falling back to og-default.png when the collage cannot be named — runs `guide-og.mjs` with the real WebAssembly renderer against a stubbed fetch |
+| `scripts/guide-share.test.mjs` | a `/gg/` page answering 404 when PostgREST failed (503 + Retry-After after one retry, for a failed guides, gun_guides or parts read), answering anything but 404 for zero rows from both tables or for a path with no uuid, serving a Gunforma draft or a taken-down community guide (the published/removed filters must be SENT), a canonical not built from the title, a community guide without noindex or a published one with it, the share card not carrying the count and today's total, a buy row off `/go/`, a stale price stated, a sibling option's listing standing in for the saved one, a discontinued or typed part sold, or an unnamed embed off `gun_guides`; also og:image not naming the collage at its declared 1200x630 image/png — runs `guide-share.mjs` against a stubbed fetch; an Armory build's page saying "community" anywhere, or not "Armory build by @<username>" with its crumb to the Armory |
+| `scripts/guide-og.test.mjs` | a Gun Guide's share image that is not 1200x630 in its own bytes; a JPEG, PNG or WebP photo loaded but not DRAWN (pixels read off the render — resvg draws a WebP as nothing); a photo that fails (status, reject, timeout, not an image) taking the card down, not drawing as its swatch, or being cached durably; a failed render or read serving anything but og-default.png's bytes; a stale hash not 301ing to the current one; the hash not moving with a part, an option, the title, a photo or today's total; the logo not drawn in the header band, or a corner wordmark back; the hash not moving with `COLLAGE_VERSION`; tiles out of build order, past six without "+N", borrowing another option's photo or fetching a snapshot's URL; the `/gg/` page naming a URL the image function does not answer 200 on, or not falling back to og-default.png when the collage cannot be named — runs `guide-og.mjs` with the real WebAssembly renderer against a stubbed fetch; a reader's build banded anything but ARMORY BUILD |
 | `scripts/gun-guide-buy.test.mjs` | an open Gun Guide selling a part dishonestly — a stale price stated as a number or falling back to MSRP (the buy row must read "Check price"), a sibling option's listing standing in for the SAVED option (a gone saved option falls back to the product block, and a maker-only one then reads "Check price", never a sibling's MSRP), a maker-only part without its `/go/part/<id>` button or with `sponsored` on it, a discontinued or typed part given a buy row, the live total drifting from `js/build-total.js`'s number (the one a build's page shows), per-block disclosures where the guide says ONE line, or the catalog panel's own `renderBlock` losing its disclosure — runs `js/affiliate.js`'s real ingestion and the page's own inline script over a stubbed catalog |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
-| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub |
+| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), any write to `part_favorites`, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; and Gun Guides growing a Community tab or a `gun_guides` read back |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -3456,9 +3461,11 @@ dropdowns filtered live by PARTS_BUILDER_COMPATIBILITY_LOGIC.md (barrel↔slide
 length + `barrel_slide_requirements`, `threaded_barrel_ok`, the comp rules,
 `FrameFit` for grips, `magwell_frame_requirements`). Saving writes a row to
 **`gun_guides`** (`supabase/migrations/20261027120000_gun_guides.sql`), shown
-by **`gunforma-gun-guides.html`**, which also lists the curated `guides` rows
-(so that table now has TWO readers — the old "only `from('guides')` query"
-claim is dead). The old page's drafts list, remix, favourites sort,
+by the Armory's **My builds** tab and the profile's **Armory builds** tab
+(see **The Armory's tabs** below) and on its own `/gg/` page.
+**`gunforma-gun-guides.html`** lists the curated `guides` rows only (so
+that table has TWO readers — the old "only `from('guides')` query" claim
+is dead). The old page's drafts list, remix, favourites sort,
 `?prefill=`/`?build=` handling and post-build handoff are **gone on purpose**;
 posting a real build is still only `gunforma-post-build.html`, and the
 `ARMORY_POST_KEY` handshake there is untouched. The Armory no longer reads or
@@ -3492,9 +3499,10 @@ rule):
   **Published** switch. Themes are rows in **`guide_themes`** (the CHECK
   over four literals is gone; `guides.category` is a foreign key to it), and
   "New theme…" in the save step inserts one — admins only.
-- **Edit on every card, for who may use it** — admins on every card, a
-  community guide's owner on their own, nobody else (`canEdit()` in the
-  gallery). It opens `gunforma-armory.html?edit=<curated|community>:<uuid>`,
+- **Edit on every card, for who may use it** — on Gun Guides, admins on
+  every card and nobody else (`canEdit()` in the gallery); a reader's own
+  Armory builds open from the Armory's My builds tab and the profile. Both open
+  `gunforma-armory.html?edit=<curated|community>:<uuid>`,
   which ADOPTS the row: `STATE.target`, `savedId`, `ownerId` and the theme
   settings are the build's identity, set together on open and cleared
   together by "Start a new build" (see **Replacing the builder's
@@ -3587,10 +3595,58 @@ variant's photo as a stand-in.
   (`?next=gunforma-armory.html`), with in-progress picks held in localStorage
   across the OAuth round trip.
 
+**The Armory's tabs (Alex, 2026-11-02).** Under the title, Gun Guides'
+tab bar: **Build | My builds (N) | Saved parts (N)**. Build is the builder
+and the default. Each tab is a link to its own hash — `#build` (or none),
+`#my-builds`, `#saved-parts` — so the profile and toasts link straight to
+one and Back/Forward and reload keep it; `setEditParam()` keeps the hash
+when it writes `?edit=`. Counts show only when signed in; signed out both
+tabs say "Sign in to see your saved builds / parts" with a button, and
+before the session is read they say "Loading…", never a sign-in flash.
+Both are full-width grids of the Gun Guides card (`.ab-grid` / `.ab-card`
+in `js/armory-builds.js`, Gun Guides' values under its own prefix), one
+per row at phone width.
+
+- **My builds** are the reader's own `gun_guides` rows (`user_id` =
+  them, newest first), drawn by **`js/armory-builds.js`** — the one read
+  and card, shared with the profile's **Armory builds** tab so the two
+  lists cannot drift: the first five parts as photo tiles in build order
+  and a "+N" (the saved option's photo, else its swatch), model, title
+  (linking `/gg/`), today's total from `js/build-total.js` and the part
+  count. Empty: "No saved builds yet. Build one →" (to `#build`). Actions:
+  **Open** (`?edit=community:<id>#build`; in the page it runs
+  `openForEdit(…, { inPage: true })`, which asks about the build ON SCREEN
+  and leaves it, its identity, its `?edit=` and the tab untouched on a
+  "no", and lands on the Build tab with the build loaded on a yes), **Share** (copies the
+  `/gg/` URL; not on a build an admin took down) and **Delete** (confirm,
+  done only when a row comes back). Deleting the build that is open keeps
+  its parts and drops its identity, so the next save is a new row rather
+  than a quiet re-make of the deleted one. The profile tab offers Open and
+  Share only.
+- **Saved parts** are the reader's `part_favorites` rows, **read only**.
+  Empty: "Heart parts in the Parts Catalog to save them here →".
+  "Add to build" puts one in the build on screen — then lands on the Build
+  tab, scrolled to that part's slot — only when the pickers would offer it (`availableFor()` and the same fit tags), and otherwise is
+  disabled with the reason ("Doesn't fit with <the pick it clashes
+  with>.", "Not a <pistol> part.", a tag's reason). Adding is not
+  replacing the builder's contents: target, `savedId`, `ownerId` and the
+  title are untouched.
+- **Names.** A reader's saved build is an **"Armory build"** everywhere a
+  reader sees it — the save button is **"Save & share →"** (the first save
+  copies the build's link), "Update your Armory build →", the edit banner,
+  the share card's band and the `/gg/` page. `STATE.target`, `?edit=` and
+  `x-guide-share` keep `community`: identifiers, not copy. **Gun Guides
+  shows Gunforma guides only** — the Community builds tab is gone, and the
+  gallery never reads `gun_guides`; an admin edits or deletes a reader's
+  build from its `?edit=community:` link, not from a gallery card.
+  `scripts/guide-editor.test.mjs` pins all of it.
+
 **Favourites are NOT part of this.** `part_favorites` is a standalone
 watchlist that will back price-drop emails. The heart lives on
-`gunforma-parts-catalog.html` (the only write path), the catalog has a
-"My Favorites" tab, and the profile has a "Favorite parts" tab — all three
-read the table directly and none of them needs the Armory. The Armory only
-ever *read* favourites, to sort them first in its picker; the rebuilt page
-does not read them at all yet. Leave all of it alone.
+`gunforma-parts-catalog.html` (where a part is saved), the catalog has a
+"My Favorites" tab, and the profile has a "Favorite parts" tab whose card
+also carries a **Remove** (a delete — the one other write path, older than
+the Armory's Saved parts tab). All of them read the table directly and none needs the Armory.
+The Armory's Saved parts tab **reads** favourites and never writes them —
+the guide-editor test refuses a write from that page. Leave all of it
+alone.

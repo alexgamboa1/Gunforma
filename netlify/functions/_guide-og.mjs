@@ -48,7 +48,8 @@ export const OG_DEFAULT_H = 630;
 
 // 2: the logo moved from a small bottom-right wordmark to a header band.
 // 3: the band label and the model line up to 36px (15px at 500px wide).
-export const COLLAGE_VERSION = 3;
+// 4: a reader's build is labelled ARMORY BUILD, not COMMUNITY GUIDE.
+export const COLLAGE_VERSION = 4;
 // Up to six tiles. A guide of more than six parts shows five photos and a
 // "+N" tile — the Gun Guides card's rule, one row more.
 export const MAX_TILES = 6;
@@ -130,7 +131,7 @@ export function parseOgPath(pathname) {
 export async function shareImageFor(found, variants, { loadCategories = loadBuildCategories } = {}) {
   const title = guideTitle(found && found.row);
   const count = guideParts(found && found.row).length;
-  const alt = 'Gun Guide: ' + title + ' — ' + count + (count === 1 ? ' part' : ' parts') + ' on the ' + guideModel(found && found.row);
+  const alt = (found && found.kind === 'curated' ? 'Gun Guide: ' : 'Armory build: ') + title + ' — ' + count + (count === 1 ? ' part' : ' parts') + ' on the ' + guideModel(found && found.row);
   try {
     const BuildCategories = await loadCategories();
     if (!BuildCategories) throw new Error('js/build-categories.js is not in the bundle');
