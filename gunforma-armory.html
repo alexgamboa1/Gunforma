@@ -117,11 +117,11 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
    injected rules land on these same class names (CLAUDE.md, "Nor is the
    part picker"). */
 .picker-panel { background: #fafaf8; border: 0.5px solid #e8e8e8; border-radius: 6px; margin-top: 8px; }
-.picker-tools { padding: 10px 12px 0; }
-.picker-search { width: 100%; font-family: inherit; font-size: 12.5px; color: #1a1a1a; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 10px; }
+.picker-tools { padding: 10px 12px 0; display: flex; gap: 8px; align-items: center; }
+.picker-search { flex: 1; min-width: 0; width: 100%; font-family: inherit; font-size: 12.5px; color: #1a1a1a; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 10px; }
 .picker-search:focus { outline: none; border-color: #4a9edd; }
 .part-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(175px, 1fr)); gap: 8px; padding: 10px 12px 12px; max-height: 620px; overflow-y: auto; }
-.part-card { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, box-shadow 0.15s; }
+.part-card { position: relative; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s, box-shadow 0.15s; }
 .part-card:hover { border-color: #4a9edd; box-shadow: 0 3px 12px rgba(0,0,0,0.05); }
 .part-card-photo { aspect-ratio: 4/3; background: #fff; border-bottom: 0.5px solid #f4f3ee; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .part-card-photo img { width: 100%; height: 100%; object-fit: contain; padding: 6px; display: block; }
@@ -137,6 +137,16 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-btn.add { background: #4a9edd; color: #fff; border-color: #4a9edd; }
 .part-card-btn.add:hover { background: #2a7bbd; }
 @media (max-width: 600px) { .part-grid { grid-template-columns: repeat(2, 1fr); } }
+/* The ♥ is js/favorites.js's: over a picker card's photo, as in the Parts
+   Catalog; in the row on a picked card. "Saved" narrows an open picker to
+   the reader's hearted parts — fit rules unchanged. */
+.part-card .fav-btn { top: 6px; right: 6px; width: 28px; height: 28px; font-size: 14px; }
+.fav-btn.fav-inline { position: static; flex-shrink: 0; width: 28px; height: 28px; font-size: 14px; }
+.picker-saved { flex-shrink: 0; font-family: inherit; font-size: 11px; font-weight: 700; padding: 8px 11px; border-radius: 4px; border: 0.5px solid #d5d3ca; background: #fff; color: #888; cursor: pointer; white-space: nowrap; transition: all 0.15s; }
+.picker-saved:hover { color: #d85a30; border-color: #d85a30; }
+.picker-saved[aria-pressed="true"] { color: #d85a30; border-color: #d85a30; background: #fff5f1; }
+.picker-saved-empty { padding: 14px 12px 2px; font-size: 12px; color: #888; }
+.sp-card { position: relative; }
 
 /* PICKED PART */
 .picked { display: flex; align-items: flex-start; gap: 12px; background: #f6fdf9; border: 0.5px solid #86cfad; border-radius: 6px; padding: 10px; }
@@ -401,6 +411,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/guide-url.js"></script>
 <script src="js/build-total.js"></script>
 <script src="js/armory-builds.js"></script>
+<script src="js/favorites.js"></script>
 <script src="js/frame-fit.js"></script>
 <script src="js/slide-fit.js"></script>
 <script src="js/nav.js"></script>
@@ -553,6 +564,10 @@ var MY = {
   partsError: null,
 };
 
+// The pickers' "Saved" filter: only the reader's hearted parts. One switch
+// for every picker, so it stays on while they move between slots.
+var SAVED_ONLY = false;
+
 var DRAFT_KEY = 'gf-armory-picks-v1';
 var NEW_THEME = '__new__';
 
@@ -588,6 +603,40 @@ sb.auth.onAuthStateChange(function (event, session) {
     // Armory is whoever is signed in now, never the last reader's rows.
     if (MY.started && (CURRENT_USER ? CURRENT_USER.id : null) !== MY.userId) loadMyArmory();
   }, 0);
+});
+
+// ─── THE ♥ ──────────────────────────────────────────────────────────────────
+// js/favorites.js, the Parts Catalog's heart: the same read, the same
+// verified write (done only when a row comes back; flipped back and toasted
+// when not). Hearting a part never touches the build — not STATE.picks,
+// not its identity. The Saved parts tab's list is MY.parts, kept in step
+// here so its count and grid move with every heart on the page.
+var FAV_REMOVED = {};               // product id -> {row, index} while an un-heart is in flight
+function onFavoriteChange(id, isFav, phase) {
+  if (phase === 'saved') { delete FAV_REMOVED[id]; return; }
+  if (Array.isArray(MY.parts) && !MY.partsError) {
+    var at = MY.parts.findIndex(function (r) { return r.product_id === id; });
+    if (isFav && at === -1) {
+      var back = FAV_REMOVED[id];
+      delete FAV_REMOVED[id];
+      if (back) MY.parts.splice(Math.min(back.index, MY.parts.length), 0, back.row);
+      else MY.parts.unshift({ product_id: id, created_at: new Date().toISOString(), products: null });
+    } else if (!isFav && at !== -1) {
+      FAV_REMOVED[id] = { row: MY.parts[at], index: at };
+      MY.parts.splice(at, 1);
+      if (phase === 'revert') delete FAV_REMOVED[id];
+    }
+  }
+  renderMyTabs();
+}
+Favorites.init({
+  sb: sb,
+  user: function () { return CURRENT_USER; },
+  toast: function (msg, href, linkText) { toast(msg, href, linkText); },
+  // The build in progress is in localStorage (persistDraft) and comes back
+  // after the round trip, as it does for Save.
+  signInHref: 'gunforma-signin.html?next=gunforma-armory.html',
+  onChange: onFavoriteChange,
 });
 
 // ─── LOAD ──────────────────────────────────────────────────────────────────
@@ -1031,8 +1080,12 @@ function partCardHtml(cat, p, meta) {
   // Nothing is picked on a picker card, so js/option-price.js's opening
   // headline: "From" the lowest priced option, or the one option's price.
   var head = window.optionHeadline(optionPrices(p), null);
-  var disabled = !!(meta.tag && !meta.tag.selectable);
+  // meta.blocked: a saved part the pickers would not list (the "Saved"
+  // filter shows it anyway), with the reason in words.
+  var disabled = !!(meta.tag && !meta.tag.selectable) || !!meta.blocked;
+  var reason = meta.blocked || (meta.tag && !meta.tag.selectable ? meta.tag.reason : null);
   return '<div class="part-card' + (disabled ? ' wont-fit' : '') + '" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
+    Favorites.buttonHtml(p.id, Favorites.has(p.id)) +
     '<div class="part-card-photo">' + photo + '</div>' +
     '<div class="part-card-body">' +
       '<span class="part-card-brand">' + esc(p.brand) + '</span>' +
@@ -1041,7 +1094,7 @@ function partCardHtml(cat, p, meta) {
       (meta.tag || meta.recommended
         ? '<span class="part-card-tags">' + (meta.recommended ? '<span class="part-card-badge">Recommended</span> ' : '') + fitTagHtml(meta.tag) + '</span>'
         : '') +
-      (disabled && meta.tag.reason ? '<span class="part-card-reason">' + esc(meta.tag.reason) + '</span>' : '') +
+      (disabled && reason ? '<span class="part-card-reason">' + esc(reason) + '</span>' : '') +
       (meta.note ? '<span class="part-card-note">' + esc(meta.note) + '</span>' : '') +
       (p.variants.length > 1 ? '<span class="part-card-variants">' + p.variants.length + ' colors / options</span>' : '') +
       '<span class="part-card-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
@@ -1143,11 +1196,32 @@ function slotHtml(slot) {
   }
 
   if (isOpen && options.length) {
-    html += '<div class="picker-panel">' +
-      (options.length > 8
-        ? '<div class="picker-tools"><input type="text" class="picker-search" data-search-input="' + cat + '" placeholder="Filter by brand or name…" aria-label="Filter parts" /></div>'
+    // "Saved": only hearted parts — the ones the pickers list, plus any saved
+    // part they leave out, drawn disabled with why (never a part made
+    // pickable by being saved).
+    var savedOnly = SAVED_ONLY && !!CURRENT_USER;
+    var cards = options.map(function (p) { return partCardHtml(cat, p, metas ? metas[p.id] : null); });
+    if (savedOnly) {
+      var listed = {};
+      options.forEach(function (p) { listed[p.id] = 1; });
+      var left = productsForPlatform().filter(function (p) {
+        return p.category === cat && !listed[p.id] && Favorites.has(p.id) && (SHOW_DISCONTINUED || !p.discontinued);
+      });
+      cards = options.filter(function (p) { return Favorites.has(p.id); })
+        .map(function (p) { return partCardHtml(cat, p, metas ? metas[p.id] : null); })
+        .concat(left.map(function (p) { return partCardHtml(cat, p, { blocked: whyNotAvailable(cat, p) }); }));
+    }
+    var tools = (options.length > 8
+        ? '<input type="text" class="picker-search" data-search-input="' + cat + '" placeholder="Filter by brand or name…" aria-label="Filter parts" />'
         : '') +
-      '<div class="part-grid">' + options.map(function (p) { return partCardHtml(cat, p, metas ? metas[p.id] : null); }).join('') + '</div>' +
+      (CURRENT_USER
+        ? '<button type="button" class="picker-saved" data-saved-only aria-pressed="' + savedOnly + '">' + (savedOnly ? '♥' : '♡') + ' Saved</button>'
+        : '');
+    html += '<div class="picker-panel">' +
+      (tools ? '<div class="picker-tools">' + tools + '</div>' : '') +
+      (savedOnly && !cards.length
+        ? '<div class="picker-saved-empty">No saved parts here yet — tap ♡ on a part to save it.</div><div class="part-grid"></div>'
+        : '<div class="part-grid">' + cards.join('') + '</div>') +
     '</div>';
   }
 
@@ -1241,6 +1315,7 @@ function pickedHtml(cat, p) {
       variantRow +
       '<span class="picked-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
     '</div>' +
+    Favorites.buttonHtml(p.id, Favorites.has(p.id), 'fav-inline') +
     '<button type="button" class="picked-remove" data-remove="' + cat + '">Remove</button>' +
   '</div>';
 }
@@ -1269,6 +1344,12 @@ function renderParts() {
   if (discToggle) discToggle.addEventListener('change', function () {
     SHOW_DISCONTINUED = discToggle.checked;
     renderAll();
+  });
+  container.querySelectorAll('button[data-saved-only]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      SAVED_ONLY = !SAVED_ONLY;
+      renderAll();
+    });
   });
   container.querySelectorAll('button[data-toggle]').forEach(function (btn) {
     btn.addEventListener('click', function () {
@@ -2110,7 +2191,8 @@ async function loadMyArmory() {
   MY.builds = null;
   MY.parts = null;
   MY.partsError = null;
-  if (!uid) { MY.loading = false; renderMyTabs(); return; }
+  FAV_REMOVED = {};
+  if (!uid) { MY.loading = false; Favorites.clear(); Favorites.repaint(); renderMyTabs(); return; }
   MY.loading = true;
   renderMyTabs();
   var got = await Promise.all([
@@ -2123,8 +2205,14 @@ async function loadMyArmory() {
   if (MY.userId !== uid) return;      // signed out or switched while reading
   MY.loading = false;
   MY.builds = got[0];
-  if (got[1].error) { MY.partsError = got[1].error; MY.parts = []; }
-  else MY.parts = got[1].data || [];
+  if (got[1].error) { MY.partsError = got[1].error; MY.parts = []; Favorites.clear(); }
+  else {
+    MY.parts = got[1].data || [];
+    // The hearts on the Build tab come from this same read — no second one.
+    Favorites.set(MY.parts.map(function (r) { return r.product_id; }));
+  }
+  Favorites.repaint();
+  if (SAVED_ONLY && STATE.openCat) renderParts();
   renderMyTabs();
 }
 
@@ -2327,7 +2415,7 @@ function savedPartsHtml() {
     return '<div class="tab-empty"><a href="gunforma-parts-catalog.html">Heart parts in the Parts Catalog to save them here →</a></div>';
   }
   return '<div class="ab-grid">' + MY.parts.map(savedPartHtml).join('') + '</div>' +
-    '<div class="tab-foot">Saved with the ♥ in the <a href="gunforma-parts-catalog.html">Parts Catalog</a> — tap it there to remove one.</div>';
+    '<div class="tab-foot">Tap ♥ to remove a part. Heart more on the Build tab’s pickers or in the <a href="gunforma-parts-catalog.html">Parts Catalog</a>.</div>';
 }
 function renderSavedPartsTab() {
   var panel = document.getElementById('panel-saved-parts');
@@ -2363,6 +2451,7 @@ function savedPartHtml(fav) {
   var v = savedPartVerdict(p);
   var label = v.ok ? 'Add to build' : (v.inBuild ? 'In your build' : 'Can’t add');
   return '<div class="ab-card sp-card" data-ma-part="' + escAttr(p.id) + '">' +
+    Favorites.buttonHtml(p.id, Favorites.has(p.id)) +
     '<div class="ab-photo">' + photo + '</div>' +
     '<div class="ab-body">' +
       '<div class="ab-kicker">' + esc(window.categorySingular(p.category)) + (p.discontinued ? ' · Discontinued' : '') + '</div>' +

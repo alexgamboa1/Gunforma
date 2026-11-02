@@ -134,16 +134,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .part-card-link::after { content: ''; position: absolute; inset: 0; z-index: 1; }
 .part-card-aff { position: relative; z-index: 2; }
 
-/* Favorite (heart) button — sits above the photo, top-right */
-.fav-btn { position: absolute; top: 8px; right: 8px; z-index: 2;
-           width: 32px; height: 32px; border-radius: 50%;
-           background: rgba(255,255,255,0.9); border: 0.5px solid #e5e5e5;
-           display: flex; align-items: center; justify-content: center; cursor: pointer;
-           font-family: inherit; font-size: 15px; color: #888; padding: 0;
-           transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.1s; }
-.fav-btn:hover { background: #fff; color: #d85a30; border-color: #d85a30; }
-.fav-btn.active { background: #fff; color: #d85a30; border-color: #d85a30; }
-.fav-btn:active { transform: scale(0.9); }
+/* Favorite (heart) button: its styles, markup, read and write are
+   js/favorites.js, shared with the Armory. */
 
 /* EMPTY STATES */
 .loading, .empty { padding: 60px 20px; text-align: center; font-size: 13px; color: #888; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; }
@@ -688,6 +680,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/display-name.js"></script>
 <script src="js/option-price.js"></script>
 <script src="js/affiliate.js"></script>
+<script src="js/favorites.js"></script>
 <script>
 // ============================================================
 // gunforma-parts-catalog.html — searchable parts DATABASE.
@@ -717,7 +710,6 @@ var CURRENT_USER = null;
 var PRODUCTS = [];              // denormalized flat rows (see loadEverything)
 var PART_TYPES = {};            // product id -> products.part_type, Other Parts only
 var PLATFORMS_BY_ID = {};       // {id: {id,name,slug}}
-var FAVORITES = new Set();      // product_ids the signed-in user has favorited
 // Retired (#4): "Set as mine" pinned owned components here and narrowed the
 // grid from them. It was localStorage-only — not tied to the account, no sync
 // across devices, and nothing else on the site read it — yet it silently
@@ -809,7 +801,7 @@ sb.auth.onAuthStateChange(function (event, session) {
   var newUser = session ? session.user : null;
   var flipped = (!newUser) !== (!CURRENT_USER);
   CURRENT_USER = newUser;
-  if (!newUser) { FAVORITES = new Set(); }
+  if (!newUser) { Favorites.clear(); }
   if (flipped) { loadFavoritesAndRender(); }
 });
 
@@ -978,12 +970,7 @@ async function loadEverything() {
 }
 
 async function loadFavoritesAndRender(skipRender) {
-  if (!CURRENT_USER) { FAVORITES = new Set(); }
-  else {
-    var res = await sb.from('part_favorites').select('product_id').eq('user_id', CURRENT_USER.id);
-    if (res.error) { console.error(res.error); }
-    else { FAVORITES = new Set((res.data || []).map(function (r) { return r.product_id; })); }
-  }
+  await Favorites.load();
   updateTabCounts();
   if (!skipRender) applyFiltersAndRender();
 }
@@ -1122,7 +1109,7 @@ function setTab(favsOnly) {
 
 function updateTabCounts() {
   document.getElementById('tab-all-count').textContent  = '(' + PRODUCTS.filter(function (r) { return !r.discontinued; }).length + ')';
-  document.getElementById('tab-favs-count').textContent = CURRENT_USER ? ('(' + FAVORITES.size + ')') : '';
+  document.getElementById('tab-favs-count').textContent = CURRENT_USER ? ('(' + Favorites.size() + ')') : '';
 }
 
 function clearAllFilters() {
@@ -1880,7 +1867,7 @@ function matchesAllExcept(r, excludeKey) {
   // option list to keep alive).
   if (!matchesFitment(r)) return false;
   // The favorites-only view is a tab, not a sidebar filter — always apply.
-  if (F.favsOnly && !FAVORITES.has(r.id)) return false;
+  if (F.favsOnly && !Favorites.has(r.id)) return false;
   // Discontinued parts are hidden unless the toggle is on — except under My
   // Favorites, where a part the reader saved never vanishes on them.
   if (r.discontinued && !F.showDiscontinued && !F.favsOnly) return false;
@@ -1906,7 +1893,7 @@ function applyFiltersAndRender() {
 
   var container = document.getElementById('grid-container');
   if (!list.length) {
-    if (F.favsOnly && CURRENT_USER && FAVORITES.size === 0) {
+    if (F.favsOnly && CURRENT_USER && Favorites.size() === 0) {
       container.innerHTML =
         '<div class="empty">' +
           '<div class="empty-title">No favorites yet</div>' +
@@ -1946,7 +1933,7 @@ function cardHeadline(variants, lowestPrice) {
 }
 
 function renderCard(r) {
-  var isFav = FAVORITES.has(r.id);
+  var isFav = Favorites.has(r.id);
   // Compact affiliate hero — real street price + retailer + Buy button.
   // Rendered on top of any card that has affiliate data. Skipped silently
   // when the product isn't listed anywhere (no dead untracked link).
@@ -1994,7 +1981,7 @@ function renderCard(r) {
     ? '<a class="part-card-link" href="' + escAttr(href) + '">' + esc(r.name) + '</a>'
     : esc(r.name);
   return '<div class="part-card" data-id="' + r.id + '" data-open-detail="1">' +
-    '<button type="button" class="fav-btn' + (isFav ? ' active' : '') + '" onclick="event.stopPropagation();toggleFavorite(\'' + r.id + '\',this)" aria-label="' + (isFav ? 'Unfavorite' : 'Favorite') + '" aria-pressed="' + isFav + '">' + (isFav ? '♥' : '♡') + '</button>' +
+    Favorites.buttonHtml(r.id, isFav) +
     '<div class="part-card-photo">' + photoHtml +
       (r.category ? '<div class="part-card-cat">' + esc(partCatLabel(r)) + '</div>' : '') +
     '</div>' +
@@ -2293,7 +2280,7 @@ function renderDetail(p) {
 
   // Favorite button
   var favEl = document.getElementById('detail-fav');
-  var isFav = FAVORITES.has(p.id);
+  var isFav = Favorites.has(p.id);
   favEl.textContent = isFav ? '♥' : '♡';
   favEl.classList.toggle('active', isFav);
   favEl.setAttribute('aria-pressed', String(isFav));
@@ -2386,12 +2373,11 @@ function detailSpecRows(p) {
 // already touches.
 async function toggleFavoriteFromDetail(productId) {
   var favEl = document.getElementById('detail-fav');
-  // Re-use the grid-card handler to keep insert/delete + revert logic in
-  // one place. Pass a dummy element so paintFavButton has a target.
-  var wasFav = FAVORITES.has(productId);
-  await toggleFavorite(productId, favEl);
+  // js/favorites.js keeps insert/delete + revert logic in one place.
+  var wasFav = Favorites.has(productId);
+  await Favorites.toggle(productId, favEl);
   // Re-paint the ♥/♡ + aria on the detail button after the handler resolved.
-  var nowFav = FAVORITES.has(productId);
+  var nowFav = Favorites.has(productId);
   favEl.textContent = nowFav ? '♥' : '♡';
   favEl.classList.toggle('active', nowFav);
   favEl.setAttribute('aria-pressed', String(nowFav));
@@ -2402,50 +2388,22 @@ async function toggleFavoriteFromDetail(productId) {
 }
 
 // ─── FAVORITES ─────────────────────────────────────────────
-// Optimistic UI: flip the local Set + repaint one card immediately, then
-// insert/delete on the server. On error, revert and toast. Matches the
-// pattern in gunforma-builds.html:toggleFire.
-window.toggleFavorite = async function (productId, btn) {
-  if (!CURRENT_USER) {
-    toast('Sign in to save parts', 'gunforma-signin.html', 'Sign in');
-    return;
-  }
-  var wasFav = FAVORITES.has(productId);
-  // Optimistic flip
-  if (wasFav) FAVORITES.delete(productId); else FAVORITES.add(productId);
-  paintFavButton(btn, !wasFav);
+// js/favorites.js does the read, the write (done only when a row comes
+// back; flipped back and toasted when not) and the heart itself. The page
+// keeps its tab count and the My Favorites grid in step: an un-heart on
+// that tab drops the card, a failed write puts it back.
+function onFavoriteChange(productId, isFav, phase) {
+  if (phase === 'saved') return;
   updateTabCounts();
-  // If we're on the favorites tab and just un-favorited the last item that
-  // was matching, refresh the grid so it disappears.
-  if (F.favsOnly && wasFav) applyFiltersAndRender();
-
-  var res;
-  try {
-    if (wasFav) {
-      res = await sb.from('part_favorites').delete().eq('user_id', CURRENT_USER.id).eq('product_id', productId);
-    } else {
-      res = await sb.from('part_favorites').insert({ user_id: CURRENT_USER.id, product_id: productId });
-    }
-  } catch (e) { res = { error: e }; }
-
-  if (res && res.error) {
-    // Revert
-    if (wasFav) FAVORITES.add(productId); else FAVORITES.delete(productId);
-    paintFavButton(btn, wasFav);
-    updateTabCounts();
-    if (F.favsOnly) applyFiltersAndRender();
-    console.error('favorite toggle failed', res.error);
-    toast('Couldn\'t save — try again');
-  }
-};
-
-function paintFavButton(btn, isFav) {
-  if (!btn) return;
-  btn.classList.toggle('active', !!isFav);
-  btn.textContent = isFav ? '♥' : '♡';
-  btn.setAttribute('aria-pressed', String(!!isFav));
-  btn.setAttribute('aria-label', isFav ? 'Unfavorite' : 'Favorite');
+  if (F.favsOnly && (phase === 'revert' || !isFav)) applyFiltersAndRender();
 }
+Favorites.init({
+  sb: sb,
+  user: function () { return CURRENT_USER; },
+  toast: function (msg, href, linkText) { toast(msg, href, linkText); },
+  signInHref: 'gunforma-signin.html',
+  onChange: onFavoriteChange,
+});
 
 // ─── UTILITIES ────────────────────────────────────────────
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }

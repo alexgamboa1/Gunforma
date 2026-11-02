@@ -174,7 +174,7 @@ function liftFn(src, name) {
 function pageScope(page, fns, extra) {
   const src = read(page);
   const scope = {};
-  for (const f of ['js/category-map.js', 'js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js', 'js/option-price.js']) {
+  for (const f of ['js/category-map.js', 'js/variant-label.js', 'js/variant-swatch.js', 'js/display-name.js', 'js/option-price.js', 'js/favorites.js']) {
     new Function('window', read(f))(scope);
   }
   const body = fns.map((n) => liftFn(src, n)).join('\n') +
@@ -187,7 +187,7 @@ const axgVariants = OPTIONS.map((o) => ({ id: o.id, msrp: o.msrp, color: o.color
 test('catalog grid card: "From $<lowest>" until an option is picked, the same number as its panel', () => {
   const page = pageScope('gunforma-parts-catalog.html',
     ['cardHeadline', 'renderCard', 'swatchFallbackHtml', 'partCatLabel', 'esc', 'escAttr'],
-    { FAVORITES: new Set(), PART_TYPES: {} });
+    { PART_TYPES: {} });
   const card = (variants, lowest) => {
     const h = page.cardHeadline(variants, lowest);
     return { h, price: cardPrice(page.renderCard({ id: 'x', slug: 'part', name: 'Part', brand: 'Brand', category: 'frame',
@@ -217,7 +217,7 @@ test('catalog grid card: "From $<lowest>" until an option is picked, the same nu
 test('catalog retailer card: the price line is labelled MSRP beside the live retailer price', () => {
   const page = pageScope('gunforma-parts-catalog.html',
     ['cardHeadline', 'renderCard', 'swatchFallbackHtml', 'partCatLabel', 'esc', 'escAttr'],
-    { FAVORITES: new Set(), PART_TYPES: {} });
+    { PART_TYPES: {} });
   const HERO = '<div class="part-affiliate-hero">$161.99 Buy at OpticsPlanet</div>';
   const card = (variants, lowest, listed) => {
     page.window.affiliate = { renderHero: () => (listed ? HERO : '') };
