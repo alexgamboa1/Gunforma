@@ -33,7 +33,7 @@ const RULES = [
   // call-time reads, so a wrong ORDER survives today — the check enforces it
   // anyway, because "it happens to work because of when we call it" is not a
   // thing to leave to memory.
-  { global: 'variantMediaHtml', defines: 'js/variant-swatch.js', consumers: ['js/part-picker.js'] },
+  { global: 'variantMediaHtml', defines: 'js/variant-swatch.js', consumers: ['js/part-picker.js', 'js/armory-builds.js'] },
   // The spec line beside a variant's label. part-picker.js reads it at render
   // time; the two builder pages call it inline in loadCatalog() and
   // addPartWithVariant(), and the build page in resolveVariant().
@@ -42,8 +42,10 @@ const RULES = [
   // A Gun Guide's /gg/ URL: Gun Guides' card title links and Share button,
   // and the Armory's Share button after a save, call it inline. A missing
   // tag throws inside the card render and the gallery stays empty.
-  { global: 'gunGuideUrl',  defines: 'js/guide-url.js',     consumers: [] },
-  { global: 'gunGuidePath', defines: 'js/guide-url.js',     consumers: [] },
+  // js/armory-builds.js (an Armory build's card title and Share) reads both
+  // at call time.
+  { global: 'gunGuideUrl',  defines: 'js/guide-url.js',     consumers: ['js/armory-builds.js'] },
+  { global: 'gunGuidePath', defines: 'js/guide-url.js',     consumers: ['js/armory-builds.js'] },
   // The /parts/ addresses that 301. The catalog, the Armory, both builder
   // pages and the review queue call window.isRedirectedPart inline when they
   // load the catalog; a missing tag throws there and the picker stays empty.
@@ -52,7 +54,7 @@ const RULES = [
   // window.buildPriceTotal / window.priceTotalText inline from their card
   // renderers (the server copy is in _build-cards.mjs). A missing tag
   // throws inside the render and the grid stays empty.
-  { global: 'buildPriceTotal', defines: 'js/build-total.js', consumers: [] },
+  { global: 'buildPriceTotal', defines: 'js/build-total.js', consumers: ['js/armory-builds.js'] },
   // The maker-link label and the disclosure wording. affiliate.js reads
   // window.makerLink / window.buyDisclosure / window.MAKER_REL at call time;
   // gunforma-build-detail.html calls window.makerLink inline from
@@ -81,7 +83,7 @@ const RULES = [
   // at the top of its inline script. A wrong order here does not survive —
   // it throws "Cannot read properties of undefined" before any render, and
   // the whole page is blank.
-  { global: 'BuildCategories', defines: 'js/build-categories.js', consumers: [],
+  { global: 'BuildCategories', defines: 'js/build-categories.js', consumers: ['js/armory-builds.js'],
     pattern: /\bBuildCategories\s*\./ },
   // build-categories.js names its sections from category-map.js AT PARSE
   // TIME (label: name('frame')), and throws if it is missing — so on the
@@ -112,6 +114,12 @@ const RULES = [
   // for a save: the page throws on its first render and stays blank.
   { global: 'GunModel', defines: 'js/gun-model.js', consumers: [],
     pattern: /\bGunModel\s*\./ },
+  // A reader's Armory builds, read and drawn once for the Armory's My Armory
+  // panel and the profile's Armory builds tab. An object read as a member
+  // (ArmoryBuilds.load), called once the page has a session; a missing tag
+  // throws there and the list stays on "Loading…".
+  { global: 'ArmoryBuilds', defines: 'js/armory-builds.js', consumers: [],
+    pattern: /\bArmoryBuilds\s*\./ },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

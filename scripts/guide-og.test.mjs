@@ -33,7 +33,7 @@ const og = await import(fn('guide-og.mjs'));
 const handler = og.default;
 const share = (await import(fn('guide-share.mjs'))).default;
 const { collageModel, collageHash, shareImageFor, ogImagePath, parseOgPath, GG_OG_W, GG_OG_H, MAX_TILES,
-        OG_DEFAULT_URL } = await import(fn('_guide-og.mjs'));
+        OG_DEFAULT_URL, COLLAGE_VERSION } = await import(fn('_guide-og.mjs'));
 const { loadBuildCategories } = await import(fn('_build-categories.mjs'));
 const { CDN_CACHE_BUILD } = await import(fn('_cache.mjs'));
 const BC = await loadBuildCategories();
@@ -274,6 +274,17 @@ test('the hash is of what the image draws: it moves with the parts, the option, 
 });
 
 // ── what is drawn ─────────────────────────────────────────────────────────
+// The header band says whose it is. A reader's build is an ARMORY BUILD
+// (Alex, 2026-11-02) — never "COMMUNITY GUIDE", and never GUN GUIDE, which
+// is Gunforma's own. The label is drawn, so it is part of the design:
+// COLLAGE_VERSION 4 moved every cached card off the old wording.
+test('the band reads GUN GUIDE for a Gunforma guide and ARMORY BUILD for a reader\'s build', () => {
+  assert.equal(og.bandLabel('curated'), 'GUN GUIDE');
+  assert.equal(og.bandLabel('community'), 'ARMORY BUILD');
+  assert.ok(COLLAGE_VERSION >= 4, 'COLLAGE_VERSION bumped with the label');
+  assert.doesNotMatch(readFileSync(join(ROOT, 'netlify/functions/guide-og.mjs'), 'utf8').replace(/^\s*\/\/.*$/gm, ''), /COMMUNITY GUIDE/);
+});
+
 test('tiles follow BuildCategories.orderParts, not stored order', () => {
   const m = collageModel({ kind: 'curated', row: ROW, variants: VARIANTS }, BC);
   const want = BC.orderParts(SNAPSHOT).map((p) => p.category);

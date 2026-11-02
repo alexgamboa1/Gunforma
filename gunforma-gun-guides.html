@@ -11,7 +11,7 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Gun Guides — Gunforma</title>
 <link rel="canonical" href="https://gunforma.com/gunforma-gun-guides.html" />
-<meta name="description" content="Gun Guides — builds spec'd in the Gunforma Armory, part by part from the catalog, plus Gunforma's own curated setups." />
+<meta name="description" content="Gun Guides — Gunforma's own P365 setups, part by part from the catalog, every part fit-checked and priced today." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -64,13 +64,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .page-sub { font-size: 12.5px; color: #666; margin-top: 4px; max-width: 560px; }
 .btn-armory { font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; padding: 9px 14px; border-radius: 4px; text-decoration: none; white-space: nowrap; }
 .btn-armory:hover { background: #2a7bbd; }
-
-.tab-row { max-width: 1240px; margin: 18px auto 0; padding: 0 32px; display: flex; gap: 4px; border-bottom: 0.5px solid #e5e5e5; }
-.tab-btn { font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
-           padding: 10px 14px; background: transparent; border: none; cursor: pointer; color: #888;
-           border-bottom: 2px solid transparent; margin-bottom: -0.5px; transition: color 0.15s, border-color 0.15s; }
-.tab-btn:hover { color: #1a1a1a; }
-.tab-btn.active { color: #1a1a1a; border-bottom-color: #4a9edd; }
 
 .wrap { max-width: 1240px; margin: 0 auto; padding: 22px 32px 64px; }
 .guide-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
@@ -159,8 +152,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .gdetail-close { margin-top: 10px; font-family: inherit; font-size: 11px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 6px 12px; cursor: pointer; }
 .gdetail-close:hover { color: #1a1a1a; border-color: #b9b6aa; }
 
-/* EDIT / DELETE — shown only to who may do them: admins on every card, a
-   community guide's owner on their own. */
+/* EDIT / DELETE — shown only to admins. */
 .gcard-actions { display: flex; gap: 6px; padding: 0 14px 12px; }
 .gact { font-family: inherit; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 4px; border: 0.5px solid #a7cdec; background: #fff; color: #2a7bbd; cursor: pointer; text-decoration: none; }
 .gact:hover { background: #eaf4fc; }
@@ -189,7 +181,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .footer-txt a:hover { color: #2a7bbd; }
 
 @media (max-width: 600px) {
-  .page-header, .wrap, .tab-row, .footer-bar { padding-left: 16px; padding-right: 16px; }
+  .page-header, .wrap, .footer-bar { padding-left: 16px; padding-right: 16px; }
   .gdetail-cat { width: 84px; }
   .gdetail-photo { width: 52px; }
   .gdetail-buy { padding-left: 0; }
@@ -239,22 +231,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="page-header">
   <div>
     <div class="page-title">Gun Guides</div>
-    <div class="page-sub">Builds spec'd part-by-part in the Armory — every part is a real catalog product you can actually buy — plus Gunforma's own curated setups.</div>
+    <div class="page-sub">Gunforma's own setups, part by part from the catalog — every part fit-checked and one you can actually buy. Start from any of them in the Armory and make it yours.</div>
   </div>
   <a class="btn-armory" href="gunforma-armory.html">Build yours in the Armory →</a>
 </div>
 
-<div class="tab-row" role="tablist">
-  <button class="tab-btn active" id="tab-community" role="tab" aria-selected="true">Community builds</button>
-  <button class="tab-btn" id="tab-curated" role="tab" aria-selected="false">Gunforma guides</button>
-</div>
-
 <div class="wrap">
-  <div id="community-panel">
-    <div class="guide-grid" id="community-grid"></div>
-    <div class="empty" id="community-empty" hidden></div>
-  </div>
-  <div id="curated-panel" hidden>
+  <div id="curated-panel">
     <div class="guide-grid" id="curated-grid"></div>
     <div class="empty" id="curated-empty" hidden></div>
   </div>
@@ -278,11 +261,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
-// ─── GUN GUIDES — the gallery the Armory saves into ─────────────────────────
-// Two tabs over one renderer:
-//   Community builds — rows from `gun_guides` (saved by the Armory)
-//   Gunforma guides  — the curated `guides` rows (is_published), which had no
-//                      surface since the old Armory was parked
+// ─── GUN GUIDES — Gunforma's own guides ─────────────────────────────────────
+// One grid: the curated `guides` rows (is_published). A reader's saved build
+// is an ARMORY BUILD (`gun_guides`): it has its own /gg/ page and lives in
+// that reader's My Armory (the Armory) and profile, not here — the
+// Community builds tab is gone (Alex, 2026-11-02). This page never reads
+// gun_guides.
 // Every part row links to its /parts/ page when the snapshot carries a slug;
 // card totals are the MSRPs stored at save time, labelled as such. The OPEN
 // guide also sells: every catalog part gets the catalog panel's buy row
@@ -290,9 +274,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // "Total at today's prices" (js/build-total.js — the build pages' number)
 // and the one disclosure line. scripts/gun-guide-buy.test.mjs pins it.
 //
-// Edit and Delete (2026-10-30): an admin sees both on every card, the owner
-// of a community guide on their own, nobody else on any (canEdit()). Edit
-// opens the guide in the Armory (?edit=<kind>:<uuid>), which saves it back
+// Edit and Delete (2026-10-30): an admin sees both on every card, nobody
+// else on any (canEdit()). Edit
+// opens the guide in the Armory (?edit=curated:<uuid>), which saves it back
 // in place; Delete asks first and checks a row came back, because an
 // RLS-refused delete matches nothing and returns no error. An admin also
 // sees unpublished Gunforma guides, so a draft can be found and published.
@@ -302,7 +286,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // reads "Edit as draft" and opens a draft of it in the Armory, and the live
 // guide changes only when that draft is published (the Armory copies it
 // onto the live row). A published guide can be taken down with Unpublish,
-// which moves it to Drafts. Drafts carry Edit and Delete. The database decides all of it — guides' and gun_guides' RLS
+// which moves it to Drafts. Drafts carry Edit and Delete. The database decides all of it — guides' RLS
 // (supabase/migrations/*_guides_admin_writes.sql); these checks only decide
 // what is offered.
 //
@@ -318,7 +302,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 var sb = window.sb;
 var BC = window.BuildCategories;
 var GUNS_BY_ID = {}, PLATFORMS_BY_ID = {};
-var COMMUNITY = [], CURATED = [];
+var CURATED = [];
 var OPEN_ID = null;
 var THUMBS_ON_CARD = 5;
 var VARIANTS_BY_ID = {}, DEFAULT_VARIANT_BY_PRODUCT = {};
@@ -332,7 +316,6 @@ var DISCONTINUED = {};
 var ME = null, IS_ADMIN = false;
 var THEME_LABELS = {};               // guide_themes key -> label, once it exists
 var EDITING_LIVE = false;            // guide_themes readable = the migration is applied
-var KIND_TABLE = { curated: 'guides', community: 'gun_guides' };
 
 // Who is looking, and whether they are an admin (get_my_profile(), as the
 // admin pages and nav.js read it). Any failure is "signed out": the page
@@ -370,28 +353,18 @@ async function loadAll() {
   var r = await Promise.all([
     sb.from('platforms').select('id, name'),
     sb.from('guns').select('id, name'),
-    sb.from('gun_guides').select('id, user_id, title, platform_id, gun_id, parts_snapshot, is_removed, created_at').order('created_at', { ascending: false }),
     curatedQ.order('title'),
   ]);
   (r[0].data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
   (r[1].data || []).forEach(function (g) { GUNS_BY_ID[g.id] = g; });
 
-  // gun_guides failing is survivable — the table may not exist yet. The
-  // curated tab still renders.
   if (r[2].error) {
-    console.warn('[gun-guides] community read failed', r[2].error);
-    COMMUNITY = [];
-    showEmpty('community', 'Community builds are coming online', 'Nothing can be shown here yet. Be first — <a href="gunforma-armory.html">spec a build in the Armory</a>.');
-  } else {
-    COMMUNITY = r[2].data || [];
-  }
-  if (r[3].error) {
-    console.warn('[gun-guides] guides read failed', r[3].error);
+    console.warn('[gun-guides] guides read failed', r[2].error);
     CURATED = [];
   } else {
-    CURATED = r[3].data || [];
+    CURATED = r[2].data || [];
   }
-  await loadPhotos(COMMUNITY.concat(CURATED));
+  await loadPhotos(CURATED);
   renderAll();
 }
 
@@ -535,14 +508,9 @@ function themeLabel(key) {
 
 // A guide's own page, /gg/<slug>-<uuid> (js/guide-url.js; guide-share.mjs
 // serves it). Only for a guide that page will serve — a published Gunforma
-// guide or a community guide not taken down — so an admin's draft card
-// never links to a 404.
-function kindOf(row) {
-  return CURATED.some(function (r) { return r.id === row.id; }) ? 'curated' : 'community';
-}
+// guide — so an admin's draft card never links to a 404.
 function sharePath(row, kind) {
   if (kind === 'curated' && row.is_published === false) return null;
-  if (kind === 'community' && row.is_removed === true) return null;
   return window.gunGuidePath(row.id, row.title);
 }
 // The apex URL to the clipboard — the canonical the page declares, never
@@ -559,9 +527,7 @@ async function copyShareLink(row) {
 }
 
 function canEdit(row, kind) {
-  if (!ME) return false;
-  if (kind === 'curated') return IS_ADMIN;
-  return IS_ADMIN || row.user_id === ME.id;
+  return !!ME && IS_ADMIN;
 }
 
 function actionsHtml(row, kind) {
@@ -602,20 +568,18 @@ async function unpublishGuide(id, btn) {
 }
 
 async function deleteGuide(kind, id, btn) {
-  var rows = kind === 'curated' ? CURATED : COMMUNITY;
-  var row = rows.find(function (r) { return r.id === id; });
+  var row = CURATED.find(function (r) { return r.id === id; });
   if (!row) return;
-  var foreign = kind === 'community' && row.user_id !== (ME && ME.id);
-  if (!EDITING_LIVE && (kind === 'curated' || foreign)) {
-    toast('Deleting ' + (kind === 'curated' ? 'Gunforma guides' : 'someone else’s guide') + ' isn’t switched on yet — it needs the database update.');
+  if (!EDITING_LIVE) {
+    toast('Deleting Gunforma guides isn’t switched on yet — it needs the database update.');
     return;
   }
-  var isDraft = kind === 'curated' && row.is_published === false;
+  var isDraft = row.is_published === false;
   if (!window.confirm(isDraft
     ? 'Delete the draft “' + (row.title || 'this guide') + '”? This can’t be undone.'
     : 'Delete “' + (row.title || 'this guide') + '”? It disappears from Gun Guides for everyone, and this can’t be undone.')) return;
   btn.disabled = true;
-  var res = await sb.from(KIND_TABLE[kind]).delete().eq('id', id).select('id');
+  var res = await sb.from('guides').delete().eq('id', id).select('id');
   // A refused delete matches zero rows and returns no error: only a row
   // coming back proves it went.
   if (res.error || !Array.isArray(res.data) || res.data.length !== 1) {
@@ -623,8 +587,7 @@ async function deleteGuide(kind, id, btn) {
     toast('Couldn’t delete it' + (res.error ? ': ' + (res.error.message || 'unknown error') : ' — it may already be gone, or you can no longer delete it.'));
     return;
   }
-  if (kind === 'curated') CURATED = CURATED.filter(function (r) { return r.id !== id; });
-  else COMMUNITY = COMMUNITY.filter(function (r) { return r.id !== id; });
+  CURATED = CURATED.filter(function (r) { return r.id !== id; });
   if (OPEN_ID === kind + ':' + id) OPEN_ID = null;
   renderAll();
   toast('Deleted “' + (row.title || 'the guide') + '”.');
@@ -662,7 +625,7 @@ function detailHtml(row) {
   // The start of the reader's OWN build: ?from= loads the parts and nothing
   // else — never ?edit=, which adopts a saved guide's identity.
   html += '<a class="gdetail-start" href="gunforma-armory.html?from=' + escAttr(row.id) + '">Customize this build in the Armory →</a>';
-  if (sharePath(row, kindOf(row))) {
+  if (sharePath(row, 'curated')) {
     html += '<button type="button" class="gdetail-share" data-share="1">Share</button>';
   }
   html += '<button type="button" class="gdetail-close">Close</button></div>';
@@ -752,8 +715,7 @@ function renderGrid(which, rows, kind) {
   if (!rows.length) {
     grid.innerHTML = '';
     if (empty.hidden) {
-      showEmpty(which, which === 'community' ? 'No community builds yet' : 'No curated guides yet',
-        which === 'community' ? 'Be first — <a href="gunforma-armory.html">spec a build in the Armory</a>.' : '');
+      showEmpty(which, 'No guides yet', 'Meanwhile, <a href="gunforma-armory.html">spec your own build in the Armory</a>.');
     }
     return;
   }
@@ -776,8 +738,7 @@ function wireCards(grid) {
       var unpub = e.target.closest('button[data-unpublish]');
       if (unpub) { unpublishGuide(card.dataset.id, unpub); return; }
       if (e.target.closest('button[data-share]')) {
-        var rows = card.dataset.kind === 'curated' ? CURATED : COMMUNITY;
-        var sharing = rows.find(function (r) { return r.id === card.dataset.id; });
+        var sharing = CURATED.find(function (r) { return r.id === card.dataset.id; });
         if (sharing) copyShareLink(sharing);
         return;
       }
@@ -795,22 +756,8 @@ function wireCards(grid) {
 }
 
 function renderAll() {
-  renderGrid('community', COMMUNITY, 'community');
   renderGrid('curated', CURATED, 'curated');
 }
-
-// Tabs
-function setTab(which) {
-  var isCommunity = which === 'community';
-  document.getElementById('tab-community').classList.toggle('active', isCommunity);
-  document.getElementById('tab-curated').classList.toggle('active', !isCommunity);
-  document.getElementById('tab-community').setAttribute('aria-selected', String(isCommunity));
-  document.getElementById('tab-curated').setAttribute('aria-selected', String(!isCommunity));
-  document.getElementById('community-panel').hidden = !isCommunity;
-  document.getElementById('curated-panel').hidden = isCommunity;
-}
-document.getElementById('tab-community').onclick = function () { setTab('community'); };
-document.getElementById('tab-curated').onclick = function () { setTab('curated'); };
 
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
 function escAttr(s) { return esc(s); }

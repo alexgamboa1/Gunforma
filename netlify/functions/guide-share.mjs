@@ -72,6 +72,10 @@ import { shareImageFor, guideTitle, guideModel, OG_DEFAULT_URL, OG_DEFAULT_W, OG
 
 const SITE = 'https://gunforma.com';
 const GALLERY = '/gunforma-gun-guides.html';
+// A reader's saved build is an Armory build, not a Gun Guide (Alex,
+// 2026-11-02): Gun Guides lists Gunforma's own guides only, so an Armory
+// build's crumb leads back to the Armory, where it was made.
+const ARMORY = '/gunforma-armory.html';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // The selects and reads are shared with guide-og.mjs (_guide-data.mjs);
@@ -312,7 +316,7 @@ export function renderGuide({ kind, row, variants, username, image }) {
   const theme = kind === 'curated' && row.guide_themes ? row.guide_themes.label : null;
   const parts = guideParts(row);
   const og = image || { url: OG_DEFAULT_URL, w: OG_DEFAULT_W, h: OG_DEFAULT_H, type: 'image/png',
-                        alt: 'Gun Guide: ' + title, collage: false };
+                        alt: (kind === 'curated' ? 'Gun Guide: ' : 'Armory build: ') + title, collage: false };
 
   const byProduct = groupByProduct(variants);
   const views = parts.map((p) => partView(p, byProduct));
@@ -325,6 +329,7 @@ export function renderGuide({ kind, row, variants, username, image }) {
   const docTitle = pageTitle(title, headline);
   const description = pageDescription({ title, kind, model, username, parts: headline, count: parts.length, totalText });
   const indexable = kind === 'curated';
+  const crumb = kind === 'curated' ? { name: 'Gun Guides', path: GALLERY } : { name: 'Armory', path: ARMORY };
 
   const jsonLd = [
     {
@@ -340,7 +345,7 @@ export function renderGuide({ kind, row, variants, username, image }) {
       '@context': 'https://schema.org', '@type': 'BreadcrumbList',
       itemListElement: [
         { '@type': 'ListItem', position: 1, name: 'Gunforma', item: SITE + '/' },
-        { '@type': 'ListItem', position: 2, name: 'Gun Guides', item: SITE + GALLERY },
+        { '@type': 'ListItem', position: 2, name: crumb.name, item: SITE + crumb.path },
         { '@type': 'ListItem', position: 3, name: title, item: canonical },
       ],
     },
@@ -348,17 +353,17 @@ export function renderGuide({ kind, row, variants, username, image }) {
 
   const eyebrow = kind === 'curated'
     ? 'Gunforma guide' + (theme ? ' &middot; ' + esc(theme) : '')
-    : 'Community build' + (username ? ' &middot; by ' + esc(username) : '');
+    : 'Armory build' + (username ? ' by @' + esc(username) : '');
 
   const html = '<!DOCTYPE html><html lang="en"><head>' +
     headTags({ title: docTitle, description, canonical, jsonLd, ogType: 'article',
                ogImage: og.url, ogImageMeta: og }) +
-    // A community guide is served, never submitted (loadouts-spec §7.5).
+    // An Armory build is served, never submitted (loadouts-spec §7.5).
     (indexable ? '' : '<meta name="robots" content="noindex"/>') +
     '<style>' + chromeCss() + layoutCss() + guideCss() + '</style>' +
     '</head><body>' +
     navHtml({ active: 'guides' }) +
-    '<div class="breadcrumb"><a href="/">Home</a> / <a href="' + GALLERY + '">Gun Guides</a> / ' + esc(title) + '</div>' +
+    '<div class="breadcrumb"><a href="/">Home</a> / <a href="' + crumb.path + '">' + crumb.name + '</a> / ' + esc(title) + '</div>' +
     '<div class="page">' +
       '<div class="eyebrow">' + eyebrow + '</div>' +
       '<h1>' + esc(title) + '</h1>' +
