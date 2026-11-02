@@ -47,7 +47,8 @@ export const OG_DEFAULT_W = 1200;
 export const OG_DEFAULT_H = 630;
 
 // 2: the logo moved from a small bottom-right wordmark to a header band.
-export const COLLAGE_VERSION = 2;
+// 3: the band label and the model line up to 36px (15px at 500px wide).
+export const COLLAGE_VERSION = 3;
 // Up to six tiles. A guide of more than six parts shows five photos and a
 // "+N" tile — the Gun Guides card's rule, one row more.
 export const MAX_TILES = 6;

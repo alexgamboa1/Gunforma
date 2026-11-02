@@ -296,7 +296,10 @@ function swatchFill(sw, id) {
 // when the card is shown ~500px wide (iMessage, Reddit: 60px → 25px), and
 // what kind of guide this is, right. A community guide says so here, so its
 // author's title never reads as a Gunforma guide.
-const BAND = { h: 112, logoH: 60, labelSize: 28 };
+// The band label and the model line are the card's smallest text; 36px is
+// 15px at 500px wide, the floor for reading them on a phone.
+const SMALL_TEXT = 36;
+const BAND = { h: 112, logoH: 60, labelSize: SMALL_TEXT };
 const LOGO_RATIO = 1496 / 211;   // assets/gunforma-logo.png
 
 // The tile grid below the band: 1 tile alone, up to 4 in two columns, 5–6
@@ -399,21 +402,21 @@ export function collageSvg(model, photos, assets, measure) {
   const titleLead = Math.round(titleSize * 1.04);
   const stats = model.count + (model.count === 1 ? ' part' : ' parts') + (model.total ? '  ·  ' + model.total + ' today' : '');
   let modelLine = model.model;
-  while (modelLine.length > 1 && measure(modelLine, 32, 500) > TW) modelLine = modelLine.slice(0, -2) + '…';
+  while (modelLine.length > 1 && measure(modelLine, SMALL_TEXT, 500) > TW) modelLine = modelLine.slice(0, -2) + '…';
   let statsSize = 38;
-  while (statsSize > 28 && measure(stats, statsSize, 700) > TW) statsSize -= 2;
+  while (statsSize > SMALL_TEXT && measure(stats, statsSize, 700) > TW) statsSize -= 2;
 
   // Centred in the space under the band. Baselines: the first title line
   // sits one cap height below the block's top.
-  const blockH = Math.round(titleSize * 0.74) + (title.lines.length - 1) * titleLead + 22 + 32 + 18 + statsSize;
+  const blockH = Math.round(titleSize * 0.74) + (title.lines.length - 1) * titleLead + 22 + SMALL_TEXT + 18 + statsSize;
   let y = GRID.y + Math.round((GRID.h - blockH) / 2) + Math.round(titleSize * 0.74) - titleLead;
   for (const line of title.lines) {
     y += titleLead;
     body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="700" font-size="' + titleSize +
       '" fill="' + C.cream + '">' + xml(line) + '</text>');
   }
-  y += 22 + 32;
-  body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="500" font-size="32" fill="' + C.muted + '">' +
+  y += 22 + SMALL_TEXT;
+  body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="500" font-size="' + SMALL_TEXT + '" fill="' + C.muted + '">' +
     xml(modelLine) + '</text>');
   y += 18 + statsSize;
   body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="700" font-size="' + statsSize + '" fill="' + C.cream + '">' +
