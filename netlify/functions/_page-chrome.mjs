@@ -170,7 +170,18 @@ export function layoutCss() {
 // The <head> every one of these pages emits, minus the page-specific
 // <style>. Apex canonical and og:url are not optional — see CLAUDE.md
 // "SEO invariants": they are always gunforma.com, never the current origin.
-export function headTags({ title, description, canonical, jsonLd, ogType = 'article', ogImage }) {
+// `ogImageMeta` ({ w, h, type, alt }) is optional and opt-in per page: given,
+// the image's size, type and alt are declared and twitter:image is set to
+// the same URL. Declare them only from the constants the image is rendered
+// or served at — scripts/check-og-image.mjs decodes the bytes against them.
+export function headTags({ title, description, canonical, jsonLd, ogType = 'article', ogImage, ogImageMeta }) {
+  const imageMeta = ogImageMeta
+    ? '<meta property="og:image:width" content="' + esc(ogImageMeta.w) + '"/>' +
+      '<meta property="og:image:height" content="' + esc(ogImageMeta.h) + '"/>' +
+      '<meta property="og:image:type" content="' + esc(ogImageMeta.type) + '"/>' +
+      '<meta property="og:image:alt" content="' + esc(ogImageMeta.alt) + '"/>' +
+      '<meta name="twitter:image" content="' + esc(ogImage) + '"/>'
+    : '';
   return (
     '<meta charset="UTF-8"/>' +
     '<base href="/"/>' +
@@ -186,6 +197,7 @@ export function headTags({ title, description, canonical, jsonLd, ogType = 'arti
     '<meta property="og:title" content="' + esc(title) + '"/>' +
     '<meta property="og:description" content="' + esc(description) + '"/>' +
     '<meta property="og:image" content="' + esc(ogImage) + '"/>' +
+    imageMeta +
     '<meta property="og:url" content="' + esc(canonical) + '"/>' +
     '<meta name="twitter:card" content="summary_large_image"/>' +
     '<meta name="twitter:title" content="' + esc(title) + '"/>' +

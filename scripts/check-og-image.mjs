@@ -14,7 +14,8 @@
 //   1. og:image returns 200 — an og:image that 404s for a crawler is worse
 //      than a thumbnail, because it drops the card entirely.
 //   2. The DECODED BYTES are the size the tags claim — OG_W x OG_H for a
-//      transformed hero, og-default.png's own size when that is the card.
+//      transformed hero, GG_OG_W x GG_OG_H for a Gun Guide's collage,
+//      og-default.png's own size when that is the card.
 //      Not the declared width/height, the actual image. If the CDN declines
 //      to upscale a small source, the
 //      declaration becomes a lie and the card silently goes back to being
@@ -46,6 +47,9 @@ const SITE = 'https://gunforma.com';
 // function builds the transform and the meta tags from.
 const { OG_W, OG_H, OG_DEFAULT_W, OG_DEFAULT_H } =
   await import('../netlify/functions/build-og.mjs');
+// A Gun Guide's collage (/gg-og/<uuid>-<hash>.png, guide-og.mjs): its own
+// size, from the constants the render and the /gg/ page's tags use.
+const { GG_OG_W, GG_OG_H, GG_OG_PREFIX } = await import('../netlify/functions/_guide-og.mjs');
 
 let failures = 0;
 const ok = (c, l, d) => { console.log((c ? 'PASS  ' : 'FAIL  ') + l + (d !== undefined && d !== '' ? `   [${d}]` : '')); if (!c) failures++; };
@@ -92,9 +96,22 @@ const BUILDS = [
   ['near-square hero', '/b/p365-new-build-a4d60762-ef6a-4b79-8cf3-76435d455176'],
 ];
 
+// And one Gun Guide, whose card is a collage rendered by guide-og.mjs. Not
+// pinned — the first guide in this origin's /sitemap-guides.xml, so a
+// deleted guide cannot rot the list the way the builds above did.
+const PAGES = [...BUILDS];
+try {
+  const xml = await (await fetch(origin + '/sitemap-guides.xml')).text();
+  const loc = (xml.match(/<loc>https:\/\/gunforma\.com(\/gg\/[^<]+)<\/loc>/) || [])[1];
+  if (loc) PAGES.push(['Gun Guide collage', loc]);
+  else ok(false, 'a Gun Guide to check', 'no /gg/ URL in /sitemap-guides.xml');
+} catch (e) {
+  ok(false, 'a Gun Guide to check', '/sitemap-guides.xml: ' + e.message);
+}
+
 console.log(`checking share-card images on ${origin}\n`);
 
-for (const [label, path] of BUILDS) {
+for (const [label, path] of PAGES) {
   console.log(`── ${label}  ${path}`);
   const page = await fetch(origin + path);
   const html = await page.text();
@@ -128,9 +145,13 @@ for (const [label, path] of BUILDS) {
   // so. Both are legitimate; what is not legitimate is either one lying,
   // which the byte check below is what actually settles.
   const isDefault = /\/og-default\.png$/.test(img);
-  const expectW = isDefault ? OG_DEFAULT_W : OG_W;
-  const expectH = isDefault ? OG_DEFAULT_H : OG_H;
-  if (isDefault) note('this build has no photo — card falls back to og-default.png');
+  const isCollage = img.startsWith(SITE + GG_OG_PREFIX);
+  const expectW = isDefault ? OG_DEFAULT_W : isCollage ? GG_OG_W : OG_W;
+  const expectH = isDefault ? OG_DEFAULT_H : isCollage ? GG_OG_H : OG_H;
+  if (isDefault) note('this page has no image of its own — card falls back to og-default.png');
+  // A Gun Guide page names its collage; og-default.png there means the page
+  // could not name one (the taxonomy files missing from its bundle).
+  if (path.startsWith('/gg/')) ok(isCollage, '  a Gun Guide names its collage, not og-default.png', img.slice(0, 80));
   ok(w === String(expectW) && h === String(expectH),
      `  og:image:width/height declared`, `${w}x${h}, expected ${expectW}x${expectH}`);
   ok(!!alt && alt.length > 3, '  og:image:alt present', alt);
@@ -158,6 +179,15 @@ for (const [label, path] of BUILDS) {
     headers: { 'User-Agent': 'facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)' },
   });
   ok(res.status === 200, '  og:image returns 200 to an anonymous crawler', res.status);
+  // A collage that served og-default.png's bytes is still a card, at the
+  // declared size — but it is a render failing, and that is this check's
+  // business. -reason says why.
+  if (isCollage) {
+    ok(res.headers.get('x-gg-og') === 'rendered', '  the collage rendered (not the og-default.png fallback)',
+       (res.headers.get('x-gg-og') || '<none>') + (res.headers.get('x-gg-og-reason') ? ' — ' + res.headers.get('x-gg-og-reason') : '')
+       + (res.redirected ? ' — after a redirect: the page named a stale hash' : ''));
+    note('photos loaded', res.headers.get('x-gg-og-photos'));
+  }
   const servedType = (res.headers.get('content-type') || '').split(';')[0].trim();
   ok(servedType.startsWith('image/'), '  served as an image', servedType);
 

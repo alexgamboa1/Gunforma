@@ -182,7 +182,15 @@ test('published Gunforma guide: 200, apex canonical from the title, indexable, G
   const canon = (html.match(/rel="canonical" href="([^"]+)"/) || [])[1];
   assert.equal(canon, CANON, 'the title decides the slug, not the request');
   assert.equal((html.match(/property="og:url" content="([^"]+)"/) || [])[1], CANON);
-  assert.equal((html.match(/property="og:image" content="([^"]+)"/) || [])[1], SITE + '/og-default.png');
+  // The collage, named by a hash of what it draws (guide-og.test.mjs holds
+  // the image to it), declared at its real size.
+  const ogImage = (html.match(/property="og:image" content="([^"]+)"/) || [])[1];
+  assert.match(ogImage, new RegExp('^' + SITE + '/gg-og/' + ID + '-[0-9a-f]{10}\\.png$'));
+  assert.equal(res.headers.get('x-guide-share-image'), 'collage');
+  assert.match(html, /property="og:image:width" content="1200"/);
+  assert.match(html, /property="og:image:height" content="630"/);
+  assert.match(html, /property="og:image:type" content="image\/png"/);
+  assert.equal((html.match(/name="twitter:image" content="([^"]+)"/) || [])[1], ogImage);
   assert.doesNotMatch(html, /name="robots"/);
   assert.match(html, /<h1>Sig P365 Concealed Carry<\/h1>/);
   assert.match(html, /Gunforma guide &middot; Concealed carry/);
