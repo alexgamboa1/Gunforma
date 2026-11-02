@@ -1871,7 +1871,11 @@ not a sixteenth nav copy; it has no analytics tag (the guard exempts
   file); before that file is applied the page says tracking is not reported.
 - **Product photos are pasted https URLs, not uploads, for now.** The page
   previews each one; a photo that does not load is flagged and counts as no
-  photo (it is not sent). Nothing writes to the `product-images` bucket, and
+  photo (it is not sent). The database refuses an `http://` photo too, for
+  every writer (`product_variants_primary_image_https`,
+  `variant_images_url_https`; `supabase/migrations/*_https_image_urls.sql`,
+  which rewrote the six that had come in by other routes — the share image
+  fetches https only, so each drew as a swatch). Nothing writes to the `product-images` bucket, and
   a maker changing their site breaks the photo — copying them into our own
   storage is logged for later.
 - **The label preview runs `variantLabel()` over what `create_variant()`
