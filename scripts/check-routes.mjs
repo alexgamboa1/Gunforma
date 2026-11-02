@@ -538,6 +538,37 @@ for (const [label, path, want] of [
     ok(missing.status === 404, '/gg/<unknown uuid>: 404', missing.status);
     const noId = await fetch(origin + '/gg/not-a-guide', { redirect: 'manual' });
     ok(noId.status === 404, '/gg/<no uuid>: 404', noId.status);
+
+    // The share image: the collage the page names (guide-og.mjs), fetched
+    // from THIS origin and decoded — a PNG of exactly the size the page
+    // declares, rendered (not the og-default.png fallback), and no redirect
+    // on the way (the page and the image agree on the hash). A stale hash
+    // 301s to the current one; an unknown uuid is a 404.
+    const { GG_OG_W, GG_OG_H, GG_OG_PREFIX, ogImagePath } = await import('../netlify/functions/_guide-og.mjs');
+    const SITE = 'https://gunforma.com';
+    const page = await (await fetch(origin + path)).text();
+    const tag = (prop) => (page.match(new RegExp(`<meta property="${prop}" content="([^"]*)"`)) || [])[1];
+    const img = tag('og:image') || '';
+    ok(img.startsWith(SITE + GG_OG_PREFIX + g.id + '-'), `${path}: og:image is the guide's collage`, img);
+    ok(tag('og:image:width') === String(GG_OG_W) && tag('og:image:height') === String(GG_OG_H) && tag('og:image:type') === 'image/png',
+       `${path}: og:image declared ${GG_OG_W}x${GG_OG_H} image/png`,
+       tag('og:image:width') + 'x' + tag('og:image:height') + ' ' + tag('og:image:type'));
+    if (img.startsWith(SITE + GG_OG_PREFIX)) {
+      const r = await fetch(img.replace(SITE, origin), { redirect: 'manual', headers: { 'User-Agent': 'facebookexternalhit/1.1' } });
+      const buf = Buffer.from(await r.arrayBuffer());
+      const png = buf[0] === 0x89 && buf[1] === 0x50 ? { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) } : null;
+      ok(r.status === 200, 'the collage answers 200 at the URL the page names (no stale-hash hop)', r.status);
+      ok((r.headers.get('content-type') || '').startsWith('image/png'), 'the collage is served as image/png', r.headers.get('content-type'));
+      ok(r.headers.get('x-gg-og') === 'rendered', 'the collage rendered, not the og-default.png fallback',
+         (r.headers.get('x-gg-og') || '<none>') + (r.headers.get('x-gg-og-reason') ? ' — ' + r.headers.get('x-gg-og-reason') : ''));
+      ok(!!png && png.w === GG_OG_W && png.h === GG_OG_H, `the decoded bytes are ${GG_OG_W}x${GG_OG_H}`, png ? png.w + 'x' + png.h : 'not a PNG');
+      note('collage photos loaded', r.headers.get('x-gg-og-photos'));
+      const stale = await fetch(origin + ogImagePath(g.id, '0000000000'), { redirect: 'manual' });
+      ok(stale.status === 301 && (stale.headers.get('location') || '').endsWith(img.slice(SITE.length)),
+         'a stale collage hash 301s to the current one', stale.status + ' → ' + stale.headers.get('location'));
+      const gone = await fetch(origin + ogImagePath('00000000-0000-4000-8000-000000000000', '0000000000'), { redirect: 'manual' });
+      ok(gone.status === 404, 'the collage of an unknown uuid is a 404', gone.status);
+    }
   }
 }
 

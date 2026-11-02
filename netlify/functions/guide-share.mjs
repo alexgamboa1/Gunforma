@@ -37,8 +37,10 @@
 //
 // THE SHARE CARD is built from the data — the guide's title, its most
 // notable parts (headlineParts(), shared with build-og.mjs), the part count
-// and today's total — and og:image is og-default.png for now. The collage
-// (loadouts-spec §5) is a separate change.
+// and today's total — and og:image is the guide's collage,
+// /gg-og/<uuid>-<hash>.png (guide-og.mjs; the hash is of what the image
+// draws, _guide-og.mjs), declared 1200x630 image/png. When the collage
+// cannot be named the page declares og-default.png, the same size and type.
 //
 // PRICES follow the house rules through the shared modules, never a copy:
 // _listing-rules.mjs for stale and sort, _maker-link.mjs for the unpaid
@@ -64,35 +66,17 @@ import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } f
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { CDN_CACHE_BUILD, CDN_CACHE_NO_STORE } from './_cache.mjs';
 import { pgRows, unavailable } from './_pg.mjs';
+import { CURATED_SELECT, COMMUNITY_SELECT, VARIANT_SELECT, fetchGuide, fetchVariants, guideParts,
+         groupByProduct, partPicture } from './_guide-data.mjs';
+import { shareImageFor, guideTitle, guideModel, OG_DEFAULT_URL, OG_DEFAULT_W, OG_DEFAULT_H } from './_guide-og.mjs';
 
 const SITE = 'https://gunforma.com';
 const GALLERY = '/gunforma-gun-guides.html';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// Every embed names its FK (CLAUDE.md, PGRST201). gun_guides carries TWO
-// foreign keys to guns — gun_id alone and the composite (gun_id,
-// platform_id) — so a bare guns(...) off it is ambiguous and fails the
-// whole read. guides has one (the composite); named anyway.
-export const CURATED_SELECT = [
-  'id', 'title', 'category', 'description', 'platform_id', 'gun_id', 'parts_snapshot', 'created_at',
-  'guide_themes!guides_category_fkey(label)',
-  'guns!guides_gun_platform_fkey(name,slug)',
-  'platforms!guides_platform_id_fkey(name)',
-].join(',');
-export const COMMUNITY_SELECT = [
-  'id', 'user_id', 'title', 'platform_id', 'gun_id', 'parts_snapshot', 'created_at', 'updated_at',
-  'guns!gun_guides_gun_id_fkey(name,slug)',
-  'platforms!gun_guides_platform_id_fkey(name)',
-].join(',');
-// One read for every catalog part: photos, the saved option's listings, the
-// maker fallback and priceTotal()'s inputs (a superset of
-// PRICE_TOTAL_SELECT). product_variants → products is the two-FK pair: named.
-export const VARIANT_SELECT = [
-  'id', 'product_id', 'is_default', 'msrp', 'color', 'finish', 'variant_label', 'primary_image_url',
-  'products!product_variants_product_id_fkey(slug,category,url,is_discontinued,' +
-    'manufacturers!products_brand_id_fkey(name,website_url))',
-  'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name))',
-].join(',');
+// The selects and reads are shared with guide-og.mjs (_guide-data.mjs);
+// re-exported so the named-embed test reads them where it always has.
+export { CURATED_SELECT, COMMUNITY_SELECT, VARIANT_SELECT };
 
 // ── routing ──────────────────────────────────────────────────────────────
 // A function receives the ORIGINAL request URL (CLAUDE.md, "Netlify
@@ -129,24 +113,9 @@ function notFound() {
 }
 
 // ── reads ────────────────────────────────────────────────────────────────
-// Each throws UpstreamError on a failure to read (the handler answers 503);
-// an empty array is the one real "not here".
-async function fetchGuide(id) {
-  const curated = await pgRows('guides?id=eq.' + id + '&is_published=eq.true' +
-    '&select=' + encodeURIComponent(CURATED_SELECT) + '&limit=1');
-  if (curated.length) return { kind: 'curated', row: curated[0] };
-  const community = await pgRows('gun_guides?id=eq.' + id + '&is_removed=eq.false' +
-    '&select=' + encodeURIComponent(COMMUNITY_SELECT) + '&limit=1');
-  if (community.length) return { kind: 'community', row: community[0] };
-  return null;
-}
-
-async function fetchVariants(parts) {
-  const ids = [...new Set(parts.map((p) => p && p.refId).filter((r) => typeof r === 'string' && UUID_RE.test(r)))];
-  if (!ids.length) return [];
-  return pgRows('product_variants?select=' + encodeURIComponent(VARIANT_SELECT) +
-    '&retired_at=is.null&affiliate_links.retired_at=is.null&product_id=in.(' + ids.join(',') + ')');
-}
+// fetchGuide() and fetchVariants() (_guide-data.mjs) throw UpstreamError on
+// a failure to read (the handler answers 503); an empty array is the one
+// real "not here".
 
 // The builder's username. Not a fact about whether the guide exists, so a
 // failed read is a page without a byline, never a 503.
@@ -250,14 +219,9 @@ function partView(p, byProduct) {
   const entry = p && p.refId ? byProduct.get(p.refId) : null;
   const product = entry ? entry.product : null;
   const variants = entry ? entry.variants : [];
-  const saved = p.variantId ? variants.find((v) => v.id === p.variantId) : null;
-  const dv = variants.find((v) => v.is_default) || variants[0] || null;
-  // The saved option's photo; a curated guide (no saved option) shows the
-  // default's. Never another option's photo as a stand-in (loadouts-spec
-  // §9): a saved option with no photo gets its own colour's swatch.
-  const shown = p.variantId ? saved : dv;
-  const photo = shown ? shown.primary_image_url : (p.variantId ? p.imageUrl || null : null);
-  const color = shown ? shown.color : (p.variantColor || null);
+  // The saved option's photo, else its swatch — never another option's
+  // (partPicture(), shared with the share image).
+  const { photo, color, saved } = partPicture(p, entry);
   const optionLabel = saved ? variantLabel(saved) : (p.variantLabel || '');
   const discontinued = !!(product && product.is_discontinued);
   let buy = null;
@@ -338,22 +302,19 @@ function pageDescription({ title, kind, model, username, parts, count, totalText
   return (core + who).length <= META_DESCRIPTION_MAX ? core + who : clampLine(core, META_DESCRIPTION_MAX);
 }
 
-export function renderGuide({ kind, row, variants, username }) {
+// `image` is the share image the handler resolved (shareImageFor()); without
+// one the page declares og-default.png at its real size.
+export function renderGuide({ kind, row, variants, username, image }) {
   const id = String(row.id).toLowerCase();
-  const title = (row.title || '').trim() || 'Untitled guide';
+  const title = guideTitle(row);
   const canonical = gunGuideUrl(id, title);
-  const model = (row.guns && row.guns.name) || (row.platforms && row.platforms.name) || 'P365';
+  const model = guideModel(row);
   const theme = kind === 'curated' && row.guide_themes ? row.guide_themes.label : null;
-  const parts = (Array.isArray(row.parts_snapshot) ? row.parts_snapshot : []).filter(Boolean);
+  const parts = guideParts(row);
+  const og = image || { url: OG_DEFAULT_URL, w: OG_DEFAULT_W, h: OG_DEFAULT_H, type: 'image/png',
+                        alt: 'Gun Guide: ' + title, collage: false };
 
-  const byProduct = new Map();
-  for (const v of variants) {
-    if (!v || !v.product_id) continue;
-    const e = byProduct.get(v.product_id) || { product: v.products || null, variants: [] };
-    if (!e.product && v.products) e.product = v.products;
-    e.variants.push(v);
-    byProduct.set(v.product_id, e);
-  }
+  const byProduct = groupByProduct(variants);
   const views = parts.map((p) => partView(p, byProduct));
   const totalText = priceTotalText(priceTotal(parts, variants));
   const hasPartner = views.some((v) => v.buy && v.buy.kind === 'partner');
@@ -391,7 +352,7 @@ export function renderGuide({ kind, row, variants, username }) {
 
   const html = '<!DOCTYPE html><html lang="en"><head>' +
     headTags({ title: docTitle, description, canonical, jsonLd, ogType: 'article',
-               ogImage: SITE + '/og-default.png' }) +
+               ogImage: og.url, ogImageMeta: og }) +
     // A community guide is served, never submitted (loadouts-spec §7.5).
     (indexable ? '' : '<meta name="robots" content="noindex"/>') +
     '<style>' + chromeCss() + layoutCss() + guideCss() + '</style>' +
@@ -419,6 +380,7 @@ export function renderGuide({ kind, row, variants, username }) {
     html, indexable,
     buyCount: views.filter((v) => v.buy).length,
     totalText,
+    collage: !!og.collage,
   };
 }
 
@@ -466,15 +428,16 @@ export default async (req) => {
     // Zero rows from BOTH tables — the one real not-found. A failed read
     // never gets here: pgRows throws and the catch answers 503.
     if (!found) return notFound();
-    variants = await fetchVariants(Array.isArray(found.row.parts_snapshot) ? found.row.parts_snapshot : []);
+    variants = await fetchVariants(guideParts(found.row));
   } catch (err) {
     console.error('[guide-share] lookup failed', err);
     return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
   }
   const username = found.kind === 'community' ? await fetchUsername(found.row.user_id) : null;
+  const image = await shareImageFor(found, variants);   // never throws: og-default.png on any failure
 
-  const out = renderGuide({ kind: found.kind, row: found.row, variants, username });
-  const parts = Array.isArray(found.row.parts_snapshot) ? found.row.parts_snapshot.filter(Boolean).length : 0;
+  const out = renderGuide({ kind: found.kind, row: found.row, variants, username, image });
+  const parts = guideParts(found.row).length;
   return new Response(out.html, {
     status: 200,
     headers: {
@@ -489,6 +452,7 @@ export default async (req) => {
       'x-guide-share-parts': String(parts),
       'x-guide-share-buy': String(out.buyCount),
       'x-guide-share-priced': out.totalText || 'none',
+      'x-guide-share-image': out.collage ? 'collage' : 'default',
       ...(out.indexable ? {} : { 'X-Robots-Tag': 'noindex' }),
     },
   });

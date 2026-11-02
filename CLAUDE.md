@@ -23,7 +23,10 @@ Two companion files, both under `claude/` (blocked from the web by netlify.toml)
   client is trusted.
 
 Because there is no build step, what is in the repo is what ships. Edit the real file;
-there is nothing to compile.
+there is nothing to compile. One function has npm dependencies —
+`guide-og.mjs`, the Gun Guide share image — pinned in the root `package.json`;
+Netlify installs them before the build, and you run `npm ci` before
+`check-all.sh` (see **The share image** under Gun Guide pages).
 
 ## Cloning
 
@@ -526,14 +529,70 @@ read. It copies `build-og.mjs`'s URL shape and `gun-hub.mjs`'s chrome:
   parts are never sold.
 - **The share card is built from the data** — title, `headlineParts()`
   (moved into `_build-cards.mjs`, shared with `build-og.mjs`), the count and
-  today's total. **og:image is `og-default.png`** until the collage
-  (loadouts-spec §5) ships.
+  today's total — and **og:image is the guide's collage** (below), declared
+  1200x630 `image/png` with `twitter:image` the same URL. The reads and the
+  which-photo rule (`partPicture()`) live in `_guide-data.mjs`, shared with
+  the image, because the image's URL is a hash of what it draws and the two
+  must read the same rows the same way.
 - **Cache**: `CDN_CACHE_BUILD` on the 200 — an unpublished or taken-down
   guide leaves every reader within the hour.
 - **Observable**: `x-guide-share` (`curated` | `community`),
-  `-index`, `-parts`, `-buy`, `-priced`. `check-routes.mjs` walks one
-  published guide on the wire; `check-sitemap.mjs` holds every submitted
-  `/gg/` URL to the canonical it serves and refuses a noindex on one.
+  `-index`, `-parts`, `-buy`, `-priced`, `-image` (`collage` | `default`).
+  `check-routes.mjs` walks one published guide on the wire;
+  `check-sitemap.mjs` holds every submitted `/gg/` URL to the canonical it
+  serves and refuses a noindex on one.
+
+#### The share image: `/gg-og/<uuid>-<hash>.png`
+
+`netlify/functions/guide-og.mjs` (2026-11-01) renders loadouts-spec §5's
+collage at 1200x630 — the ~1.91:1 shape scrapers give the large card (see
+**SEO invariants**): a header band with the Gunforma logo
+(`assets/gunforma-logo.png`, 60px tall so it still reads when the card is
+shown ~500px wide) and "GUN GUIDE" or "COMMUNITY GUIDE" — a community
+title never reads as a Gunforma guide — then the parts in build order
+(`BuildCategories.orderParts`, the browser file evaluated by
+`_build-categories.mjs`, never a server copy), up to six tiles with five
+and a "+N" past six, and beside them the title (the largest text), the
+model, the part count and "$X today" from the page's own `priceTotal()`.
+It is the repo's **first function with npm
+dependencies** — `package.json` at the root pins `@resvg/resvg-wasm`
+(SVG → PNG with our own font; no system fonts on Lambda) and
+`@jsquash/webp`'s decoder (resvg 2.6.2 draws a WebP as **nothing, without
+an error** — 149 of 864 live variant photos were WebP). Both are
+WebAssembly, so the build's test runs the real renderer. The `.wasm` files,
+the fonts (`brand/fonts/`, Barlow Condensed, SIL OFL), the wordmark and
+`og-default.png` ship through `included_files`; `node_modules`,
+`package.json` and `package-lock.json` are 404 by `netlify.toml`, because
+the root is published. Run `npm ci` before `check-all.sh` locally.
+
+- **The URL carries a hash of the MODEL** (`_guide-og.mjs`: exactly what
+  the image draws — title, model, count, total, each tile's photo URL or
+  swatch, "+N", and `COLLAGE_VERSION`). An edit or a moved total is a new
+  URL, so a durably cached image is right for its URL by construction. The
+  function rebuilds the model from live rows and **301s a stale hash** to
+  the current one. **Bump `COLLAGE_VERSION` whenever the drawing changes**,
+  or every cached image keeps the old design under its old URL.
+- **Which photo**: `partPicture()`, the page's rule — the saved option's
+  own photo, else its colour as a swatch tile (chip, category, colour
+  name), never another option's photo. One difference: a photo URL from a
+  guide's SNAPSHOT (a saved option no longer live) is not fetched — this
+  function fetches server-side and that URL was written by the guide's
+  author. Photos are fetched from their makers' hosts with a timeout and a
+  size cap, sniffed by their bytes; their hosts are **not** on the
+  `[images]` allowlist.
+- **Never a broken card**: a photo that fails draws as its swatch and the
+  response is `no-store` (the next request retries); a failed read, a
+  missing bundle file, a render that throws or decodes to the wrong size
+  serves **og-default.png's own bytes** (200, 1200x630, `no-store`). The
+  page cannot know whether a later render will succeed, which is why the
+  fallback lives at the image URL; the page itself declares og-default.png
+  only when it cannot build the model. Zero rows is a 404.
+- **Unpublished and noindex rules are the page's**: the image exists for any
+  guide `/gg/` serves, and goes with it (`CDN_CACHE_BUILD`, the hour).
+- **Observable**: `x-gg-og` (`rendered` | `fallback` | `redirect` |
+  `not-found`), `-reason`, `-photos` (loaded/asked), `-hash`.
+  `check-og-image.mjs` decodes the first sitemap guide's collage;
+  `check-routes.mjs` decodes one on the wire and checks the stale-hash 301.
 
 ### Field Notes articles: `/field-notes/<slug>`
 
@@ -1479,7 +1538,8 @@ Registered today:
 | `scripts/option-price.test.mjs` | a part's headline price drifting from the selected option — a maker-only buy box showing another option's MSRP (the AXG FUSE read "MSRP $519.99", Black / Black, with FDE / Gold selected), "From $<lowest>" missing when nothing is selected, a number where the selected option has none, or a retailer-offer buy box changing with the selection; a catalog, Armory, builder-picker or profile Favorites card printing the default option's MSRP instead of "From $<lowest>", a "From" where every option costs the same, a catalog retailer card or panel whose MSRP number is not labelled "MSRP" (or a non-MSRP fallback that is), or the Armory's picked card or the builder's selected row showing another option's number; also any page or function still saying "Price N/A" / "Price n/a" instead of "Check price" — runs `js/option-price.js` and `js/affiliate.js` against the AXG FUSE's real prices |
 | `scripts/discontinued.test.mjs` | a discontinued part hidden or sold — its page showing a price, a buy row or a JSON-LD offer, missing its "Discontinued" badge, offering a successor the database does not name or one that is discontinued or unapproved, suggesting an unapproved or discontinued "similar" part, or reading `replaced_by_id` for a live part; a builder picker, the review queue, the catalog or the Armory filtering discontinued parts out of its read again, the catalog's or the Armory's "Show discontinued" toggle starting on, a guide or build no longer marking one; the sitemap or `/parts` dropping discontinued pages, or listing an address that 301s; `PART_REDIRECTS` or `js/part-redirects.js` drifting from the `/parts/` 301s in `netlify.toml`, or a catalog surface offering a row that 301s — runs `product-page.mjs` against a stubbed catalog and reads the pages' sources |
 | `scripts/guide-url.test.mjs` | `js/guide-url.js` and `_guide-url.mjs` drifting apart — a Share button or card link naming a different `/gg/` URL from the canonical the page declares — or the guide slug rule drifting from `buildSlug()` |
-| `scripts/guide-share.test.mjs` | a `/gg/` page answering 404 when PostgREST failed (503 + Retry-After after one retry, for a failed guides, gun_guides or parts read), answering anything but 404 for zero rows from both tables or for a path with no uuid, serving a Gunforma draft or a taken-down community guide (the published/removed filters must be SENT), a canonical not built from the title, a community guide without noindex or a published one with it, the share card not carrying the count and today's total, a buy row off `/go/`, a stale price stated, a sibling option's listing standing in for the saved one, a discontinued or typed part sold, or an unnamed embed off `gun_guides` — runs `guide-share.mjs` against a stubbed fetch |
+| `scripts/guide-share.test.mjs` | a `/gg/` page answering 404 when PostgREST failed (503 + Retry-After after one retry, for a failed guides, gun_guides or parts read), answering anything but 404 for zero rows from both tables or for a path with no uuid, serving a Gunforma draft or a taken-down community guide (the published/removed filters must be SENT), a canonical not built from the title, a community guide without noindex or a published one with it, the share card not carrying the count and today's total, a buy row off `/go/`, a stale price stated, a sibling option's listing standing in for the saved one, a discontinued or typed part sold, or an unnamed embed off `gun_guides`; also og:image not naming the collage at its declared 1200x630 image/png — runs `guide-share.mjs` against a stubbed fetch |
+| `scripts/guide-og.test.mjs` | a Gun Guide's share image that is not 1200x630 in its own bytes; a JPEG, PNG or WebP photo loaded but not DRAWN (pixels read off the render — resvg draws a WebP as nothing); a photo that fails (status, reject, timeout, not an image) taking the card down, not drawing as its swatch, or being cached durably; a failed render or read serving anything but og-default.png's bytes; a stale hash not 301ing to the current one; the hash not moving with a part, an option, the title, a photo or today's total; the logo not drawn in the header band, or a corner wordmark back; the hash not moving with `COLLAGE_VERSION`; tiles out of build order, past six without "+N", borrowing another option's photo or fetching a snapshot's URL; the `/gg/` page naming a URL the image function does not answer 200 on, or not falling back to og-default.png when the collage cannot be named — runs `guide-og.mjs` with the real WebAssembly renderer against a stubbed fetch |
 | `scripts/gun-guide-buy.test.mjs` | an open Gun Guide selling a part dishonestly — a stale price stated as a number or falling back to MSRP (the buy row must read "Check price"), a sibling option's listing standing in for the SAVED option (a gone saved option falls back to the product block, and a maker-only one then reads "Check price", never a sibling's MSRP), a maker-only part without its `/go/part/<id>` button or with `sponsored` on it, a discontinued or typed part given a buy row, the live total drifting from `js/build-total.js`'s number (the one a build's page shows), per-block disclosures where the guide says ONE line, or the catalog panel's own `renderBlock` losing its disclosure — runs `js/affiliate.js`'s real ingestion and the page's own inline script over a stubbed catalog |
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |

@@ -1,6 +1,9 @@
 # Brand source files
 
-Masters only — the files you re-export FROM. Nothing here is loaded by the site.
+Masters only — the files you re-export FROM. Nothing here is loaded by the site,
+with one exception: `fonts/` (Barlow Condensed, SIL Open Font License — `fonts/OFL.txt`)
+is read by `netlify/functions/guide-og.mjs` to draw the Gun Guide share image, and
+ships inside that function through `included_files` in `netlify.toml`.
 
 What the site actually loads lives in `assets/`:
 - `assets/gunforma-logo.png` — nav wordmark, 1496x211, transparent, cropped tight

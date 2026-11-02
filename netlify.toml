@@ -82,6 +82,29 @@
 [functions."field-note"]
   included_files = ["field-notes/*.md"]
 
+# guide-share names its share image by a hash of what the image draws, and
+# the image draws parts in build order — js/build-categories.js, evaluated
+# by _build-categories.mjs (it reads js/category-map.js at load). Missing
+# from the bundle, the page declares og-default.png instead of a collage.
+[functions."guide-share"]
+  included_files = ["js/category-map.js", "js/build-categories.js"]
+
+# guide-og renders the collage: the same two taxonomy files, the two
+# WebAssembly modules (the renderer and the WebP decoder — package.json pins
+# both), the fonts (brand/fonts/, SIL OFL), the wordmark, and og-default.png,
+# whose bytes it serves when a render fails. Any of these missing is a
+# fallback to og-default.png, never a broken image.
+[functions."guide-og"]
+  included_files = [
+    "js/category-map.js",
+    "js/build-categories.js",
+    "node_modules/@resvg/resvg-wasm/index_bg.wasm",
+    "node_modules/@jsquash/webp/codec/dec/webp_dec.wasm",
+    "brand/fonts/*.ttf",
+    "assets/gunforma-logo.png",
+    "og-default.png",
+  ]
+
 # ---------------------------------------------------------------------------
 # Not-the-website paths. publish = "." serves the whole repo root, so source
 # that happens to live next to the pages is reachable over HTTP. None of it is
@@ -177,6 +200,27 @@
   status = 404
   force = true
 
+# package.json exists for the functions' dependencies (guide-og.mjs), and
+# the build installs node_modules into the published root. None of it is
+# for the web.
+[[redirects]]
+  from = "/node_modules/*"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/package.json"
+  to = "/404.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/package-lock.json"
+  to = "/404.html"
+  status = 404
+  force = true
+
 # gunforma-post-build-v6.html was renamed to drop the -v6. Anything already
 # indexed, bookmarked, or sitting in an old email link still asks for the old
 # path, and no file answers to it any more.
@@ -242,6 +286,15 @@
 [[redirects]]
   from = "/gg/*"
   to = "/.netlify/functions/guide-share?id=:splat"
+  status = 200
+
+# A Gun Guide's share image, /gg-og/<uuid>-<hash>.png (guide-og.mjs). Same
+# shape as /gg/*: the function reads the original pathname; ?p= is what
+# `netlify dev` substitutes. /gg-og/ is its own prefix, so /gg/* above does
+# not shadow it.
+[[redirects]]
+  from = "/gg-og/*"
+  to = "/.netlify/functions/guide-og?p=:splat"
   status = 200
 
 # The legacy build URL, server-rendered by the same function so BOTH shapes

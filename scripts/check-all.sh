@@ -92,6 +92,7 @@ check "gun guide parts build order" scripts/guide-part-order.test.mjs
 check "gun guide buy rows"        scripts/gun-guide-buy.test.mjs
 check "guide-url copies agree"    scripts/guide-url.test.mjs
 check "gun guide share pages"     scripts/guide-share.test.mjs
+check "gun guide share image"     scripts/guide-og.test.mjs
 check "headline price follows option" scripts/option-price.test.mjs
 check "guide editor writes"       scripts/guide-editor.test.mjs
 
@@ -129,9 +130,10 @@ NOT_BUILD_CHECKS=(
   # .github/workflows/check-sitemap.yml.
   scripts/check-sitemap.mjs
 
-  # Fetches the share-card image from a live origin and decodes the bytes to
-  # confirm they really are 1200x630. Needs a deployed Image CDN transform,
-  # which does not exist at build time. Runs from
+  # Fetches the share-card images from a live origin — two builds' and one
+  # Gun Guide's collage — and decodes the bytes to confirm the size the tags
+  # declare. Needs a deployed Image CDN transform and guide-og function,
+  # which do not exist at build time. Runs from
   # .github/workflows/check-routes.yml.
   scripts/check-og-image.mjs
 
