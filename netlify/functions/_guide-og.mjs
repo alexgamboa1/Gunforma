@@ -46,7 +46,8 @@ export const OG_DEFAULT_URL = SITE + '/og-default.png';
 export const OG_DEFAULT_W = 1200;
 export const OG_DEFAULT_H = 630;
 
-export const COLLAGE_VERSION = 1;
+// 2: the logo moved from a small bottom-right wordmark to a header band.
+export const COLLAGE_VERSION = 2;
 // Up to six tiles. A guide of more than six parts shows five photos and a
 // "+N" tile — the Gun Guides card's rule, one row more.
 export const MAX_TILES = 6;

@@ -2,11 +2,13 @@
 // ─────────────────────────────────────────────────────────────────────────
 // The collage of claude/loadouts-spec.md §5, at the size every scraper gives
 // the large card (1200x630, ~1.91:1 — CLAUDE.md, "SEO invariants": the card
-// is chosen from the image's real pixels): the guide's parts in build order
-// (BuildCategories.orderParts, the browser's own file — _build-categories.mjs),
-// up to six tiles with a "+N" tile for the rest, then the title, the model,
-// the part count and "$X today" from the same priceTotal() the page prints,
-// and the Gunforma wordmark small in a corner. A part with no photo of its
+// is chosen from the image's real pixels): a header band with the Gunforma
+// logo (sized to read at ~500px wide, how iMessage and Reddit show it) and
+// "GUN GUIDE" or "COMMUNITY GUIDE"; under it the guide's parts in build
+// order (BuildCategories.orderParts, the browser's own file —
+// _build-categories.mjs), up to six tiles with a "+N" tile for the rest,
+// and beside them the title, the model, the part count and "$X today" from
+// the same priceTotal() the page prints. A part with no photo of its
 // saved option draws as that option's colour swatch (_variant-swatch.mjs),
 // never as another option's photo.
 //
@@ -290,17 +292,27 @@ function swatchFill(sw, id) {
   return { def: '', fill: cs[0] };
 }
 
-// The tile grid inside the left panel: 1 tile alone, up to 4 in two
-// columns, 5–6 in three.
-const GRID = { x: 40, y: 40, w: 620, h: 550, gap: 16 };
-export function gridFor(n) {
+// The header band: the Gunforma logo, left, at a height that still reads
+// when the card is shown ~500px wide (iMessage, Reddit: 60px → 25px), and
+// what kind of guide this is, right. A community guide says so here, so its
+// author's title never reads as a Gunforma guide.
+const BAND = { h: 112, logoH: 60, labelSize: 28 };
+const LOGO_RATIO = 1496 / 211;   // assets/gunforma-logo.png
+
+// The tile grid below the band: 1 tile alone, up to 4 in two columns, 5–6
+// in three. Left-aligned under the logo and centred vertically; the text
+// column starts just right of it, so fewer tiles leave the title more room.
+const GRID = { x: 40, y: BAND.h + 24, w: 600, h: GG_OG_H - BAND.h - 24 - 36, gap: 14 };
+function gridSpan(n) {
   const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3;
   const rows = Math.max(1, Math.ceil(n / cols));
   const size = Math.floor(Math.min((GRID.w - GRID.gap * (cols - 1)) / cols, (GRID.h - GRID.gap * (rows - 1)) / rows));
-  const gw = cols * size + GRID.gap * (cols - 1);
-  const gh = rows * size + GRID.gap * (rows - 1);
-  const x0 = GRID.x + (GRID.w - gw) / 2;
-  const y0 = GRID.y + (GRID.h - gh) / 2;
+  const w = cols * size + GRID.gap * (cols - 1);
+  const h = rows * size + GRID.gap * (rows - 1);
+  return { cols, size, w, h, x0: GRID.x, y0: GRID.y + Math.round((GRID.h - h) / 2) };
+}
+export function gridFor(n) {
+  const { cols, size, x0, y0 } = gridSpan(n);
   return (k) => ({ x: x0 + (k % cols) * (size + GRID.gap), y: y0 + Math.floor(k / cols) * (size + GRID.gap), size });
 }
 
@@ -359,30 +371,42 @@ export function collageSvg(model, photos, assets, measure) {
       (model.more === 1 ? 'part' : 'parts') + '</text>');
   }
 
+  const span = gridSpan(n);
   if (n === 0) {
-    body.push('<rect x="' + GRID.x + '" y="' + GRID.y + '" width="' + GRID.w + '" height="' + GRID.h + '" rx="24" fill="' + C.moreBg + '"/>');
-    body.push('<text x="' + (GRID.x + GRID.w / 2) + '" y="' + (GRID.y + GRID.h / 2 + 14) + '" text-anchor="middle" font-family="' +
+    span.w = GRID.h;
+    body.push('<rect x="' + GRID.x + '" y="' + GRID.y + '" width="' + span.w + '" height="' + GRID.h + '" rx="24" fill="' + C.moreBg + '"/>');
+    body.push('<text x="' + (GRID.x + span.w / 2) + '" y="' + (GRID.y + GRID.h / 2 + 14) + '" text-anchor="middle" font-family="' +
       FONT_FAMILY + '" font-weight="500" font-size="40" fill="' + C.muted + '">No parts yet</text>');
   }
 
-  // The text column.
-  const TX = 700, TW = GG_OG_W - TX - 40;
-  const eyebrow = model.kind === 'curated' ? 'GUNFORMA GUIDE' : 'COMMUNITY BUILD';
-  let titleSize = 64, title = wrap(model.title, TW, 3, (s) => measure(s, 64, 700));
+  // The header band.
+  const LH = BAND.logoH, LW = Math.round(LH * LOGO_RATIO);
+  body.push('<image x="' + GRID.x + '" y="' + Math.round((BAND.h - LH) / 2) + '" width="' + LW + '" height="' + LH +
+    '" href="' + assets.logoUri + '"/>');
+  const label = model.kind === 'curated' ? 'GUN GUIDE' : 'COMMUNITY GUIDE';
+  body.push('<text x="' + (GG_OG_W - 40) + '" y="' + Math.round(BAND.h / 2 + BAND.labelSize * 0.36) + '" text-anchor="end" font-family="' +
+    FONT_FAMILY + '" font-weight="500" font-size="' + BAND.labelSize + '" letter-spacing="4" fill="' + C.muted + '">' + label + '</text>');
+  body.push('<rect x="' + GRID.x + '" y="' + BAND.h + '" width="' + (GG_OG_W - 2 * GRID.x) + '" height="2" fill="' + C.tileEdge + '"/>');
+
+  // The text column, beside the grid. The title is the largest text on the
+  // card.
+  const TX = GRID.x + span.w + 44, TW = GG_OG_W - TX - 40;
+  let titleSize = 62, title = wrap(model.title, TW, 3, (s) => measure(s, 62, 700));
   if (!title.fits) {
-    titleSize = 54;
-    title = wrap(model.title, TW, 4, (s) => measure(s, 54, 700));
+    titleSize = 52;
+    title = wrap(model.title, TW, 4, (s) => measure(s, 52, 700));
   }
   const titleLead = Math.round(titleSize * 1.04);
   const stats = model.count + (model.count === 1 ? ' part' : ' parts') + (model.total ? '  ·  ' + model.total + ' today' : '');
   let modelLine = model.model;
   while (modelLine.length > 1 && measure(modelLine, 32, 500) > TW) modelLine = modelLine.slice(0, -2) + '…';
+  let statsSize = 38;
+  while (statsSize > 28 && measure(stats, statsSize, 700) > TW) statsSize -= 2;
 
-  const blockH = 26 + 18 + title.lines.length * titleLead + 22 + 34 + 18 + 40;
-  let y = Math.max(60, Math.round((560 - blockH) / 2 + 26));
-  body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="500" font-size="24" letter-spacing="3" fill="' +
-    C.blue + '">' + eyebrow + '</text>');
-  y += 18;
+  // Centred in the space under the band. Baselines: the first title line
+  // sits one cap height below the block's top.
+  const blockH = Math.round(titleSize * 0.74) + (title.lines.length - 1) * titleLead + 22 + 32 + 18 + statsSize;
+  let y = GRID.y + Math.round((GRID.h - blockH) / 2) + Math.round(titleSize * 0.74) - titleLead;
   for (const line of title.lines) {
     y += titleLead;
     body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="700" font-size="' + titleSize +
@@ -391,14 +415,9 @@ export function collageSvg(model, photos, assets, measure) {
   y += 22 + 32;
   body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="500" font-size="32" fill="' + C.muted + '">' +
     xml(modelLine) + '</text>');
-  y += 18 + 40;
-  body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="700" font-size="40" fill="' + C.cream + '">' +
+  y += 18 + statsSize;
+  body.push('<text x="' + TX + '" y="' + y + '" font-family="' + FONT_FAMILY + '" font-weight="700" font-size="' + statsSize + '" fill="' + C.cream + '">' +
     xml(stats) + '</text>');
-
-  // The wordmark, small, bottom right (1496x211 → 184 wide).
-  const LW = 184, LH = Math.round(LW * 211 / 1496);
-  body.push('<image x="' + (GG_OG_W - 40 - LW) + '" y="' + (GG_OG_H - 36 - LH) + '" width="' + LW + '" height="' + LH +
-    '" href="' + assets.logoUri + '"/>');
 
   return '<svg xmlns="http://www.w3.org/2000/svg" width="' + GG_OG_W + '" height="' + GG_OG_H + '" viewBox="0 0 ' + GG_OG_W + ' ' + GG_OG_H + '">' +
     (defs.length ? '<defs>' + defs.join('') + '</defs>' : '') +

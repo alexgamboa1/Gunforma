@@ -221,6 +221,26 @@ test('a guide that is gone (zero rows from both tables) is a 404; a bad path is 
   }
 });
 
+test('the logo heads the card, in the band, and the bottom-right corner is empty', async () => {
+  stub(world());
+  const got = capturePixels();
+  assert.equal((await get(currentPath())).status, 200);
+  const BG = [0x0e, 0x0f, 0x11];
+  const lit = (x0, y0, x1, y1) => {
+    let n = 0;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const i = (y * GG_OG_W + x) * 4;
+      if (!near([got.pixels[i], got.pixels[i + 1], got.pixels[i + 2]], BG, 24)) n++;
+    }
+    return n;
+  };
+  // The logo: 60px tall from x=40 in the 112px band — thousands of lit
+  // pixels, where an image that failed to draw leaves none.
+  assert.ok(lit(40, 26, 466, 86) > 4000, 'the logo is drawn in the header band (' + lit(40, 26, 466, 86) + ' lit pixels)');
+  // Where the small corner wordmark used to sit: nothing.
+  assert.equal(lit(960, 560, 1160, 600), 0, 'no corner wordmark');
+});
+
 // ── the hash ──────────────────────────────────────────────────────────────
 test('a stale or missing hash 301s to the current one, uncached', async () => {
   for (const p of [ogImagePath(ID, 'abcdef0123'), ogImagePath(ID, null)]) {
@@ -247,6 +267,9 @@ test('the hash is of what the image draws: it moves with the parts, the option, 
     "today's total": h(ROW, VARIANTS.map((v) => (v.id === 'v-opt' ? { ...v, affiliate_links: [link('L1', 249.99)] } : v))),
   };
   for (const [what, hash] of Object.entries(moved)) assert.notEqual(hash, base, what);
+  // A design change moves every URL: the version is part of what is hashed.
+  const m = collageModel({ kind: 'curated', row: ROW, variants: VARIANTS }, BC);
+  assert.notEqual(collageHash({ ...m, v: m.v + 1 }), base, 'COLLAGE_VERSION');
   assert.deepEqual(parseOgPath(ogImagePath(ID, base)), { id: ID, hash: base });
 });
 
