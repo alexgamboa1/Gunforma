@@ -1,12 +1,13 @@
 // armory-builds — one reader's own Armory builds (gun_guides rows), read and
-// drawn ONCE for the two places that list them: the Armory's My Armory panel
+// drawn ONCE for the two places that list them: the Armory's My builds tab
 // and the profile's Armory builds tab. Each page wires its own actions
 // (Open, Share, and on the Armory, Delete) into the card's action slot; the
 // read, the card and its numbers live here, so the page nobody is looking
 // at cannot keep an older card (CLAUDE.md, "Neither is the photo uploader").
 //
 //   ArmoryBuilds.load(sb, userId)  → Promise<{ rows, variants, byId, defaults, error }>
-//   ArmoryBuilds.cardHtml(row, data, actionsHtml) → one card
+//   ArmoryBuilds.cardHtml(row, data, actionsHtml) → one card, in an .ab-grid
+//   ArmoryBuilds.ensureCss()       → the card and grid styles (cardHtml calls it)
 //   ArmoryBuilds.modelName(row)    → "P365 XMacro" | "SIG P365" | ''
 //   ArmoryBuilds.shareable(row)    → false for a build an admin took down
 //   ArmoryBuilds.copyLink(row)     → Promise<url>; the apex /gg/ URL to the clipboard
@@ -22,8 +23,11 @@
 // to nothing. A failed variants read draws swatches and no total; the list
 // still shows.
 //
-// Thumbnails are the SAVED option's photo, else its colour's swatch — never
-// another option's photo (loadouts-spec §9), the Gun Guides card's rule.
+// The card and grid are the Gun Guides card's design (gunforma-gun-guides.html
+// .gcard / .guide-grid): the first five parts in build order as 4:3 tiles and
+// a "+N" tile for the rest, kicker, title, then a footer with the total and
+// the part count. Thumbnails are the SAVED option's photo, else its colour's
+// swatch — never another option's photo (loadouts-spec §9), its rule too.
 //
 // Needs, loaded first: js/build-categories.js (orderParts), js/variant-swatch.js,
 // js/build-total.js, js/guide-url.js — check-script-order.mjs holds the order.
@@ -37,7 +41,7 @@
   // select, with the photo).
   var VARIANT_SELECT = 'id, product_id, msrp, is_default, color, primary_image_url, ' +
     'affiliate_links(street_price, in_stock, last_checked, op_last_matched_by)';
-  var THUMBS = 4;
+  var THUMBS = 5;
 
   async function load(sb, userId) {
     var out = { rows: [], variants: [], byId: {}, defaults: {}, error: null };
@@ -91,7 +95,7 @@
       ? '<img src="' + esc(m.url) + '" alt="" loading="lazy" data-fallback="' + esc(swatch) + '"' +
           ' onerror="this.parentElement.innerHTML=this.dataset.fallback" />'
       : swatch;
-    return '<span class="ab-thumb">' + inner + '</span>';
+    return '<div class="ab-thumb">' + inner + '</div>';
   }
 
   function cardHtml(row, data, actionsHtml) {
@@ -101,20 +105,22 @@
     var shown = parts.slice(0, THUMBS);
     var rest = parts.length - shown.length;
     var thumbs = shown.length
-      ? shown.map(function (p) { return thumbHtml(p, data); }).join('') +
-        (rest > 0 ? '<span class="ab-thumb ab-more">+' + rest + '</span>' : '')
-      : '<span class="ab-empty">No parts</span>';
+      ? '<div class="ab-thumbs">' + shown.map(function (p) { return thumbHtml(p, data); }).join('') +
+          (rest > 0 ? '<div class="ab-thumb ab-more">+' + rest + '</div>' : '') + '</div>'
+      : '<div class="ab-thumbs-blank">' + esc(modelName(row) || 'Build') + ' · no parts</div>';
     var today = global.priceTotalText(global.buildPriceTotal(row.parts_snapshot, data.variants));
     var title = esc(row.title || 'Untitled build');
     var live = shareable(row);
     return '<div class="ab-card" data-id="' + esc(row.id) + '">' +
-      '<div class="ab-thumbs">' + thumbs + '</div>' +
+      thumbs +
       '<div class="ab-body">' +
         '<div class="ab-kicker">' + esc(modelName(row) || 'Build') +
           (live ? '' : ' · <span class="ab-removed">Taken down</span>') + '</div>' +
         '<div class="ab-title">' + (live ? '<a href="' + esc(global.gunGuidePath(row.id, row.title)) + '">' + title + '</a>' : title) + '</div>' +
-        '<div class="ab-meta">' + parts.length + (parts.length === 1 ? ' part' : ' parts') +
-          (today ? ' · <strong>' + esc(today) + '</strong> today' : '') + '</div>' +
+      '</div>' +
+      '<div class="ab-foot">' +
+        '<span class="ab-total">' + (today ? esc(today) + ' today' : '') + '</span>' +
+        '<span class="ab-count">' + parts.length + (parts.length === 1 ? ' part' : ' parts') + '</span>' +
       '</div>' +
       (actionsHtml ? '<div class="ab-actions">' + actionsHtml + '</div>' : '') +
     '</div>';
@@ -132,31 +138,42 @@
     return url;
   }
 
+  // Values are gunforma-gun-guides.html's .guide-grid / .gcard rules, under
+  // this module's own prefix: the profile and the Armory have their own
+  // .card / .part-card rules these must not land on.
   var CSS =
-    '.ab-list{display:flex;flex-direction:column;gap:10px}' +
-    '.ab-card{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;background:#fff;border:0.5px solid #e5e5e5;border-radius:6px;padding:10px 12px}' +
-    '.ab-thumbs{display:flex;gap:4px}' +
-    '.ab-thumb{width:52px;aspect-ratio:4/3;background:#fff;border:0.5px solid #eee;border-radius:3px;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#888}' +
-    '.ab-thumb img{width:100%;height:100%;object-fit:contain;padding:2px;display:block}' +
-    '.ab-thumb .ab-media{display:flex;align-items:center;justify-content:center;width:100%;height:100%}' +
-    '.ab-thumb .ab-media-swatch{display:block;width:24px;height:24px;border-radius:50%}' +
-    '.ab-more{background:#f4f3ee}' +
-    '.ab-empty{font-size:11px;color:#999;padding:8px 0}' +
-    '.ab-body{min-width:0}' +
-    '.ab-kicker{font-size:10px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:#888}' +
+    '.ab-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}' +
+    '.ab-card{background:#fff;border:0.5px solid #e5e5e5;border-radius:6px;overflow:hidden;display:flex;flex-direction:column;transition:border-color 0.15s,box-shadow 0.15s}' +
+    '.ab-card:hover{border-color:#4a9edd;box-shadow:0 4px 16px rgba(0,0,0,0.06)}' +
+    '.ab-thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:12px;border-bottom:0.5px solid #f0efe9}' +
+    '.ab-thumb{position:relative;aspect-ratio:4/3;background:#f4f3ee;border-radius:4px;overflow:hidden;min-width:0}' +
+    '.ab-thumb img{width:100%;height:100%;object-fit:cover;display:block}' +
+    '.ab-more{display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#555;background:#efeee8}' +
+    '.ab-thumbs-blank{padding:28px 12px;text-align:center;font-size:10px;color:#c5c2b8;letter-spacing:0.06em;text-transform:uppercase;border-bottom:0.5px solid #f0efe9}' +
+    '.ab-media{display:flex;align-items:center;justify-content:center;width:100%;height:100%}' +
+    '.ab-media-swatch{display:block;width:40%;aspect-ratio:1;max-width:30px;border-radius:50%}' +
+    '.ab-photo{aspect-ratio:4/3;background:#fff;border-bottom:0.5px solid #f0efe9;overflow:hidden;display:flex;align-items:center;justify-content:center}' +
+    '.ab-photo img{width:100%;height:100%;object-fit:contain;padding:10px;display:block}' +
+    '.ab-photo .ab-media-swatch{width:56px;max-width:none}' +
+    '.ab-body{padding:11px 14px 0;display:flex;flex-direction:column;gap:4px}' +
+    '.ab-kicker{font-size:9.5px;color:#2a7bbd;font-weight:700;letter-spacing:0.08em;text-transform:uppercase}' +
     '.ab-removed{color:#b24a2a}' +
-    '.ab-title{font-size:13.5px;font-weight:700;line-height:1.3;color:#1a1a1a;overflow-wrap:anywhere}' +
+    '.ab-title{font-size:15px;font-weight:700;line-height:1.25;color:#1a1a1a;overflow-wrap:anywhere}' +
     '.ab-title a{color:inherit;text-decoration:none}' +
     '.ab-title a:hover{color:#2a7bbd;text-decoration:underline}' +
-    '.ab-meta{font-size:11.5px;color:#666;margin-top:2px}' +
-    '.ab-meta strong{color:#1a1a1a}' +
-    '.ab-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}' +
-    '.ab-act{font-family:inherit;font-size:11px;font-weight:700;padding:5px 11px;border-radius:4px;border:0.5px solid #a7cdec;background:#fff;color:#2a7bbd;cursor:pointer;text-decoration:none;white-space:nowrap}' +
+    '.ab-foot{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:9px 14px 12px;margin-top:auto;border-top:0.5px solid #f0efe9}' +
+    '.ab-body + .ab-foot{margin-top:9px}' +
+    '.ab-total{font-size:14px;font-weight:700;color:#1a1a1a}' +
+    '.ab-total.na{color:#bbb;font-weight:500}' +
+    '.ab-count{font-size:11px;color:#888}' +
+    '.ab-actions{display:flex;gap:6px;flex-wrap:wrap;padding:0 14px 12px}' +
+    '.ab-act{font-family:inherit;font-size:11px;font-weight:700;padding:5px 12px;border-radius:4px;border:0.5px solid #a7cdec;background:#fff;color:#2a7bbd;cursor:pointer;text-decoration:none;white-space:nowrap}' +
     '.ab-act:hover{background:#eaf4fc}' +
+    '.ab-act.primary{background:#4a9edd;border-color:#4a9edd;color:#fff}' +
+    '.ab-act.primary:hover{background:#2a7bbd}' +
     '.ab-act.danger{color:#b24a2a;border-color:#f3bfae}' +
     '.ab-act.danger:hover{background:#fdeae4}' +
-    '.ab-act:disabled{opacity:0.5;cursor:default}' +
-    '@media (max-width:600px){.ab-card{grid-template-columns:1fr}.ab-actions{justify-content:flex-start}}';
+    '.ab-act:disabled,.ab-act.primary:disabled{background:#e8ecf0;border-color:#e8ecf0;color:#7a8590;cursor:default}';
   var cssDone = false;
   function ensureCss() {
     if (cssDone) return;
@@ -178,6 +195,7 @@
   global.ArmoryBuilds = {
     load: load,
     cardHtml: cardHtml,
+    ensureCss: ensureCss,
     modelName: modelName,
     shareable: shareable,
     copyLink: copyLink,

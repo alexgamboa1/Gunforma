@@ -91,7 +91,9 @@ function loadPage(file, marker, { confirm = () => true } = {}) {
   const store = {};
   ctx.document = dom.document;
   ctx.localStorage = { getItem: (k) => (k in store ? store[k] : null), setItem: (k, v) => { store[k] = String(v); }, removeItem: (k) => { delete store[k]; } };
-  ctx.location = { search: '', pathname: '/' + file };
+  // A browser's location.hash: assigning 'x' reads back '#x'.
+  ctx.location = { search: '', pathname: '/' + file, _hash: '',
+    get hash() { return this._hash; }, set hash(v) { this._hash = v ? (v[0] === '#' ? v : '#' + v) : ''; } };
   ctx.replaced = [];
   ctx.history = { replaceState(_s, _t, url) { ctx.replaced.push(url); } };
   ctx.confirm = confirm;
@@ -480,9 +482,9 @@ test('publishing a draft of a live guide updates the live row, deletes the draft
   assert.match(els['toast-msg'].textContent, /Published/);
 });
 
-// ── My Armory (2026-11-02) ────────────────────────────────────────────────
-// The reader's own Armory builds and saved parts, on the Armory page. Every
-// rule here renders a perfectly normal panel when broken: another reader's
+// ── My builds and Saved parts (2026-11-02) ────────────────────────────────
+// The reader's own Armory builds and saved parts, as the Armory's second and
+// third tabs. Every rule here renders a perfectly normal tab when broken: another reader's
 // rows listed as yours, Open landing in a Gunforma guide, a part that does
 // not fit added anyway, a saved build quietly re-pointed, a write to
 // part_favorites from a page that only reads it, a refused delete reported
@@ -505,9 +507,9 @@ function myArmoryReads(ctx, { builds = [JOES_BUILD], favs = [] } = {}) {
   return reads;
 }
 
-test('My Armory reads only the signed-in reader\'s own rows, and never writes part_favorites', async () => {
+test('My builds / Saved parts reads only the signed-in reader\'s own rows, and never writes part_favorites', async () => {
   const { ctx, els } = armory();
-  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; MY.open = true;`);
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; showTab('my-builds');`);
   const reads = myArmoryReads(ctx, { favs: [{ product_id: 'trig-2', created_at: '2026-11-01T00:00:00Z', products: { id: 'trig-2', name: 'Trigger Two' } }] });
   await ctx.loadMyArmory();
   const of = (t) => reads.filter((r) => r.table === t);
@@ -515,36 +517,53 @@ test('My Armory reads only the signed-in reader\'s own rows, and never writes pa
   assert.deepEqual(of('gun_guides')[0].filters, [['user_id', JOE.id]], 'builds: user_id = the reader, nothing wider');
   assert.equal(of('part_favorites').length, 1);
   assert.deepEqual(of('part_favorites')[0].filters, [['user_id', JOE.id]], 'parts: user_id = the reader');
-  assert.equal(els['my-armory-btn'].textContent, 'My Armory · 1 build · 1 part');
-  assert.match(els['my-armory-body'].innerHTML, /Joe carry/);
+  assert.equal(els['tab-my-builds'].textContent, 'My builds (1)');
+  assert.equal(els['tab-saved-parts'].textContent, 'Saved parts (1)');
+  assert.match(els['panel-my-builds'].innerHTML, /class="ab-grid".*Joe carry/);
 
-  // Adding a saved part, deleting nothing: the panel's only writes are the
+  // Adding a saved part, deleting nothing: the tabs' only writes are the
   // ones the reader asks for, and none of them is to part_favorites.
-  set(ctx, `MY.tab = 'parts'; renderMyArmory();`);
+  set(ctx, `showTab('saved-parts');`);
+  assert.match(els['panel-saved-parts'].innerHTML, /class="ab-grid".*data-ma-part="trig-2"/);
   ctx.addSavedPart('trig-2');
   assert.deepEqual(ctx.sb.calls.filter((c) => c.table === 'part_favorites'), [], 'no write to part_favorites');
   const html = read('gunforma-armory.html');
   assert.doesNotMatch(html, /from\('part_favorites'\)\s*\.(insert|update|delete|upsert)/, 'and no code path that could');
 });
 
-test('My Armory signed out: a sign-in line and nothing else, and no reads', async () => {
+test('My builds / Saved parts signed out: the tabs show, say to sign in with a button, and read nothing', async () => {
   const { ctx, els } = armory();
-  set(ctx, `CURRENT_USER = null; MY.open = true;`);
+  set(ctx, `CURRENT_USER = null; showTab('my-builds');`);
+  assert.match(els['panel-my-builds'].innerHTML, /Loading…/, 'before the session is known: loading, never a sign-in flash');
   const reads = myArmoryReads(ctx);
   await ctx.loadMyArmory();
   assert.deepEqual(reads.filter((r) => r.table === 'gun_guides' || r.table === 'part_favorites'), [], 'nothing is read for nobody');
-  assert.match(els['my-armory-body'].innerHTML, /Sign in<\/a> to see your saved builds and parts\./);
-  assert.doesNotMatch(els['my-armory-body'].innerHTML, /ma-tab|ab-card|part-card/, 'no tabs, no lists');
-  assert.equal(els['my-armory-btn'].textContent, 'My Armory');
+  assert.match(els['panel-my-builds'].innerHTML, /Sign in to see your saved builds<\/div><a class="tab-empty-btn" href="gunforma-signin\.html\?next=gunforma-armory\.html">Sign in<\/a>/);
+  assert.doesNotMatch(els['panel-my-builds'].innerHTML, /ab-card/, 'no list');
+  set(ctx, `showTab('saved-parts');`);
+  assert.match(els['panel-saved-parts'].innerHTML, /Sign in to see your saved parts<\/div><a class="tab-empty-btn"/);
+  assert.equal(els['tab-my-builds'].textContent, 'My builds', 'no counts signed out');
+  assert.equal(els['tab-saved-parts'].textContent, 'Saved parts');
 });
 
-test('My Armory: Open is ?edit=community, never curated — and a "no" leaves the open build alone', async () => {
+test('My builds / Saved parts empty states', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; showTab('my-builds');`);
+  myArmoryReads(ctx, { builds: [], favs: [] });
+  await ctx.loadMyArmory();
+  assert.match(els['panel-my-builds'].innerHTML, /No saved builds yet\.<\/div><a href="#build">Build one →<\/a>/);
+  set(ctx, `showTab('saved-parts');`);
+  assert.match(els['panel-saved-parts'].innerHTML, /<a href="gunforma-parts-catalog\.html">Heart parts in the Parts Catalog to save them here →<\/a>/);
+  assert.equal(els['tab-my-builds'].textContent, 'My builds (0)');
+});
+
+test('My builds / Saved parts: Open is ?edit=community, never curated — and a "no" leaves the open build alone', async () => {
   const { ctx } = armory({ confirm: () => false });
   set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
   const actions = ctx.savedBuildActionsHtml(JOES_BUILD);
-  assert.match(actions, new RegExp(`href="gunforma-armory\\.html\\?edit=community:${JOES_BUILD.id}"`));
+  assert.match(actions, new RegExp(`href="gunforma-armory\\.html\\?edit=community:${JOES_BUILD.id}#build"`));
   assert.doesNotMatch(actions, /curated/);
-  assert.match(read('gunforma-armory.html'), /openForEdit\('community', a\.dataset\.maOpen, \{ inPage: true \}\)/,
+  assert.match(read('gunforma-armory.html'), /openForEdit\('community', id, \{ inPage: true \}\)/,
     'the in-page Open is the community path too');
 
   // Another Armory build of Joe's is open, with unsaved changes; he declines.
@@ -566,7 +585,7 @@ test('My Armory: Open is ?edit=community, never curated — and a "no" leaves th
     [JOES_BUILD.id, 'community', JOE.id, 'Joe carry']);
 });
 
-test('My Armory: "Add to build" is refused for a part that doesn\'t fit, and never changes the build\'s identity', () => {
+test('My builds / Saved parts: "Add to build" is refused for a part that doesn\'t fit, and never changes the build\'s identity', () => {
   const { ctx } = armory();
   const product = (id, category, platform) => ({ id, slug: id, name: id, category, brand: 'Maker', platform_ids: [platform],
     variants: [{ id: id + '-v', msrp: 100, color: 'Black' }], defaultVariant: { id: id + '-v', msrp: 100, color: 'Black' } });
@@ -585,7 +604,7 @@ test('My Armory: "Add to build" is refused for a part that doesn\'t fit, and nev
   assert.equal(no.ok, false);
   assert.equal(no.reason, 'Doesn’t fit with Maker Slide One.', 'the reason names the pick it clashes with');
   assert.match(ctx.savedPartHtml({ product_id: 'barrel-31' }), /data-ma-add="barrel-31" disabled>Can’t add</);
-  assert.match(ctx.savedPartHtml({ product_id: 'barrel-31' }), /part-card-reason">Doesn’t fit with Maker Slide One\./);
+  assert.match(ctx.savedPartHtml({ product_id: 'barrel-31' }), /sp-reason">Doesn’t fit with Maker Slide One\./);
   assert.equal(ctx.addSavedPart('barrel-31'), false);
   assert.equal(ctx.STATE.picks.barrel, undefined, 'refused: not added');
   assert.equal(ctx.savedPartVerdict(other).reason, 'Not a SIG P365 part.');
@@ -598,10 +617,10 @@ test('My Armory: "Add to build" is refused for a part that doesn\'t fit, and nev
   assert.equal(ctx.sb.calls.length, 0, 'adding a part writes nothing');
 
   set(ctx, `STATE.platform = null;`);
-  assert.equal(ctx.savedPartVerdict(b37).reason, 'Pick a pistol below first.');
+  assert.equal(ctx.savedPartVerdict(b37).reason, 'Pick a pistol on the Build tab first.');
 });
 
-test('My Armory: a delete is done only when a row comes back; deleting the open build keeps its parts, drops its identity', async () => {
+test('My builds / Saved parts: a delete is done only when a row comes back; deleting the open build keeps its parts, drops its identity', async () => {
   const run = async (answer, open) => {
     const page = armory({ confirm: () => true });
     const { ctx } = page;
@@ -629,7 +648,7 @@ test('My Armory: a delete is done only when a row comes back; deleting the open 
   assert.deepEqual([s.savedId, s.ownerId, s.target], [null, null, 'community'], 'no longer points at the deleted row');
   assert.deepEqual(Object.keys(s.picks), ['trigger'], 'the parts on screen stay');
   assert.equal(openOne.ctx.savePlan([]).op, 'insert', 'the next save is a new row, not a re-made deleted one');
-  assert.match(openOne.els['toast-msg'].textContent, /still here as a new, unsaved build/);
+  assert.match(openOne.els['toast-msg'].textContent, /still on the Build tab as a new, unsaved build/);
 });
 
 test('ArmoryBuilds card: today\'s total, the saved option\'s photo, and no link or Share on a taken-down build', () => {
@@ -640,14 +659,93 @@ test('ArmoryBuilds card: today\'s total, the saved option\'s photo, and no link 
       affiliate_links: [] }] };
   const card = ctx.ArmoryBuilds.cardHtml(JOES_BUILD, data, '');
   assert.match(card, /src="https:\/\/x\.test\/t1\.jpg"/, 'the saved option\'s own photo');
-  assert.match(card, /<strong>\$150<\/strong> today/, 'priced by js/build-total.js');
+  assert.match(card, /class="ab-total">\$150 today</, 'priced by js/build-total.js');
+  assert.match(card, /class="ab-count">1 part</);
   assert.match(card, new RegExp(`href="/gg/joe-carry-${JOES_BUILD.id}"`), 'the title links its /gg/ page');
-  assert.match(card, />SIG P365</, 'the model, or the platform when there is none');
+  assert.match(card, /class="ab-kicker">SIG P365</, 'the model, or the platform when there is none');
   const down = { ...JOES_BUILD, is_removed: true };
   assert.equal(ctx.ArmoryBuilds.shareable(down), false);
   assert.doesNotMatch(ctx.ArmoryBuilds.cardHtml(down, data, ''), /href="\/gg\//, 'a taken-down build links nowhere');
   set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
   assert.doesNotMatch(ctx.savedBuildActionsHtml(down), /data-ma-share/, 'and offers no Share');
+});
+
+// ── The tabs ──────────────────────────────────────────────────────────────
+// The hash is the tab: #build (or none), #my-builds, #saved-parts. Open and
+// Add to build land on the Build tab, and neither moves the build's identity
+// anywhere it was not asked to go.
+test('tabs: the hash selects the tab; Open and Add to build land on Build without changing which build is saved', async () => {
+  const shown = (ctx, els) => ['build', 'my-builds', 'saved-parts'].filter((t) => !els['panel-' + t].hidden);
+  const { ctx, els } = armory({ confirm: () => true });
+  for (const [hash, tab] of [['', 'build'], ['#build', 'build'], ['#my-builds', 'my-builds'], ['#saved-parts', 'saved-parts'], ['#nope', 'build']]) {
+    ctx.location.hash = hash;
+    ctx.showTab(ctx.tabFromHash());
+    assert.deepEqual(shown(ctx, els), [tab], hash + ' shows ' + tab + ' alone');
+    assert.equal(ctx.CURRENT_TAB, tab);
+  }
+  // goTab moves the hash (a history entry: Back returns to the tab you came from).
+  ctx.goTab('saved-parts');
+  assert.equal(ctx.location.hash, '#saved-parts');
+  assert.deepEqual(shown(ctx, els), ['saved-parts']);
+
+  // Add to build: a saved build is open; the part goes into it, the Build tab
+  // shows, and the build is still the same saved row.
+  const b37 = { id: 'barrel-37', slug: 'barrel-37', name: 'Barrel 37', category: 'barrel', brand: 'Maker', platform_ids: [PLAT],
+    variants: [{ id: 'b37v', msrp: 100 }], defaultVariant: { id: 'b37v', msrp: 100 } };
+  ctx.PRODUCTS.push(b37); ctx.PRODUCTS_BY_ID[b37.id] = b37;
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};
+    SPEC.slide['slide-1'] = { product_id: 'slide-1', barrel_length_in: 3.7 };
+    SPEC.barrel['barrel-37'] = { product_id: 'barrel-37', barrel_length_in: 3.7, barrel_type: 'standard' };
+    STATE.target = 'community'; STATE.savedId = '${GUIDE_ID}'; STATE.ownerId = '${JOE.id}'; STATE.title = 'Joe carry';
+    STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv1' } };`);
+  const identity = () => [ctx.STATE.target, ctx.STATE.savedId, ctx.STATE.ownerId, ctx.STATE.title];
+  const before = identity();
+  assert.equal(ctx.addSavedPart('barrel-37'), true);
+  assert.equal(ctx.CURRENT_TAB, 'build', 'Add to build lands on the Build tab');
+  assert.deepEqual(shown(ctx, els), ['build']);
+  assert.deepEqual(identity(), before, 'still the same saved build');
+  assert.match(els['toast-msg'].textContent, /^Added Maker Barrel 37 to your build\.$/);
+
+  // A refused add stays where it is.
+  ctx.goTab('saved-parts');
+  assert.equal(ctx.addSavedPart('nonexistent'), false);
+  assert.equal(ctx.CURRENT_TAB, 'saved-parts');
+
+  // Open, declined: stays on My builds, nothing about the build moves.
+  const no = armory({ confirm: () => false });
+  set(no.ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; STATE.target = 'community'; STATE.savedId = '${GUIDE_ID}'; STATE.ownerId = '${JOE.id}';
+    STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
+  no.ctx.goTab('my-builds');
+  no.ctx.sb.answer = (call) => (call.table === 'gun_guides' ? { data: [JOES_BUILD], error: null } : undefined);
+  assert.equal(await no.ctx.openSavedBuild(JOES_BUILD.id), false);
+  assert.equal(no.ctx.CURRENT_TAB, 'my-builds', 'a "no" stays on My builds');
+  assert.equal(no.ctx.STATE.savedId, GUIDE_ID, 'and the open build is still the saved one');
+
+  // Open, accepted: the Build tab, with that build as the one saves go to.
+  const yes = armory({ confirm: () => true });
+  set(yes.ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; STATE.picks = { trigger: { productId: 'trig-2', variantId: 'tv2' } };`);
+  yes.ctx.goTab('my-builds');
+  yes.ctx.sb.answer = (call) => (call.table === 'gun_guides' ? { data: [JOES_BUILD], error: null } : undefined);
+  assert.equal(await yes.ctx.openSavedBuild(JOES_BUILD.id), true);
+  assert.equal(yes.ctx.CURRENT_TAB, 'build', 'Open lands on the Build tab');
+  assert.deepEqual([yes.ctx.STATE.savedId, yes.ctx.STATE.target], [JOES_BUILD.id, 'community']);
+  assert.equal(yes.ctx.savePlan([]).op, 'update', 'the next save updates the opened build');
+  assert.equal(yes.ctx.replaced.at(-1), `/gunforma-armory.html?edit=community:${JOES_BUILD.id}#my-builds`,
+    '?edit= names the build and keeps the tab\'s hash (the Build tab is then its own history entry)');
+});
+
+test('tabs: the Armory carries the Gun Guides tab bar, and no My Armory button or panel', () => {
+  const html = read('gunforma-armory.html');
+  assert.match(html, /<a class="tab-btn active" id="tab-build" href="#build"[^>]*>Build<\/a>/);
+  assert.match(html, /<a class="tab-btn" id="tab-my-builds" href="#my-builds"[^>]*>My builds<\/a>/);
+  assert.match(html, /<a class="tab-btn" id="tab-saved-parts" href="#saved-parts"[^>]*>Saved parts<\/a>/);
+  assert.doesNotMatch(html, /my-armory-btn|id="my-armory"/, 'the old button and panel are gone');
+  // The same tab bar as Gun Guides had: the values that make it look the same.
+  assert.match(html, /\.tab-btn \{[^}]*font-size: 12px; font-weight: 700; letter-spacing: 0\.06em; text-transform: uppercase;/);
+  assert.match(html, /\.tab-btn\.active \{ color: #1a1a1a; border-bottom-color: #4a9edd; \}/);
+  const profile = read('gunforma-profile.html');
+  assert.match(profile, /href="gunforma-armory\.html#my-builds">Open in the Armory →/);
+  assert.match(profile, /href="gunforma-armory\.html#saved-parts">Open in the Armory →/);
 });
 
 // ── The names (Alex, 2026-11-02) ──────────────────────────────────────────

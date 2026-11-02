@@ -1549,7 +1549,7 @@ Registered today:
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
-| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and in My Armory, a read of anyone's rows but the signed-in reader's (Armory builds or saved parts), anything read or listed for a signed-out visitor, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), any write to `part_favorites`, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; and Gun Guides growing a Community tab or a `gun_guides` read back |
+| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), any write to `part_favorites`, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; and Gun Guides growing a Community tab or a `gun_guides` read back |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -3461,8 +3461,8 @@ dropdowns filtered live by PARTS_BUILDER_COMPATIBILITY_LOGIC.md (barrel↔slide
 length + `barrel_slide_requirements`, `threaded_barrel_ok`, the comp rules,
 `FrameFit` for grips, `magwell_frame_requirements`). Saving writes a row to
 **`gun_guides`** (`supabase/migrations/20261027120000_gun_guides.sql`), shown
-by the reader's **My Armory** panel on the Armory and the profile's
-**Armory builds** tab (see **My Armory** below) and on its own `/gg/` page.
+by the Armory's **My builds** tab and the profile's **Armory builds** tab
+(see **The Armory's tabs** below) and on its own `/gg/` page.
 **`gunforma-gun-guides.html`** lists the curated `guides` rows only (so
 that table has TWO readers — the old "only `from('guides')` query" claim
 is dead). The old page's drafts list, remix, favourites sort,
@@ -3501,7 +3501,7 @@ rule):
   "New theme…" in the save step inserts one — admins only.
 - **Edit on every card, for who may use it** — on Gun Guides, admins on
   every card and nobody else (`canEdit()` in the gallery); a reader's own
-  Armory builds open from My Armory and the profile. Both open
+  Armory builds open from the Armory's My builds tab and the profile. Both open
   `gunforma-armory.html?edit=<curated|community>:<uuid>`,
   which ADOPTS the row: `STATE.target`, `savedId`, `ownerId` and the theme
   settings are the build's identity, set together on open and cleared
@@ -3595,28 +3595,38 @@ variant's photo as a stand-in.
   (`?next=gunforma-armory.html`), with in-progress picks held in localStorage
   across the OAuth round trip.
 
-**My Armory (Alex, 2026-11-02).** A "My Armory · N builds · N parts"
-button at the top of the Armory opens a panel with two tabs; signed out it
-says to sign in and shows nothing else. `#my-armory` / `#my-armory-parts`
-open it (the profile links there).
+**The Armory's tabs (Alex, 2026-11-02).** Under the title, Gun Guides'
+tab bar: **Build | My builds (N) | Saved parts (N)**. Build is the builder
+and the default. Each tab is a link to its own hash — `#build` (or none),
+`#my-builds`, `#saved-parts` — so the profile and toasts link straight to
+one and Back/Forward and reload keep it; `setEditParam()` keeps the hash
+when it writes `?edit=`. Counts show only when signed in; signed out both
+tabs say "Sign in to see your saved builds / parts" with a button, and
+before the session is read they say "Loading…", never a sign-in flash.
+Both are full-width grids of the Gun Guides card (`.ab-grid` / `.ab-card`
+in `js/armory-builds.js`, Gun Guides' values under its own prefix), one
+per row at phone width.
 
-- **Saved builds** are the reader's own `gun_guides` rows (`user_id` =
+- **My builds** are the reader's own `gun_guides` rows (`user_id` =
   them, newest first), drawn by **`js/armory-builds.js`** — the one read
   and card, shared with the profile's **Armory builds** tab so the two
-  lists cannot drift: title (linking `/gg/`), model, part count, the first
-  four thumbnails in build order (the saved option's photo, else its
-  swatch) and today's total from `js/build-total.js`. Actions: **Open**
-  (`?edit=community:<id>`; in the page it runs `openForEdit(…, { inPage:
-  true })`, which asks about the build ON SCREEN and leaves it, its
-  identity and its `?edit=` untouched on a "no"), **Share** (copies the
+  lists cannot drift: the first five parts as photo tiles in build order
+  and a "+N" (the saved option's photo, else its swatch), model, title
+  (linking `/gg/`), today's total from `js/build-total.js` and the part
+  count. Empty: "No saved builds yet. Build one →" (to `#build`). Actions:
+  **Open** (`?edit=community:<id>#build`; in the page it runs
+  `openForEdit(…, { inPage: true })`, which asks about the build ON SCREEN
+  and leaves it, its identity, its `?edit=` and the tab untouched on a
+  "no", and lands on the Build tab with the build loaded on a yes), **Share** (copies the
   `/gg/` URL; not on a build an admin took down) and **Delete** (confirm,
   done only when a row comes back). Deleting the build that is open keeps
   its parts and drops its identity, so the next save is a new row rather
   than a quiet re-make of the deleted one. The profile tab offers Open and
   Share only.
 - **Saved parts** are the reader's `part_favorites` rows, **read only**.
-  "Add to build" puts one in the build on screen only when the pickers
-  would offer it (`availableFor()` and the same fit tags), and otherwise is
+  Empty: "Heart parts in the Parts Catalog to save them here →".
+  "Add to build" puts one in the build on screen — then lands on the Build
+  tab, scrolled to that part's slot — only when the pickers would offer it (`availableFor()` and the same fit tags), and otherwise is
   disabled with the reason ("Doesn't fit with <the pick it clashes
   with>.", "Not a <pistol> part.", a tag's reason). Adding is not
   replacing the builder's contents: target, `savedId`, `ownerId` and the
@@ -3636,7 +3646,7 @@ watchlist that will back price-drop emails. The heart lives on
 `gunforma-parts-catalog.html` (where a part is saved), the catalog has a
 "My Favorites" tab, and the profile has a "Favorite parts" tab whose card
 also carries a **Remove** (a delete — the one other write path, older than
-My Armory). All of them read the table directly and none needs the Armory.
-The Armory's My Armory panel **reads** favourites and never writes them —
+the Armory's Saved parts tab). All of them read the table directly and none needs the Armory.
+The Armory's Saved parts tab **reads** favourites and never writes them —
 the guide-editor test refuses a write from that page. Leave all of it
 alone.

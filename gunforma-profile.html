@@ -166,7 +166,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .panel-head .panel-title { margin-bottom: 0; }
 .panel-head-link { font-size: 12px; font-weight: 700; color: #2a7bbd; text-decoration: none; white-space: nowrap; }
 .panel-head-link:hover { text-decoration: underline; }
-.panel-head + .ab-list, .panel-head + .parts-grid, .panel-head + .empty { margin-top: 14px; }
+.panel-head + .ab-grid, .panel-head + .parts-grid, .panel-head + .empty { margin-top: 14px; }
 
 /* EMPTY STATE */
 .empty { text-align: center; padding: 48px 20px; background: #fff; border: 0.5px dashed #d5d3ca; border-radius: 6px; }
@@ -942,16 +942,16 @@ window.unsaveBuild = async function(buildId) {
 // ============================================================
 // ARMORY BUILDS TAB (private) — the builds this member saved in the Armory
 // (gun_guides). The read and the card are js/armory-builds.js, the same one
-// the Armory's My Armory panel draws, so the two lists cannot drift. Here
+// the Armory's My builds tab draws, so the two lists cannot drift. Here
 // it is the summary: Open (back into the Armory, ?edit=community:<id>) and
-// Share. Deleting one is the Armory's job, in My Armory.
+// Share. Deleting one is the Armory's job, on its My builds tab.
 // ============================================================
 async function loadArmoryBuilds() {
   const panel = document.getElementById('panel-armory');
   ARMORY_BUILDS = await window.ArmoryBuilds.load(sb, CURRENT_USER.id);
   const head = function(n) {
     return '<div class="panel-head"><div class="panel-title">Armory builds'+(n == null ? '' : ' ('+n+')')+'</div>'+
-      '<a class="panel-head-link" href="gunforma-armory.html#my-armory">Open in the Armory →</a></div>';
+      '<a class="panel-head-link" href="gunforma-armory.html#my-builds">Open in the Armory →</a></div>';
   };
   if (ARMORY_BUILDS.error) {
     console.error('loadArmoryBuilds', ARMORY_BUILDS.error);
@@ -962,7 +962,7 @@ async function loadArmoryBuilds() {
   const rows = ARMORY_BUILDS.rows;
   panel.innerHTML = head(rows.length)+
     (rows.length
-      ? '<div class="ab-list">'+rows.map(function(row){ return window.ArmoryBuilds.cardHtml(row, ARMORY_BUILDS, armoryActionsHtml(row)); }).join('')+'</div>'
+      ? '<div class="ab-grid">'+rows.map(function(row){ return window.ArmoryBuilds.cardHtml(row, ARMORY_BUILDS, armoryActionsHtml(row)); }).join('')+'</div>'
       : '<div class="empty"><div class="empty-title">No Armory builds yet</div>'+
           '<div class="empty-sub">Spec a build part by part in the Armory and hit Save &amp; share — it shows up here with its own page to share.</div>'+
           '<a class="empty-cta" href="gunforma-armory.html">Open the Armory</a></div>');
@@ -1006,7 +1006,7 @@ async function loadFavoriteParts() {
 
   panel.innerHTML =
     '<div class="panel-head"><div class="panel-title">Favorite parts ('+FAVORITE_PARTS.length+')</div>'+
-      '<a class="panel-head-link" href="gunforma-armory.html#my-armory-parts">Open in the Armory →</a></div>'+
+      '<a class="panel-head-link" href="gunforma-armory.html#saved-parts">Open in the Armory →</a></div>'+
     (FAVORITE_PARTS.length
       ? '<div class="parts-grid">'+FAVORITE_PARTS.map(function(r){ return renderFavoritePartCard(r.products); }).join('')+'</div>'
       : '<div class="empty"><div class="empty-title">No favorite parts yet</div>'+
