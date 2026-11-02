@@ -97,9 +97,10 @@ ok(childLocs.join(' ') === SITEMAP_CHILDREN.map((k) => SITE + childPath(k)).join
 
 // What each child may contain: the prefix test for its page type.
 const CHILD_RULE = {
-  static:   (p) => !/^\/(p365|fit|b|u|parts|field-notes)\//.test(p) || p === '/parts',
+  static:   (p) => !/^\/(p365|fit|b|u|parts|field-notes|gg)\//.test(p) || p === '/parts',
   hubs:     (p) => p === '/p365/' || /^\/p365\/[^/]+$/.test(p),
   fit:      (p) => /^\/fit\/p365\/[^/]+\/[^/]+$/.test(p),
+  guides:   (p) => /^\/gg\/[^/]+$/.test(p),
   'field-notes': (p) => /^\/field-notes\/[^/]+$/.test(p),
   builds:   (p) => /^\/b\/[^/]+$/.test(p),
   profiles: (p) => /^\/u\/[^/]+$/.test(p),
@@ -268,6 +269,21 @@ for (const loc of sitemapBuilds) {
   const canon = (body.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/) || [])[1];
   ok(r.status === 200 && canon === loc,
      `  ${path}`, r.status + ' canonical=' + (canon || 'none'));
+}
+
+// The same claim for Gun Guides (guide-share.mjs and sitemap.mjs both build
+// /gg/ URLs with _guide-url.mjs), plus the one thing a submitted guide must
+// never carry: a noindex. Only published Gunforma guides are submitted, and
+// those are exactly the indexable ones (x-guide-share-index).
+console.log('\n── every /gg/ URL must equal the canonical that URL serves, and be indexable');
+for (const loc of locs.filter((u) => u.startsWith(SITE + '/gg/'))) {
+  const path = loc.slice(SITE.length);
+  const r = await fetch(origin + path);
+  const body = await r.text();
+  const canon = (body.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/) || [])[1];
+  ok(r.status === 200 && canon === loc && r.headers.get('x-guide-share') === 'curated' &&
+     r.headers.get('x-guide-share-index') === 'index' && !/name="robots"[^>]*noindex/.test(body),
+     `  ${path}`, r.status + ' canonical=' + (canon || 'none') + ' ' + r.headers.get('x-guide-share') + '/' + r.headers.get('x-guide-share-index'));
 }
 
 console.log(failures === 0 ? '\nALL PASS' : `\n${failures} FAILURE(S)`);

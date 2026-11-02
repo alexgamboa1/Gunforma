@@ -82,7 +82,7 @@ function loadPage(file, marker, { confirm = () => true } = {}) {
   ctx.window = ctx;
   vm.createContext(ctx);
   for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js',
-    'js/variant-label.js', 'js/variant-swatch.js', 'js/option-price.js', 'js/frame-fit.js', 'js/slide-fit.js']) {
+    'js/variant-label.js', 'js/variant-swatch.js', 'js/option-price.js', 'js/frame-fit.js', 'js/slide-fit.js', 'js/guide-url.js']) {
     vm.runInContext(read(f), ctx, { filename: f });
   }
   const dom = makeDom();
