@@ -95,6 +95,7 @@ check "gun guide share pages"     scripts/guide-share.test.mjs
 check "gun guide share image"     scripts/guide-og.test.mjs
 check "headline price follows option" scripts/option-price.test.mjs
 check "guide editor writes"       scripts/guide-editor.test.mjs
+check "the ♥ is one module"       scripts/favorites.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

@@ -1549,7 +1549,8 @@ Registered today:
 | `scripts/guide-part-order.test.mjs` | a Gun Guides card's thumbnails or open-guide list drifting from build order — sorting on its own again instead of through `BuildCategories.orderParts()` / `groupParts()` (sections in `CATEGORIES` order, barrel before compensator, stable within a section); more or fewer than five thumbnails before the "+N" tile, or a "+N" tile on a guide of five or fewer; a part rendering an empty box instead of its photo or colour swatch, or another option's photo standing in for a saved one — runs the page's own inline script with the real taxonomy and swatch modules |
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
-| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), any write to `part_favorites`, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; and Gun Guides growing a Community tab or a `gun_guides` read back |
+| `scripts/favorites.test.mjs` | the ♥ claiming a save it did not make — an insert or delete counted done with no row back (RLS matched nothing), an error or a throw that does not flip the heart back and toast; a signed-out click that writes or reads; two writes racing on one part; a heart whose click reaches the card under it (pick, add, open); other hearts for the same part left unpainted; the Parts Catalog keeping its own copy of the heart, writing `part_favorites` itself, or redrawing its My Favorites tab differently than it did (count on every change, the grid when a card must leave or come back); the Armory not loading the module — runs `js/favorites.js` against a recording stub and the catalog's own `onFavoriteChange()` |
+| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), a write to `part_favorites` from anything but the ♥, a heart missing from a picker card, a picked card or a saved part, a heart that changes the picks, the open picker, the stored draft or the build's identity, a heart that does not move the Saved parts count and grid (or a failed one that does not put them back in place), a signed-out heart that writes or does not link sign-in back to the Armory, the "Saved" picker filter listing an unsaved part or making a saved part that doesn't fit pickable, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; and Gun Guides growing a Community tab or a `gun_guides` read back |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -3623,7 +3624,8 @@ per row at phone width.
   its parts and drops its identity, so the next save is a new row rather
   than a quiet re-make of the deleted one. The profile tab offers Open and
   Share only.
-- **Saved parts** are the reader's `part_favorites` rows, **read only**.
+- **Saved parts** are the reader's `part_favorites` rows, each with its
+  ♥ (tap to remove — see **The heart** below).
   Empty: "Heart parts in the Parts Catalog to save them here →".
   "Add to build" puts one in the build on screen — then lands on the Build
   tab, scrolled to that part's slot — only when the pickers would offer it (`availableFor()` and the same fit tags), and otherwise is
@@ -3641,12 +3643,49 @@ per row at phone width.
   build from its `?edit=community:` link, not from a gallery card.
   `scripts/guide-editor.test.mjs` pins all of it.
 
-**Favourites are NOT part of this.** `part_favorites` is a standalone
-watchlist that will back price-drop emails. The heart lives on
-`gunforma-parts-catalog.html` (where a part is saved), the catalog has a
-"My Favorites" tab, and the profile has a "Favorite parts" tab whose card
-also carries a **Remove** (a delete — the one other write path, older than
-the Armory's Saved parts tab). All of them read the table directly and none needs the Armory.
-The Armory's Saved parts tab **reads** favourites and never writes them —
-the guide-editor test refuses a write from that page. Leave all of it
-alone.
+**The heart: one module, two pages that write (Alex, 2026-11-02).**
+`part_favorites` is a standalone watchlist that will back price-drop
+emails. It used to be written only by the Parts Catalog's heart; since
+2026-11-02 **the Armory hearts parts too**, and both pages do it through
+**`js/favorites.js`** (`window.Favorites`, a plain `<script>` global like
+`js/affiliate.js`; `check-script-order.mjs` holds the tag) — the read, the
+write, the button's markup and styles, and its painting live there once.
+Do not give a third page its own copy; add the tag and `Favorites.init()`.
+
+- **A write is done only when a row comes back.** Insert and delete both
+  ask for `product_id` back; no row (an RLS refusal matches nothing and
+  says nothing), an error or a throw flips the heart back and toasts
+  "Couldn't save — try again". One write per part at a time — a second
+  click while one is saving does nothing. The catalog's heart used to
+  count "no error" as saved; that is the one thing about it that changed.
+- **Signed out**, a heart shows outline and a click writes nothing: "Sign in
+  to save parts", linking the page's `signInHref` — the Armory's carries
+  `?next=gunforma-armory.html`, and the build in progress survives the
+  round trip in the stored draft, as it does for Save.
+- **The heart never does anything but heart.** Its click stops at the
+  button (`stopPropagation` + `preventDefault`), so it cannot open the
+  catalog's detail panel or pick, add or remove an Armory part; and the
+  Armory's change handler (`onFavoriteChange()`) touches `MY.parts` and the
+  tabs only — never `STATE.picks` or the build's identity.
+- **In the Armory**: a heart on every picker card (over the photo, as in
+  the catalog), on each picked card (beside Remove) and on each Saved parts
+  card. Every heart for a part on the page is repainted together, the
+  Saved parts count and grid move with each change without a reload
+  (the grid is `MY.parts`, seeded by the tab's own read, which also seeds
+  the hearts — no second read), and an un-heart in Saved parts drops the
+  card there and empties the picker's heart. Each open picker has a
+  **"♡ Saved"** switch (signed in only; one switch for every picker) that
+  narrows it to hearted parts: those the picker lists, plus any saved part
+  it leaves out, drawn **disabled with the reason** (`whyNotAvailable()`)
+  — saving a part never makes it pickable.
+- **In the catalog** nothing else moved: the tab count on every change,
+  the My Favorites grid redrawn when a card must leave (un-heart) or come
+  back (a failed write), the detail panel's heart through the same toggle.
+  `scripts/favorites.test.mjs` pins the module and the catalog's handler;
+  `scripts/guide-editor.test.mjs` pins the Armory's.
+
+The profile's "Favorite parts" tab keeps its own **Remove** (a delete,
+older than the module) — a third write path, left as it was; fold it into
+the module when that page is next touched. Favourites never need the
+Armory: the catalog's My Favorites tab and the profile read the table
+directly.

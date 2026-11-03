@@ -119,7 +119,12 @@ const RULES = [
   // (ArmoryBuilds.load), called once the page has a session; a missing tag
   // throws there and the list stays on "Loading…".
   { global: 'ArmoryBuilds', defines: 'js/armory-builds.js', consumers: [],
-    pattern: /\bArmoryBuilds\s*\./ },
+    pattern: /\bArmoryBuilds\s*\./ },  // The ♥ on a part — the Parts Catalog and the Armory both read, write and
+  // draw it through js/favorites.js. An object read as a member
+  // (Favorites.init, Favorites.has) while the page's script first runs; a
+  // missing tag throws there and the page renders no parts at all.
+  { global: 'Favorites', defines: 'js/favorites.js', consumers: [],
+    pattern: /\bFavorites\s*\.(?:init|load|has|set|clear|size|ids|toggle|paint|repaint|buttonHtml)\b/ },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

@@ -84,7 +84,7 @@ function loadPage(file, marker, { confirm = () => true } = {}) {
   vm.createContext(ctx);
   for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js',
     'js/variant-label.js', 'js/variant-swatch.js', 'js/option-price.js', 'js/frame-fit.js', 'js/slide-fit.js', 'js/guide-url.js',
-    'js/build-total.js', 'js/armory-builds.js']) {
+    'js/build-total.js', 'js/armory-builds.js', 'js/favorites.js']) {
     vm.runInContext(read(f), ctx, { filename: f });
   }
   const dom = makeDom();
@@ -507,7 +507,7 @@ function myArmoryReads(ctx, { builds = [JOES_BUILD], favs = [] } = {}) {
   return reads;
 }
 
-test('My builds / Saved parts reads only the signed-in reader\'s own rows, and never writes part_favorites', async () => {
+test('My builds / Saved parts reads only the signed-in reader\'s own rows; Add to build never writes part_favorites', async () => {
   const { ctx, els } = armory();
   set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; showTab('my-builds');`);
   const reads = myArmoryReads(ctx, { favs: [{ product_id: 'trig-2', created_at: '2026-11-01T00:00:00Z', products: { id: 'trig-2', name: 'Trigger Two' } }] });
@@ -528,7 +528,9 @@ test('My builds / Saved parts reads only the signed-in reader\'s own rows, and n
   ctx.addSavedPart('trig-2');
   assert.deepEqual(ctx.sb.calls.filter((c) => c.table === 'part_favorites'), [], 'no write to part_favorites');
   const html = read('gunforma-armory.html');
-  assert.doesNotMatch(html, /from\('part_favorites'\)\s*\.(insert|update|delete|upsert)/, 'and no code path that could');
+  assert.doesNotMatch(html, /from\('part_favorites'\)\s*\.(insert|update|delete|upsert)/,
+    'the page writes it only through the ♥ (js/favorites.js, favorites.test.mjs)');
+  assert.deepEqual([...ctx.Favorites.ids()], ['trig-2'], 'the hearts are seeded from the same read');
 });
 
 test('My builds / Saved parts signed out: the tabs show, say to sign in with a button, and read nothing', async () => {
@@ -746,6 +748,137 @@ test('tabs: the Armory carries the Gun Guides tab bar, and no My Armory button o
   const profile = read('gunforma-profile.html');
   assert.match(profile, /href="gunforma-armory\.html#my-builds">Open in the Armory →/);
   assert.match(profile, /href="gunforma-armory\.html#saved-parts">Open in the Armory →/);
+});
+
+// ── The ♥ in the Armory (Alex, 2026-11-02) ────────────────────────────────
+// The Parts Catalog's heart (js/favorites.js) on every picker card, each
+// picked card and each saved part. It writes part_favorites and nothing else:
+// never a pick, never the build's identity. Saved parts and the pickers move
+// together, and a write is done only when a row comes back.
+const heartBtn = () => ({ textContent: '', classList: { toggle() {} }, setAttribute() {} });
+const FAV_ROW = (id) => ({ product_id: id, created_at: '2026-11-01T00:00:00Z', products: { id, name: id } });
+
+test('heart: on every picker card, each picked card and each saved part — and its click is the heart\'s alone', () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; Favorites.set(['trig-2']);
+    STATE.picks = { trigger: { productId: 'trig-2', variantId: 'tv2' } };`);
+  const card = ctx.partCardHtml('trigger', ctx.PRODUCTS_BY_ID['trig-1'], null);
+  assert.match(card, /<button type="button" class="fav-btn" data-fav-id="trig-1"[^>]*aria-pressed="false">♡<\/button>/, 'outline: not saved');
+  assert.match(ctx.partCardHtml('trigger', ctx.PRODUCTS_BY_ID['trig-2'], null), /class="fav-btn active" data-fav-id="trig-2"[^>]*>♥</, 'filled: saved');
+  assert.match(card, /onclick="event\.stopPropagation\(\);event\.preventDefault\(\);Favorites\.toggle/);
+  const picked = ctx.pickedHtml('trigger', ctx.PRODUCTS_BY_ID['trig-2']);
+  assert.match(picked, /class="fav-btn fav-inline active" data-fav-id="trig-2"/, 'the picked card');
+  assert.match(picked, /♥<\/button><button type="button" class="picked-remove"/);
+  set(ctx, `MY.started = true; MY.parts = [${JSON.stringify(FAV_ROW('trig-2'))}]; showTab('saved-parts');`);
+  assert.match(els['panel-saved-parts'].innerHTML, /data-ma-part="trig-2"><button type="button" class="fav-btn active" data-fav-id="trig-2"/, 'each saved part');
+  // Signed out the heart still shows, outline.
+  set(ctx, `CURRENT_USER = null; Favorites.clear();`);
+  assert.match(ctx.partCardHtml('trigger', ctx.PRODUCTS_BY_ID['trig-2'], null), /class="fav-btn" data-fav-id="trig-2"[^>]*>♡</);
+});
+
+test('heart: hearting in Build never changes the build or its saved identity, and moves the Saved parts count and grid', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};
+    STATE.target = 'community'; STATE.savedId = '${GUIDE_ID}'; STATE.ownerId = '${JOE.id}'; STATE.title = 'Joe carry';
+    STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv2' } }; STATE.openCat = 'trigger';`);
+  myArmoryReads(ctx, { favs: [FAV_ROW('slide-1')] });
+  await ctx.loadMyArmory();
+  set(ctx, `showTab('saved-parts');`);
+  assert.equal(els['tab-saved-parts'].textContent, 'Saved parts (1)');
+  const snap = () => JSON.stringify([ctx.STATE.picks, ctx.STATE.target, ctx.STATE.savedId, ctx.STATE.ownerId, ctx.STATE.title, ctx.STATE.openCat, ctx.STATE.draftOf]);
+  const before = snap();
+  const draftBefore = ctx.localStorage.getItem('gf-armory-picks-v1');
+
+  ctx.sb.answer = (call) => (call.op === 'insert' ? { data: [{ product_id: call.payload.product_id }], error: null } : undefined);
+  assert.equal(await ctx.Favorites.toggle('trig-1', heartBtn()), true);
+  assert.deepEqual(ctx.sb.calls.map((c) => [c.op, c.table, JSON.stringify(c.payload)]),
+    [['insert', 'part_favorites', JSON.stringify({ user_id: JOE.id, product_id: 'trig-1' })]], 'one write, to part_favorites, and nothing else');
+  assert.equal(snap(), before, 'picks, the open picker, target, savedId, ownerId, title: untouched');
+  assert.equal(ctx.localStorage.getItem('gf-armory-picks-v1'), draftBefore, 'the stored draft too');
+  assert.equal(els['tab-saved-parts'].textContent, 'Saved parts (2)', 'the tab count moved without a reload');
+  assert.match(els['panel-saved-parts'].innerHTML, /data-ma-part="trig-1".*data-ma-part="slide-1"/, 'and the grid, newest first');
+
+  // Un-heart from the Saved parts grid: the card leaves, the count drops, the build stays.
+  ctx.sb.calls.length = 0;
+  ctx.sb.answer = (call) => (call.op === 'delete' ? { data: [{ product_id: 'slide-1' }], error: null } : undefined);
+  assert.equal(await ctx.Favorites.toggle('slide-1', heartBtn()), true);
+  assert.deepEqual(ctx.sb.calls.map((c) => [c.op, c.table, c.filters]), [['delete', 'part_favorites', [['user_id', JOE.id], ['product_id', 'slide-1']]]]);
+  assert.equal(ctx.Favorites.has('slide-1'), false, 'the pickers read the same set');
+  assert.doesNotMatch(els['panel-saved-parts'].innerHTML, /data-ma-part="slide-1"/);
+  assert.equal(els['tab-saved-parts'].textContent, 'Saved parts (1)');
+  assert.deepEqual(JSON.parse(JSON.stringify(ctx.STATE.picks)), { slide: { productId: 'slide-1', variantId: 'sv2' } }, 'un-hearting a picked part does not remove it');
+  assert.equal(ctx.STATE.savedId, GUIDE_ID);
+});
+
+test('heart: a write with no row back is reported as failed and everything flips back', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
+  myArmoryReads(ctx, { favs: [FAV_ROW('trig-2'), FAV_ROW('slide-1')] });
+  await ctx.loadMyArmory();
+  set(ctx, `showTab('saved-parts');`);
+  const order = () => ctx.MY.parts.map((r) => r.product_id).join(',');
+
+  ctx.sb.answer = (call) => (call.op === 'insert' || call.op === 'delete' ? { data: [], error: null } : undefined);
+  assert.equal(await ctx.Favorites.toggle('trig-1', heartBtn()), false, 'insert matched nothing');
+  assert.equal(ctx.Favorites.has('trig-1'), false);
+  assert.equal(order(), 'trig-2,slide-1');
+  assert.equal(els['tab-saved-parts'].textContent, 'Saved parts (2)');
+  assert.equal(els['toast-msg'].textContent, 'Couldn\'t save — try again');
+
+  els['toast-msg'].textContent = '';
+  assert.equal(await ctx.Favorites.toggle('slide-1', heartBtn()), false, 'delete matched nothing');
+  assert.equal(ctx.Favorites.has('slide-1'), true);
+  assert.equal(order(), 'trig-2,slide-1', 'back in its place, not moved to the top');
+  assert.match(els['panel-saved-parts'].innerHTML, /data-ma-part="slide-1"/);
+  assert.equal(els['toast-msg'].textContent, 'Couldn\'t save — try again');
+});
+
+test('heart: signed out, a click writes nothing and says to sign in, back to the Armory', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = null; STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } }; persistDraft();`);
+  const draft = ctx.localStorage.getItem('gf-armory-picks-v1');
+  ctx.sb.answer = () => ({ data: [{ product_id: 'trig-2' }], error: null });
+  assert.equal(await ctx.Favorites.toggle('trig-2', heartBtn()), false);
+  assert.deepEqual(ctx.sb.calls, [], 'no write');
+  assert.equal(els['toast-msg'].textContent, 'Sign in to save parts');
+  assert.match(els['toast-link-wrap'].innerHTML, /href="gunforma-signin\.html\?next=gunforma-armory\.html">Sign in</);
+  assert.equal(ctx.localStorage.getItem('gf-armory-picks-v1'), draft, 'the build in progress is held for the round trip');
+  assert.match(draft, /trig-1/);
+});
+
+test('heart: "Saved" narrows an open picker to hearted parts, and a saved part that doesn\'t fit stays disabled with its reason', () => {
+  const { ctx, els } = armory();
+  const product = (id, len) => ({ id, slug: id, name: id, category: 'barrel', brand: 'Maker', platform_ids: [PLAT],
+    variants: [{ id: id + '-v', msrp: 100 }], defaultVariant: { id: id + '-v', msrp: 100 } });
+  for (const p of [product('barrel-37a'), product('barrel-37b'), product('barrel-31')]) { ctx.PRODUCTS.push(p); ctx.PRODUCTS_BY_ID[p.id] = p; }
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};
+    SPEC.slide['slide-1'] = { product_id: 'slide-1', barrel_length_in: 3.7 };
+    SPEC.barrel['barrel-37a'] = { product_id: 'barrel-37a', barrel_length_in: 3.7, barrel_type: 'standard' };
+    SPEC.barrel['barrel-37b'] = { product_id: 'barrel-37b', barrel_length_in: 3.7, barrel_type: 'standard' };
+    SPEC.barrel['barrel-31'] = { product_id: 'barrel-31', barrel_length_in: 3.1, barrel_type: 'standard' };
+    STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv1' } }; STATE.openCat = 'barrel';
+    Favorites.set(['barrel-37b', 'barrel-31']);`);
+  const html = () => els['parts-container'].innerHTML;
+  ctx.renderParts();
+  assert.match(html(), /class="picker-saved" data-saved-only aria-pressed="false">♡ Saved</);
+  assert.match(html(), /data-fav-id="barrel-37a"/, 'off: every part that fits');
+  assert.doesNotMatch(html(), /data-fav-id="barrel-31"/, 'and none that doesn\'t');
+
+  set(ctx, `SAVED_ONLY = true;`);
+  ctx.renderParts();
+  assert.match(html(), /aria-pressed="true">♥ Saved</);
+  assert.doesNotMatch(html(), /data-fav-id="barrel-37a"/, 'on: an unsaved part is not listed');
+  assert.match(html(), /data-fav-id="barrel-37b"[\s\S]*data-add="barrel" data-id="barrel-37b">Add to build</, 'a saved part that fits is pickable');
+  assert.match(html(), /data-fav-id="barrel-31"[\s\S]*part-card-reason">Doesn’t fit with Maker Slide One\.<[\s\S]*data-id="barrel-31" disabled>Won’t fit</,
+    'a saved part that doesn\'t fit is shown disabled, with why');
+
+  set(ctx, `Favorites.clear();`);
+  ctx.renderParts();
+  assert.match(html(), /No saved parts here yet/);
+  // Signed out: no filter (nothing is saved for nobody).
+  set(ctx, `CURRENT_USER = null;`);
+  ctx.renderParts();
+  assert.doesNotMatch(html(), /picker-saved/);
 });
 
 // ── The names (Alex, 2026-11-02) ──────────────────────────────────────────
