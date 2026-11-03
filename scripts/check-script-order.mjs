@@ -119,12 +119,18 @@ const RULES = [
   // (ArmoryBuilds.load), called once the page has a session; a missing tag
   // throws there and the list stays on "Loading…".
   { global: 'ArmoryBuilds', defines: 'js/armory-builds.js', consumers: [],
-    pattern: /\bArmoryBuilds\s*\./ },  // The ♥ on a part — the Parts Catalog and the Armory both read, write and
+    pattern: /\bArmoryBuilds\s*\./ },
+  // The ♥ on a part — the Parts Catalog and the Armory both read, write and
   // draw it through js/favorites.js. An object read as a member
   // (Favorites.init, Favorites.has) while the page's script first runs; a
   // missing tag throws there and the page renders no parts at all.
   { global: 'Favorites', defines: 'js/favorites.js', consumers: [],
     pattern: /\bFavorites\s*\.(?:init|load|has|set|clear|size|ids|toggle|paint|repaint|buttonHtml)\b/ },
+  // Where a sign-in may send the reader (?next=) — the one allowlist the
+  // auth pages share. A missing tag throws on SafeNext.fromLocation() and
+  // the sign-in page's script dies before it can route anyone anywhere.
+  { global: 'SafeNext', defines: 'js/safe-next.js', consumers: [],
+    pattern: /\bSafeNext\s*\.(?:check|fromLocation|withNext|ALLOWED_NEXT)\b/ },
 ];
 
 const html = (await readdir(ROOT)).filter((f) => f.endsWith('.html'));

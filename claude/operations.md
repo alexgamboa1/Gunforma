@@ -205,6 +205,13 @@ session or SQL, so this list records what was added and why, not a dump:
 
 When auditing the dashboard, anything else on the list predates this table.
 
+**Sign-in with `?next=` needed nothing here** (2026-11-02): the failed-verify
+probe returned `https://gunforma.com/gunforma-signin.html?next=%2Fgunforma-armory.html`
+and the same on a deploy preview to themselves, with a non-listed control
+falling back to the site URL — so the existing entries already accept the
+sign-in page with a query string. If Google sign-in from the Armory ever
+lands on the homepage instead, re-run that probe first.
+
 ---
 
 ## 6. Advisor findings — accepted, with reasons

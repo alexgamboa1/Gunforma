@@ -189,7 +189,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       </button>
 
       <div class="card-footer">
-        Don't have an account? <a href="gunforma-signup.html">Create one free</a>
+        Don't have an account? <a href="gunforma-signup.html" id="signup-link">Create one free</a>
       </div>
     </div>
 
@@ -265,11 +265,23 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 </script>
 <script src="js/supabase-client.js"></script>
 <script src="js/site-url.js"></script>
+<script src="js/safe-next.js"></script>
 <script src="js/nav.js"></script>
 <script>
 // Page-specific code below. Supabase client (window.sb) + nav come from
 // the shared includes above. Auth pages don't render a footer.
 var sb = window.sb;
+
+// Where to go after signing in: this page's ?next=, through js/safe-next.js
+// (a listed same-site page or nothing). Null means today's routing — home,
+// or the admin queue for an admin. It rides along through everything that
+// leaves this page and comes back: Google's redirectTo, the reset email's
+// link, and "Create one free" to the sign-up page.
+var NEXT = window.SafeNext.fromLocation();
+(function () {
+  var link = document.getElementById('signup-link');
+  if (link) link.href = window.SafeNext.withNext('gunforma-signup.html', NEXT);
+})();
 
 // Origin used when we hand Supabase a URL to email the user (password reset,
 // email confirmation). Detects local dev by hostname so the same file works
@@ -403,16 +415,18 @@ async function redirectByRole() {
     // Onboarding check comes BEFORE role routing — an admin OAuth user (rare
     // but possible) still needs a username before they land in the admin queue.
     if (!profile.onboarding_complete) {
-      window.location.href = 'gunforma-complete-profile.html';
+      window.location.href = window.SafeNext.withNext('gunforma-complete-profile.html', NEXT);
       return;
     }
-    if (profile.role === 'admin') {
+    if (NEXT) {
+      window.location.href = NEXT;
+    } else if (profile.role === 'admin') {
       window.location.href = 'gunforma-admin-queue.html';
     } else {
       window.location.href = 'index.html';
     }
   } catch (e) {
-    window.location.href = 'index.html';
+    window.location.href = NEXT || 'index.html';
   }
 }
 
@@ -499,7 +513,7 @@ async function handleReset() {
   onEmailInput(resetEmailInput, 'reset-email-help');
   if (!email) { showError('Enter your email address.'); return; }
   var res = await sb.auth.resetPasswordForEmail(email, {
-    redirectTo:   siteBaseUrl() + '/gunforma-signin.html',
+    redirectTo:   siteBaseUrl() + window.SafeNext.withNext('/gunforma-signin.html', NEXT),
     captchaToken: turnstileToken,
   });
   if (res.error) {
@@ -561,7 +575,9 @@ async function handleGoogleSignIn() {
   showError('');
   var res = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: siteBaseUrl() + '/gunforma-signin.html' },
+    // ?next= rides in redirectTo: Supabase's allowlist accepts the sign-in
+    // page with a query string (probed 2026-11-02, production and previews).
+    options: { redirectTo: siteBaseUrl() + window.SafeNext.withNext('/gunforma-signin.html', NEXT) },
   });
   if (res && res.error) showError(res.error.message);
 }
