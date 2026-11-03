@@ -568,7 +568,11 @@ var MY = {
 // for every picker, so it stays on while they move between slots.
 var SAVED_ONLY = false;
 
-var DRAFT_KEY = 'gf-armory-picks-v1';
+var DRAFT_KEY = 'gf-armory-picks-v1';       // localStorage: an OPEN saved guide's unsaved changes (?edit=)
+var RESUME_KEY = 'gf-armory-resume-v1';     // sessionStorage: a new build held across the sign-in round trip
+var RESUME_TTL_MS = 30 * 60 * 1000;
+var SAVED_SIG = null;                       // buildSig() as last saved or opened; null = never saved
+var LEAVING_FOR_SIGNIN = false;
 var NEW_THEME = '__new__';
 
 var IS_ADMIN = false;
@@ -633,8 +637,8 @@ Favorites.init({
   sb: sb,
   user: function () { return CURRENT_USER; },
   toast: function (msg, href, linkText) { toast(msg, href, linkText); },
-  // The build in progress is in localStorage (persistDraft) and comes back
-  // after the round trip, as it does for Save.
+  // A click on the toast's Sign in link holds the build in progress for the
+  // round trip (stashForSignIn), as Save's does.
   signInHref: 'gunforma-signin.html?next=gunforma-armory.html',
   onChange: onFavoriteChange,
 });
@@ -706,13 +710,24 @@ async function loadAll() {
 
   await Promise.all([loadFitTiers(), loadGuideThemes(), loadStartGuides(), AUTH_READY]);
   renderPlatformRow();
+  await openOnLoad();
+  renderGuideStart();
+  loadMyArmory();
+}
+
+// What the builder opens with. ?edit= and ?from= load what they name; a
+// plain visit is ALWAYS a blank builder, with one exception: the first load
+// back from sign-in, when a Sign in link on this page held the build
+// (stashForSignIn). The hold is taken — read and cleared — on every load,
+// whatever the URL, so it comes back once at most.
+async function openOnLoad() {
+  var held = takeResume();
+  forgetNewBuildDraft();
   var edit = editParam();
   var from = fromParam();
   if (edit) await openForEdit(edit.kind, edit.id);
   else if (from) await openFromGuide(from);
-  else restoreDraft();
-  renderGuideStart();
-  loadMyArmory();
+  else if (held && CURRENT_USER) restoreDraft(held);
 }
 
 // The published Gunforma guides, for "Start from a guide". Always the
@@ -1054,6 +1069,7 @@ function selectPlatform(id) {
     STATE.ownerId = null;
     STATE.dropped = [];
     STATE.startedFrom = '';
+    SAVED_SIG = null;
   }
   STATE.platform = next;
   renderPlatformRow();
@@ -1600,19 +1616,32 @@ function renderGuideStart() {
 function startFromGuide(id) {
   var row = START_GUIDES.find(function (g) { return g.id === id; });
   if (!row || !PLATFORMS_BY_ID[row.platform_id]) return;
-  if (!confirmStartFrom(readDraft(), row.title)) return;
+  if (!confirmStartFrom(draftSnapshot(), row.title)) return;   // what is on screen
   adoptGuideAsNew(row);
 }
 
-// ─── DRAFT PERSISTENCE (localStorage) ──────────────────────────────────────
-// Sign-in is an OAuth round trip that leaves the page, so an in-progress
-// build has to survive it. Reads and writes are wrapped: private windows and
-// blocked storage must degrade to "no draft", never to a broken page.
+// ─── DRAFT PERSISTENCE ─────────────────────────────────────────────────────
+// A plain visit is a blank builder (Alex, 2026-11-02): a build loaded from a
+// guide, or left unsaved, never reappears on its own. Two things are kept,
+// and each comes back only through the door that names it:
 //
-// The stored draft carries the build's identity too, but the identity is
-// only ever ADOPTED through ?edit= (openForEdit). A plain visit to the
-// Armory restores a new, unsaved build and nothing else — so a link to the
-// Armory can never land in edit mode on a saved guide.
+//   - an OPEN saved guide's unsaved changes, in localStorage (DRAFT_KEY), so
+//     a reload of its ?edit= keeps them. Only a draft with an identity is
+//     ever stored there; a new build's is removed (persistDraft), and any
+//     left by older code — which stored every build — is dropped on load
+//     (forgetNewBuildDraft).
+//   - a NEW build in progress, in sessionStorage (RESUME_KEY), written only
+//     when a Sign in link on this page is clicked, and taken on the next
+//     load: restored if it is back from sign-in, signed in and within the
+//     TTL; dropped otherwise. This page's Sign in links carry
+//     ?next=gunforma-armory.html, which sign-in honours (js/safe-next.js),
+//     so the reader lands back here and the build returns on arrival. The
+//     hold is the tab's, not the URL's: a sign-in begun without a next
+//     (the nav's link) still brings it back on the next Armory load here.
+//
+// Reads and writes are wrapped: private windows and blocked storage must
+// degrade to "no draft", never to a broken page. The identity is only ever
+// ADOPTED through ?edit= (openForEdit).
 function draftSnapshot() {
   if (!STATE.platform) return null;
   return {
@@ -1628,14 +1657,15 @@ function draftSnapshot() {
     draftOfTitle: STATE.draftOfTitle,
     dropped: STATE.dropped,
     startedFrom: STATE.startedFrom,
+    savedSig: SAVED_SIG,
   };
 }
 function persistDraft() {
   try {
     var d = draftSnapshot();
-    if (!d) { localStorage.removeItem(DRAFT_KEY); return; }
+    if (!d || !draftHasIdentity(d)) { localStorage.removeItem(DRAFT_KEY); return; }
     localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
-  } catch (e) { /* storage unavailable — build just won't survive a reload */ }
+  } catch (e) { /* storage unavailable — changes just won't survive a reload */ }
 }
 
 function readDraft() {
@@ -1647,13 +1677,40 @@ function draftHasIdentity(draft) {
   return !!(draft && (draft.savedId || draft.draftOf));
 }
 
-// opts.adopt: restore the saved identity as well — only openForEdit passes
-// it, once it has checked the draft is this ?edit= row's.
-function restoreDraft(opts) {
+// On load, before anything reads the store: a new build's draft is never
+// shown again, so it is not kept to be asked about either.
+function forgetNewBuildDraft() {
+  var d = readDraft();
+  if (d && !draftHasIdentity(d)) { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
+}
+
+// A Sign in link on this page was clicked: hold the new build in progress
+// for the round trip. An open saved guide is not held here — DRAFT_KEY and
+// its ?edit= already bring it back.
+function stashForSignIn() {
+  var d = draftSnapshot();
+  if (!d || draftHasIdentity(d)) return;
+  try { sessionStorage.setItem(RESUME_KEY, JSON.stringify({ at: Date.now(), draft: d })); } catch (e) {}
+}
+
+// Read the hold and clear it, in one step: whatever this load does with it,
+// the next load finds nothing.
+function takeResume() {
+  var held = null;
+  try {
+    held = JSON.parse(sessionStorage.getItem(RESUME_KEY) || 'null');
+    sessionStorage.removeItem(RESUME_KEY);
+  } catch (e) { return null; }
+  if (!held || !held.draft || typeof held.at !== 'number' || Date.now() - held.at > RESUME_TTL_MS) return null;
+  return held.draft;
+}
+
+// opts.adopt: restore the saved identity as well — only openForEdit and
+// openDraftOf pass it, once they have checked the draft is this ?edit= row's.
+function restoreDraft(draft, opts) {
   var adopt = !!(opts && opts.adopt);
-  var draft = readDraft();
   if (!draft || !PLATFORMS_BY_ID[draft.platformId]) return;
-  if (!adopt && draftHasIdentity(draft)) return;   // a saved guide's edit: not reopened by a plain visit
+  if (!adopt && draftHasIdentity(draft)) return;   // a saved guide's edit: only ever reopened by its ?edit=
   STATE.platform = PLATFORMS_BY_ID[draft.platformId];
   STATE.gun = GUNS.find(function (g) { return g.id === draft.gunId; }) || null;
   STATE.title = draft.title || '';
@@ -1674,9 +1731,55 @@ function restoreDraft(opts) {
     STATE.picks[cat] = { productId: p.id, variantId: v ? v.id : null };
   });
   reconcilePicks();
+  SAVED_SIG = adopt && typeof draft.savedSig === 'string' ? draft.savedSig : null;
   renderPlatformRow();
   renderAll();
 }
+
+// ─── UNSAVED PICKS ─────────────────────────────────────────────────────────
+// What the build is, for "has it changed since it was saved or opened".
+function buildSig() {
+  if (!STATE.platform) return null;
+  var picks = {};
+  Object.keys(STATE.picks).sort().forEach(function (k) { picks[k] = STATE.picks[k]; });
+  return JSON.stringify({
+    platform: STATE.platform.id, gun: STATE.gun ? STATE.gun.id : null, picks: picks,
+    title: STATE.title || '', target: STATE.target, curated: STATE.curated,
+  });
+}
+function hasUnsavedPicks() {
+  if (!Object.keys(STATE.picks).length) return false;
+  return SAVED_SIG === null || buildSig() !== SAVED_SIG;
+}
+
+// A reload or a close with unsaved picks asks first — a new build is not
+// kept across a reload, so this is what stands between it and a stray
+// click. Nothing picked, or everything saved: no prompt. Leaving for sign-in
+// from a link on this page: no prompt — the build is held for the trip.
+function onBeforeUnload(e) {
+  if (LEAVING_FOR_SIGNIN || !hasUnsavedPicks()) return;
+  e.preventDefault();
+  e.returnValue = '';
+  return '';
+}
+function onSignInClick(e) {
+  if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // a new tab leaves this page here
+  var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+  if (!a || !/(^|\/)gunforma-signin\.html(\?|#|$)/.test(a.getAttribute('href') || '')) return;
+  stashForSignIn();
+  LEAVING_FOR_SIGNIN = true;
+}
+if (window.addEventListener) {
+  window.addEventListener('beforeunload', onBeforeUnload);
+  // Back from the sign-in page through the back/forward cache: still here,
+  // with the build on screen, so a later reload asks again and the hold —
+  // now older than what is on screen — goes.
+  window.addEventListener('pageshow', function (e) {
+    LEAVING_FOR_SIGNIN = false;
+    if (e && e.persisted) { try { sessionStorage.removeItem(RESUME_KEY); } catch (err) {} }
+  });
+}
+if (document.addEventListener) document.addEventListener('click', onSignInClick);
 
 // ─── EDITING A SAVED GUIDE ─────────────────────────────────────────────────
 // ?edit=curated:<uuid> (guides) or ?edit=community:<uuid> (gun_guides), from
@@ -1747,9 +1850,9 @@ async function readGuideRow(kind, id) {
 async function openForEdit(kind, id, opts) {
   var inPage = !!(opts && opts.inPage);
   var noun = kind === 'curated' ? 'guide' : 'build';
-  function stay() { if (!inPage) { clearEditParam(); restoreDraft(); } }
+  // Not opening on a page load leaves the blank builder a plain visit has.
+  function stay() { if (!inPage) clearEditParam(); }
   if (!CURRENT_USER) {
-    if (!inPage) restoreDraft();
     toast('Sign in to edit this ' + noun + ', then open it again.',
       'gunforma-signin.html?next=' + encodeURIComponent('gunforma-armory.html?edit=' + kind + ':' + id), 'Sign in');
     if (!inPage) clearEditParam();
@@ -1775,7 +1878,7 @@ async function openForEdit(kind, id, opts) {
   // Reopening the same guide (a reload, or Edit again) keeps the unsaved
   // changes made here; anything else is a replacement and asks first.
   if (draft && draft.savedId === row.id && (draft.target || 'community') === kind) {
-    if (!inPage) restoreDraft({ adopt: true });
+    if (!inPage) restoreDraft(draft, { adopt: true });
     setEditParam(kind, row.id);
     if (inPage) toast('“' + (row.title || 'That build') + '” is already open here.');
     return true;
@@ -1811,11 +1914,11 @@ async function openDraftOf(live, draft) {
   // a different draft of the same guide (one draft per live guide).
   if (draft && draft.target === 'curated' && draft.draftOf === live.id &&
       (!saved || draft.savedId === saved.id)) {
-    restoreDraft({ adopt: true });
+    restoreDraft(draft, { adopt: true });
     setEditParam('curated', STATE.savedId || live.id);
     return;
   }
-  if (!confirmReplace(draft, live.title)) { clearEditParam(); restoreDraft(); return; }
+  if (!confirmReplace(draft, live.title)) { clearEditParam(); return; }
   adoptRow('curated', saved || live, {
     savedId: saved ? saved.id : null,
     draftOf: live.id,
@@ -1852,8 +1955,9 @@ function fromParam() {
 // Gunforma guide must be PUBLISHED — the filter refuses a draft even for an
 // admin, since a draft is a workbench, never a template; a community guide
 // (public read) loads the same way. An unknown or unpublished id is a toast
-// over the empty builder. The param is cleared once handled, like ?edit=:
-// a reload keeps the reader's own build, not a fresh copy of the guide.
+// over the empty builder. The param is cleared once handled: a reload is a
+// plain visit (blank, after the unsaved-picks prompt), never a fresh copy of
+// the guide over what the reader changed.
 async function openFromGuide(id) {
   var res = await sb.from('guides').select('*').eq('id', id).eq('is_published', true);
   var row = !res.error && res.data && res.data[0] || null;
@@ -1863,11 +1967,10 @@ async function openFromGuide(id) {
   }
   if (!row || !PLATFORMS_BY_ID[row.platform_id]) {
     clearEditParam();
-    restoreDraft();
     toast('That guide isn’t available to start from.');
     return;
   }
-  if (!confirmStartFrom(readDraft(), row.title)) { clearEditParam(); restoreDraft(); return; }
+  if (!confirmStartFrom(readDraft(), row.title)) { clearEditParam(); return; }
   adoptGuideAsNew(row);
 }
 
@@ -1897,6 +2000,7 @@ function adoptGuideAsNew(row) {
   STATE.openCat = null;
   var unfit = reconcilePicks({ quiet: true });
   STATE.dropped = got.dropped.concat(unfit.map(function (n) { return { name: n, why: 'doesn’t fit with the rest' }; }));
+  SAVED_SIG = null;      // the reader's build, never saved
   clearEditParam();
   renderPlatformRow();
   renderAll();
@@ -1920,6 +2024,7 @@ function adoptRow(kind, row, id) {
   STATE.openCat = null;
   var unfit = reconcilePicks({ quiet: true });
   STATE.dropped = got.dropped.concat(unfit.map(function (n) { return { name: n, why: 'doesn’t fit with the rest' }; }));
+  SAVED_SIG = buildSig();   // as saved: opening is not a change
   renderPlatformRow();
   renderAll();
 }
@@ -1939,6 +2044,7 @@ function resetBuild() {
   STATE.dropped = [];
   STATE.startedFrom = '';
   STATE.openCat = null;
+  SAVED_SIG = null;
   clearEditParam();
   renderPlatformRow();
   renderAll();
@@ -2074,6 +2180,7 @@ async function saveGuide() {
     STATE.savedId = (res.data && res.data[0] && res.data[0].id) || STATE.savedId;
     if (STATE.target === 'community' && !STATE.ownerId) STATE.ownerId = CURRENT_USER.id;
     STATE.dropped = [];
+    SAVED_SIG = buildSig();
     setEditParam(STATE.target, STATE.savedId);
     persistDraft();
     if (STATE.target === 'curated') {
@@ -2332,6 +2439,7 @@ async function deleteArmoryBuild(id, btn) {
     STATE.draftOf = null;
     STATE.draftOfTitle = '';
     STATE.dropped = [];
+    SAVED_SIG = null;      // unsaved now: a reload asks first
     clearEditParam();
     renderAll();
     toast('Deleted “' + (row.title || 'the build') + '”. Its parts are still on the Build tab as a new, unsaved build.', '#build', 'Build');

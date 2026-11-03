@@ -1551,7 +1551,7 @@ Registered today:
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
 | `scripts/favorites.test.mjs` | the ♥ claiming a save it did not make — an insert or delete counted done with no row back (RLS matched nothing), an error or a throw that does not flip the heart back and toast; a signed-out click that writes or reads; two writes racing on one part; a heart whose click reaches the card under it (pick, add, open); other hearts for the same part left unpainted; the Parts Catalog keeping its own copy of the heart, writing `part_favorites` itself, or redrawing its My Favorites tab differently than it did (count on every change, the grid when a card must leave or come back); the Armory not loading the module — runs `js/favorites.js` against a recording stub and the catalog's own `onFavoriteChange()` |
 | `scripts/safe-next.test.mjs` | sign-in becoming an open redirect, or ignoring `?next=` — `js/safe-next.js` letting through a scheme, `//`, a backslash, an encoded slash, a host, `javascript:`, an unlisted page or a query/hash outside its alphabet; a second copy of `ALLOWED_NEXT`; `gunforma-signin.html` not sending a signed-in reader (an admin too) to a checked next, or forwarding a refused one; next dropped from Google's `redirectTo`, the reset email, sign-up's confirmation email or the links between the two pages; a reset link with next no longer showing "Choose a new password"; `gunforma-complete-profile.html` not going on to next, or looping on next = itself; `auth-callback.html` forwarding an unchecked next; a page linking to sign-in with a next the rule refuses — runs the module over a table and the four pages' own scripts against stubbed sessions |
-| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), a write to `part_favorites` from anything but the ♥, a heart missing from a picker card, a picked card or a saved part, a heart that changes the picks, the open picker, the stored draft or the build's identity, a heart that does not move the Saved parts count and grid (or a failed one that does not put them back in place), a signed-out heart that writes or does not link sign-in back to the Armory, the "Saved" picker filter listing an unsaved part or making a saved part that doesn't fit pickable, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; and Gun Guides growing a Community tab or a `gun_guides` read back |
+| `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), a write to `part_favorites` from anything but the ♥, a heart missing from a picker card, a picked card or a saved part, a heart that changes the picks, the open picker, the stored draft or the build's identity, a heart that does not move the Saved parts count and grid (or a failed one that does not put them back in place), a signed-out heart that writes or does not link sign-in back to the Armory, the "Saved" picker filter listing an unsaved part or making a saved part that doesn't fit pickable, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; Gun Guides growing a Community tab or a `gun_guides` read back; and a plain Armory visit opening anything but a blank builder — a stored draft restored, a new build written to localStorage, a `?from=` build back on the next visit, the sign-in hold restored signed out, stale, twice or for an open saved guide, `?edit=` losing its guide or a reload's unsaved changes, or `beforeunload` asking with nothing unsaved (or not asking with unsaved picks) |
 
 This table is the full registry, not a sample. It read "Registered today:"
 over three rows while `check-all.sh` ran ten, which is the documentation
@@ -3020,6 +3020,11 @@ rule:
   shows "Choose a new password": the query does not touch the hash that
   marks a recovery.
 - **`auth-callback.html`** goes to `SafeNext.check(next) || '/'`.
+- **The Armory pairs it with its sign-in hold**: its Sign in links carry
+  `?next=gunforma-armory.html` and hold the build in progress in the tab,
+  so the reader lands back on the Armory with that build restored (see
+  **A plain visit is a blank builder**). `next` only says where to land;
+  what comes back is the hold's business, never the URL's.
 - `scripts/safe-next.test.mjs` pins the rule over a table of values and
   runs the four pages' own scripts, and requires every `?next=` a page
   links to sign-in with to pass the rule.
@@ -3584,7 +3589,8 @@ the editor above, and both looked fine in a browser:
   one Save away from rewriting a live guide. **The identity is now adopted
   only through `?edit=`**: the URL carries it while a saved guide is open
   (set on open and after each save, cleared by "Start a new build"), and a
-  plain visit restores a new, unsaved build or nothing.
+  plain visit restores nothing — see **A plain visit is a blank builder**
+  below.
 - **A published guide was edited in place**, so every save was public at
   once. **Now a published Gunforma guide is never a save target.** Edit on
   one ("Edit as draft" on its card) opens a **draft**: a separate
@@ -3601,6 +3607,44 @@ the editor above, and both looked fine in a browser:
   both pages probe for `draft_of` and the draft's link to its live guide
   lives in the editing browser only. Community guides (`gun_guides`) have
   no publish state and are unchanged.
+
+**A plain visit is a blank builder** (Alex, 2026-11-02). Until then every
+plain visit to `gunforma-armory.html` restored the last unsaved build from
+localStorage, so a guide loaded with `?from=`, or a build walked away from,
+kept coming back. Now `openOnLoad()` decides what the builder opens with:
+
+- **`?edit=` and `?from=` load what they name**, as before; `?edit=` still
+  keeps an open guide's unsaved changes across a reload.
+- **Anything else is blank**: no pistol, no parts, no title, the "Start
+  from a guide" cards showing. Nothing is restored.
+- **The one exception is the sign-in round trip.** A click on any Sign in
+  link on the page (Save's toast, the heart's, My Armory's button, the nav)
+  holds a NEW build in progress in **sessionStorage**
+  (`gf-armory-resume-v1`, `stashForSignIn()`), and the next Armory load in
+  that tab takes it — read and cleared on every load, whatever the URL —
+  and restores it only when the reader is signed in and it is under 30
+  minutes old. So it comes back once at most and the next plain visit is
+  blank. **The Armory's own Sign in links carry `?next=gunforma-armory.html`**
+  (the `?edit=` toast, `?next=gunforma-armory.html?edit=…`), which sign-in
+  honours (see **Where sign-in sends the reader** below), so the reader
+  lands straight back on the Armory and the held build is restored on
+  arrival. **The hold itself is the tab's, not the URL's**: it is what
+  marks "this build is coming back", so `next` stays a plain page path for
+  `js/safe-next.js`, and a sign-in begun from a link that carries no
+  `next` — the nav's — still brings the build back on the reader's next
+  Armory load in that tab, wherever sign-in put them.
+- **localStorage holds only an open saved guide's draft** (`gf-armory-picks-v1`,
+  one with a `savedId` or `draftOf`) — `persistDraft()` removes a new
+  build's, and `forgetNewBuildDraft()` drops any that older code left, on
+  every load before anything reads the store.
+- **A reload or close with unsaved picks asks first** (`beforeunload`,
+  the browser's own "Leave site?"). Unsaved means picks on screen that
+  differ from the last save or open (`SAVED_SIG`, `buildSig()`) — nothing
+  picked, or everything saved, does not ask, and nor does leaving through
+  a Sign in link on the page, whose build is held.
+- `scripts/guide-editor.test.mjs` pins all of it: a plain visit with a
+  stored draft, the sign-in return once and then blank, `?from=` then a
+  plain visit, `?edit=` and its reload, and when `beforeunload` fires.
 
 **History — why the old Armory was parked** (kept because the reasoning still
 binds the rebuild): the pre-rebuild page worked — `#83`–`#86` fixed its
@@ -3632,10 +3676,11 @@ variant's photo as a stand-in.
 - The old Armory's `?prefill=` / `?build=` handling did NOT survive the
   rebuild — the rebuilt page has no builds read at all. Post-build's
   `ARMORY_POST_KEY` handshake is intact but currently has no sender.
-- `/gunforma-armory.html` stays in `auth-callback.html`'s `ALLOWED_NEXT`, and
-  the rebuilt page uses it: save is gated on sign-in
-  (`?next=gunforma-armory.html`), with in-progress picks held in localStorage
-  across the OAuth round trip.
+- `/gunforma-armory.html` stays in `ALLOWED_NEXT` (`js/safe-next.js`).
+  Save is gated on sign-in; its link carries `?next=gunforma-armory.html`,
+  so sign-in returns to the Armory, and a new build in progress is held in
+  sessionStorage across the round trip (see **A plain visit is a blank
+  builder**).
 
 **The Armory's tabs (Alex, 2026-11-02).** Under the title, Gun Guides'
 tab bar: **Build | My builds (N) | Saved parts (N)**. Build is the builder
@@ -3700,9 +3745,9 @@ Do not give a third page its own copy; add the tag and `Favorites.init()`.
   click while one is saving does nothing. The catalog's heart used to
   count "no error" as saved; that is the one thing about it that changed.
 - **Signed out**, a heart shows outline and a click writes nothing: "Sign in
-  to save parts", linking the page's `signInHref` — the Armory's carries
-  `?next=gunforma-armory.html`, and the build in progress survives the
-  round trip in the stored draft, as it does for Save.
+  to save parts", linking the page's `signInHref`. On the Armory a click on
+  that link holds the build in progress for the round trip, as Save's
+  does (see **A plain visit is a blank builder**).
 - **The heart never does anything but heart.** Its click stops at the
   button (`stopPropagation` + `preventDefault`), so it cannot open the
   catalog's detail panel or pick, add or remove an Armory part; and the
