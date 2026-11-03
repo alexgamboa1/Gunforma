@@ -248,7 +248,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
       </button>
 
       <div class="card-footer" style="margin-top:20px;">
-        Already have an account? <a href="gunforma-signin.html">Sign in</a>
+        Already have an account? <a href="gunforma-signin.html" id="signin-link">Sign in</a>
       </div>
     </div>
 
@@ -272,9 +272,20 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/supabase-client.js"></script>
 <script src="js/site-url.js"></script>
+<script src="js/safe-next.js"></script>
 <script src="js/nav.js"></script>
 <script>
 var sb = window.sb;
+
+// ?next= from the sign-in page (js/safe-next.js: a listed same-site page or
+// nothing). It is handed back to gunforma-signin.html by every way out of
+// here — Google's redirectTo, the confirmation email's link, "Sign in" —
+// and that page sends the reader on once signed in.
+var NEXT = window.SafeNext.fromLocation();
+(function () {
+  var link = document.getElementById('signin-link');
+  if (link) link.href = window.SafeNext.withNext('gunforma-signin.html', NEXT);
+})();
 
 // Origin used when we hand Supabase a URL to email the user (email
 // confirmation, magic links). Detects local dev by hostname so the same file
@@ -331,7 +342,7 @@ async function handleGoogleSignIn() {
   showError('');
   var res = await sb.auth.signInWithOAuth({
     provider: 'google',
-    options: { redirectTo: siteBaseUrl() + '/gunforma-signin.html' },
+    options: { redirectTo: siteBaseUrl() + window.SafeNext.withNext('/gunforma-signin.html', NEXT) },
   });
   if (res && res.error) showError(res.error.message);
 }
@@ -505,7 +516,7 @@ async function handleSignUp() {
         username:           username,
         marketing_consent:  marketing,
       },
-      emailRedirectTo: siteBaseUrl() + '/gunforma-signin.html'
+      emailRedirectTo: siteBaseUrl() + window.SafeNext.withNext('/gunforma-signin.html', NEXT)
     }
   });
 

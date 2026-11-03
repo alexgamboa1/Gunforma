@@ -154,12 +154,19 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <script src="js/supabase-client.js"></script>
 <script src="js/site-url.js"></script>
+<script src="js/safe-next.js"></script>
 <script>
 // Onboarding nav (logo + "Not you? Sign out" only) is intentionally NOT the
 // shared nav — it belongs to the "you're signed in but not yet onboarded"
 // state, which the shared variants don't model. Same for the footer: this
 // page never had one.
 var sb = window.sb;
+
+// Where to go once onboarded: ?next= from the sign-in page, through
+// js/safe-next.js. Never this page itself — onboarded readers are bounced
+// from here, so next=this page would bounce forever.
+var NEXT = window.SafeNext.fromLocation();
+if (NEXT && /^\/gunforma-complete-profile\.html(?:[?#]|$)/.test(NEXT)) NEXT = null;
 
 // Session watchdog: catches sign-outs (from another tab, or here) and
 // silent token-refresh failures so the user doesn't sit on a stale UI.
@@ -208,7 +215,7 @@ var usernameValid = false;
   // the caller's own row only (audit finding #5).
   var { data: profile, error } = await sb.rpc('get_my_profile').maybeSingle();
   if (error) { showFatal("Couldn't load your profile. Try signing in again."); return; }
-  if (profile && profile.onboarding_complete) { window.location.href = 'index.html'; return; }
+  if (profile && profile.onboarding_complete) { window.location.href = NEXT || 'index.html'; return; }
 
   renderForm(CURRENT_USER, profile || {});
 })();
@@ -362,8 +369,9 @@ async function handleFinish() {
     }
     return;
   }
-  // Land on the home page. There's no dedicated "welcome" screen yet.
-  window.location.href = 'index.html';
+  // Back where they started (?next=), else the home page. There's no
+  // dedicated "welcome" screen yet.
+  window.location.href = NEXT || 'index.html';
 }
 
 // ============================================================

@@ -13,6 +13,7 @@
 <meta name="description" content="Auth landing page for Gunforma magic-link and admin-generated sign-in flows." />
 <meta name="robots" content="noindex, nofollow" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/safe-next.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f3ee; color: #1a1a1a; min-height: 100vh; display: flex; flex-direction: column; }
@@ -103,23 +104,12 @@ var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: { detectSessionInUrl: false, persistSession: true, autoRefreshToken: true },
 });
 
-// Allowlisted redirect targets. `next` from the query string is matched
-// EXACTLY against this list — no prefix match, no absolute URLs. Anything
-// unrecognized silently falls back to '/'. This is the only defense
-// preventing this page from becoming an open redirect.
-var ALLOWED_NEXT = [
-  '/',
-  '/gunforma-admin-queue.html',
-  '/gunforma-admin-post.html',
-  '/gunforma-post-build.html',
-  '/gunforma-armory.html',
-  '/gunforma-complete-profile.html',
-];
-
+// Where `next` may send the reader is js/safe-next.js — the ALLOWED_NEXT
+// list of pages and the one rule every sign-in page shares. Anything it
+// refuses falls back to '/'. That module is the only defense preventing this
+// page from becoming an open redirect; do not grow a local copy here.
 function validateNext(raw) {
-  if (!raw) return '/';
-  if (raw.indexOf('://') !== -1) return '/';   // absolute URL → reject
-  return ALLOWED_NEXT.indexOf(raw) !== -1 ? raw : '/';
+  return window.SafeNext.check(raw) || '/';
 }
 
 function esc(s) {

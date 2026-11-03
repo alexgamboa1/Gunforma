@@ -1633,9 +1633,11 @@ function startFromGuide(id) {
 //   - a NEW build in progress, in sessionStorage (RESUME_KEY), written only
 //     when a Sign in link on this page is clicked, and taken on the next
 //     load: restored if it is back from sign-in, signed in and within the
-//     TTL; dropped otherwise. gunforma-signin.html does not read ?next= —
-//     sign-in lands on the homepage — so the hold is the tab's, not the
-//     URL's: it comes back on the reader's next Armory load in that tab.
+//     TTL; dropped otherwise. This page's Sign in links carry
+//     ?next=gunforma-armory.html, which sign-in honours (js/safe-next.js),
+//     so the reader lands back here and the build returns on arrival. The
+//     hold is the tab's, not the URL's: a sign-in begun without a next
+//     (the nav's link) still brings it back on the next Armory load here.
 //
 // Reads and writes are wrapped: private windows and blocked storage must
 // degrade to "no draft", never to a broken page. The identity is only ever

@@ -1550,6 +1550,7 @@ Registered today:
 | `scripts/slide-fit.test.mjs` | the P365 tier rule (`js/slide-fit.js`) drifting from the signed-off 30-cell matrix — a FUSE grip on a 3.1" slide reading anything but "Won't fit", a comp slide offered an add-on comp, a null tier guessed instead of "Fit not confirmed", MSRP-style wrong labels or a tier label showing inches; also the tag table (label, colour, selectable) and the picker sort order |
 | `scripts/fits-on.test.mjs` | a P365 product page's "Fits on" grid drifting from the signed-off matrix — a slide page of any kind, or a grip page of any tier, serving a cell the matrix does not say; an add-on-comp column on a comp slide; a part with no tier drawn as a grid of blanks instead of "Fit not confirmed"; a P320 part given the tier grid; a grip label showing inches, a slide row not Alex's size-first label or not led by its bold size, a slide page's intro not naming its slide by size; the builders' "…to finish this build" on a product page instead of "…to cover the grip"; a failed read taking the page down; or a second copy of the rule under `netlify/`, or `js/slide-fit.js` missing from the function's `included_files` — runs `product-page.mjs` against a stubbed fetch |
 | `scripts/favorites.test.mjs` | the ♥ claiming a save it did not make — an insert or delete counted done with no row back (RLS matched nothing), an error or a throw that does not flip the heart back and toast; a signed-out click that writes or reads; two writes racing on one part; a heart whose click reaches the card under it (pick, add, open); other hearts for the same part left unpainted; the Parts Catalog keeping its own copy of the heart, writing `part_favorites` itself, or redrawing its My Favorites tab differently than it did (count on every change, the grid when a card must leave or come back); the Armory not loading the module — runs `js/favorites.js` against a recording stub and the catalog's own `onFavoriteChange()` |
+| `scripts/safe-next.test.mjs` | sign-in becoming an open redirect, or ignoring `?next=` — `js/safe-next.js` letting through a scheme, `//`, a backslash, an encoded slash, a host, `javascript:`, an unlisted page or a query/hash outside its alphabet; a second copy of `ALLOWED_NEXT`; `gunforma-signin.html` not sending a signed-in reader (an admin too) to a checked next, or forwarding a refused one; next dropped from Google's `redirectTo`, the reset email, sign-up's confirmation email or the links between the two pages; a reset link with next no longer showing "Choose a new password"; `gunforma-complete-profile.html` not going on to next, or looping on next = itself; `auth-callback.html` forwarding an unchecked next; a page linking to sign-in with a next the rule refuses — runs the module over a table and the four pages' own scripts against stubbed sessions |
 | `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), a write to `part_favorites` from anything but the ♥, a heart missing from a picker card, a picked card or a saved part, a heart that changes the picks, the open picker, the stored draft or the build's identity, a heart that does not move the Saved parts count and grid (or a failed one that does not put them back in place), a signed-out heart that writes or does not link sign-in back to the Armory, the "Saved" picker filter listing an unsaved part or making a saved part that doesn't fit pickable, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; Gun Guides growing a Community tab or a `gun_guides` read back; and a plain Armory visit opening anything but a blank builder — a stored draft restored, a new build written to localStorage, a `?from=` build back on the next visit, the sign-in hold restored signed out, stale, twice or for an open saved guide, `?edit=` losing its guide or a reload's unsaved changes, or `beforeunload` asking with nothing unsaved (or not asking with unsaved picks) |
 
 This table is the full registry, not a sample. It read "Registered today:"
@@ -2983,6 +2984,51 @@ different vocabulary from the build's sections and must not be merged. That
 was the drift: one part had four names depending on the page. They are one
 list now — see **One category list, two copies** above.
 
+### Where sign-in sends the reader: `?next=`, one rule (2026-11-02)
+
+**Until 2026-11-02 `gunforma-signin.html` never read `?next=`.** Every
+sign-in landed on the homepage (the admin queue for an admin), so the
+`?next=gunforma-armory.html` the Armory's sign-in links carried, and the
+profile's `?next=gunforma-profile.html`, did nothing — a link that renders,
+works and goes to the wrong place. Now four pages honour it, through ONE
+rule:
+
+- **`js/safe-next.js` (`window.SafeNext`) is the rule and the only home of
+  `ALLOWED_NEXT`** — `auth-callback.html` used to hold the list itself; do
+  not grow a copy back. A value passes only as a bare page path ("/",
+  "/x.html" or "x.html") whose page is on the list, with an optional query
+  (letters, digits, `- . _ ~ = & :`) and hash (letters, digits, `- _`).
+  That alphabet has no `/`, `\`, `%`, whitespace or scheme separator, so
+  nothing can name a host or decode into one; the result always starts
+  with exactly one `/` and a listed page. Anything else is null and the
+  page routes as it did before. **To let sign-in return to a new page, add
+  it to the list** — and only a page, never a pattern.
+- **`gunforma-signin.html`** sends a signed-in reader to next — password
+  sign-in, Google, the already-signed-in arrival and a saved reset
+  password — admins included; without one, today's routing. A reader not
+  yet onboarded goes to `gunforma-complete-profile.html?next=…`, which goes
+  on to next once the username is saved (and ignores a next naming itself,
+  which would bounce forever).
+- **next rides through every round trip**: Google's `redirectTo` and the
+  reset email's (both `/gunforma-signin.html?next=…`), "Create one free"
+  to `gunforma-signup.html`, and back through sign-up's Google
+  `redirectTo`, its confirmation email (`emailRedirectTo`) and its "Sign
+  in" link. **Supabase's Redirect URL allowlist accepts the sign-in page
+  with a query string** — probed 2026-11-02 with the failed-verify probe,
+  production and a preview, a non-listed control falling back to the site
+  URL — so nothing in the dashboard changed. A reset link with next still
+  shows "Choose a new password": the query does not touch the hash that
+  marks a recovery.
+- **`auth-callback.html`** goes to `SafeNext.check(next) || '/'`.
+- **The Armory pairs it with its sign-in hold**: its Sign in links carry
+  `?next=gunforma-armory.html` and hold the build in progress in the tab,
+  so the reader lands back on the Armory with that build restored (see
+  **A plain visit is a blank builder**). `next` only says where to land;
+  what comes back is the hold's business, never the URL's.
+- `scripts/safe-next.test.mjs` pins the rule over a table of values and
+  runs the four pages' own scripts, and requires every `?next=` a page
+  links to sign-in with to pass the rule.
+
 ### Auth emails live in the dashboard, not in this repo
 
 The Supabase Auth email templates are configured in the Supabase dashboard
@@ -3578,12 +3624,15 @@ kept coming back. Now `openOnLoad()` decides what the builder opens with:
   that tab takes it — read and cleared on every load, whatever the URL —
   and restores it only when the reader is signed in and it is under 30
   minutes old. So it comes back once at most and the next plain visit is
-  blank. **The hold is the tab's, not the URL's, on purpose:
-  `gunforma-signin.html` never reads `?next=`** (it lands on the homepage,
-  or the admin queue for an admin), so the `?next=gunforma-armory.html` on
-  the Armory's links is inert today, and a marker riding in it would never
-  arrive. The build comes back on the reader's next Armory load, wherever
-  sign-in put them.
+  blank. **The Armory's own Sign in links carry `?next=gunforma-armory.html`**
+  (the `?edit=` toast, `?next=gunforma-armory.html?edit=…`), which sign-in
+  honours (see **Where sign-in sends the reader** below), so the reader
+  lands straight back on the Armory and the held build is restored on
+  arrival. **The hold itself is the tab's, not the URL's**: it is what
+  marks "this build is coming back", so `next` stays a plain page path for
+  `js/safe-next.js`, and a sign-in begun from a link that carries no
+  `next` — the nav's — still brings the build back on the reader's next
+  Armory load in that tab, wherever sign-in put them.
 - **localStorage holds only an open saved guide's draft** (`gf-armory-picks-v1`,
   one with a `savedId` or `draftOf`) — `persistDraft()` removes a new
   build's, and `forgetNewBuildDraft()` drops any that older code left, on
@@ -3627,11 +3676,11 @@ variant's photo as a stand-in.
 - The old Armory's `?prefill=` / `?build=` handling did NOT survive the
   rebuild — the rebuilt page has no builds read at all. Post-build's
   `ARMORY_POST_KEY` handshake is intact but currently has no sender.
-- `/gunforma-armory.html` stays in `auth-callback.html`'s `ALLOWED_NEXT`.
-  Save is gated on sign-in, and a new build in progress is held in
+- `/gunforma-armory.html` stays in `ALLOWED_NEXT` (`js/safe-next.js`).
+  Save is gated on sign-in; its link carries `?next=gunforma-armory.html`,
+  so sign-in returns to the Armory, and a new build in progress is held in
   sessionStorage across the round trip (see **A plain visit is a blank
-  builder** — and note `gunforma-signin.html` ignores the
-  `?next=gunforma-armory.html` the page's links carry).
+  builder**).
 
 **The Armory's tabs (Alex, 2026-11-02).** Under the title, Gun Guides'
 tab bar: **Build | My builds (N) | Saved parts (N)**. Build is the builder
