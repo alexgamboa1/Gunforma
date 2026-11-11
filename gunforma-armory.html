@@ -11,7 +11,7 @@
 <link rel="manifest" href="/site.webmanifest?v=12026" />
 <title>Armory — Gunforma</title>
 <link rel="canonical" href="https://gunforma.com/gunforma-armory.html" />
-<meta name="description" content="Gunforma Armory — spec a P365 build from the parts catalog. Pick a platform, then choose compatible parts in every section." />
+<meta name="description" content="Gunforma Armory — spec a P365 build before you buy a part. Pick your pistol, tell us what you're starting with, and the Armory only shows parts that fit." />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -297,6 +297,127 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   .page-header, .tab-row, .armory, .footer-bar { padding-left: 16px; padding-right: 16px; }
   .tab-btn { padding-left: 10px; padding-right: 10px; }
 }
+
+/* ── THE 2026-11-10 FLOW ──────────────────────────────────────────────────
+   Start → model → build list → part pages. New rules only below this line;
+   everything above is the shared chrome the rebuild keeps. */
+
+/* crumbs */
+.crumbs { font-size: 11.5px; color: #999; margin-bottom: 12px; }
+.crumbs a { color: #2a7bbd; text-decoration: none; }
+
+/* start + model tiles */
+.plat { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.tiles.guns { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 10px; }
+.tile { font-family: inherit; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 6px; padding: 14px; text-align: left; display: flex; flex-direction: column; gap: 6px; cursor: pointer; transition: border-color 0.12s; }
+.tile:hover:not(:disabled) { border-color: #4a9edd; }
+.tile[aria-pressed="true"] { border-color: #4a9edd; box-shadow: inset 0 0 0 1px #4a9edd; background: #eaf4fc; }
+.tile:disabled { opacity: 0.55; cursor: default; }
+.tile .use { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #2a7bbd; }
+.tile .t { font-weight: 700; font-size: 16px; color: #1a1a1a; }
+.plat .tile .t { font-size: 20px; }
+.tile .facts { font-size: 11.5px; font-weight: 600; color: #333; font-variant-numeric: tabular-nums; }
+.tile .meta { font-size: 11.5px; color: #888; line-height: 1.45; }
+.tile .foot { margin-top: auto; display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 8px; font-size: 11px; color: #999; font-variant-numeric: tabular-nums; }
+.tile .foot b { color: #2a7bbd; }
+.tile.fcu { border-style: dashed; }
+.resume-bar { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; background: #fff; border: 0.5px solid #4a9edd; border-radius: 6px; padding: 12px 14px; margin-bottom: 16px; font-size: 12.5px; color: #333; }
+.sec-h2 { font-size: 15px; font-weight: 700; margin: 18px 0 10px; color: #1a1a1a; }
+.navrow { display: flex; justify-content: space-between; align-items: center; margin-top: 18px; gap: 12px; }
+.navrow a { color: #2a7bbd; font-weight: 700; font-size: 13px; text-decoration: none; }
+.btn-next { font-family: inherit; font-size: 13px; font-weight: 700; padding: 10px 18px; border-radius: 4px; border: 0.5px solid #4a9edd; background: #4a9edd; color: #fff; cursor: pointer; }
+.btn-next:hover { background: #2a7bbd; }
+.btn-next:disabled { background: #cfd8e0; border-color: #cfd8e0; cursor: default; }
+
+/* "starting from" bar */
+.start-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 12px 14px; }
+.sb-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; }
+.sb-gun { font-size: 16px; font-weight: 800; color: #1a1a1a; }
+.sb-facts { font-size: 11.5px; color: #888; margin-top: 2px; }
+.sb-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.sb-btn { font-family: inherit; font-size: 11px; font-weight: 700; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; border-radius: 4px; padding: 6px 12px; cursor: pointer; text-decoration: none; }
+.sb-btn:hover { background: #eaf4fc; }
+
+/* fit-warnings bar */
+.fit-bar { display: flex; gap: 10px; align-items: flex-start; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; border: 0.5px solid; line-height: 1.5; }
+.fit-bar.ok { background: #e7f6ee; border-color: #9edbbb; color: #1a1a1a; }
+.fit-bar.warn { background: #fdf3e2; border-color: #f3d9a8; }
+.fit-bar.bad { background: #fdeae4; border-color: #f3bfae; }
+.fit-bar b { white-space: nowrap; }
+.fit-bar ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; flex: 1; min-width: 0; }
+.fit-bar a { font-weight: 700; color: #2a7bbd; text-decoration: none; white-space: nowrap; }
+.sev { display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; }
+.sev.bad { background: #b24a2a; color: #fff; }
+.sev.warn { background: #c08a2e; color: #fff; }
+.sev.info { background: #f0f1f3; color: #555; }
+
+/* build-list rows */
+.slot-choose { display: inline-block; font-size: 11.5px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 7px 12px; text-decoration: none; }
+.slot-choose:hover { background: #2a7bbd; }
+.slot-upgrade { display: inline-block; font-size: 11px; font-weight: 700; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; border-radius: 4px; padding: 5px 12px; text-decoration: none; }
+.slot-upgrade:hover { background: #eaf4fc; }
+.stock-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12.5px; color: #555; }
+.stock-tag { font-size: 9.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; background: #f0f1f3; color: #666; padding: 2px 7px; border-radius: 3px; flex-shrink: 0; }
+.stock-incl { font-size: 11px; color: #999; margin-left: auto; white-space: nowrap; }
+.slot-row-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.cat-link { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #888; text-decoration: none; }
+.cat-link:hover { color: #2a7bbd; }
+
+/* part page */
+.part-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 20px; align-items: start; }
+.facets { background: #fff; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 4px 14px 14px; position: sticky; top: 72px; max-height: calc(100vh - 92px); overflow: auto; }
+.facet { padding-top: 12px; border-top: 0.5px solid #f0efe9; margin-top: 12px; }
+.facet:first-child { border-top: 0; margin-top: 0; }
+.facet h4 { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; margin: 0 0 6px; }
+.facet label { display: flex; gap: 8px; align-items: center; font-size: 12.5px; padding: 3px 0; cursor: pointer; color: #333; }
+.facet label .c { margin-left: auto; color: #b0ada4; font-size: 11px; font-variant-numeric: tabular-nums; }
+.facet input[type=range] { width: 100%; }
+.facet .scroll { max-height: 180px; overflow: auto; }
+.filters-btn { display: none; font-family: inherit; font-size: 11px; font-weight: 700; color: #555; background: #fff; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 11px; cursor: pointer; }
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.toolbar .n { color: #888; font-size: 12px; white-space: nowrap; }
+.sortsel { font-family: inherit; font-size: 12px; color: #1a1a1a; border: 0.5px solid #d5d3ca; background: #fff; border-radius: 4px; padding: 8px; }
+.ctx-line { font-size: 12px; color: #555; background: #eaf4fc; border-radius: 4px; padding: 8px 12px; margin-bottom: 10px; }
+.ctx-line b { color: #1a1a1a; }
+.hidden-note { font-size: 12px; color: #888; padding: 12px 2px; }
+.hidden-note button { background: none; border: 0; color: #2a7bbd; font-weight: 700; padding: 0; cursor: pointer; font-family: inherit; font-size: 12px; }
+.part-grid.pg-page { max-height: none; overflow: visible; padding: 0; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); }
+.part-card-spec { font-size: 10.5px; color: #999; }
+.part-card-shop { font-size: 10px; color: #999; }
+.pc-cmp { position: absolute; top: 6px; left: 6px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 4px; font-size: 10px; padding: 3px 6px; display: flex; gap: 4px; align-items: center; cursor: pointer; color: #888; z-index: 2; }
+.pc-link { color: inherit; text-decoration: none; display: block; }
+
+/* compare tray + modal */
+.cmp-tray { position: fixed; left: 0; right: 0; bottom: 0; z-index: 250; background: #0e0f11; color: #fff; padding: 10px 16px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cmp-tray .it { background: #24272b; border-radius: 4px; padding: 5px 8px; font-size: 11.5px; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmp-tray button { font-family: inherit; font-size: 11px; font-weight: 700; border-radius: 4px; padding: 7px 12px; cursor: pointer; }
+.cmp-tray .go { background: #4a9edd; color: #fff; border: 0.5px solid #4a9edd; }
+.cmp-tray .go:disabled { opacity: 0.5; cursor: default; }
+.cmp-tray .clr { background: none; color: #ccc; border: 0.5px solid #555; }
+.cmp-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 260; display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px; overflow: auto; }
+.cmp-modal[hidden] { display: none; }
+.cmp-box { background: #fff; border-radius: 8px; max-width: 900px; width: 100%; padding: 18px; }
+.cmp-box h2 { font-size: 16px; margin: 0 0 12px; }
+.cmp-box .x { float: right; background: none; border: 0; font-size: 18px; color: #888; cursor: pointer; }
+.cmp-table-wrap { overflow-x: auto; }
+.cmp-table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.cmp-table td, .cmp-table th { padding: 8px 10px; border-bottom: 0.5px solid #f0efe9; text-align: left; vertical-align: top; }
+.cmp-table td:first-child { color: #888; font-size: 11.5px; white-space: nowrap; }
+.cmp-img { width: 110px; height: 82px; object-fit: contain; }
+
+/* mobile bottom bar */
+.mobile-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 240; background: #0e0f11; color: #fff; padding: 10px 16px; display: none; align-items: center; justify-content: space-between; gap: 12px; }
+.mobile-bar .mb-total { font-size: 17px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.mobile-bar .mb-sub { font-size: 10px; opacity: 0.7; }
+.mobile-bar .mb-save { font-family: inherit; font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 9px 14px; cursor: pointer; }
+
+@media (max-width: 900px) {
+  .part-layout { grid-template-columns: minmax(0, 1fr); }
+  .facets { position: static; max-height: none; display: none; }
+  .facets.open { display: block; }
+  .filters-btn { display: inline-flex; }
+  .mobile-bar.on { display: flex; }
+}
 </style>
 </head>
 <body>
@@ -340,7 +461,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 
 <div class="page-header">
   <div class="page-title">The Armory</div>
-  <div class="page-sub">Spec a build before you own the parts. Pick your pistol, then choose from every compatible part in the catalog — the Armory only shows combinations that actually fit together.</div>
+  <div class="page-sub">Spec a pistol build before you buy a part. Pick your pistol, tell us what you're starting with, and the Armory only shows parts that fit.</div>
 </div>
 
 <div class="tab-row" role="tablist">
@@ -353,48 +474,49 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <div class="armory" id="panel-saved-parts" role="tabpanel" hidden></div>
 
 <div class="armory" id="panel-build" role="tabpanel">
-  <div class="build-layout">
-    <div class="build-main">
-      <div class="card" id="guide-start" hidden>
-        <div class="card-title">Start from a guide <span class="card-hint">load a Gunforma build, then make it yours</span></div>
-        <div class="guide-start-row" id="guide-start-row"></div>
-        <div class="guide-start-or">…or start from scratch below.</div>
+  <div id="view-start" hidden></div>
+  <div id="view-model" hidden></div>
+  <div id="view-part" hidden></div>
+  <div id="view-build" hidden>
+    <div class="build-layout">
+      <div class="build-main">
+        <div id="start-bar"></div>
+        <div id="fit-bar"></div>
+        <div id="parts-container"></div>
       </div>
-      <div class="card">
-        <div class="card-title">Pistol <span class="card-hint" id="platform-note"></span></div>
-        <div class="platform-row" id="platform-row"><span style="font-size:12px;color:#888;">Loading platforms…</span></div>
-        <div class="model-row" id="model-row" hidden>
-          <div class="model-label">Which model?</div>
-          <select class="gf-select" id="model-select" aria-label="Which model"></select>
-          <div class="model-note" id="model-note"></div>
+      <aside class="build-side">
+        <div class="card">
+          <div class="card-title">Your build</div>
+          <div class="edit-banner" id="edit-banner" hidden></div>
+          <div class="edit-dropped" id="edit-dropped" hidden></div>
+          <div class="summary-row"><span class="summary-label">Starting from</span><span class="summary-value" id="s-platform">—</span></div>
+          <div class="summary-row"><span class="summary-label">Parts picked</span><span class="summary-value" id="s-parts">0</span></div>
+          <div class="summary-row"><span class="summary-label">Grip length</span><span class="summary-value" id="s-grip">—</span></div>
+          <div class="summary-row"><span class="summary-label">Slide length</span><span class="summary-value" id="s-slide">—</span></div>
+          <div class="summary-parts" id="s-list" hidden></div>
+          <div class="summary-total-wrap">
+            <div class="summary-total-label">Upgrade cost (MSRP)</div>
+            <div class="summary-total" id="s-total">$0</div>
+            <div class="summary-total-sub" id="s-total-sub"></div>
+            <div class="summary-total-sub">Stock parts aren't counted — only what you're buying.</div>
+          </div>
+          <input type="text" class="build-title-input" id="build-title" maxlength="80" placeholder="Name this build" autocomplete="off" hidden />
+          <div class="save-opts" id="save-opts" hidden></div>
+          <button type="button" class="btn-block primary" id="btn-save" disabled>Save &amp; share →</button>
+          <button type="button" class="btn-block ghost" id="btn-share" hidden>Share this build</button>
+          <a class="btn-block ghost" href="gunforma-gun-guides.html">Browse Gun Guides</a>
         </div>
-      </div>
-      <div id="parts-container">
-        <div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Pick a pistol to see compatible parts.</div></div>
-      </div>
+      </aside>
     </div>
-    <aside class="build-side">
-      <div class="card">
-        <div class="card-title">Your build</div>
-        <div class="edit-banner" id="edit-banner" hidden></div>
-        <div class="edit-dropped" id="edit-dropped" hidden></div>
-        <div class="summary-row"><span class="summary-label">Pistol</span><span class="summary-value" id="s-platform">—</span></div>
-        <div class="summary-row"><span class="summary-label">Parts picked</span><span class="summary-value" id="s-parts">0</span></div>
-        <div class="summary-parts" id="s-list" hidden></div>
-        <div class="summary-total-wrap">
-          <div class="summary-total-label">Running total (MSRP)</div>
-          <div class="summary-total" id="s-total">$0</div>
-          <div class="summary-total-sub" id="s-total-sub"></div>
-        </div>
-        <input type="text" class="build-title-input" id="build-title" maxlength="80" placeholder="Name this build" autocomplete="off" hidden />
-        <div class="save-opts" id="save-opts" hidden></div>
-        <button type="button" class="btn-block primary" id="btn-save" disabled>Save &amp; share →</button>
-        <button type="button" class="btn-block ghost" id="btn-share" hidden>Share this build</button>
-        <a class="btn-block ghost" href="gunforma-gun-guides.html">Browse Gun Guides</a>
-      </div>
-    </aside>
   </div>
 </div>
+
+<div class="mobile-bar" id="mobile-bar" hidden>
+  <div><div class="mb-sub" id="mb-sub">Upgrade cost</div><div class="mb-total" id="mb-total">$0</div></div>
+  <button type="button" class="mb-save" id="mb-save">Save &amp; share</button>
+</div>
+<div class="cmp-tray" id="cmp-tray" hidden></div>
+<div class="cmp-modal" id="cmp-modal" hidden></div>
 
 <div class="toast" id="toast"><span id="toast-msg"></span><span id="toast-link-wrap"></span></div>
 
@@ -410,20 +532,36 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/option-price.js"></script>
 <script src="js/guide-url.js"></script>
 <script src="js/build-total.js"></script>
+<script src="js/maker-link.js"></script>
+<script src="js/affiliate.js"></script>
 <script src="js/armory-builds.js"></script>
 <script src="js/favorites.js"></script>
 <script src="js/frame-fit.js"></script>
 <script src="js/slide-fit.js"></script>
+<script src="js/armory-fit.js"></script>
 <script src="js/nav.js"></script>
 <script src="js/footer.js"></script>
 <script>
 // ─── THE ARMORY, rebuilt as pick-and-save ───────────────────────────────────
-// One job: choose a pistol, pick one part per category from a catalog-style
-// card grid (photos, not dropdowns — Alex, 2026-10-27) that only ever lists
-// parts compatible with everything already picked, and save
-// the result to Gun Guides (the `gun_guides` table — see
-// supabase/migrations/*gun_guides.sql). It does NOT write draft builds;
-// posting a real build stays gunforma-post-build.html's job.
+// The 2026-11-10/11 flow (Alex's sign-off — the phase-1 ship doc):
+//   1. #start   Pick your pistol (P365 now; P320 visible, parts coming)
+//   2. #model   "What are you starting with?" — one card per P365 model in
+//               `guns` (facts from the row, blurb from guns.armory_blurb)
+//               plus Just the FCU. A factory model fills its stock grip,
+//               slide and barrel into the build list; FCU starts empty.
+//   3. #build   The build list: all 18 catalog categories as rows, grouped
+//               Core / Sights & light / Feeding / Controls / Internals &
+//               finish, with a fit-warnings bar on top and the save card
+//               beside it. The build in progress lives in localStorage
+//               (BUILD_KEY) and carries over between visits.
+//   4. #part-x  One page per category: facets, search, sort, compare (3),
+//               photo cards tagged by js/armory-fit.js. Parts that won't
+//               fit are hidden behind "Show them with the reason" — shown
+//               disabled, never silently dropped.
+// ?add=<product id>[&variant=<id>] (the product page's Add to build): into
+// the build in progress, or the model step first with a note.
+// Saving still writes gun_guides exactly as before; posting a real build
+// stays gunforma-post-build.html's job.
 //
 // The compatibility rules are PARTS_BUILDER_COMPATIBILITY_LOGIC.md, applied
 // client-side over anon-readable tables:
@@ -461,10 +599,13 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 // draft; publishing a plain draft just flips is_published. Every update to
 // a Gunforma guide carries .eq('is_published', false), so even a stale
 // identity cannot write to a live guide: the database matches no row.
-// And the plain Armory URL (no ?edit=) always starts a new build — the
-// saved identity lives in ?edit= while you edit, never in a draft alone,
-// which is how "Build yours in the Armory" used to land in edit mode on
-// the last guide an admin had opened.
+// And a plain Armory URL (no ?edit=) never lands in edit mode — the saved
+// IDENTITY lives in ?edit= while you edit, never in a draft alone, which is
+// how "Build yours in the Armory" used to land in edit mode on the last
+// guide an admin had opened. Since the 2026-11-10 rebuild a plain visit DOES
+// restore the identity-less build in progress (BUILD_KEY — the ship doc's
+// "carries over between visits"), which can never make a save land on a
+// saved row: it has no identity to carry.
 //
 // NAMES (Alex, 2026-11-02). A reader's saved build (gun_guides) is an
 // "Armory build" on every surface, never a "community guide"; "Gun Guides"
@@ -495,6 +636,19 @@ var PRODUCTS = [], PRODUCTS_BY_ID = {};
 var SPEC = { slide: {}, barrel: {}, compensator: {}, frame: {} };
 var BARREL_LOCKS = {};              // barrel pid -> [{slide, note}]
 var MAGWELL_FITS = {};              // magwell pid -> [{frame, note}]
+var MAG_FITS = {};                  // magazine pid -> { housing_class: {fit, note} }
+var GUN_CUTS = {};                  // gun id -> [gun_optic_cuts rows]
+var OPTIC_CUT_FOOTPRINTS = {};      // optic_cut -> { footprint_id: 'direct'|'via-plate' }
+var FOOTPRINT_NAME = {};            // footprint id -> common_name
+// Facet/spec rows per category the part pages filter and compare on, one
+// table each. A failed read means no facets for that category, never a
+// broken page.
+var XSPEC = { optic: {}, light: {}, sight: {}, magazine: {}, magwell: {}, basepad: {},
+  trigger: {}, mag_release: {}, slide_release: {}, takedown_lever: {}, safety_selector: {}, recoil_spring: {} };
+// The new Armory's reference data — both arrive with *_armory_reference.sql
+// and both reads tolerate its absence (house rule: code deploys first).
+var STOCK_PARTS = {};               // gun id -> { category: product_id } (gun_stock_parts)
+var BLURBS = {};                    // gun id -> guns.armory_blurb
 
 // The 2026-10-29 fitment model's columns, read in queries of their OWN so a
 // database that predates the migration fails these four reads and nothing
@@ -509,30 +663,50 @@ var FIT = {
   gun: {},           // guns id   -> { slide_fit_tier, slide_comp_style, grip_fit_tier }
 };
 
-// Categories that get a dropdown, in render order, grouped like the builder
-// pages. Derived from BuildCategories so the taxonomy lives once; only
-// catalog-backed sections appear (holsters, paint and knives are typed-in
-// parts on post-build, not catalog picks).
-var SLOT_GROUPS = BC.GROUPED_CATEGORIES.map(function (g) {
-  return {
-    group: g.group,
-    slots: g.categories.reduce(function (list, c) {
-      (c.dbCategory || []).forEach(function (db) {
-        list.push({ cat: db, section: c.key, label: window.categorySingular(db) });
-      });
-      return list;
-    }, []),
-  };
-}).filter(function (g) { return g.slots.length; });
+// All 18 catalog categories as build-list rows, in the ship doc's groups.
+// Labels come from js/category-map.js (categorySingular) — never typed here
+// (check-categories.mjs's "no hand-written copies" rule). split(' ') rather
+// than an array of string literals for the same guard's tuple pattern.
+var ARMORY_GROUPS = [
+  { label: 'Core', cats: 'frame slide barrel compensator'.split(' ') },
+  { label: 'Sights & light', cats: 'optic sight light'.split(' ') },
+  { label: 'Feeding', cats: 'magazine magwell basepad'.split(' ') },
+  { label: 'Controls', cats: 'trigger mag_release slide_release takedown_lever safety_selector'.split(' ') },
+  { label: 'Internals & finish', cats: 'recoil_spring slide_plate other'.split(' ') },
+];
+var ARMORY_CATS = ARMORY_GROUPS.reduce(function (a, g) { return a.concat(g.cats); }, []);
+// Categories with no fit data at all: filters only, "N to pick from".
+var NO_FIT_CATS = {};
+'sight light basepad trigger mag_release slide_release takedown_lever safety_selector slide_plate other'
+  .split(' ').forEach(function (c) { NO_FIT_CATS[c] = 1; });
+// "a slide" / "an optic", from the category-map singular.
+function nounOne(cat) {
+  var s = window.categorySingular(cat).toLowerCase();
+  return (/^[aeiou]/.test(s) ? 'an ' : 'a ') + s;
+}
+function nounMany(cat) { return window.categoryPlural(cat).toLowerCase(); }
+// The model cards' order — the ship doc's, family by family; a gun the list
+// doesn't name sorts after these, alphabetically.
+var MODEL_ORDER = 'p365 p365-x p365-xl p365-xl-rose-comp p365-xmacro p365-xmacro-comp p365-axg p365-xf-dh3 p365-xf-dh3-axg p365-fuse p365-fuse-comp'.split(' ');
+// Grip sizes in words, by frame_specs/guns housing class — never inches for
+// a grip (Alex, 2026-10-30).
+var GRIP_SIZE = { p365: 'P365', p365xl: 'X / XL', xmacro: 'XMacro', 'xmacro-sub': 'XMacro Sub', fuse: 'FUSE length', 'fuse-xl': 'FUSE length' };
 
 // The pickers' "Show discontinued parts" toggle — off by default, and not
 // part of a build's identity, so "Start a new build" leaves it alone.
 var SHOW_DISCONTINUED = false;
 var STATE = {
   platform: null,
-  gun: null,              // guns row, or null = "custom / FCU / not sure"
+  gun: null,              // guns row, or null (FCU, or the question unanswered)
+  gunMode: null,          // null = "what are you starting with?" not answered
+                          // yet; 'model' = a factory gun; 'fcu' = just the FCU
   picks: {},              // category -> { productId, variantId }
-  openCat: null,          // which category's visual picker is open (one at a time)
+  pending: null,          // ?add= held until the model step answers
+  compare: [],            // product ids ticked for compare (one category, ≤3)
+  filters: {},            // per-category part-page filters (transient)
+  sort: {},               // per-category part-page sort (transient)
+  showAll: {},            // per-category "show parts that don't fit"
+  gunDraft: undefined,    // the model step's not-yet-confirmed selection
   title: '',
   // Which row Save writes. These four are the build's IDENTITY: anything
   // that replaces the builder's contents sets or clears all of them
@@ -569,10 +743,11 @@ var MY = {
 var SAVED_ONLY = false;
 
 var DRAFT_KEY = 'gf-armory-picks-v1';       // localStorage: an OPEN saved guide's unsaved changes (?edit=)
-var RESUME_KEY = 'gf-armory-resume-v1';     // sessionStorage: a new build held across the sign-in round trip
-var RESUME_TTL_MS = 30 * 60 * 1000;
+var BUILD_KEY = 'gf-armory-build-v2';       // localStorage: the identity-LESS build in progress — the one
+                                            // that carries over between plain visits (ship doc, 2026-11-10).
+                                            // A new key on purpose: old v1 blobs were edit drafts and must
+                                            // never restore as builds.
 var SAVED_SIG = null;                       // buildSig() as last saved or opened; null = never saved
-var LEAVING_FOR_SIGNIN = false;
 var NEW_THEME = '__new__';
 
 var IS_ADMIN = false;
@@ -637,8 +812,8 @@ Favorites.init({
   sb: sb,
   user: function () { return CURRENT_USER; },
   toast: function (msg, href, linkText) { toast(msg, href, linkText); },
-  // A click on the toast's Sign in link holds the build in progress for the
-  // round trip (stashForSignIn), as Save's does.
+  // The build in progress persists in localStorage (BUILD_KEY), so the
+  // sign-in round trip loses nothing; ?next= lands the reader back here.
   signInHref: 'gunforma-signin.html?next=gunforma-armory.html',
   onChange: onFavoriteChange,
 });
@@ -647,10 +822,10 @@ Favorites.init({
 async function loadAll() {
   var queries = [
     sb.from('platforms').select('id, name, slug, is_live').order('name'),
-    sb.from('guns').select('id, slug, name, housing_class, slide_length_in, integrated_comp, platform_id').order('name'),
+    sb.from('guns').select('id, slug, name, housing_class, slide_length_in, barrel_length_in, oem_capacity, frame_material, integrated_comp, platform_id').order('name'),
     sb.from('products')
       .select(
-        'id, slug, name, category, is_approved, is_discontinued,' +
+        'id, slug, name, category, is_approved, is_discontinued, restricted_states,' +
         'brands:manufacturers(id, name),' +
         'product_platforms(platform_id),' +
         'product_variants!product_variants_product_id_fkey(id, variant_label, color, finish, msrp, is_default, primary_image_url, retired_at)'
@@ -659,7 +834,7 @@ async function loadAll() {
       // (picksFromSnapshot), and the pickers offer them behind the "Show
       // discontinued" toggle (SHOW_DISCONTINUED) — fit rules apply as ever.
       .is('product_variants.retired_at', null),
-    sb.from('slide_specs').select('product_id, barrel_length_in, integrated_comp, internally_ported, threaded_barrel_ok, port_style'),
+    sb.from('slide_specs').select('product_id, slide_length_in, barrel_length_in, integrated_comp, internally_ported, threaded_barrel_ok, port_style'),
     sb.from('barrel_specs').select('product_id, barrel_length_in, barrel_type, thread_pitch, requires_slide_text, port_style'),
     sb.from('compensator_specs').select('product_id, mounting_type, requires_threaded_barrel, thread_pitch, comes_with_barrel, barrel_length_in'),
     sb.from('frame_specs').select('product_id, housing_class'),
@@ -688,6 +863,7 @@ async function loadAll() {
       category: row.category,
       brand: (row.brands && row.brands.name) || 'Unknown',
       discontinued: row.is_discontinued === true,
+      restricted_states: row.restricted_states || null,
       variants: variants,
       defaultVariant: dv,
       platform_ids: (row.product_platforms || []).map(function (pp) { return pp.platform_id; }),
@@ -708,26 +884,136 @@ async function loadAll() {
       .push({ frame: row.frame_product_id, note: row.compatibility_note || '' });
   });
 
-  await Promise.all([loadFitTiers(), loadGuideThemes(), loadStartGuides(), AUTH_READY]);
-  renderPlatformRow();
+  await Promise.all([loadFitTiers(), loadFitData(), loadArmoryRef(), loadGuideThemes(), loadStartGuides(), AUTH_READY]);
+  LOADED = true;
   await openOnLoad();
-  renderGuideStart();
+  route();
   loadMyArmory();
 }
+var LOADED = false;
 
-// What the builder opens with. ?edit= and ?from= load what they name; a
-// plain visit is ALWAYS a blank builder, with one exception: the first load
-// back from sign-in, when a Sign in link on this page held the build
-// (stashForSignIn). The hold is taken — read and cleared — on every load,
-// whatever the URL, so it comes back once at most.
+// The fit and facet rows the 2026-11-10 flow adds: magazine fit claims, the
+// optic-cut chain, and one spec read per part-page category. Each read is
+// tolerant on its own — a failure means that category has no facets or its
+// verdicts read unconfirmed, never a broken page.
+async function loadFitData() {
+  var defs = [
+    ['magazine_housing_fit', 'magazine_product_id, housing_class, fit, note', function (rows) {
+      rows.forEach(function (m) { (MAG_FITS[m.magazine_product_id] = MAG_FITS[m.magazine_product_id] || {})[m.housing_class] = { fit: m.fit, note: m.note || '' }; });
+    }],
+    ['gun_optic_cuts', 'gun_id, optic_cut, applies_to, confidence', function (rows) {
+      rows.forEach(function (c) { (GUN_CUTS[c.gun_id] = GUN_CUTS[c.gun_id] || []).push(c); });
+    }],
+    ['optic_cut_footprints', 'optic_cut, footprint_id, fit', function (rows) {
+      rows.forEach(function (m) {
+        var map = OPTIC_CUT_FOOTPRINTS[m.optic_cut] = OPTIC_CUT_FOOTPRINTS[m.optic_cut] || {};
+        // 'direct' beats 'via-plate' when both reach one footprint.
+        if (map[m.footprint_id] !== 'direct') map[m.footprint_id] = m.fit;
+      });
+    }],
+    ['footprints', 'id, common_name', function (rows) {
+      rows.forEach(function (f) { FOOTPRINT_NAME[f.id] = f.common_name || null; });
+    }],
+    ['optic_specs', 'product_id, footprint_id, optic_type, reticle, enclosed_emitter', null],
+    ['light_specs', 'product_id, lumens_max, candela_max, has_laser, rechargeable', null],
+    ['sight_specs', 'product_id, sight_position, sight_type', null],
+    ['magazine_specs', 'product_id, capacity, mag_style', null],
+    ['magwell_specs', 'product_id, attachment_method, is_combo', null],
+    ['basepad_specs', 'product_id, basepad_type, fits_mag_type, capacity_change', null],
+    ['trigger_specs', 'product_id, profile, drop_in', null],
+    ['mag_release_specs', 'product_id, style', null],
+    ['slide_release_specs', 'product_id, texture', null],
+    ['takedown_lever_specs', 'product_id, takedown_type', null],
+    ['safety_selector_specs', 'product_id, is_ambidextrous', null],
+    ['recoil_spring_specs', 'product_id, slide_length_in, spring_weight', null],
+  ];
+  await Promise.all(defs.map(function (d) {
+    return sb.from(d[0]).select(d[1]).then(function (res) {
+      if (res.error) { console.error('[armory] ' + d[0] + ' read failed', res.error); return; }
+      var rows = res.data || [];
+      if (d[2]) { d[2](rows); return; }
+      var cat = d[0].replace(/_specs$/, '');
+      rows.forEach(function (row) { XSPEC[cat][row.product_id] = row; });
+    }, function (e) { console.error('[armory] ' + d[0] + ' read failed', e); });
+  }));
+}
+
+// guns.armory_blurb and gun_stock_parts arrive with *_armory_reference.sql.
+// Each is read on its own and an error means "not there yet": no blurb on
+// the model cards, and stock-grip magwell checks read unconfirmed — the page
+// before the migration, by design.
+async function loadArmoryRef() {
+  try {
+    var b = await sb.from('guns').select('id, armory_blurb');
+    if (!b.error) (b.data || []).forEach(function (row) { if (row.armory_blurb) BLURBS[row.id] = row.armory_blurb; });
+  } catch (e) {}
+  try {
+    var s = await sb.from('gun_stock_parts').select('gun_id, category, product_id');
+    if (!s.error) (s.data || []).forEach(function (row) {
+      (STOCK_PARTS[row.gun_id] = STOCK_PARTS[row.gun_id] || {})[row.category] = row.product_id;
+    });
+  } catch (e) {}
+}
+
+// What the builder opens with. ?edit= and ?from= load what they name; any
+// other visit restores the identity-less build in progress (BUILD_KEY) —
+// the ship doc's "carries over between visits". ?add= (the product pages'
+// Add to build) then goes into that build, or waits for the model step.
 async function openOnLoad() {
-  var held = takeResume();
   forgetNewBuildDraft();
   var edit = editParam();
   var from = fromParam();
-  if (edit) await openForEdit(edit.kind, edit.id);
-  else if (from) await openFromGuide(from);
-  else if (held && CURRENT_USER) restoreDraft(held);
+  var add = addParam();
+  if (edit) { await openForEdit(edit.kind, edit.id); return; }
+  if (from) { await openFromGuide(from); return; }
+  var draft = readBuildDraft();
+  if (draft) restoreDraft(draft);
+  if (add) handleAdd(add);
+}
+
+// ?add=<product id>[&variant=<variant id>] — Add to build from anywhere.
+function addParam() {
+  var pid, vid;
+  try {
+    var sp = new URLSearchParams(location.search);
+    pid = sp.get('add'); vid = sp.get('variant');
+  } catch (e) { return null; }
+  var UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!pid || !UUID.test(pid)) return null;
+  return { productId: pid.toLowerCase(), variantId: vid && UUID.test(vid) ? vid.toLowerCase() : null };
+}
+
+function applyAdd(p, variantId) {
+  var vValid = variantId && p.variants.some(function (x) { return x.id === variantId; });
+  STATE.picks[p.category] = { productId: p.id, variantId: vValid ? variantId : (p.defaultVariant ? p.defaultVariant.id : null) };
+  var removed = reconcilePicks({ quiet: true });
+  toast('Added ' + displayProductName({ brand: p.brand, name: p.name }) + ' to your build' +
+    (removed.length ? ' — removed ' + removed.join(', ') + ', which no longer fits.' : '.'));
+}
+
+// A part sent in by its product page. With a build in progress it goes
+// straight in; without one the model step comes first, with a note saying
+// where the part will land. The param is cleared either way: a reload is a
+// plain visit, never a second copy of the add.
+function handleAdd(add) {
+  var p = PRODUCTS_BY_ID[add.productId];
+  clearEditParam();                              // strips ?add from the URL
+  if (!p) { toast('That part isn’t in the Armory’s catalog.'); return; }
+  if (STATE.platform && gunChosen()) {
+    if (p.platform_ids.indexOf(STATE.platform.id) === -1) {
+      toast('That’s not a ' + STATE.platform.name + ' part, so it can’t go into this build.');
+      return;
+    }
+    applyAdd(p, add.variantId);
+    goTab('build');
+    return;
+  }
+  // No build yet: remember the part, pick the pistol it fits, ask the model.
+  var plat = PLATFORMS.find(function (pl) { return p.platform_ids.indexOf(pl.id) !== -1; });
+  if (!plat) { toast('That part isn’t tied to a pistol the Armory knows.'); return; }
+  STATE.pending = { productId: p.id, variantId: add.variantId };
+  STATE.platform = plat;
+  try { location.hash = 'model'; } catch (e) {}
 }
 
 // The published Gunforma guides, for "Start from a guide". Always the
@@ -808,50 +1094,86 @@ function isThreadedType(t) { return t === 'threaded' || t === 'threaded-and-port
 function tierMode() {
   return FIT.supported === true && STATE.platform && STATE.platform.slug === 'p365';
 }
-// The slide whose tier the grips are judged against: the picked slide, or the
-// model's stock slide (guns.slide_fit_tier / slide_comp_style — the prefill).
-// No model and no slide -> null -> no tags anywhere.
-function effectiveSlideFit() {
+// ── THE VERDICT LAYER (js/armory-fit.js) ───────────────────────────────────
+// One build context per render pass, handed to ArmoryFit's pure verdict
+// functions. The same module judges the product pages' "Fits your build"
+// line, so the two surfaces cannot disagree.
+function gunWithTiers() {
+  if (STATE.gunMode !== 'model' || !STATE.gun) return null;
+  return Object.assign({}, STATE.gun, FIT.supported === true ? (FIT.gun[STATE.gun.id] || {}) : {});
+}
+// The effective slide as a slideRef: the picked slide, else the model's
+// stock slide (which also carries the gun's optic-cut rows), else null.
+function slideRefFor() {
   var slide = pickedProduct('slide');
-  if (slide) return FIT.slide[slide.id] || { fit_tier: null, comp_style: null };
-  if (STATE.gun) {
-    var g = FIT.gun[STATE.gun.id];
-    if (g && (g.slide_fit_tier || g.slide_comp_style)) {
-      return { fit_tier: g.slide_fit_tier, comp_style: g.slide_comp_style, stock: true };
-    }
+  if (slide) {
+    return window.ArmoryFit.slideRef(slide, SPEC.slide[slide.id] || null,
+      FIT.supported === true ? (FIT.slide[slide.id] || null) : null);
   }
-  return null;
+  var g = gunWithTiers();
+  return g ? window.ArmoryFit.stockSlideRef(g, GUN_CUTS[g.id] || null) : null;
 }
-function pickedCompFit() {
+// The gun's factory grip as a catalog product (gun_stock_parts), for the
+// magwell question when no grip is picked. Null before the migration, for
+// the AXG models, and for FCU builds — all of which read unconfirmed.
+function stockGripProduct() {
+  var g = STATE.gunMode === 'model' && STATE.gun ? STATE.gun : null;
+  if (!g || !STOCK_PARTS[g.id] || !STOCK_PARTS[g.id].frame) return null;
+  var p = PRODUCTS_BY_ID[STOCK_PARTS[g.id].frame];
+  return p ? { id: p.id, brand: p.brand, name: p.name, stock: true } : null;
+}
+function buildCtx() {
+  var grip = pickedProduct('frame');
+  var barrel = pickedProduct('barrel');
   var comp = pickedProduct('compensator');
-  return comp ? (FIT.comp[comp.id] || { fit_result: null }) : null;
+  var ctx = {
+    tierMode: tierMode(),
+    gun: gunWithTiers(),
+    fcu: STATE.gunMode === 'fcu',
+    slide: slideRefFor(),
+    grip: grip ? {
+      product: grip,
+      spec: SPEC.frame[grip.id] || null,
+      fitRow: FIT.supported === true ? (FIT.frame[grip.id] || { fit_tier: null }) : { fit_tier: null },
+    } : null,
+    stockGripProduct: stockGripProduct(),
+    barrel: barrel ? { spec: SPEC.barrel[barrel.id] || {}, locks: BARREL_LOCKS[barrel.id] || null } : null,
+    comp: comp ? { spec: SPEC.compensator[comp.id] || {}, fitRow: FIT.supported === true ? (FIT.comp[comp.id] || null) : null } : null,
+    optics: {
+      cutFootprints: OPTIC_CUT_FOOTPRINTS,
+      footprintName: function (id) { return FOOTPRINT_NAME[id] || null; },
+    },
+  };
+  ctx.gripHC = window.ArmoryFit.gripHousingClass(ctx);
+  return ctx;
 }
-// A grip's tag against the effective slide (and the picked add-on comp), or
-// null when there is nothing to judge against.
-function gripTagFor(frameProduct) {
-  if (!tierMode()) return null;
-  var es = effectiveSlideFit();
-  if (!es) return null;
-  return window.SlideFit.tag(es, FIT.frame[frameProduct.id] || { fit_tier: null }, pickedCompFit());
+// The verdict for one part against the build. `na` means the category has no
+// fit data: no tag, filters only. Pass a prebuilt ctx when tagging a list.
+function verdictFor(cat, p, ctx) {
+  ctx = ctx || buildCtx();
+  var AF = window.ArmoryFit;
+  if (cat === 'frame') return AF.gripVerdict(FIT.supported === true ? (FIT.frame[p.id] || { fit_tier: null }) : { fit_tier: null }, ctx);
+  if (cat === 'slide') return AF.slideVerdict(AF.slideRef(p, SPEC.slide[p.id] || null, FIT.supported === true ? (FIT.slide[p.id] || null) : null), ctx);
+  if (cat === 'barrel') return AF.barrelVerdict({ spec: SPEC.barrel[p.id] || {}, locks: BARREL_LOCKS[p.id] || null }, ctx);
+  if (cat === 'compensator') return AF.compVerdict({ spec: SPEC.compensator[p.id] || {} }, ctx);
+  if (cat === 'magazine') return AF.magazineVerdict(MAG_FITS[p.id] || null, ctx);
+  if (cat === 'magwell') return AF.magwellVerdict(MAGWELL_FITS[p.id] || null, ctx);
+  if (cat === 'recoil_spring') return AF.springVerdict(XSPEC.recoil_spring[p.id] || null, ctx);
+  if (cat === 'optic') return AF.opticVerdict({ footprintId: (XSPEC.optic[p.id] || {}).footprint_id || null }, ctx);
+  return AF.verdict('na');
 }
-// The reverse direction, so picking grip-first works too: a slide's tag
-// against the PICKED grip, or null when no grip is picked.
-function slideTagFor(slideProduct) {
-  if (!tierMode()) return null;
-  var grip = pickedProduct('frame');
-  if (!grip) return null;
-  return window.SlideFit.tag(FIT.slide[slideProduct.id] || { fit_tier: null },
-                             FIT.frame[grip.id] || { fit_tier: null }, pickedCompFit());
-}
-// The current slide/grip pair's tag — the Save gate (needs_comp holds Save)
-// and the picked-grip card both read it.
+// The slide/grip pair's tag — the Save gate (needs_comp holds Save until a
+// comp or a longer slide resolves it). The grip side is the picked grip, or
+// the model's own grip tier under a picked slide.
 function currentPairTag() {
-  var grip = pickedProduct('frame');
-  if (!grip) return null;
-  return gripTagFor(grip);
+  var ctx = buildCtx();
+  if (!ctx.tierMode || !ctx.slide) return null;
+  var gripRow = ctx.grip ? ctx.grip.fitRow : (ctx.gun ? { fit_tier: ctx.gun.grip_fit_tier } : null);
+  if (!gripRow || !gripRow.fit_tier) return null;
+  return window.ArmoryFit.gripVerdict(gripRow, ctx);
 }
 function fitTagHtml(tag) {
-  if (!tag) return '';
+  if (!tag || tag.key === 'na' || !tag.label) return '';
   return '<span class="fit-tag ' + tag.color + '">' + esc(tag.label) + '</span>';
 }
 
@@ -871,6 +1193,9 @@ function compHiddenReason() {
   var slideStyle = slide && FIT.supported === true ? (FIT.slide[slide.id] || {}).comp_style : null;
   if (slideStyle ? slideStyle !== 'none' : (slideSpec && slideSpec.integrated_comp === true)) {
     return 'Your slide has a built-in compensator.';
+  }
+  if (slideSpec && slideSpec.internally_ported === true) {
+    return 'Your ported slide’s porting already reduces muzzle flip — and its matched barrel isn’t threaded, so no add-on comp attaches.';
   }
   var barrelSpec = pickedSpec('barrel');
   if (barrelSpec && barrelSpec.barrel_type === 'ported') return 'Ported barrels already reduce muzzle flip — no separate comp needed.';
@@ -985,19 +1310,22 @@ function reconcilePicks(opts) {
         changed = true;
       }
     });
-    // Tier mode lists every grip, so availableFor never drops one — but a
-    // PICKED slide and grip that can no longer coexist still part ways: the
-    // grip goes, with the toast. Only a picked slide does this; changing the
-    // model never drops a grip on its own (the stock slide only tags).
-    if (tierMode()) {
-      var slide = pickedProduct('slide'), gripPick = pickedProduct('frame');
-      if (slide && gripPick) {
-        var t = window.SlideFit.tag(FIT.slide[slide.id] || { fit_tier: null },
-                                    FIT.frame[gripPick.id] || { fit_tier: null }, pickedCompFit());
-        if (t.key === 'wont_fit') {
-          removed.push(displayProductName({ brand: gripPick.brand, name: gripPick.name }));
-          delete STATE.picks.frame;
+    // availableFor doesn't filter everything the verdicts judge (magazines,
+    // springs, the tier rule), so a pick whose verdict turns wont_fit under
+    // a NEW pick goes too, one per pass — with the toast, never silently.
+    // Changing the model never drops a grip on its own (the stock slide
+    // only tags); a picked slide × picked grip that cannot coexist does.
+    if (!changed) {
+      var cats = Object.keys(STATE.picks);
+      for (var ci = 0; ci < cats.length; ci++) {
+        var vp = pickedProduct(cats[ci]);
+        if (!vp) continue;
+        var vd = verdictFor(cats[ci], vp, null);
+        if (vd && vd.key === 'wont_fit') {
+          removed.push(displayProductName({ brand: vp.brand, name: vp.name }));
+          delete STATE.picks[cats[ci]];
           changed = true;
+          break;
         }
       }
     }
@@ -1010,54 +1338,94 @@ function reconcilePicks(opts) {
   return removed;
 }
 
-// ─── RENDER ────────────────────────────────────────────────────────────────
-function renderPlatformRow() {
-  var row = document.getElementById('platform-row');
-  var note = document.getElementById('platform-note');
-  if (!PLATFORMS.length) { row.innerHTML = '<span style="font-size:12px;color:#c25d3a;">No platforms available.</span>'; return; }
-  row.innerHTML = PLATFORMS.map(function (p) {
-    var isActive = STATE.platform && STATE.platform.id === p.id;
-    return '<button type="button" class="platform-btn' + (isActive ? ' active' : '') + '" data-id="' + p.id + '">' + esc(p.name) + '</button>';
-  }).join('');
-  row.querySelectorAll('.platform-btn').forEach(function (btn) {
-    btn.addEventListener('click', function () { selectPlatform(btn.dataset.id); });
+// ─── RENDER: ROUTING ────────────────────────────────────────────────────────
+// The hash is the view inside the Build tab: #start, #model, #part-<cat>,
+// and #build (or none) for the build list — which falls back to the start
+// or model step until each question is answered. #my-builds / #saved-parts
+// stay the other two tabs.
+function viewFromHash() {
+  var h = '';
+  try { h = (location.hash || '').replace(/^#/, ''); } catch (e) {}
+  var m = /^part-([a-z_]+)$/.exec(h);
+  if (m && window.CATEGORY_KEYS.indexOf(m[1]) !== -1) return { name: 'part', cat: m[1] };
+  if (h === 'model') return { name: 'model' };
+  if (h === 'start') return { name: 'start' };
+  return { name: 'build' };
+}
+// "What are you starting with?" is answered. Only the P365 has the model
+// step; any other platform goes straight to the build list.
+function gunChosen() {
+  if (!STATE.platform) return false;
+  if (STATE.platform.slug !== 'p365') return true;
+  return STATE.gunMode === 'model' || STATE.gunMode === 'fcu';
+}
+function renderBuildPanel() {
+  if (!LOADED) return;
+  var view = viewFromHash();
+  var mode = view.name === 'start' ? 'start'
+    : !STATE.platform ? 'start'
+    : view.name === 'model' ? 'model'
+    : !gunChosen() ? 'model'
+    : view.name === 'part' ? 'part' : 'build';
+  ['start', 'model', 'build', 'part'].forEach(function (m) {
+    var el = document.getElementById('view-' + m);
+    if (el) el.hidden = m !== mode;
   });
-  if (STATE.platform) {
-    var count = productsForPlatform().filter(function (p) { return !p.discontinued; }).length;
-    note.textContent = count ? count + ' parts in the catalog' : '— catalog coming soon';
-  } else { note.textContent = ''; }
-  renderModelRow();
+  if (mode === 'start') renderStart();
+  if (mode === 'model') renderModel();
+  if (mode === 'build') { renderStartBar(); renderFitBar(); renderBuildList(); renderSidebar(); }
+  if (mode === 'part') renderCatPage(view.cat);
+  renderMobileBar(mode);
+  renderCompareTray(mode, view.cat || null);
+}
+function route() {
+  showTab(tabFromHash());
 }
 
-function renderModelRow() {
-  var wrap = document.getElementById('model-row');
-  var sel = document.getElementById('model-select');
-  var note = document.getElementById('model-note');
-  if (!STATE.platform) { wrap.hidden = true; return; }
-  var models = GUNS.filter(function (g) { return g.platform_id === STATE.platform.id; });
-  if (!models.length) { wrap.hidden = true; return; }
-  wrap.hidden = false;
-  sel.innerHTML =
-    '<option value="">Custom / FCU build — show every grip size</option>' +
-    models.map(function (g) {
-      return '<option value="' + g.id + '"' + (STATE.gun && STATE.gun.id === g.id ? ' selected' : '') + '>' + esc(g.name) + '</option>';
-    }).join('');
-  sel.onchange = function () {
-    STATE.gun = models.find(function (g) { return g.id === sel.value; }) || null;
-    reconcilePicks();
-    renderAll();
-  };
-  // Tier mode: the model prefills, never filters (2026-10-29 fitment model).
-  note.textContent = tierMode()
-    ? (STATE.gun
-        ? 'The ' + STATE.gun.name + ' sets your stock slide and grip — every part stays listed, tagged by how it fits.'
-        : 'Pick a model to tag every grip against its stock slide — or build free-form.')
-    : (STATE.gun
-        ? 'Grip modules are filtered to ones that fit the ' + STATE.gun.name + '.'
-        : 'Pick a model to filter grip modules to your gun — or build free-form.');
+// ─── STEP 1: PICK YOUR PISTOL ──────────────────────────────────────────────
+function renderStart() {
+  var el = document.getElementById('view-start');
+  if (!el) return;
+  var hasBuild = STATE.platform && gunChosen() && (Object.keys(STATE.picks).length || STATE.savedId || STATE.gunMode);
+  // The P365 leads; everything else follows in name order.
+  var plats = PLATFORMS.slice().sort(function (a, b) {
+    return (a.slug === 'p365' ? 0 : 1) - (b.slug === 'p365' ? 0 : 1) || a.name.localeCompare(b.name);
+  });
+  var tiles = plats.map(function (p) {
+    var count = PRODUCTS.filter(function (x) { return x.platform_ids.indexOf(p.id) !== -1 && !x.discontinued; }).length;
+    var models = GUNS.filter(function (g) { return g.platform_id === p.id; }).length;
+    if (p.slug === 'p365') {
+      return '<button type="button" class="tile" data-plat="' + escAttr(p.id) + '">' +
+        '<span class="use">SIG Sauer</span><span class="t">P365</span>' +
+        '<span class="meta">' + models + ' factory models, or start from just the FCU</span>' +
+        '<span class="foot"><span>' + count + ' parts</span><b>Next ›</b></span></button>';
+    }
+    // The P320 card stays visible: parts are being added this month.
+    return '<button type="button" class="tile" disabled>' +
+      '<span class="use">SIG Sauer</span><span class="t">' + esc(p.name.replace(/^SIG\s*/i, '')) + '</span>' +
+      '<span class="meta">Parts are being added this month</span>' +
+      '<span class="foot"><span>' + count + ' parts</span><span>Coming soon</span></span></button>';
+  }).join('');
+  el.innerHTML =
+    '<nav class="crumbs">Armory</nav>' +
+    (hasBuild
+      ? '<div class="resume-bar"><span>Your <b>' + esc(STATE.gunMode === 'fcu' ? 'P365 FCU' : (STATE.gun ? 'SIG ' + STATE.gun.name : (STATE.platform ? STATE.platform.name : ''))) +
+        '</b> build is in progress · ' + Object.keys(STATE.picks).length + ' parts</span><a class="slot-choose" href="#build">Continue build</a></div>'
+      : '') +
+    '<div class="sec-h2">Pick your pistol</div>' +
+    '<div class="plat">' + (tiles || '<span style="font-size:12px;color:#888;">Loading platforms…</span>') + '</div>' +
+    '<div class="card" id="guide-start" hidden style="margin-top:18px;">' +
+      '<div class="card-title">Start from a guide <span class="card-hint">load a Gunforma build, then make it yours</span></div>' +
+      '<div class="guide-start-row" id="guide-start-row"></div>' +
+    '</div>' +
+    '<p style="font-size:12px;color:#999;margin-top:16px;">Want a head start? Every <a href="gunforma-gun-guides.html" style="color:#2a7bbd;text-decoration:none;font-weight:700;">Gun Guide</a> has a “Customize this part list” button that opens here with its gun and parts filled in.</p>';
+  el.querySelectorAll('button[data-plat]').forEach(function (btn) {
+    btn.addEventListener('click', function () { choosePlatform(btn.dataset.plat); });
+  });
+  renderGuideStart();
 }
 
-function selectPlatform(id) {
+function choosePlatform(id) {
   var next = PLATFORMS_BY_ID[id];
   if (!next) return;
   if (STATE.platform && STATE.platform.id !== id) {
@@ -1065,6 +1433,7 @@ function selectPlatform(id) {
     // row it would have updated (and whose it was) go with the picks.
     STATE.picks = {};
     STATE.gun = null;
+    STATE.gunMode = null;
     STATE.savedId = null;
     STATE.ownerId = null;
     STATE.dropped = [];
@@ -1072,17 +1441,103 @@ function selectPlatform(id) {
     SAVED_SIG = null;
   }
   STATE.platform = next;
-  renderPlatformRow();
+  try { location.hash = next.slug === 'p365' ? 'model' : 'build'; } catch (e) {}
   renderAll();
+}
+
+// ─── STEP 2: WHAT ARE YOU STARTING WITH? ───────────────────────────────────
+// One card per factory model in `guns` plus Just the FCU. The facts line is
+// the row's own columns; the blurb is guns.armory_blurb (absent before the
+// migration: facts line only). Next is disabled until one is picked.
+function gunFacts(g) {
+  var hc = GRIP_SIZE[g.housing_class] || g.housing_class || '';
+  return [
+    g.oem_capacity ? g.oem_capacity + ' rounds' : '',
+    g.slide_length_in != null ? Number(g.slide_length_in) + '" slide' : '',
+    g.barrel_length_in != null ? Number(g.barrel_length_in) + '" barrel' : '',
+    hc ? hc + ' grip' : '',
+    g.frame_material || '',
+    g.integrated_comp === true ? 'Comp' : '',
+  ].filter(Boolean).join(' · ');
+}
+function platformModels() {
+  if (!STATE.platform) return [];
+  var models = GUNS.filter(function (g) { return g.platform_id === STATE.platform.id; });
+  return models.slice().sort(function (a, b) {
+    var ia = MODEL_ORDER.indexOf(a.slug), ib = MODEL_ORDER.indexOf(b.slug);
+    if (ia === -1 && ib === -1) return a.name.localeCompare(b.name);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+}
+function renderModel() {
+  var el = document.getElementById('view-model');
+  if (!el || !STATE.platform) return;
+  if (STATE.gunDraft === undefined) {
+    STATE.gunDraft = STATE.gunMode === 'fcu' ? 'fcu' : (STATE.gun ? STATE.gun.id : null);
+  }
+  var d = STATE.gunDraft;
+  var models = platformModels();
+  var pendingP = STATE.pending ? PRODUCTS_BY_ID[STATE.pending.productId] : null;
+  var tiles = models.map(function (g) {
+    var fit = FIT.supported === true ? (FIT.gun[g.id] || {}) : {};
+    var foot = fit.grip_fit_tier && fit.slide_fit_tier
+      ? 'Grip: ' + window.SlideFit.TIER_LABEL[fit.grip_fit_tier] + ' · Slide: ' + window.SlideFit.TIER_LABEL[fit.slide_fit_tier]
+      : '';
+    return '<button type="button" class="tile gun" data-m="' + escAttr(g.id) + '" aria-pressed="' + (d === g.id) + '">' +
+      '<span class="t">' + esc(g.name) + '</span>' +
+      '<span class="facts">' + esc(gunFacts(g)) + '</span>' +
+      (BLURBS[g.id] ? '<span class="meta">' + esc(BLURBS[g.id]) + '</span>' : '') +
+      (foot ? '<span class="foot"><span>' + esc(foot) + '</span></span>' : '') +
+    '</button>';
+  }).join('');
+  el.innerHTML =
+    '<nav class="crumbs"><a href="#start">Armory</a> › ' + esc(STATE.platform.name) + '</nav>' +
+    (pendingP ? '<div class="ctx-line">Pick what you’re starting with, then <b>' +
+      esc(displayProductName({ brand: pendingP.brand, name: pendingP.name })) + '</b> goes into your new build.</div>' : '') +
+    '<div class="sec-h2" style="font-size:20px;">What are you starting with?</div>' +
+    '<p class="page-sub" style="margin:-4px 0 14px;">Pick the gun you own and its stock parts fill your build, so every list only shows parts that fit it. Building from a bare fire control unit? Pick FCU only.</p>' +
+    '<div class="tiles guns" role="group" aria-label="Starting gun">' + tiles +
+      '<button type="button" class="tile gun fcu" data-m="fcu" aria-pressed="' + (d === 'fcu') + '">' +
+        '<span class="t">Just the FCU</span><span class="facts">Fire control unit only</span>' +
+        '<span class="meta">You have the serialized FCU and you’re building everything around it. Nothing is stock, so you start by picking a grip module.</span>' +
+        '<span class="foot"><span>Every part is yours to pick</span></span></button>' +
+    '</div>' +
+    '<div class="navrow"><a href="' + (gunChosen() ? '#build' : '#start') + '">‹ Back</a>' +
+      '<button type="button" class="btn-next" id="model-next"' + (d ? '' : ' disabled') + '>Next: build list ›</button></div>';
+  el.querySelectorAll('button[data-m]').forEach(function (btn) {
+    btn.addEventListener('click', function () { STATE.gunDraft = btn.dataset.m; renderModel(); });
+  });
+  document.getElementById('model-next').onclick = function () {
+    if (!STATE.gunDraft) return;
+    var models2 = platformModels();
+    STATE.gun = STATE.gunDraft === 'fcu' ? null : (models2.find(function (g) { return g.id === STATE.gunDraft; }) || null);
+    STATE.gunMode = STATE.gunDraft === 'fcu' ? 'fcu' : (STATE.gun ? 'model' : null);
+    STATE.gunDraft = undefined;
+    if (STATE.pending) {
+      var p = PRODUCTS_BY_ID[STATE.pending.productId];
+      var vid = STATE.pending.variantId;
+      STATE.pending = null;
+      if (p) applyAdd(p, vid);
+    } else {
+      reconcilePicks();
+    }
+    try { location.hash = 'build'; } catch (e) {}
+    renderAll();
+  };
 }
 
 // One card per part, catalog-style: the photo IS the pitch. A part with no
 // photo on its default variant gets its colour swatch (variant-swatch.js) —
 // never another variant's photo as a stand-in (loadouts-spec §9).
-// meta (optional, tier mode): { tag, recommended, note } — the fit tag chip,
-// the "Recommended" badge on a comp slide's own chunk barrel, and the
-// threaded-barrel note beside it. A wont_fit tag disables the card: shown,
-// never hidden, with the reason — a disappeared option is the old model's bug.
+// meta: { tag, recommended, note, blocked, spec, inBuild, compare, href } —
+// the fit verdict chip, the "Recommended" badge on a comp slide's own chunk
+// barrel, the key-specs line, and the part-page extras. A wont_fit tag
+// disables the card: shown, never hidden, with the reason — a disappeared
+// option is the old model's bug. The price is the hero retailer row when a
+// fresh in-stock one exists (its MSRP labelled beside it), else the MSRP
+// headline under js/option-price.js's rule.
 function partCardHtml(cat, p, meta) {
   meta = meta || {};
   var dv = p.defaultVariant;
@@ -1096,161 +1551,263 @@ function partCardHtml(cat, p, meta) {
   // Nothing is picked on a picker card, so js/option-price.js's opening
   // headline: "From" the lowest priced option, or the one option's price.
   var head = window.optionHeadline(optionPrices(p), null);
-  // meta.blocked: a saved part the pickers would not list (the "Saved"
+  var aff = window.affiliate ? window.affiliate.get(p.id) : null;
+  var hero = aff && aff.hero && !aff.hero.maker && !aff.hero.stale && aff.hero.price != null && aff.hero.in_stock === true ? aff.hero : null;
+  var priceHtml = hero
+    ? '<span class="part-card-price">' + money(hero.price) + '</span>' +
+      '<span class="part-card-shop">at ' + esc(hero.partnerName || 'retailer') +
+      (head.kind !== 'check' ? ' · ' + esc(window.optionPriceText(head, { msrp: true })) : '') + '</span>'
+    : '<span class="part-card-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
+      (head.kind !== 'check' ? '<span class="part-card-shop">MSRP</span>' : '');
+  // meta.blocked: a saved part the lists would not offer (the "Saved"
   // filter shows it anyway), with the reason in words.
   var disabled = !!(meta.tag && !meta.tag.selectable) || !!meta.blocked;
   var reason = meta.blocked || (meta.tag && !meta.tag.selectable ? meta.tag.reason : null);
+  var href = meta.href || (p.slug ? window.productPath(p.category, p.slug) : null);
+  var nameHtml = '<span class="part-card-brand">' + esc(p.brand) + '</span>' +
+    '<span class="part-card-name">' + esc(p.name) + '</span>';
   return '<div class="part-card' + (disabled ? ' wont-fit' : '') + '" data-search="' + escAttr(dispName.toLowerCase()) + '">' +
+    (meta.compare ? '<label class="pc-cmp"><input type="checkbox" data-cmp="' + escAttr(p.id) + '"' +
+      (STATE.compare.indexOf(p.id) !== -1 ? ' checked' : '') + '><span>Compare</span></label>' : '') +
     Favorites.buttonHtml(p.id, Favorites.has(p.id)) +
-    '<div class="part-card-photo">' + photo + '</div>' +
+    (href
+      ? '<a class="pc-link" href="' + escAttr(href) + '"><div class="part-card-photo">' + photo + '</div></a>'
+      : '<div class="part-card-photo">' + photo + '</div>') +
     '<div class="part-card-body">' +
-      '<span class="part-card-brand">' + esc(p.brand) + '</span>' +
-      '<span class="part-card-name">' + esc(p.name) + '</span>' +
+      (href ? '<a class="pc-link" href="' + escAttr(href) + '">' + nameHtml + '</a>' : nameHtml) +
       (p.discontinued ? '<span class="part-card-disc">Discontinued</span>' : '') +
       (meta.tag || meta.recommended
         ? '<span class="part-card-tags">' + (meta.recommended ? '<span class="part-card-badge">Recommended</span> ' : '') + fitTagHtml(meta.tag) + '</span>'
         : '') +
       (disabled && reason ? '<span class="part-card-reason">' + esc(reason) + '</span>' : '') +
+      (!disabled && meta.tag && meta.tag.reason && meta.tag.key !== 'wont_fit' ? '<span class="part-card-note">' + esc(meta.tag.reason) + '</span>' : '') +
       (meta.note ? '<span class="part-card-note">' + esc(meta.note) + '</span>' : '') +
+      (cat === 'magazine' && p.restricted_states && p.restricted_states.length
+        ? '<span class="part-card-spec" title="Not available in ' + escAttr(p.restricted_states.join(', ')) + '">Restricted in ' + p.restricted_states.length + ' states</span>' : '') +
+      (meta.spec ? '<span class="part-card-spec">' + esc(meta.spec) + '</span>' : '') +
       (p.variants.length > 1 ? '<span class="part-card-variants">' + p.variants.length + ' colors / options</span>' : '') +
-      '<span class="part-card-price' + (head.kind === 'check' ? ' na' : '') + '">' + esc(window.optionPriceText(head)) + '</span>' +
+      priceHtml +
     '</div>' +
-    '<div class="part-card-actions"><button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '"' + (disabled ? ' disabled' : '') + '>' + (disabled ? 'Won’t fit' : 'Add to build') + '</button></div>' +
+    '<div class="part-card-actions">' +
+      (meta.inBuild
+        ? '<span class="fit-tag green" style="display:block;text-align:center;">In your build</span>'
+        : '<button type="button" class="part-card-btn add" data-add="' + cat + '" data-id="' + escAttr(p.id) + '"' + (disabled ? ' disabled' : '') + '>' + (disabled ? 'Won’t fit' : 'Add to build') + '</button>') +
+    '</div>' +
   '</div>';
 }
 
-// What the picker shows about one option in tier mode: its fit tag (grips
-// against the effective slide; slides against the picked grip), and on a
-// ported-barrel comp slide which barrel is the maker's own chunk barrel.
-// FDEZ says threaded barrels work — they stay listed — but the slide's comp
-// ports only work with the ported barrel, so that one is badged and sorts
-// first and the threaded ones carry the note.
-function cardMeta(cat, p) {
-  if (!tierMode()) return null;
-  if (cat === 'frame') {
-    var t = gripTagFor(p);
-    return t ? { tag: t } : null;
-  }
-  if (cat === 'slide') {
-    var ts = slideTagFor(p);
-    return ts ? { tag: ts } : null;
-  }
+// What a list says about one option beyond its verdict: on a ported-barrel
+// comp slide, which barrel is the maker's own chunk barrel ("Recommended",
+// sorts first — the FDEZ shape; the threaded ones carry the module's note).
+function cardMetaFor(cat, p, ctx) {
+  var tag = verdictFor(cat, p, ctx);
+  var meta = { tag: tag && tag.key !== 'na' ? tag : null };
   if (cat === 'barrel') {
-    var slide = pickedProduct('slide');
-    if (!slide || (FIT.slide[slide.id] || {}).comp_style !== 'ported_barrel') return null;
-    var locks = BARREL_LOCKS[p.id];
-    if (locks && locks.some(function (l) { return l.slide === slide.id; })) return { recommended: true };
-    var bs = SPEC.barrel[p.id];
-    if (bs && isThreadedType(bs.barrel_type)) {
-      return { note: 'Fits, but the slide’s comp ports only work with the ported barrel — pick this for a suppressor or thread protector.' };
+    var s = ctx ? ctx.slide : slideRefFor();
+    if (s && !s.stock && (s.ported || s.compStyle === 'ported_barrel')) {
+      var locks = BARREL_LOCKS[p.id];
+      if (locks && locks.some(function (l) { return l.slide === s.productId; })) meta.recommended = true;
     }
-    return null;
+  }
+  return meta;
+}
+
+// ─── STEP 3: THE BUILD LIST ────────────────────────────────────────────────
+// Every part of `cat` the list would offer: availableFor's rules, minus
+// wont_fit verdicts (shown behind the part page's reveal, never offered).
+function fittingOptions(cat, ctx) {
+  var avail = {};
+  availableFor(cat).forEach(function (p) { avail[p.id] = 1; });
+  return productsForPlatform().filter(function (p) {
+    if (p.category !== cat || !avail[p.id]) return false;
+    if (!(SHOW_DISCONTINUED || !p.discontinued)) return false;   // hidden behind the toggle, fit rules unchanged
+    var vd = verdictFor(cat, p, ctx);
+    return !vd || vd.key !== 'wont_fit';
+  });
+}
+
+// The model's factory part on an empty row, with its own verdict against
+// the picks: the stock grip, slide and barrel, and "Built into the slide"
+// for a comp model. Null when the row is genuinely empty (FCU, other cats).
+function stockRowFor(cat, ctx) {
+  var g = ctx.gun;
+  if (!g || ctx.fcu) return null;
+  var factory = { key: 'flush', label: 'Factory', color: 'green', selectable: true, reason: '' };
+  if (cat === 'frame') {
+    var tag = pickedProduct('slide') ? window.ArmoryFit.gripVerdict({ fit_tier: g.grip_fit_tier }, ctx) : factory;
+    return { text: g.name + ' grip module', tag: tag };
+  }
+  if (cat === 'slide' && !pickedProduct('slide')) {
+    var stag = pickedProduct('frame')
+      ? window.ArmoryFit.slideVerdict(window.ArmoryFit.stockSlideRef(g), ctx)
+      : factory;
+    return { text: g.name + ' slide' + (g.slide_length_in != null ? ' · ' + Number(g.slide_length_in) + '"' : ''), tag: stag };
+  }
+  if (cat === 'barrel' && !pickedProduct('barrel')) {
+    var comp = g.integrated_comp === true || (g.slide_comp_style && g.slide_comp_style !== 'none');
+    var btag = window.ArmoryFit.stockBarrelVerdict(ctx);
+    if (btag.key === 'na') return null;   // the picked slide kit brings its own
+    return { text: (g.barrel_length_in != null ? Number(g.barrel_length_in) + '" barrel' : 'Factory barrel') + (comp ? ', compensated' : ''), tag: btag };
+  }
+  if (cat === 'compensator' && !pickedProduct('slide') &&
+      (g.integrated_comp === true || (g.slide_comp_style && g.slide_comp_style !== 'none'))) {
+    return { text: 'Built into the slide', tag: null, noUpgrade: true };
   }
   return null;
 }
 
-function slotHtml(slot) {
-  var cat = slot.cat;
+function slotRowHtml(cat, ctx) {
   var picked = pickedProduct(cat);
-  var isOpen = STATE.openCat === cat;
-  var pairTag = cat === 'compensator' || cat === 'frame' ? currentPairTag() : null;
-  var needsComp = cat === 'compensator' && pairTag && pairTag.key === 'needs_comp';
-  var html = '<div class="slot' + (isOpen ? ' open' : '') + (needsComp ? ' comp-needed' : '') + '" data-cat="' + cat + '">';
+  var pairTag = cat === 'compensator' ? currentPairTag() : null;
+  var needsComp = !!(pairTag && pairTag.key === 'needs_comp');
+  var html = '<div class="slot' + (needsComp ? ' comp-needed' : '') + '" data-cat="' + cat + '">';
+  var label = window.categorySingular(cat);
+  var head = '<div class="slot-row-head"><a class="cat-link" href="#part-' + cat + '">' + esc(label) + '</a>';
+
+  // A picked part: its card, with the row's verdict and banners.
+  if (picked) {
+    html += head + '<a class="slot-upgrade" href="#part-' + cat + '">Change</a></div>';
+    html += pickedHtml(cat, picked, verdictFor(cat, picked, ctx));
+    html += slotBanners(cat, picked);
+    html += '</div>';
+    return html;
+  }
 
   if (cat === 'compensator') {
     var reason = compHiddenReason();
     if (reason) {
-      html += '<div class="slot-head"><div class="slot-label">' + esc(slot.label) + '</div></div>';
-      html += '<div class="note-banner muted">' + esc(reason) + '</div></div>';
-      return html;
+      return html + head + '</div><div class="note-banner muted">' + esc(reason) + '</div></div>';
     }
   }
 
-  // An ARC Reactor kit: the barrel is in the box, so the slot says that and
+  // A stock part fills its row for a factory gun.
+  var stock = stockRowFor(cat, ctx);
+  if (stock) {
+    html += head + (stock.noUpgrade ? '' : '<a class="slot-upgrade" href="#part-' + cat + '">Upgrade</a>') + '</div>';
+    html += '<div class="stock-line"><span class="stock-tag">Stock</span><span>' + esc(stock.text) + '</span>' +
+      fitTagHtml(stock.tag) +
+      (stock.tag && stock.tag.reason && stock.tag.key !== 'flush' ? '<span class="picked-fit-reason">' + esc(stock.tag.reason) + '</span>' : '') +
+      '<span class="stock-incl">Included</span></div>';
+    html += '</div>';
+    return html;
+  }
+
+  // An ARC Reactor kit: the barrel is in the box, so the row says that and
   // offers nothing — not required to save, and never priced twice.
-  if (cat === 'barrel' && tierMode()) {
-    var pickedSlide = pickedProduct('slide');
-    if (pickedSlide && (FIT.slide[pickedSlide.id] || {}).includes_barrel === true) {
-      html += '<div class="slot-head"><div class="slot-label">' + esc(slot.label) + '</div></div>';
-      html += '<div class="note-banner info">Barrel included with this kit.</div></div>';
-      return html;
-    }
+  if (cat === 'barrel' && ctx.slide && ctx.slide.includesBarrel) {
+    return html + head + '</div><div class="note-banner info">Barrel included with this kit.</div></div>';
   }
 
-  // Discontinued parts are hidden from the picker unless the toggle is on.
-  // A picked one stays picked: it is drawn by pickedHtml, not from here.
-  var options = availableFor(cat).filter(function (p) { return SHOW_DISCONTINUED || !p.discontinued; });
-  var metas = null;
-  if (tierMode() && (cat === 'frame' || cat === 'slide' || cat === 'barrel')) {
-    metas = {};
-    options.forEach(function (p) { metas[p.id] = cardMeta(cat, p); });
-    // Sort: Flush first, Won't fit last (SlideFit.sortRank); a comp slide's
-    // own chunk barrel ("Recommended") first. Array.prototype.sort is stable,
-    // so ties keep the catalog's order.
-    options = options.slice().sort(function (a, b) {
-      var ma = metas[a.id] || {}, mb = metas[b.id] || {};
-      var ra = ma.recommended ? -1 : (ma.tag ? window.SlideFit.sortRank(ma.tag.key) : 0);
-      var rb = mb.recommended ? -1 : (mb.tag ? window.SlideFit.sortRank(mb.tag.key) : 0);
-      return ra - rb;
-    });
-  }
-  html += '<div class="slot-head">' +
-    '<div class="slot-label">' + esc(slot.label) + ' <span class="slot-count" style="color:#c5c2b8;font-weight:500;">· ' + options.length + ' ' + (cat === 'frame' && tierMode() ? 'listed' : 'compatible') + '</span></div>' +
-    (options.length || isOpen
-      ? '<button type="button" class="slot-toggle" data-toggle="' + cat + '" aria-expanded="' + isOpen + '">' + (isOpen ? 'Close' : (picked ? 'Change' : 'Choose')) + '</button>'
-      : '') +
-    '</div>';
-
-  if (needsComp && !picked) {
+  // Empty row: "+ Choose a …" and the count of what fits. A fit question
+  // with no subject yet says so instead of counting everything as a fit.
+  var n = fittingOptions(cat, ctx).length;
+  var noGrip = (cat === 'magazine' && !ctx.gripHC) ||
+               (cat === 'magwell' && !ctx.grip && !ctx.stockGripProduct && (!ctx.gun || ctx.fcu));
+  var countText = !n ? 'None in the catalog fit your build yet.'
+    : NO_FIT_CATS[cat] ? n + ' to pick from'
+    : noGrip ? n + ' to pick from — pick a grip to check fit'
+    : n + ' fit';
+  html += head + '</div>';
+  if (needsComp) {
     html += '<div class="note-banner warn">Your grip runs past the slide — add a comp here to cover it.</div>';
   }
-
-  if (picked) {
-    html += pickedHtml(cat, picked);
-  } else if (!options.length) {
-    html += '<div class="slot-empty">' + esc(emptyText(cat)) + '</div>';
-  }
-
-  if (isOpen && options.length) {
-    // "Saved": only hearted parts — the ones the pickers list, plus any saved
-    // part they leave out, drawn disabled with why (never a part made
-    // pickable by being saved).
-    var savedOnly = SAVED_ONLY && !!CURRENT_USER;
-    var cards = options.map(function (p) { return partCardHtml(cat, p, metas ? metas[p.id] : null); });
-    if (savedOnly) {
-      var listed = {};
-      options.forEach(function (p) { listed[p.id] = 1; });
-      var left = productsForPlatform().filter(function (p) {
-        return p.category === cat && !listed[p.id] && Favorites.has(p.id) && (SHOW_DISCONTINUED || !p.discontinued);
-      });
-      cards = options.filter(function (p) { return Favorites.has(p.id); })
-        .map(function (p) { return partCardHtml(cat, p, metas ? metas[p.id] : null); })
-        .concat(left.map(function (p) { return partCardHtml(cat, p, { blocked: whyNotAvailable(cat, p) }); }));
-    }
-    var tools = (options.length > 8
-        ? '<input type="text" class="picker-search" data-search-input="' + cat + '" placeholder="Filter by brand or name…" aria-label="Filter parts" />'
-        : '') +
-      (CURRENT_USER
-        ? '<button type="button" class="picker-saved" data-saved-only aria-pressed="' + savedOnly + '">' + (savedOnly ? '♥' : '♡') + ' Saved</button>'
-        : '');
-    html += '<div class="picker-panel">' +
-      (tools ? '<div class="picker-tools">' + tools + '</div>' : '') +
-      (savedOnly && !cards.length
-        ? '<div class="picker-saved-empty">No saved parts here yet — tap ♡ on a part to save it.</div><div class="part-grid"></div>'
-        : '<div class="part-grid">' + cards.join('') + '</div>') +
-    '</div>';
-  }
-
-  html += slotBanners(cat, picked);
+  html += '<div class="stock-line">' +
+    (n ? '<a class="slot-choose" href="#part-' + cat + '">+ Choose ' + esc(nounOne(cat)) + '</a>' : '') +
+    '<span class="count" style="font-size:11.5px;color:#999;">' + esc(countText) + '</span></div>';
   html += '</div>';
   return html;
 }
 
-function emptyText(cat) {
-  if (cat === 'magwell') return 'No compatible magwells found for this grip module.';
-  if (cat === 'barrel') return 'No barrels fit this combination — the slide’s length and port cuts decide which barrels work.';
-  if (cat === 'compensator') return 'No comps fit this barrel — most need a threaded barrel with a matching thread pitch.';
-  return 'Nothing in the catalog fits this combination yet.';
+function renderBuildList() {
+  var container = document.getElementById('parts-container');
+  if (!container) return;
+  if (!STATE.platform) { container.innerHTML = ''; return; }
+  if (!productsForPlatform().length) {
+    container.innerHTML = '<div class="card"><div class="empty"><div class="empty-title">Catalog coming soon</div>No ' + esc(STATE.platform.name) + ' parts yet.</div></div>';
+    return;
+  }
+  var ctx = buildCtx();
+  container.innerHTML = ARMORY_GROUPS.map(function (g) {
+    return '<div class="group-head"><div class="group-head-label">' + esc(g.label) + '</div></div>' +
+      '<div class="section-card">' + g.cats.map(function (cat) { return slotRowHtml(cat, ctx); }).join('') + '</div>';
+  }).join('');
+  container.querySelectorAll('select[data-variant]').forEach(function (sel) {
+    sel.addEventListener('change', function () {
+      var pick = STATE.picks[sel.dataset.variant];
+      if (pick) { pick.variantId = sel.value; renderAll(); }
+    });
+  });
+  container.querySelectorAll('button[data-remove]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      delete STATE.picks[btn.dataset.remove];
+      reconcilePicks();
+      renderAll();
+    });
+  });
+}
+
+// ─── THE FIT-WARNINGS BAR ──────────────────────────────────────────────────
+// Three severities (the ship doc's): Must fix (won't fit), Works with a
+// catch (needs a comp, or a threaded barrel), Heads up (unconfirmed — the
+// data cannot back the pairing). Each item links the parts that resolve it.
+var SEV = { bad: 'Must fix', warn: 'Works, with a catch', info: 'Heads up' };
+function fitIssues(ctx) {
+  var out = [];
+  var pair = currentPairTag();
+  if (pair && pair.key === 'needs_comp') {
+    out.push({ lvl: 'warn', cat: 'compensator',
+      msg: 'Your grip is longer than the slide, so the front of the grip sticks out past it. It still works and is safe to shoot. Most people add a comp to fill the gap.',
+      fix: 'See comps that fit' });
+  }
+  ARMORY_CATS.forEach(function (cat) {
+    var p = pickedProduct(cat);
+    if (!p) return;
+    var vd = verdictFor(cat, p, ctx);
+    if (!vd || vd.key === 'na') return;
+    var name = displayProductName({ brand: p.brand, name: p.name });
+    if (vd.key === 'wont_fit') {
+      out.push({ lvl: 'bad', cat: cat, msg: name + ' won’t work in this build.' + (vd.reason ? ' ' + vd.reason : ''),
+        fix: 'See ' + nounMany(cat) + ' that fit' });
+    } else if (vd.key === 'needs_comp' && cat === 'compensator') {
+      out.push({ lvl: 'warn', cat: 'barrel', msg: 'The ' + name + ' needs a threaded barrel' +
+        (ctx.barrel ? ', and your barrel isn’t threaded.' : ' — pick one first.'), fix: 'See threaded barrels' });
+    } else if (vd.key === 'unconfirmed' && vd.reason && !/^Pick a /.test(vd.reason)) {
+      out.push({ lvl: 'info', cat: cat, msg: name + ': ' + vd.reason +
+        (/check with the/i.test(vd.reason) ? '' : ' We haven’t verified this pairing, so check with the maker before you buy.') });
+    }
+  });
+  // The stock barrel against a picked slide — the checklist's Norsso C case.
+  if (!pickedProduct('barrel') && pickedProduct('slide') && ctx.gun && !ctx.fcu) {
+    var bf = window.ArmoryFit.stockBarrelVerdict(ctx);
+    if (bf.key === 'wont_fit') {
+      out.push({ lvl: 'bad', cat: 'barrel', msg: 'Your stock barrel won’t go in this slide. ' + (bf.reason || ''), fix: 'See barrels that fit' });
+    } else if (bf.key === 'unconfirmed' && bf.reason) {
+      out.push({ lvl: 'info', cat: 'barrel', msg: 'Stock barrel in this slide: ' + bf.reason });
+    }
+  }
+  return out;
+}
+function renderFitBar() {
+  var el = document.getElementById('fit-bar');
+  if (!el) return;
+  if (!STATE.platform || !gunChosen()) { el.innerHTML = ''; return; }
+  var ctx = buildCtx();
+  var iss = fitIssues(ctx);
+  var bad = iss.some(function (i) { return i.lvl === 'bad'; });
+  var warn = iss.some(function (i) { return i.lvl === 'warn'; });
+  var cls = bad ? 'bad' : warn ? 'warn' : 'ok';
+  var headline = bad ? 'Compatibility problem' : warn ? 'Needs attention'
+    : Object.keys(STATE.picks).length ? 'No fit issues' : 'Ready to build';
+  el.innerHTML = '<div class="fit-bar ' + cls + '" role="status"><b>' + headline + '</b>' +
+    (iss.length
+      ? '<ul>' + iss.map(function (i) {
+          return '<li><span class="sev ' + i.lvl + '">' + SEV[i.lvl] + '</span> ' + esc(i.msg) +
+            (i.fix && i.cat ? ' <a href="#part-' + i.cat + '">' + esc(i.fix) + ' ›</a>' : '') + '</li>';
+        }).join('') + '</ul>'
+      : '<span>' + (Object.keys(STATE.picks).length
+          ? 'Every part checked against your grip and slide.'
+          : 'Pick parts below — everything is checked against your gun as you go.') + '</span>') +
+    '</div>';
 }
 
 function slotBanners(cat, picked) {
@@ -1280,13 +1837,10 @@ function slotBanners(cat, picked) {
       html += '<div class="note-banner muted">Fit depends on your grip module — pick one to confirm.</div>';
     }
   }
-  if (cat === 'frame' && !STATE.gun && picked) {
-    html += '<div class="note-banner muted">Pick your model above to confirm this grip module fits it.</div>';
-  }
   return html;
 }
 
-function pickedHtml(cat, p) {
+function pickedHtml(cat, p, tag) {
   var pick = STATE.picks[cat];
   var variant = p.variants.find(function (v) { return v.id === pick.variantId; }) || p.defaultVariant;
   // The picked option's own price, or "Check price" — never the default
@@ -1310,15 +1864,12 @@ function pickedHtml(cat, p) {
       }).join('') + '</select></div>';
   }
 
-  // The picked grip wears the pair's tag (and its reason, when it has one):
+  // The picked part wears its verdict (and the reason, when it has one):
   // "Needs comp" is what holds Save, and the card is where it says why.
   var tagRow = '';
-  if (cat === 'frame') {
-    var t = gripTagFor(p);
-    if (t) {
-      tagRow = '<span class="picked-fit">' + fitTagHtml(t) +
-        (t.reason ? ' <span class="picked-fit-reason">' + esc(t.reason) + '</span>' : '') + '</span>';
-    }
+  if (tag && tag.key !== 'na' && tag.label) {
+    tagRow = '<span class="picked-fit">' + fitTagHtml(tag) +
+      (tag.reason ? ' <span class="picked-fit-reason">' + esc(tag.reason) + '</span>' : '') + '</span>';
   }
 
   return '<div class="picked">' +
@@ -1336,77 +1887,456 @@ function pickedHtml(cat, p) {
   '</div>';
 }
 
-function renderParts() {
-  var container = document.getElementById('parts-container');
-  if (!STATE.platform) {
-    container.innerHTML = '<div class="card"><div style="font-size:12px;color:#888;text-align:center;padding:16px;">Pick a pistol to see compatible parts.</div></div>';
-    return;
-  }
-  if (!productsForPlatform().length) {
-    container.innerHTML = '<div class="card"><div class="empty"><div class="empty-title">Catalog coming soon</div>No ' + esc(STATE.platform.name) + ' parts yet.</div></div>';
-    return;
-  }
-  var anyDiscontinued = productsForPlatform().some(function (p) { return p.discontinued; });
-  container.innerHTML = (anyDiscontinued
-    ? '<label class="disc-toggle"><input type="checkbox" id="show-discontinued"' + (SHOW_DISCONTINUED ? ' checked' : '') + ' /> Show discontinued parts</label>'
-    : '') + SLOT_GROUPS.map(function (g) {
-    var inner = g.slots.map(slotHtml).join('');
-    if (!inner) return '';
-    return '<div class="group-head"><div class="group-head-label">' + esc(g.group.label) + '</div><div class="group-head-blurb">' + esc(g.group.blurb) + '</div></div>' +
-           '<div class="section-card">' + inner + '</div>';
-  }).join('');
+// ─── "STARTING FROM" BAR ───────────────────────────────────────────────────
+function renderStartBar() {
+  var el = document.getElementById('start-bar');
+  if (!el) return;
+  var g = STATE.gunMode === 'model' ? STATE.gun : null;
+  el.innerHTML = '<div class="start-bar"><div style="min-width:0;">' +
+    '<div class="sb-label">Starting from</div>' +
+    '<div class="sb-gun">' + esc(g ? 'SIG ' + g.name : (STATE.gunMode === 'fcu' ? 'FCU only' : (STATE.platform ? STATE.platform.name : ''))) + '</div>' +
+    '<div class="sb-facts">' + esc(g ? gunFacts(g) : 'Nothing is stock. Every part is yours to pick — start with the grip module: it sets the length every slide and comp is checked against.') + '</div>' +
+    '</div><div class="sb-actions">' +
+    (STATE.platform && STATE.platform.slug === 'p365' ? '<a class="sb-btn" href="#model">Change</a>' : '') +
+    '<button type="button" class="sb-btn" id="btn-restart">Start new build</button></div></div>' +
+    (STATE.startedFrom ? '<div style="font-size:11.5px;color:#888;margin-top:8px;">Started from <b>' + esc(STATE.startedFrom) + '</b>. Swap any part to make it yours.</div>' : '');
+  document.getElementById('btn-restart').onclick = startNewBuild;
+}
 
+// ─── STEP 4: THE PART PAGES (#part-<cat>) ──────────────────────────────────
+// Facets, search, sort, compare — and one verdict per card. Parts that won't
+// fit are hidden behind "Show them with the reason"; everything else is
+// tagged, never hidden.
+var BP_TYPE = { 'flush-replacement': 'Flush replacement', extension: 'Extension', adapter: 'Adapter', 'pinky-extension': 'Pinky extension' };
+var SIGHT_TYPE = { fiber: 'Fiber optic', night: 'Night sights', plain: 'Plain black', 'night-fiber': 'Night + fiber' };
+function compStyleLabel(p) {
+  var f = FIT.supported === true ? (FIT.slide[p.id] || {}) : {};
+  if (f.comp_style === 'short_barrel') return 'Integrated comp';
+  if (f.comp_style === 'ported_barrel') return 'Ported, matched barrel';
+  if (f.comp_style === 'none') return 'Standard';
+  var s = SPEC.slide[p.id] || {};
+  return s.integrated_comp === true ? 'Integrated comp' : s.internally_ported === true ? 'Ported, matched barrel' : 'Standard';
+}
+function lenOf(spec, key) { var v = spec && spec[key]; return v == null ? null : Number(v); }
+// cols: [label, fn] pairs for the spec line and compare table; facets:
+// [label, key, fn] — fn maps a product to the facet's value in words.
+var DEF = {
+  slide: {
+    cols: [['Length', function (p) { var l = lenOf(SPEC.slide[p.id], 'slide_length_in'); return l != null ? l + '"' : '—'; }],
+           ['Barrel', function (p) { var l = lenOf(SPEC.slide[p.id], 'barrel_length_in'); return l != null ? l + '"' : '—'; }],
+           ['Comp', compStyleLabel]],
+    facets: [['Length', 'len', function (p) { var l = lenOf(SPEC.slide[p.id], 'slide_length_in'); return l != null ? l + '"' : 'Unknown'; }],
+             ['Comp style', 'comp', compStyleLabel],
+             ['Threaded barrel', 'thr', function (p) { var t = (SPEC.slide[p.id] || {}).threaded_barrel_ok; return t === true ? 'Takes threaded' : t === false ? 'No threaded' : 'Not stated'; }]],
+  },
+  frame: {
+    cols: [['Size', function (p) { var hc = (SPEC.frame[p.id] || {}).housing_class; return GRIP_SIZE[hc] || '—'; }],
+           ['Covers slide', function (p) { var t = FIT.supported === true ? (FIT.frame[p.id] || {}).fit_tier : null; return t ? window.SlideFit.TIER_LABEL[t] : 'Not confirmed'; }]],
+    facets: [['Size', 'size', function (p) { var hc = (SPEC.frame[p.id] || {}).housing_class; return GRIP_SIZE[hc] || 'Unknown'; }]],
+  },
+  barrel: {
+    cols: [['Length', function (p) { var l = lenOf(SPEC.barrel[p.id], 'barrel_length_in'); return l != null ? l + '"' : '—'; }],
+           ['Type', function (p) { return (SPEC.barrel[p.id] || {}).barrel_type || '—'; }],
+           ['Thread', function (p) { return (SPEC.barrel[p.id] || {}).thread_pitch || '—'; }]],
+    facets: [['Length', 'len', function (p) { var l = lenOf(SPEC.barrel[p.id], 'barrel_length_in'); return l != null ? l + '"' : 'Unknown'; }],
+             ['Type', 'type', function (p) { return (SPEC.barrel[p.id] || {}).barrel_type || 'Unknown'; }]],
+  },
+  compensator: {
+    cols: [['Mount', function (p) { return (SPEC.compensator[p.id] || {}).mounting_type || '—'; }],
+           ['Thread', function (p) { return (SPEC.compensator[p.id] || {}).thread_pitch || '—'; }],
+           ['Barrel incl.', function (p) { var c = SPEC.compensator[p.id] || {}; return c.comes_with_barrel ? (lenOf(c, 'barrel_length_in') != null ? lenOf(c, 'barrel_length_in') + '"' : 'Yes') : 'No'; }]],
+    facets: [['Mount', 'mount', function (p) { return (SPEC.compensator[p.id] || {}).mounting_type || 'Unknown'; }],
+             ['Includes barrel', 'kit', function (p) { return (SPEC.compensator[p.id] || {}).comes_with_barrel ? 'Yes' : 'No'; }]],
+  },
+  optic: {
+    cols: [['Footprint', function (p) { return FOOTPRINT_NAME[(XSPEC.optic[p.id] || {}).footprint_id] || '—'; }],
+           ['Emitter', function (p) { return (XSPEC.optic[p.id] || {}).enclosed_emitter ? 'Enclosed' : 'Open'; }]],
+    facets: [['Footprint', 'fp', function (p) { return FOOTPRINT_NAME[(XSPEC.optic[p.id] || {}).footprint_id] || 'Unknown'; }],
+             ['Emitter', 'enc', function (p) { return (XSPEC.optic[p.id] || {}).enclosed_emitter ? 'Enclosed' : 'Open'; }]],
+  },
+  light: {
+    cols: [['Lumens', function (p) { var l = (XSPEC.light[p.id] || {}).lumens_max; return l != null ? Number(l).toLocaleString() + ' lm' : '—'; }],
+           ['Candela', function (p) { var c = (XSPEC.light[p.id] || {}).candela_max; return c != null ? Number(c).toLocaleString() + ' cd' : '—'; }]],
+    facets: [['Brightness', 'lmb', function (p) { var l = (XSPEC.light[p.id] || {}).lumens_max; return l == null ? 'Unknown' : l < 700 ? 'Under 700 lm' : l < 1000 ? '700 to 999 lm' : '1,000 lm or more'; }],
+             ['Laser', 'laser', function (p) { return (XSPEC.light[p.id] || {}).has_laser ? 'Light and laser' : 'Light only'; }],
+             ['Power', 'rech', function (p) { return (XSPEC.light[p.id] || {}).rechargeable ? 'Rechargeable' : 'Replaceable battery'; }]],
+  },
+  sight: {
+    cols: [['Type', function (p) { var t = (XSPEC.sight[p.id] || {}).sight_type; return SIGHT_TYPE[t] || t || '—'; }],
+           ['Includes', function (p) { var s = (XSPEC.sight[p.id] || {}).sight_position; return s === 'set' ? 'Front and rear' : s || '—'; }]],
+    facets: [['Type', 'stype', function (p) { var t = (XSPEC.sight[p.id] || {}).sight_type; return SIGHT_TYPE[t] || t || 'Unknown'; }]],
+  },
+  magazine: {
+    cols: [['Capacity', function (p) { var c = (XSPEC.magazine[p.id] || {}).capacity; return c != null ? c + ' rounds' : '—'; }]],
+    facets: [['Capacity', 'cap', function (p) { var c = (XSPEC.magazine[p.id] || {}).capacity; return c != null ? c + ' rounds' : 'Unknown'; }],
+             ['In your grip', 'sits', function (p) { var f = verdictFor('magazine', p, null); return f.key === 'flush' ? 'Flush' : f.key === 'extended' ? f.label : f.key === 'wont_fit' ? 'Won’t fit' : 'Not checked'; }],
+             ['State limits', 'rsf', function (p) { return p.restricted_states && p.restricted_states.length ? 'Restricted in some states' : 'No state limits'; }]],
+  },
+  magwell: {
+    cols: [['Mounts with', function (p) { return (XSPEC.magwell[p.id] || {}).attachment_method || '—'; }],
+           ['Backstrap', function (p) { return (XSPEC.magwell[p.id] || {}).is_combo ? 'Included' : 'Not included'; }]],
+    facets: [['Mounts with', 'attach', function (p) { return (XSPEC.magwell[p.id] || {}).attachment_method || 'Unknown'; }]],
+  },
+  basepad: {
+    cols: [['Type', function (p) { var t = (XSPEC.basepad[p.id] || {}).basepad_type; return BP_TYPE[t] || t || '—'; }],
+           ['For', function (p) { return (XSPEC.basepad[p.id] || {}).fits_mag_type || '—'; }]],
+    facets: [['Type', 'bptype', function (p) { var t = (XSPEC.basepad[p.id] || {}).basepad_type; return BP_TYPE[t] || t || 'Unknown'; }],
+             ['For', 'formag', function (p) { return (XSPEC.basepad[p.id] || {}).fits_mag_type || 'Unknown'; }],
+             ['Adds rounds', 'capchg', function (p) { var c = (XSPEC.basepad[p.id] || {}).capacity_change; return c ? '+' + c + ' rounds' : 'No added rounds'; }]],
+  },
+  trigger: {
+    cols: [['Shoe', function (p) { return (XSPEC.trigger[p.id] || {}).profile || '—'; }],
+           ['Install', function (p) { return (XSPEC.trigger[p.id] || {}).drop_in === false ? 'Needs fitting' : 'Drop-in'; }]],
+    facets: [['Shoe', 'profile', function (p) { return (XSPEC.trigger[p.id] || {}).profile || 'Unknown'; }]],
+  },
+  mag_release: { cols: [['Style', function (p) { return (XSPEC.mag_release[p.id] || {}).style || '—'; }]], facets: [] },
+  slide_release: { cols: [['Texture', function (p) { var t = (XSPEC.slide_release[p.id] || {}).texture; return t && t !== 'None' ? t : 'Smooth'; }]], facets: [] },
+  takedown_lever: { cols: [['Type', function (p) { return (XSPEC.takedown_lever[p.id] || {}).takedown_type || '—'; }]], facets: [] },
+  safety_selector: {
+    cols: [['Sides', function (p) { return (XSPEC.safety_selector[p.id] || {}).is_ambidextrous ? 'Ambidextrous' : 'One side'; }]], facets: [],
+    note: 'A manual safety only works in an FCU built for one. Check that yours has the manual safety version before you buy.',
+  },
+  recoil_spring: {
+    cols: [['For slide', function (p) { var l = lenOf(XSPEC.recoil_spring[p.id], 'slide_length_in'); return l != null ? l + '" slide' : '—'; }],
+           ['Weight', function (p) { return (XSPEC.recoil_spring[p.id] || {}).spring_weight || '—'; }]],
+    facets: [['For slide', 'rsl', function (p) { var l = lenOf(XSPEC.recoil_spring[p.id], 'slide_length_in'); return l != null ? l + '" slide' : 'Unknown'; }]],
+  },
+  slide_plate: { cols: [], facets: [] },
+  other: { cols: [], facets: [] },
+};
+function specLineFor(cat, p) {
+  var def = DEF[cat];
+  if (!def || !def.cols.length) return '';
+  return def.cols.slice(0, 2).map(function (c) { return c[1](p); })
+    .filter(function (x) { return x && x !== '—'; }).join(' · ');
+}
+
+// Retailer prices load once per category, after the page first renders —
+// the cards repaint with "lowest price + where" when they land.
+var AFF_LOADED = {};
+function ensureAff(cat) {
+  if (!window.affiliate || AFF_LOADED[cat]) return;
+  AFF_LOADED[cat] = 'loading';
+  var ids = productsForPlatform().filter(function (p) { return p.category === cat; }).map(function (p) { return p.id; });
+  window.affiliate.loadFor(sb, ids).then(function () {
+    AFF_LOADED[cat] = 'done';
+    var v = viewFromHash();
+    if (CURRENT_TAB === 'build' && v.name === 'part' && v.cat === cat) renderCatPage(cat);
+  });
+}
+
+function lowPriceOf(p) {
+  var aff = window.affiliate ? window.affiliate.get(p.id) : null;
+  var hero = aff && aff.hero && !aff.hero.maker && !aff.hero.stale && aff.hero.price != null && aff.hero.in_stock === true ? aff.hero : null;
+  if (hero) return hero.price;
+  var head = window.optionHeadline(optionPrices(p), null);
+  return head.amount != null ? head.amount : null;
+}
+
+function renderCatPage(cat) {
+  var el = document.getElementById('view-part');
+  if (!el || !STATE.platform) return;
+  ensureAff(cat);
+  var def = DEF[cat] || { cols: [], facets: [] };
+  var ctx = buildCtx();
+  var F = STATE.filters[cat] = STATE.filters[cat] || { q: '', brand: {} };
+  def.facets.forEach(function (f) { F[f[1]] = F[f[1]] || {}; });
+
+  // Every part of the category, judged. availableFor's rules fold into the
+  // verdict as wont_fit (hidden with the reason), so nothing disappears.
+  var avail = {};
+  availableFor(cat).forEach(function (p) { avail[p.id] = 1; });
+  var anyDiscontinued = false;
+  var all = productsForPlatform().filter(function (p) {
+    if (p.category !== cat) return false;
+    if (p.discontinued) { anyDiscontinued = true; if (!SHOW_DISCONTINUED) return false; }
+    return true;
+  }).map(function (p) {
+    var meta = cardMetaFor(cat, p, ctx);
+    var hidden = (meta.tag && meta.tag.key === 'wont_fit') || !avail[p.id];
+    if (hidden && (!meta.tag || meta.tag.key !== 'wont_fit')) {
+      meta.tag = window.ArmoryFit.verdict('wont_fit', null, whyNotAvailable(cat, p));
+    }
+    return { p: p, meta: meta, hidden: hidden, low: lowPriceOf(p) };
+  });
+
+  var setHas = function (set) { for (var k in set) if (set.hasOwnProperty(k)) return true; return false; };
+  var maxPrice = Math.ceil(all.reduce(function (m, x) { return Math.max(m, x.low || 0); }, 1));
+  if (F.max == null) F.max = maxPrice;
+  var pass = function (x, skip) {
+    var p = x.p;
+    if (F.q && (p.brand + ' ' + p.name).toLowerCase().indexOf(F.q.toLowerCase()) === -1) return false;
+    if (skip !== 'brand' && setHas(F.brand) && !F.brand[p.brand]) return false;
+    if ((x.low || 0) > F.max) return false;
+    for (var i = 0; i < def.facets.length; i++) {
+      var f = def.facets[i];
+      if (skip === f[1]) continue;
+      if (setHas(F[f[1]]) && !F[f[1]][f[2](x.p)]) return false;
+    }
+    return true;
+  };
+
+  var savedOnly = SAVED_ONLY && !!CURRENT_USER;
+  var showAll = !!STATE.showAll[cat];
+  var nofit = all.filter(function (x) { return x.hidden; });
+  var list = all.filter(function (x) {
+    if (!pass(x)) return false;
+    if (savedOnly && !Favorites.has(x.p.id)) return false;
+    return showAll || savedOnly || !x.hidden;    // "Saved" shows a saved part that doesn't fit, disabled with why
+  });
+  var so = STATE.sort[cat] || 'fit';
+  var rank = function (x) {
+    if (x.meta.recommended) return -1;
+    return x.meta.tag ? window.SlideFit.sortRank(x.meta.tag.key) : 1;
+  };
+  list.sort(function (a, b) {
+    if (so === 'plo') return (a.low || 1e9) - (b.low || 1e9);
+    if (so === 'phi') return (b.low || 0) - (a.low || 0);
+    if (so === 'name') return (a.p.brand + a.p.name).localeCompare(b.p.brand + b.p.name);
+    return (rank(a) - rank(b)) || ((a.low || 1e9) - (b.low || 1e9));
+  });
+
+  // Filters: fit first, then the category's own facets, max price, brand.
+  var base = all.filter(function (x) { return showAll || !x.hidden; });
+  var facetBlock = function (title, key, getter, src) {
+    var counts = {};
+    src.forEach(function (x) { var val = getter(x.p); counts[val] = (counts[val] || 0) + 1; });
+    var keys = Object.keys(counts).sort();
+    if (!keys.length) return '';
+    var set = key === 'brand' ? F.brand : F[key];
+    return '<div class="facet"><h4>' + esc(title) + '</h4><div class="' + (keys.length > 8 ? 'scroll' : '') + '">' +
+      keys.map(function (val) {
+        return '<label><input type="checkbox" data-f="' + escAttr(key) + '" value="' + escAttr(val) + '"' + (set[val] ? ' checked' : '') + '> ' +
+          esc(val) + '<span class="c">' + counts[val] + '</span></label>';
+      }).join('') + '</div></div>';
+  };
+  var fitsCount = all.length - nofit.length;
+  var facetsHtml =
+    (NO_FIT_CATS[cat] ? '' :
+      '<div class="facet"><h4>Fit with your build</h4><label><input type="checkbox" id="only-fit"' + (showAll ? '' : ' checked') + '> Only parts that fit<span class="c">' + fitsCount + '</span></label></div>') +
+    def.facets.map(function (f) { return facetBlock(f[0], f[1], f[2], base.filter(function (x) { return pass(x, f[1]); })); }).join('') +
+    '<div class="facet"><h4>Max price · <span id="pv">' + money(F.max) + '</span></h4><input type="range" id="price-range" min="0" max="' + maxPrice + '" step="5" value="' + F.max + '" aria-label="Maximum price"></div>' +
+    facetBlock('Brand', 'brand', function (p) { return p.brand; }, base.filter(function (x) { return pass(x, 'brand'); })) +
+    (anyDiscontinued ? '<div class="facet"><label class="disc-toggle" style="margin:0;"><input type="checkbox" id="show-discontinued"' + (SHOW_DISCONTINUED ? ' checked' : '') + ' /> Show discontinued parts</label></div>' : '');
+
+  // The context line: what the checks run against, in words.
+  var ctxBits = [];
+  var gripBit = ctx.grip
+    ? 'grip <b>' + esc(displayProductName({ brand: ctx.grip.product.brand, name: ctx.grip.product.name })) + '</b>'
+    : null;
+  if (cat === 'slide' || cat === 'frame') {
+    if (ctx.slide && ctx.slide.stock && ctx.gun) ctxBits.push('your stock <b>' + esc(ctx.gun.name) + '</b> slide');
+    else if (ctx.slide && !ctx.slide.stock) ctxBits.push('your slide');
+    if (gripBit) ctxBits.push(gripBit);
+    else if (ctx.gun && cat === 'slide') ctxBits.push('your stock <b>' + esc(ctx.gun.name) + '</b> grip');
+  }
+  if (cat === 'barrel' || cat === 'compensator' || cat === 'recoil_spring') {
+    if (ctx.slide) ctxBits.push(ctx.slide.stock && ctx.gun ? 'your stock <b>' + esc(ctx.gun.name) + '</b> slide' : 'your slide');
+    if (cat === 'compensator' && ctx.barrel) ctxBits.push('your barrel');
+  }
+  if (cat === 'magazine' || cat === 'magwell') {
+    if (gripBit) ctxBits.push(gripBit);
+    else if (ctx.gun) ctxBits.push('your stock <b>' + esc(ctx.gun.name) + '</b> grip');
+  }
+  if (cat === 'optic' && ctx.slide) {
+    ctxBits.push(ctx.slide.stock && ctx.gun ? 'your stock <b>' + esc(ctx.gun.name) + '</b> slide’s optic cut' : 'your slide');
+  }
+  var ctxLine = '';
+  if (NO_FIT_CATS[cat]) {
+    ctxLine = def.note ? '<div class="ctx-line"><b>Heads up.</b> ' + esc(def.note) + '</div>' : '';
+  } else if (cat === 'optic' && ctx.slide && !ctx.slide.stock) {
+    ctxLine = '<div class="ctx-line"><b>Data gap.</b> Aftermarket slides don’t carry their optic cut in the data yet, so fit to your slide isn’t checked. Filter by footprint for now.</div>';
+  } else if (ctxBits.length) {
+    ctxLine = '<div class="ctx-line">Checking against ' + ctxBits.join(' · ') + '.' +
+      (nofit.length ? ' ' + nofit.length + ' won’t fit and ' + (nofit.length === 1 ? 'is' : 'are') + ' hidden.' : '') + '</div>';
+  } else if (cat === 'magazine' || cat === 'magwell') {
+    ctxLine = '<div class="ctx-line">Pick a grip to check ' + esc(nounMany(cat)) + ' against it.</div>';
+  }
+
+  var cards = list.map(function (x) {
+    var meta = x.meta;
+    meta.spec = specLineFor(cat, x.p);
+    meta.compare = true;
+    var cur = STATE.picks[cat];
+    meta.inBuild = !!(cur && cur.productId === x.p.id);
+    if (savedOnly && x.hidden && (!meta.tag || meta.tag.selectable)) meta.blocked = whyNotAvailable(cat, x.p);
+    return partCardHtml(cat, x.p, meta);
+  });
+
+  el.innerHTML =
+    '<nav class="crumbs"><a href="#start">Armory</a> › <a href="#build">Your build</a> › Choose ' + esc(nounOne(cat)) + '</nav>' +
+    '<div class="sec-h2" style="font-size:20px;">Choose ' + esc(nounOne(cat)) + '</div>' +
+    ctxLine +
+    '<div class="part-layout">' +
+      '<aside class="facets" id="facets" aria-label="Filters">' + facetsHtml + '</aside>' +
+      '<section style="min-width:0;">' +
+        '<div class="toolbar">' +
+          '<button type="button" class="filters-btn" id="facets-toggle">Filters</button>' +
+          '<input type="search" class="picker-search" id="cat-q" placeholder="Search ' + escAttr(nounMany(cat)) + ' by brand or name" value="' + escAttr(F.q) + '" aria-label="Search" style="flex:1;min-width:140px;" />' +
+          '<select class="sortsel" id="cat-sort" aria-label="Sort">' +
+            [['fit', 'Best fit'], ['plo', 'Price: low to high'], ['phi', 'Price: high to low'], ['name', 'Name']].map(function (o) {
+              return '<option value="' + o[0] + '"' + (so === o[0] ? ' selected' : '') + '>' + o[1] + '</option>';
+            }).join('') + '</select>' +
+          (CURRENT_USER ? '<button type="button" class="picker-saved" data-saved-only aria-pressed="' + savedOnly + '">' + (savedOnly ? '♥' : '♡') + ' Saved</button>' : '') +
+          '<span class="n">' + list.length + ' shown</span>' +
+        '</div>' +
+        (savedOnly && !cards.length
+          ? '<div class="picker-saved-empty">No saved parts here yet — tap ♡ on a part to save it.</div><div class="part-grid pg-page"></div>'
+          : '<div class="part-grid pg-page">' + cards.join('') + '</div>') +
+        (!showAll && !savedOnly && nofit.length
+          ? '<div class="hidden-note">' + nofit.length + ' ' + esc(nounMany(cat)) + ' don’t fit this build. <button type="button" id="reveal-nofit">Show them with the reason</button></div>'
+          : '') +
+        (!list.length && !savedOnly ? '<div class="hidden-note">Nothing matches these filters. <button type="button" id="clear-filters">Clear filters</button></div>' : '') +
+      '</section>' +
+    '</div>';
+
+  el.querySelectorAll('input[data-f]').forEach(function (cb) {
+    cb.onchange = function () {
+      var set = cb.dataset.f === 'brand' ? F.brand : F[cb.dataset.f];
+      if (cb.checked) set[cb.value] = 1; else delete set[cb.value];
+      renderCatPage(cat);
+    };
+  });
+  var onlyFit = document.getElementById('only-fit');
+  if (onlyFit) onlyFit.onchange = function () { STATE.showAll[cat] = !onlyFit.checked; renderCatPage(cat); };
+  var reveal = document.getElementById('reveal-nofit');
+  if (reveal) reveal.onclick = function () { STATE.showAll[cat] = true; renderCatPage(cat); };
+  var clearF = document.getElementById('clear-filters');
+  if (clearF) clearF.onclick = function () { delete STATE.filters[cat]; renderCatPage(cat); };
+  var pr = document.getElementById('price-range');
+  if (pr) {
+    pr.oninput = function () { document.getElementById('pv').textContent = money(Number(pr.value)); };
+    pr.onchange = function () { F.max = Number(pr.value); renderCatPage(cat); };
+  }
+  var q = document.getElementById('cat-q');
+  if (q) q.oninput = function () {
+    // Narrow the cards in place so typing keeps focus; F.q is read on the
+    // next full render too.
+    F.q = q.value.trim();
+    var qq = F.q.toLowerCase();
+    el.querySelectorAll('.part-card').forEach(function (card) {
+      card.style.display = !qq || card.dataset.search.indexOf(qq) !== -1 ? '' : 'none';
+    });
+  };
+  var sortSel = document.getElementById('cat-sort');
+  if (sortSel) sortSel.onchange = function () { STATE.sort[cat] = sortSel.value; renderCatPage(cat); };
+  var ftog = document.getElementById('facets-toggle');
+  if (ftog) ftog.onclick = function () { document.getElementById('facets').classList.toggle('open'); };
   var discToggle = document.getElementById('show-discontinued');
-  if (discToggle) discToggle.addEventListener('change', function () {
-    SHOW_DISCONTINUED = discToggle.checked;
-    renderAll();
+  if (discToggle) discToggle.onchange = function () { SHOW_DISCONTINUED = discToggle.checked; renderCatPage(cat); };
+  el.querySelectorAll('button[data-saved-only]').forEach(function (btn) {
+    btn.addEventListener('click', function () { SAVED_ONLY = !SAVED_ONLY; renderCatPage(cat); });
   });
-  container.querySelectorAll('button[data-saved-only]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      SAVED_ONLY = !SAVED_ONLY;
-      renderAll();
-    });
-  });
-  container.querySelectorAll('button[data-toggle]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      var cat = btn.dataset.toggle;
-      STATE.openCat = STATE.openCat === cat ? null : cat;
-      renderAll();
-    });
-  });
-  container.querySelectorAll('button[data-add]').forEach(function (btn) {
+  el.querySelectorAll('button[data-add]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var p = PRODUCTS_BY_ID[btn.dataset.id];
       if (!p) return;
       STATE.picks[btn.dataset.add] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
-      STATE.openCat = null;                 // a pick closes the picker — the green card is the confirmation
       reconcilePicks();
-      renderAll();
+      persistDraft();
+      try { location.hash = 'build'; } catch (e) { renderAll(); }
     });
   });
-  // The filter narrows cards in place — no re-render, so typing keeps focus.
-  container.querySelectorAll('input[data-search-input]').forEach(function (inp) {
-    inp.addEventListener('input', function () {
-      var q = inp.value.trim().toLowerCase();
-      var grid = inp.closest('.picker-panel').querySelector('.part-grid');
-      grid.querySelectorAll('.part-card').forEach(function (card) {
-        card.style.display = !q || card.dataset.search.indexOf(q) !== -1 ? '' : 'none';
-      });
-    });
+  bindCompare(el, cat);
+}
+
+// ─── COMPARE (up to 3, one category) ───────────────────────────────────────
+function bindCompare(el, cat) {
+  el.querySelectorAll('input[data-cmp]').forEach(function (cb) {
+    cb.onchange = function () {
+      var id = cb.dataset.cmp;
+      if (cb.checked) {
+        var first = STATE.compare[0] ? PRODUCTS_BY_ID[STATE.compare[0]] : null;
+        if (first && first.category !== cat) STATE.compare = [];
+        if (STATE.compare.length >= 3) { cb.checked = false; return; }
+        if (STATE.compare.indexOf(id) === -1) STATE.compare.push(id);
+      } else {
+        STATE.compare = STATE.compare.filter(function (x) { return x !== id; });
+      }
+      renderCompareTray('part', cat);
+    };
   });
-  container.querySelectorAll('select[data-variant]').forEach(function (sel) {
-    sel.addEventListener('change', function () {
-      var pick = STATE.picks[sel.dataset.variant];
-      if (pick) { pick.variantId = sel.value; renderAll(); }
-    });
-  });
-  container.querySelectorAll('button[data-remove]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      delete STATE.picks[btn.dataset.remove];
+}
+function renderCompareTray(mode, cat) {
+  var t = document.getElementById('cmp-tray');
+  if (!t) return;
+  var items = STATE.compare.map(function (id) { return PRODUCTS_BY_ID[id]; }).filter(Boolean);
+  if (!items.length || mode !== 'part') { t.hidden = true; return; }
+  t.hidden = false;
+  t.innerHTML = '<span style="font-size:11px;font-weight:700;">Compare ' + items.length + '/3</span>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;flex:1;min-width:0;">' +
+    items.map(function (p) { return '<span class="it">' + esc(displayProductName({ brand: p.brand, name: p.name })) + '</span>'; }).join('') + '</div>' +
+    '<button type="button" class="go" id="cmp-go"' + (items.length < 2 ? ' disabled' : '') + '>Compare side by side</button>' +
+    '<button type="button" class="clr" id="cmp-clear">Clear</button>';
+  document.getElementById('cmp-clear').onclick = function () { STATE.compare = []; renderBuildPanel(); };
+  document.getElementById('cmp-go').onclick = function () { openCompare(cat); };
+}
+function openCompare(cat) {
+  var items = STATE.compare.map(function (id) { return PRODUCTS_BY_ID[id]; }).filter(Boolean);
+  if (items.length < 2) return;
+  var def = DEF[cat] || { cols: [] };
+  var ctx = buildCtx();
+  var m = document.getElementById('cmp-modal');
+  var row = function (label, fn) {
+    return '<tr><td>' + esc(label) + '</td>' + items.map(function (p) { return '<td>' + fn(p) + '</td>'; }).join('') + '</tr>';
+  };
+  m.hidden = false;
+  m.innerHTML = '<div class="cmp-box" role="dialog" aria-modal="true" aria-label="Compare parts">' +
+    '<button type="button" class="x" id="cmp-x" aria-label="Close">×</button>' +
+    '<h2>Compare ' + esc(nounMany(cat)) + '</h2>' +
+    '<div class="cmp-table-wrap"><table class="cmp-table"><tbody>' +
+    row('', function (p) {
+      var dv = p.defaultVariant, img = dv && dv.primary_image_url;
+      var href = p.slug ? window.productPath(p.category, p.slug) : null;
+      var pic = img ? '<img class="cmp-img" src="' + escAttr(img) + '" alt="' + escAttr(displayProductName({ brand: p.brand, name: p.name })) + '" loading="lazy" />'
+        : window.variantMediaHtml({ color: dv && dv.color }, 'variant-media', p.brand);
+      return (href ? '<a href="' + escAttr(href) + '">' + pic + '</a>' : pic) +
+        '<div style="font-weight:700;">' + esc(displayProductName({ brand: p.brand, name: p.name })) + '</div>';
+    }) +
+    row('MSRP', function (p) { return esc(window.optionPriceText(window.optionHeadline(optionPrices(p), null))); }) +
+    row('Best retailer price', function (p) {
+      var aff = window.affiliate ? window.affiliate.get(p.id) : null;
+      var hero = aff && aff.hero && !aff.hero.maker && !aff.hero.stale && aff.hero.price != null && aff.hero.in_stock === true ? aff.hero : null;
+      return hero ? money(hero.price) + ' at ' + esc(hero.partnerName || 'retailer') : '—';
+    }) +
+    row('Fit with your build', function (p) { return fitTagHtml(verdictFor(cat, p, ctx)) || '—'; }) +
+    def.cols.map(function (c) { return row(c[0], function (p) { return esc(c[1](p)); }); }).join('') +
+    row('Colors / options', function (p) { return String(p.variants.length); }) +
+    row('', function (p) {
+      var vd = verdictFor(cat, p, ctx);
+      return '<button type="button" class="part-card-btn add" data-cmp-add="' + escAttr(p.id) + '"' + (vd && !vd.selectable ? ' disabled' : '') + '>Add to build</button>';
+    }) +
+    '</tbody></table></div></div>';
+  var close = function () { m.hidden = true; };
+  document.getElementById('cmp-x').onclick = close;
+  m.onclick = function (e) { if (e.target === m) close(); };
+  m.querySelectorAll('button[data-cmp-add]').forEach(function (b) {
+    b.onclick = function () {
+      var p = PRODUCTS_BY_ID[b.dataset.cmpAdd];
+      if (!p) return;
+      STATE.picks[cat] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
       reconcilePicks();
-      renderAll();
-    });
+      persistDraft();
+      STATE.compare = [];
+      close();
+      try { location.hash = 'build'; } catch (e2) { renderAll(); }
+    };
   });
+}
+
+// ─── THE MOBILE BAR ────────────────────────────────────────────────────────
+function renderMobileBar(mode) {
+  var el = document.getElementById('mobile-bar');
+  if (!el) return;
+  var on = mode === 'build' && CURRENT_TAB === 'build';
+  el.hidden = !on;
+  el.classList.toggle('on', !!on);
+  if (!on) return;
+  var rows = buildRows();
+  var priced = rows.filter(function (r) { return r.price != null; });
+  var total = priced.reduce(function (sum, r) { return sum + r.price; }, 0);
+  document.getElementById('mb-sub').textContent = 'Upgrade cost · ' + rows.length + ' ' + (rows.length === 1 ? 'part' : 'parts');
+  document.getElementById('mb-total').textContent = money(total) + (priced.length < rows.length ? '+' : '');
 }
 
 function buildRows() {
@@ -1421,8 +2351,16 @@ function buildRows() {
 
 function renderSidebar() {
   var rows = buildRows();
-  document.getElementById('s-platform').textContent = STATE.gun ? STATE.gun.name : (STATE.platform ? STATE.platform.name : '—');
+  document.getElementById('s-platform').textContent =
+    STATE.gunMode === 'fcu' ? 'P365 FCU only'
+    : STATE.gun ? 'SIG ' + STATE.gun.name
+    : (STATE.platform ? STATE.platform.name : '—');
   document.getElementById('s-parts').textContent = rows.length;
+  var ctx = buildCtx();
+  var gripTier = ctx.grip && ctx.grip.fitRow && ctx.grip.fitRow.fit_tier ? ctx.grip.fitRow.fit_tier
+    : (ctx.gun ? ctx.gun.grip_fit_tier : null);
+  document.getElementById('s-grip').textContent = gripTier ? window.SlideFit.TIER_LABEL[gripTier] : 'Not set';
+  document.getElementById('s-slide').textContent = ctx.slide && ctx.slide.tier ? window.SlideFit.TIER_LABEL[ctx.slide.tier] : 'Not set';
 
   var list = document.getElementById('s-list');
   list.hidden = !rows.length;
@@ -1575,17 +2513,15 @@ function renderSaveOpts(hasParts) {
 }
 
 function renderAll() {
-  renderGuideStart();
-  renderParts();
-  renderSidebar();
+  if (CURRENT_TAB === 'build') renderBuildPanel();
   renderMyTabs();        // a saved part's "Add to build" follows the picks
   persistDraft();
 }
 
-// "Start from a guide": one small card per published Gunforma guide, shown
-// only over an EMPTY builder — once the build has parts (or a saved guide
-// is open) the section goes, because replacing work is openFromGuide's
-// confirm, not a row of tempting buttons.
+// "Start from a guide": one small card per published Gunforma guide, on the
+// START view only and over an EMPTY builder — once the build has parts (or
+// a saved guide is open) the section goes, because replacing work is
+// openFromGuide's confirm, not a row of tempting buttons.
 function renderGuideStart() {
   var card = document.getElementById('guide-start');
   if (!card) return;
@@ -1621,32 +2557,28 @@ function startFromGuide(id) {
 }
 
 // ─── DRAFT PERSISTENCE ─────────────────────────────────────────────────────
-// A plain visit is a blank builder (Alex, 2026-11-02): a build loaded from a
-// guide, or left unsaved, never reappears on its own. Two things are kept,
-// and each comes back only through the door that names it:
+// Two stores, each read only through the door that names it:
 //
+//   - the identity-LESS build in progress, in localStorage (BUILD_KEY),
+//     restored on every plain visit — the 2026-11-10 ship doc's "the build
+//     in progress lives in the browser and carries over between visits". It
+//     can never write to a saved row: it carries no identity.
 //   - an OPEN saved guide's unsaved changes, in localStorage (DRAFT_KEY), so
-//     a reload of its ?edit= keeps them. Only a draft with an identity is
-//     ever stored there; a new build's is removed (persistDraft), and any
-//     left by older code — which stored every build — is dropped on load
-//     (forgetNewBuildDraft).
-//   - a NEW build in progress, in sessionStorage (RESUME_KEY), written only
-//     when a Sign in link on this page is clicked, and taken on the next
-//     load: restored if it is back from sign-in, signed in and within the
-//     TTL; dropped otherwise. This page's Sign in links carry
-//     ?next=gunforma-armory.html, which sign-in honours (js/safe-next.js),
-//     so the reader lands back here and the build returns on arrival. The
-//     hold is the tab's, not the URL's: a sign-in begun without a next
-//     (the nav's link) still brings it back on the next Armory load here.
+//     a reload of its ?edit= keeps them. Only a draft WITH an identity is
+//     ever stored there, and a plain visit never restores it — the identity
+//     is adopted only through ?edit= (openForEdit), which is what ended the
+//     "Build yours in the Armory opened the last guide in edit mode" bug.
+//     Old v1 blobs without an identity are dropped on load
+//     (forgetNewBuildDraft) and never restored as builds.
 //
 // Reads and writes are wrapped: private windows and blocked storage must
-// degrade to "no draft", never to a broken page. The identity is only ever
-// ADOPTED through ?edit= (openForEdit).
+// degrade to "no draft", never to a broken page.
 function draftSnapshot() {
   if (!STATE.platform) return null;
   return {
     platformId: STATE.platform.id,
     gunId: STATE.gun ? STATE.gun.id : null,
+    gunMode: STATE.gunMode,
     picks: STATE.picks,
     title: STATE.title,
     target: STATE.target,
@@ -1663,13 +2595,28 @@ function draftSnapshot() {
 function persistDraft() {
   try {
     var d = draftSnapshot();
-    if (!d || !draftHasIdentity(d)) { localStorage.removeItem(DRAFT_KEY); return; }
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+    if (!d) { localStorage.removeItem(DRAFT_KEY); localStorage.removeItem(BUILD_KEY); return; }
+    if (draftHasIdentity(d)) {
+      // One build on screen at a time: opening a saved guide replaced the
+      // in-progress build (after its confirm), so the stale copy goes.
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+      localStorage.removeItem(BUILD_KEY);
+    } else {
+      localStorage.setItem(BUILD_KEY, JSON.stringify(d));
+      localStorage.removeItem(DRAFT_KEY);
+    }
   } catch (e) { /* storage unavailable — changes just won't survive a reload */ }
 }
 
 function readDraft() {
   try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || 'null'); } catch (e) { return null; }
+}
+// The build in progress, for a plain visit. One with an identity is never
+// restored from here, whatever wrote it.
+function readBuildDraft() {
+  var d = null;
+  try { d = JSON.parse(localStorage.getItem(BUILD_KEY) || 'null'); } catch (e) { return null; }
+  return d && !draftHasIdentity(d) ? d : null;
 }
 
 // A draft that belongs to a saved guide (or is a draft copy of one).
@@ -1677,32 +2624,11 @@ function draftHasIdentity(draft) {
   return !!(draft && (draft.savedId || draft.draftOf));
 }
 
-// On load, before anything reads the store: a new build's draft is never
-// shown again, so it is not kept to be asked about either.
+// On load, before anything reads the store: an identity-less draft in the
+// OLD key was a pre-rebuild new build; it is never shown again.
 function forgetNewBuildDraft() {
   var d = readDraft();
   if (d && !draftHasIdentity(d)) { try { localStorage.removeItem(DRAFT_KEY); } catch (e) {} }
-}
-
-// A Sign in link on this page was clicked: hold the new build in progress
-// for the round trip. An open saved guide is not held here — DRAFT_KEY and
-// its ?edit= already bring it back.
-function stashForSignIn() {
-  var d = draftSnapshot();
-  if (!d || draftHasIdentity(d)) return;
-  try { sessionStorage.setItem(RESUME_KEY, JSON.stringify({ at: Date.now(), draft: d })); } catch (e) {}
-}
-
-// Read the hold and clear it, in one step: whatever this load does with it,
-// the next load finds nothing.
-function takeResume() {
-  var held = null;
-  try {
-    held = JSON.parse(sessionStorage.getItem(RESUME_KEY) || 'null');
-    sessionStorage.removeItem(RESUME_KEY);
-  } catch (e) { return null; }
-  if (!held || !held.draft || typeof held.at !== 'number' || Date.now() - held.at > RESUME_TTL_MS) return null;
-  return held.draft;
 }
 
 // opts.adopt: restore the saved identity as well — only openForEdit and
@@ -1713,6 +2639,10 @@ function restoreDraft(draft, opts) {
   if (!adopt && draftHasIdentity(draft)) return;   // a saved guide's edit: only ever reopened by its ?edit=
   STATE.platform = PLATFORMS_BY_ID[draft.platformId];
   STATE.gun = GUNS.find(function (g) { return g.id === draft.gunId; }) || null;
+  STATE.gunMode = draft.gunMode === 'fcu' ? 'fcu'
+    : STATE.gun ? 'model'
+    : draft.gunMode === 'model' ? null                      // the model is gone from guns: ask again
+    : (adopt ? 'fcu' : null);                               // an older draft: an edit opens as FCU, a build asks
   STATE.title = draft.title || '';
   STATE.target = draft.target === 'curated' ? 'curated' : 'community';
   STATE.savedId = adopt ? (draft.savedId || null) : null;
@@ -1732,54 +2662,27 @@ function restoreDraft(draft, opts) {
   });
   reconcilePicks();
   SAVED_SIG = adopt && typeof draft.savedSig === 'string' ? draft.savedSig : null;
-  renderPlatformRow();
   renderAll();
 }
 
 // ─── UNSAVED PICKS ─────────────────────────────────────────────────────────
 // What the build is, for "has it changed since it was saved or opened".
+// There is no beforeunload prompt any more: the build in progress persists
+// (BUILD_KEY), and an open saved guide's changes persist under its ?edit=
+// (DRAFT_KEY) — nothing is lost to a reload or a sign-in round trip.
 function buildSig() {
   if (!STATE.platform) return null;
   var picks = {};
   Object.keys(STATE.picks).sort().forEach(function (k) { picks[k] = STATE.picks[k]; });
   return JSON.stringify({
-    platform: STATE.platform.id, gun: STATE.gun ? STATE.gun.id : null, picks: picks,
-    title: STATE.title || '', target: STATE.target, curated: STATE.curated,
+    platform: STATE.platform.id, gun: STATE.gun ? STATE.gun.id : null, gunMode: STATE.gunMode || null,
+    picks: picks, title: STATE.title || '', target: STATE.target, curated: STATE.curated,
   });
 }
 function hasUnsavedPicks() {
   if (!Object.keys(STATE.picks).length) return false;
   return SAVED_SIG === null || buildSig() !== SAVED_SIG;
 }
-
-// A reload or a close with unsaved picks asks first — a new build is not
-// kept across a reload, so this is what stands between it and a stray
-// click. Nothing picked, or everything saved: no prompt. Leaving for sign-in
-// from a link on this page: no prompt — the build is held for the trip.
-function onBeforeUnload(e) {
-  if (LEAVING_FOR_SIGNIN || !hasUnsavedPicks()) return;
-  e.preventDefault();
-  e.returnValue = '';
-  return '';
-}
-function onSignInClick(e) {
-  if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;   // a new tab leaves this page here
-  var a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
-  if (!a || !/(^|\/)gunforma-signin\.html(\?|#|$)/.test(a.getAttribute('href') || '')) return;
-  stashForSignIn();
-  LEAVING_FOR_SIGNIN = true;
-}
-if (window.addEventListener) {
-  window.addEventListener('beforeunload', onBeforeUnload);
-  // Back from the sign-in page through the back/forward cache: still here,
-  // with the build on screen, so a later reload asks again and the hold —
-  // now older than what is on screen — goes.
-  window.addEventListener('pageshow', function (e) {
-    LEAVING_FOR_SIGNIN = false;
-    if (e && e.persisted) { try { sessionStorage.removeItem(RESUME_KEY); } catch (err) {} }
-  });
-}
-if (document.addEventListener) document.addEventListener('click', onSignInClick);
 
 // ─── EDITING A SAVED GUIDE ─────────────────────────────────────────────────
 // ?edit=curated:<uuid> (guides) or ?edit=community:<uuid> (gun_guides), from
@@ -1988,6 +2891,7 @@ function adoptGuideAsNew(row) {
   var got = picksFromSnapshot(row.parts_snapshot, row.platform_id);
   STATE.platform = PLATFORMS_BY_ID[row.platform_id];
   STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
+  STATE.gunMode = STATE.gun ? 'model' : 'fcu';   // a saved row with no model is an FCU build
   STATE.title = '';
   STATE.target = 'community';
   STATE.savedId = null;
@@ -1997,12 +2901,10 @@ function adoptGuideAsNew(row) {
   STATE.curated = { theme: null, newTheme: '', published: false };
   STATE.startedFrom = row.title || '';
   STATE.picks = got.picks;
-  STATE.openCat = null;
   var unfit = reconcilePicks({ quiet: true });
   STATE.dropped = got.dropped.concat(unfit.map(function (n) { return { name: n, why: 'doesn’t fit with the rest' }; }));
   SAVED_SIG = null;      // the reader's build, never saved
   clearEditParam();
-  renderPlatformRow();
   renderAll();
 }
 
@@ -2010,6 +2912,7 @@ function adoptRow(kind, row, id) {
   var got = picksFromSnapshot(row.parts_snapshot, row.platform_id);
   STATE.platform = PLATFORMS_BY_ID[row.platform_id];
   STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
+  STATE.gunMode = STATE.gun ? 'model' : 'fcu';
   STATE.title = row.title || '';
   STATE.target = kind;
   STATE.savedId = id.savedId;
@@ -2021,19 +2924,22 @@ function adoptRow(kind, row, id) {
     : { theme: null, newTheme: '', published: false };
   STATE.startedFrom = '';
   STATE.picks = got.picks;
-  STATE.openCat = null;
   var unfit = reconcilePicks({ quiet: true });
   STATE.dropped = got.dropped.concat(unfit.map(function (n) { return { name: n, why: 'doesn’t fit with the rest' }; }));
   SAVED_SIG = buildSig();   // as saved: opening is not a change
-  renderPlatformRow();
   renderAll();
 }
 
 // Clears every part of the build's identity (CLAUDE.md, "Replacing the
-// builder's contents"). The platform stays: it is where the reader is.
+// builder's contents") — and the pistol: a new build starts at step 1.
 function resetBuild() {
   STATE.picks = {};
+  STATE.platform = null;
   STATE.gun = null;
+  STATE.gunMode = null;
+  STATE.gunDraft = undefined;
+  STATE.pending = null;
+  STATE.compare = [];
   STATE.title = '';
   STATE.target = 'community';
   STATE.savedId = null;
@@ -2043,10 +2949,9 @@ function resetBuild() {
   STATE.curated = { theme: null, newTheme: '', published: false };
   STATE.dropped = [];
   STATE.startedFrom = '';
-  STATE.openCat = null;
   SAVED_SIG = null;
   clearEditParam();
-  renderPlatformRow();
+  try { if (location.hash && location.hash !== '#build') location.hash = 'build'; } catch (e) {}
   renderAll();
 }
 
@@ -2253,6 +3158,7 @@ async function ensureNewTheme(label) {
 
 document.getElementById('btn-save').addEventListener('click', saveGuide);
 document.getElementById('btn-share').addEventListener('click', shareGuide);
+document.getElementById('mb-save').addEventListener('click', saveGuide);
 
 // ─── TABS: Build | My builds | Saved parts ─────────────────────────────────
 // Two reads, both the signed-in reader's own rows and nobody else's:
@@ -2282,6 +3188,8 @@ function showTab(tab) {
     }
     if (panel) panel.hidden = t !== tab;
   });
+  if (tab === 'build') renderBuildPanel();
+  else renderMobileBar(null);
   renderMyTabs();
 }
 // Moves to a tab as a click on it would: a new history entry, so Back
@@ -2319,7 +3227,7 @@ async function loadMyArmory() {
     Favorites.set(MY.parts.map(function (r) { return r.product_id; }));
   }
   Favorites.repaint();
-  if (SAVED_ONLY && STATE.openCat) renderParts();
+  if (SAVED_ONLY && CURRENT_TAB === 'build') renderBuildPanel();
   renderMyTabs();
 }
 
@@ -2456,7 +3364,7 @@ async function deleteArmoryBuild(id, btn) {
 // would not give.
 function slotCategories() {
   var cats = {};
-  SLOT_GROUPS.forEach(function (g) { g.slots.forEach(function (s) { cats[s.cat] = 1; }); });
+  ARMORY_CATS.forEach(function (c) { cats[c] = 1; });
   return cats;
 }
 function savedPartVerdict(p) {
@@ -2466,15 +3374,15 @@ function savedPartVerdict(p) {
   if (!slotCategories()[cat]) return { ok: false, reason: 'The Armory has no ' + window.categorySingular(cat).toLowerCase() + ' slot.' };
   var cur = STATE.picks[cat];
   if (cur && cur.productId === p.id) return { ok: false, inBuild: true, reason: null };
-  var meta = cardMeta(cat, p);
-  var tag = meta && meta.tag || null;
+  var vd = verdictFor(cat, p, null);
+  var tag = vd && vd.key !== 'na' ? vd : null;
   if (!availableFor(cat).some(function (a) { return a.id === p.id; })) {
     return { ok: false, tag: tag, reason: whyNotAvailable(cat, p) };
   }
   if (tag && !tag.selectable) return { ok: false, tag: tag, reason: tag.reason || tag.label };
   var curP = cur ? PRODUCTS_BY_ID[cur.productId] : null;
   return { ok: true, tag: tag,
-    note: curP ? 'Replaces ' + displayProductName({ brand: curP.brand, name: curP.name }) + '.' : (meta && meta.note) || null };
+    note: curP ? 'Replaces ' + displayProductName({ brand: curP.brand, name: curP.name }) + '.' : null };
 }
 
 // Which pick (or the model) keeps a part out: try the build without each
@@ -2583,7 +3491,6 @@ function addSavedPart(productId) {
   var v = savedPartVerdict(p);
   if (!v.ok) { if (v.reason) toast(v.reason); return false; }   // the button is disabled; belt and braces
   STATE.picks[p.category] = { productId: p.id, variantId: p.defaultVariant ? p.defaultVariant.id : null };
-  STATE.openCat = null;
   // A pick the new part pushes out (a comp under a built-in-comp slide, say)
   // goes as it does from the picker — said in the same toast, not a second
   // one that would replace it.
@@ -2601,7 +3508,13 @@ function addSavedPart(productId) {
   return true;
 }
 
-window.addEventListener && window.addEventListener('hashchange', function () { showTab(tabFromHash()); });
+window.addEventListener && window.addEventListener('hashchange', function () {
+  // Leaving the model step drops its not-yet-confirmed selection.
+  var h = ''; try { h = location.hash; } catch (e) {}
+  if (h !== '#model') STATE.gunDraft = undefined;
+  showTab(tabFromHash());
+  if (window.scrollTo) { try { window.scrollTo(0, 0); } catch (e2) {} }
+});
 showTab(tabFromHash());
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────

@@ -78,7 +78,7 @@ export const ALLOWLIST = [
   { file: 'gunforma-admin-post.html', match: "selectPlatform(\\''+p.id+'\\')\">'+p.name+'</button>'", reason: 'p is a platform' },
   { file: 'gunforma-post-build.html', match: "selectPlatform(\\''+p.id+'\\')\">'+p.name+'</button>'", reason: 'p is a platform' },
   { file: 'gunforma-post-build.html', match: "getElementById('platform-selected-name').textContent = p.name", reason: 'p is a platform' },
-  { file: 'gunforma-armory.html', match: "class=\"platform-btn' + (isActive ? ' active' : '') + '\" data-id=\"' + p.id + '\">' + esc(p.name)", reason: 'p is a platform' },
+  { file: 'gunforma-armory.html', match: "esc(p.name.replace(/^SIG\\s*/i, ''))", reason: 'p is a platform (the start view\'s pistol tile)' },
   // ── The rebuilt Armory (2026-10-27): one excused print, the picked card's
   //    stored name under its own brand eyebrow — the brand-line-over-name
   //    pattern Alex ruled stays as-is (claude/display-name-decisions, same

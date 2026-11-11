@@ -89,7 +89,8 @@ function loadPage(file, marker, { confirm = () => true, store = {}, session = {}
   ctx.window = ctx;
   vm.createContext(ctx);
   for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js',
-    'js/variant-label.js', 'js/variant-swatch.js', 'js/option-price.js', 'js/frame-fit.js', 'js/slide-fit.js', 'js/guide-url.js',
+    'js/variant-label.js', 'js/variant-swatch.js', 'js/option-price.js', 'js/maker-link.js', 'js/affiliate.js',
+    'js/frame-fit.js', 'js/slide-fit.js', 'js/armory-fit.js', 'js/guide-url.js',
     'js/build-total.js', 'js/armory-builds.js', 'js/favorites.js']) {
     vm.runInContext(read(f), ctx, { filename: f });
   }
@@ -236,8 +237,10 @@ test('saveGuide: a new theme is added first, then the guide carries its key', as
 
   // The same name again reuses the theme instead of inserting a duplicate.
   ctx.sb.calls.length = 0;
-  // (Publishing let go of the build, so the second guide is picked afresh.)
-  set(ctx, `STATE.target = 'curated'; STATE.savedId = null; STATE.curated = { theme: NEW_THEME, newTheme: 'competition carry', published: true };
+  // (Publishing let go of the whole build — pistol included — so the second
+  // guide starts from step 1.)
+  set(ctx, `STATE.platform = PLATFORMS[0]; STATE.target = 'curated'; STATE.savedId = null;
+    STATE.curated = { theme: NEW_THEME, newTheme: 'competition carry', published: true };
     STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
   await ctx.saveGuide();
   assert.deepEqual(ctx.sb.calls.map((c) => c.table), ['guides']);
@@ -403,7 +406,7 @@ const LIVE_ROW = { id: GUIDE_ID, title: 'Sig P365 Concealed Carry', category: 'c
   parts_snapshot: [{ refId: 'trig-1', category: 'trigger', brand: 'Maker', name: 'Trigger One' }] };
 const DRAFT_ID = '99999999-0000-4000-8000-000000000009';
 
-// ── A plain visit is a blank builder (Alex, 2026-11-02) ──────────────────
+// ── The build in progress carries over; edit mode never does (2026-11-10) ──
 
 const WIP = { platformId: PLAT, gunId: null, title: 'My WIP',
   picks: { trigger: { productId: 'trig-1', variantId: 'tv1' } }, target: 'community', savedId: null };
@@ -415,20 +418,33 @@ const isBlank = (ctx) => {
   assert.equal(s.savedId, null, 'not in edit mode');
   assert.equal(s.target, 'community');
 };
-// A click on a Sign in link, as the document listener sees it.
-const signInClick = (ctx, href) => vm.runInContext('onSignInClick', ctx)({
-  button: 0, target: { closest: () => ({ getAttribute: () => href }) },
-});
 
-test('a plain visit with a stored draft opens blank — a new build\'s or a saved guide\'s (the "Build yours" bug)', async () => {
-  // What older code left: a new build in progress.
+test('a plain visit restores the build in progress (BUILD_KEY) — and never an identity, whatever wrote the store', async () => {
+  // The build in progress, the new key: restored on every plain visit.
+  const wip = armory({ blank: true, store: { 'gf-armory-build-v2': JSON.stringify({ ...WIP, gunMode: 'fcu' }) } });
+  set(wip.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
+  await wip.ctx.openOnLoad();
+  assert.equal(wip.ctx.STATE.title, 'My WIP', 'the ship doc: it carries over between visits');
+  assert.deepEqual(JSON.parse(JSON.stringify(wip.ctx.STATE.picks)), { trigger: { productId: 'trig-1', variantId: 'tv1' } });
+  assert.equal(wip.ctx.STATE.gunMode, 'fcu');
+  assert.equal(wip.ctx.STATE.savedId, null, 'still a new build');
+
+  // A v2 blob that somehow carries an identity is never restored from here:
+  // the identity is adopted only through ?edit=.
+  const forged = armory({ blank: true, store: { 'gf-armory-build-v2': JSON.stringify({ ...WIP, savedId: GUIDE_ID }) } });
+  set(forged.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
+  await forged.ctx.openOnLoad();
+  isBlank(forged.ctx);
+
+  // An OLD v1 new-build blob (pre-rebuild) is dropped, never restored.
   const old = armory({ blank: true, store: { 'gf-armory-picks-v1': JSON.stringify(WIP) } });
   set(old.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
   await old.ctx.openOnLoad();
   isBlank(old.ctx);
   assert.equal(old.store['gf-armory-picks-v1'], undefined, 'and dropped, so nobody sees it once');
 
-  // What an admin's browser held after editing Concealed Carry.
+  // What an admin's browser held after editing Concealed Carry: a plain
+  // visit never lands in edit mode (the "Build yours" bug stays fixed).
   const edit = JSON.stringify({ platformId: PLAT, title: 'Sig P365 Concealed Carry',
     picks: { trigger: { productId: 'trig-1', variantId: 'tv1' } }, target: 'curated', savedId: GUIDE_ID,
     curated: { theme: 'concealed_carry', newTheme: '', published: false } });
@@ -438,82 +454,37 @@ test('a plain visit with a stored draft opens blank — a new build\'s or a save
   isBlank(admin.ctx);
   assert.equal(admin.store['gf-armory-picks-v1'], edit, 'kept for that guide\'s ?edit=, and only there');
   assert.equal(admin.ctx.sb.calls.length, 0);
-
-  // Unsaved changes to a NEW build are never written to storage at all.
-  set(old.ctx, `STATE.platform = PLATFORMS[0]; STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } }; renderAll();`);
-  assert.equal(old.store['gf-armory-picks-v1'], undefined);
 });
 
-test('back from sign-in: the build comes back once, then the next plain visit is blank', async () => {
-  // Signed out, picks made, Save → the toast's Sign in link.
+test('the build in progress is written to BUILD_KEY as it changes, and the sign-in round trip loses nothing', async () => {
+  // Signed out, picks made, Save → "kept for when you're back" + Sign in link.
   const before = armory();
-  set(before.ctx, `CURRENT_USER = null; STATE.title = 'My WIP';
+  set(before.ctx, `CURRENT_USER = null; STATE.gunMode = 'fcu'; STATE.title = 'My WIP';
     STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } }; renderAll();`);
+  assert.ok(before.store['gf-armory-build-v2'], 'every change persists the build');
+  assert.equal(before.store['gf-armory-picks-v1'], undefined, 'and never the edit-draft key');
   await before.ctx.saveGuide();
   assert.match(before.els['toast-link-wrap'].innerHTML, /href="gunforma-signin\.html[^"]*">Sign in</);
   assert.equal(before.ctx.sb.calls.length, 0);
-  signInClick(before.ctx, 'gunforma-signin.html?next=gunforma-armory.html');
-  assert.equal(before.ctx.hasUnsavedPicks(), true);
-  const ev = { preventDefault() { this.prevented = true; } };
-  before.ctx.onBeforeUnload(ev);
-  assert.ok(!ev.prevented, 'no "Leave site?" on the way to sign in');
 
-  // The first Armory load back in that tab, signed in.
-  const back = armory({ blank: true, store: before.store, session: before.session });
+  // The next load — back from sign-in, or any other visit: the build is there.
+  const back = armory({ blank: true, store: before.store });
   set(back.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
   await back.ctx.openOnLoad();
   assert.equal(back.ctx.STATE.title, 'My WIP');
   assert.deepEqual(JSON.parse(JSON.stringify(back.ctx.STATE.picks)), { trigger: { productId: 'trig-1', variantId: 'tv1' } });
   assert.equal(back.ctx.STATE.savedId, null, 'still a new build: no identity comes with it');
-  assert.deepEqual(Object.keys(back.session), [], 'the hold is gone');
-  assert.equal(back.store['gf-armory-picks-v1'], undefined, 'and nothing stored');
 
-  // The next plain visit: blank.
-  const next = armory({ blank: true, store: back.store, session: back.session });
-  set(next.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
-  await next.ctx.openOnLoad();
-  isBlank(next.ctx);
+  // Opening a saved guide replaces it — and moves the store to the edit key.
+  back.ctx.sb.answer = (call) => (call.table === 'gun_guides' ? { data: [{ id: DRAFT_ID, title: 'Joe carry', user_id: JOE.id, platform_id: PLAT,
+    parts_snapshot: [{ refId: 'trig-2', category: 'trigger', brand: 'Maker', name: 'Trigger Two' }] }], error: null } : undefined);
+  await back.ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(back.ctx.STATE.savedId, DRAFT_ID);
+  assert.ok(back.store['gf-armory-picks-v1'], 'the open guide\'s changes live under the edit key');
+  assert.equal(back.store['gf-armory-build-v2'], undefined, 'the replaced build does not linger to resurrect');
 });
 
-test('back from sign-in: the heart\'s Sign in link holds the build the same way', async () => {
-  const before = armory();
-  set(before.ctx, `CURRENT_USER = null; STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } }; renderAll();`);
-  await before.ctx.Favorites.toggle('trig-2', { textContent: '', classList: { toggle() {} }, setAttribute() {} });
-  const href = /href="([^"]+)"/.exec(before.els['toast-link-wrap'].innerHTML)[1];
-  signInClick(before.ctx, href);
-  const back = armory({ blank: true, session: before.session });
-  set(back.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
-  await back.ctx.openOnLoad();
-  assert.deepEqual(Object.keys(back.ctx.STATE.picks), ['trigger']);
-});
-
-test('the hold is not a way back in: signed out, stale, or another link — blank, and the hold is dropped', async () => {
-  const hold = (at) => ({ 'gf-armory-resume-v1': JSON.stringify({ at, draft: WIP }) });
-
-  const signedOut = armory({ blank: true, session: hold(Date.now()) });
-  set(signedOut.ctx, `CURRENT_USER = null;`);
-  await signedOut.ctx.openOnLoad();
-  isBlank(signedOut.ctx);
-  assert.deepEqual(Object.keys(signedOut.session), [], 'sign-in abandoned: dropped, not kept for later');
-
-  const stale = armory({ blank: true, session: hold(Date.now() - 31 * 60 * 1000) });
-  set(stale.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
-  await stale.ctx.openOnLoad();
-  isBlank(stale.ctx);
-  assert.deepEqual(Object.keys(stale.session), []);
-
-  // Only a Sign in link holds anything.
-  const page = armory();
-  set(page.ctx, `STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
-  signInClick(page.ctx, 'gunforma-parts-catalog.html');
-  assert.deepEqual(Object.keys(page.session), []);
-  // And an open saved guide is never held: its ?edit= brings it back.
-  set(page.ctx, `STATE.savedId = '${GUIDE_ID}';`);
-  signInClick(page.ctx, 'gunforma-signin.html');
-  assert.deepEqual(Object.keys(page.session), []);
-});
-
-test('?from= then a plain visit: the second visit is blank', async () => {
+test('?from= loads the guide as a new build, and it carries over to the next visit like any build in progress', async () => {
   const row = { id: GUIDE_ID, title: 'Sig P365 Duty', category: 'duty', is_published: true, platform_id: PLAT,
     parts_snapshot: [{ refId: 'trig-1', category: 'trigger', brand: 'Maker', name: 'Trigger One' }] };
   const first = armory({ blank: true, search: `?from=${GUIDE_ID}` });
@@ -525,7 +496,32 @@ test('?from= then a plain visit: the second visit is blank', async () => {
 
   const second = armory({ blank: true, store: first.store, session: first.session });
   await second.ctx.openOnLoad();
-  isBlank(second.ctx);
+  assert.deepEqual(Object.keys(second.ctx.STATE.picks), ['trigger'], 'the reader\'s build in progress persists');
+  assert.equal(second.ctx.STATE.savedId, null, 'and still has no identity');
+});
+
+test('?add= goes into the build in progress; without one it waits for the model step', async () => {
+  const ADDED = { id: '11111111-0000-4000-8000-000000000011', slug: 's2', name: 'Slide Two', category: 'slide', brand: 'Maker',
+    platform_ids: [PLAT], variants: [{ id: 'sv9', msrp: 300 }], defaultVariant: { id: 'sv9', msrp: 300 } };
+  // A build in progress: the part goes straight in.
+  const going = armory({ blank: true, search: '?add=11111111-0000-4000-8000-000000000011',
+    store: { 'gf-armory-build-v2': JSON.stringify({ ...WIP, gunMode: 'fcu' }) } });
+  going.ctx.PRODUCTS.push(ADDED);
+  going.ctx.PRODUCTS_BY_ID[ADDED.id] = ADDED;
+  set(going.ctx, `SPEC.slide['11111111-0000-4000-8000-000000000011'] = { barrel_length_in: 3.7 };`);
+  await going.ctx.openOnLoad();
+  assert.equal(going.ctx.STATE.picks.slide.productId, '11111111-0000-4000-8000-000000000011');
+  assert.deepEqual(Object.keys(going.ctx.STATE.picks).sort(), ['slide', 'trigger'], 'added beside what was there');
+  assert.equal(going.ctx.replaced.at(-1), '/gunforma-armory.html', 'the param is cleared: a reload adds nothing twice');
+
+  // No build yet: held as pending, the model step asked first.
+  const fresh = armory({ blank: true, search: '?add=11111111-0000-4000-8000-000000000011' });
+  fresh.ctx.PRODUCTS.push(ADDED);
+  fresh.ctx.PRODUCTS_BY_ID[ADDED.id] = ADDED;
+  await fresh.ctx.openOnLoad();
+  assert.equal(fresh.ctx.STATE.pending.productId, '11111111-0000-4000-8000-000000000011');
+  assert.deepEqual(Object.keys(fresh.ctx.STATE.picks), [], 'nothing added before the question is answered');
+  assert.equal(fresh.ctx.STATE.platform.id, PLAT, 'the pistol it fits is picked for the model step');
 });
 
 test('?edit= still opens its guide, and a reload of it keeps the unsaved changes', async () => {
@@ -551,33 +547,12 @@ test('?edit= still opens its guide, and a reload of it keeps the unsaved changes
   assert.equal(reload.ctx.hasUnsavedPicks(), true, 'and is still unsaved');
 });
 
-test('beforeunload: "Leave site?" only while there are unsaved picks', async () => {
+test('no "Leave site?" prompt, because nothing is lost: the build persists through every reload', async () => {
   const { ctx } = armory();
-  const leave = () => {
-    const ev = { prevented: false, preventDefault() { this.prevented = true; } };
-    ctx.listeners.beforeunload.forEach((fn) => fn(ev));
-    return ev.prevented;
-  };
-  assert.equal(ctx.listeners.beforeunload.length, 1, 'registered once');
-  assert.equal(leave(), false, 'nothing picked');
-  set(ctx, `STATE.title = 'Named but empty';`);
-  assert.equal(leave(), false, 'a title alone is not picks');
-  set(ctx, `STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
-  assert.equal(leave(), true, 'a new build with picks');
-
-  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
-  ctx.sb.answer = (call) => (call.op === 'insert' ? { data: [{ id: DRAFT_ID }], error: null } : undefined);
-  ctx.navigator = { clipboard: { writeText: async () => {} } };
-  await ctx.saveGuide();
-  assert.equal(ctx.STATE.savedId, DRAFT_ID);
-  assert.equal(leave(), false, 'everything saved');
-  set(ctx, `STATE.picks.slide = { productId: 'slide-1', variantId: 'sv1' };`);
-  assert.equal(leave(), true, 'changed after the save');
-  set(ctx, `delete STATE.picks.slide;`);
-  assert.equal(leave(), false, 'changed back');
-
-  set(ctx, `startNewBuild();`);
-  assert.equal(leave(), false, 'a new build with nothing picked');
+  assert.equal((ctx.listeners.beforeunload || []).length, 0, 'the beforeunload prompt is gone with the resume stash');
+  set(ctx, `STATE.gunMode = 'fcu'; STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } }; persistDraft();`);
+  // (The persistence itself is pinned in the BUILD_KEY tests above.)
+  assert.equal(ctx.hasUnsavedPicks(), true, 'hasUnsavedPicks still tracks the saved signature');
 });
 
 test('Edit on a PUBLISHED Gunforma guide opens a new draft of it, never the live row', async () => {
@@ -954,12 +929,12 @@ test('heart: hearting in Build never changes the build or its saved identity, an
   const { ctx, els } = armory();
   set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};
     STATE.target = 'community'; STATE.savedId = '${GUIDE_ID}'; STATE.ownerId = '${JOE.id}'; STATE.title = 'Joe carry';
-    STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv2' } }; STATE.openCat = 'trigger';`);
+    STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv2' } };`);
   myArmoryReads(ctx, { favs: [FAV_ROW('slide-1')] });
   await ctx.loadMyArmory();
   set(ctx, `showTab('saved-parts');`);
   assert.equal(els['tab-saved-parts'].textContent, 'Saved parts (1)');
-  const snap = () => JSON.stringify([ctx.STATE.picks, ctx.STATE.target, ctx.STATE.savedId, ctx.STATE.ownerId, ctx.STATE.title, ctx.STATE.openCat, ctx.STATE.draftOf]);
+  const snap = () => JSON.stringify([ctx.STATE.picks, ctx.STATE.target, ctx.STATE.savedId, ctx.STATE.ownerId, ctx.STATE.title, ctx.STATE.draftOf]);
   const before = snap();
   const draftBefore = ctx.localStorage.getItem('gf-armory-picks-v1');
 
@@ -1020,38 +995,41 @@ test('heart: signed out, a click writes nothing and says to sign in, back to the
   // Its Sign in link holds the build for the round trip — see "back from sign-in".
 });
 
-test('heart: "Saved" narrows an open picker to hearted parts, and a saved part that doesn\'t fit stays disabled with its reason', () => {
+test('heart: "Saved" narrows a part page to hearted parts, and a saved part that doesn\'t fit stays disabled with its reason', () => {
   const { ctx, els } = armory();
-  const product = (id, len) => ({ id, slug: id, name: id, category: 'barrel', brand: 'Maker', platform_ids: [PLAT],
+  const product = (id) => ({ id, slug: null, name: id, category: 'barrel', brand: 'Maker', platform_ids: [PLAT],
     variants: [{ id: id + '-v', msrp: 100 }], defaultVariant: { id: id + '-v', msrp: 100 } });
   for (const p of [product('barrel-37a'), product('barrel-37b'), product('barrel-31')]) { ctx.PRODUCTS.push(p); ctx.PRODUCTS_BY_ID[p.id] = p; }
-  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)};
+  set(ctx, `LOADED = true; CURRENT_USER = ${JSON.stringify(JOE)};
     SPEC.slide['slide-1'] = { product_id: 'slide-1', barrel_length_in: 3.7 };
     SPEC.barrel['barrel-37a'] = { product_id: 'barrel-37a', barrel_length_in: 3.7, barrel_type: 'standard' };
     SPEC.barrel['barrel-37b'] = { product_id: 'barrel-37b', barrel_length_in: 3.7, barrel_type: 'standard' };
     SPEC.barrel['barrel-31'] = { product_id: 'barrel-31', barrel_length_in: 3.1, barrel_type: 'standard' };
-    STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv1' } }; STATE.openCat = 'barrel';
+    STATE.gunMode = 'fcu'; STATE.picks = { slide: { productId: 'slide-1', variantId: 'sv1' } };
     Favorites.set(['barrel-37b', 'barrel-31']);`);
-  const html = () => els['parts-container'].innerHTML;
-  ctx.renderParts();
+  const html = () => els['view-part'].innerHTML;
+  ctx.renderCatPage('barrel');
   assert.match(html(), /class="picker-saved" data-saved-only aria-pressed="false">♡ Saved</);
   assert.match(html(), /data-fav-id="barrel-37a"/, 'off: every part that fits');
-  assert.doesNotMatch(html(), /data-fav-id="barrel-31"/, 'and none that doesn\'t');
+  assert.doesNotMatch(html(), /data-fav-id="barrel-31"/, 'and none that doesn\'t — hidden behind the reveal');
+  assert.match(html(), /1 barrels don’t fit this build\. <button type="button" id="reveal-nofit">Show them with the reason</,
+    'what is hidden says so, with a way to see why');
 
   set(ctx, `SAVED_ONLY = true;`);
-  ctx.renderParts();
+  ctx.renderCatPage('barrel');
   assert.match(html(), /aria-pressed="true">♥ Saved</);
   assert.doesNotMatch(html(), /data-fav-id="barrel-37a"/, 'on: an unsaved part is not listed');
   assert.match(html(), /data-fav-id="barrel-37b"[\s\S]*data-add="barrel" data-id="barrel-37b">Add to build</, 'a saved part that fits is pickable');
-  assert.match(html(), /data-fav-id="barrel-31"[\s\S]*part-card-reason">Doesn’t fit with Maker Slide One\.<[\s\S]*data-id="barrel-31" disabled>Won’t fit</,
-    'a saved part that doesn\'t fit is shown disabled, with why');
+  assert.match(html(), /data-fav-id="barrel-31"[\s\S]*data-id="barrel-31" disabled>Won’t fit</,
+    'a saved part that doesn\'t fit is shown disabled');
+  assert.match(html(), /part-card-reason">[^<]*3\.7&quot; barrel[^<]*</, 'with why, in words');
 
   set(ctx, `Favorites.clear();`);
-  ctx.renderParts();
+  ctx.renderCatPage('barrel');
   assert.match(html(), /No saved parts here yet/);
   // Signed out: no filter (nothing is saved for nobody).
   set(ctx, `CURRENT_USER = null;`);
-  ctx.renderParts();
+  ctx.renderCatPage('barrel');
   assert.doesNotMatch(html(), /picker-saved/);
 });
 
