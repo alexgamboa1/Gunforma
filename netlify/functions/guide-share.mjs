@@ -99,6 +99,20 @@ function extractId(req) {
   return gunGuideIdFromPath(decodeURIComponent(path));
 }
 
+// /l/<share_id> — the Armory build share link (PR 3 of the 2026-11-10
+// design). The slug alphabet is armory_share_id()'s: lowercase base 36.
+function extractShareId(req) {
+  const url = new URL(req.url);
+  let path = url.pathname;
+  if (!/^\/l\//.test(path)) {
+    const splat = url.searchParams.get('share');
+    if (splat === null) return null;
+    path = '/l/' + splat.replace(/^\/+/, '');
+  }
+  const m = /^\/l\/([a-z0-9]{6,12})\/?$/.exec(path);
+  return m ? m[1] : null;
+}
+
 function notFound() {
   return new Response(
     '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/>' +
@@ -120,6 +134,47 @@ function notFound() {
 // fetchGuide() and fetchVariants() (_guide-data.mjs) throw UpstreamError on
 // a failure to read (the handler answers 503); an empty array is the one
 // real "not here".
+
+// The /l/ page's row: COMMUNITY_SELECT plus the share columns. This select
+// exists only behind extractShareId(), so before *_armory_share_links.sql
+// is applied no /l/ link exists to ask for it; a request anyway reads as a
+// failure to read (503), never a 404.
+const SHARE_SELECT = COMMUNITY_SELECT + ',share_id,based_on_id';
+async function fetchByShareId(shareId) {
+  const rows = await pgGet('gun_guides?share_id=eq.' + encodeURIComponent(shareId) +
+    '&is_removed=eq.false&select=' + encodeURIComponent(SHARE_SELECT) + '&limit=1');
+  return rows.length ? rows[0] : null;
+}
+
+// A community /gg/ hit's new address. Tolerant on purpose: before the
+// migration the column is not there, and the answer is "no redirect — serve
+// the page as before", never a 503 over a page that can render.
+async function shareIdFor(id) {
+  try {
+    const rows = await pgGet('gun_guides?id=eq.' + id + '&select=share_id&limit=1');
+    return rows.length && rows[0].share_id ? rows[0].share_id : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+// "Based on @user's build" — credit, not a fact about this page, so any
+// failure (or a taken-down source) is a page without the line.
+async function fetchBasedOn(basedOnId) {
+  if (!basedOnId) return null;
+  try {
+    const rows = await pgGet('gun_guides?id=eq.' + basedOnId + '&is_removed=eq.false' +
+      '&select=' + encodeURIComponent('share_id,user_id,title') + '&limit=1');
+    if (!rows.length) return null;
+    const username = await fetchUsername(rows[0].user_id);
+    return {
+      href: '/l/' + rows[0].share_id,
+      text: username ? '@' + username + '’s build' : 'a shared build',
+    };
+  } catch (e) {
+    return null;
+  }
+}
 
 // The builder's username. Not a fact about whether the guide exists, so a
 // failed read is a page without a byline, never a 503.
@@ -222,6 +277,7 @@ function partHref(p, product) {
 function partView(p, byProduct) {
   const entry = p && p.refId ? byProduct.get(p.refId) : null;
   const product = entry ? entry.product : null;
+  const refId = p && p.refId ? String(p.refId) : null;
   const variants = entry ? entry.variants : [];
   // The saved option's photo, else its swatch — never another option's
   // (partPicture(), shared with the share image).
@@ -238,7 +294,7 @@ function partView(p, byProduct) {
     catLabel: CATEGORY_META[catKey] ? CATEGORY_META[catKey][2] : '',
     href: partHref(p, product),
     photo, color, brand: p.brand || '',
-    optionLabel, discontinued, buy,
+    optionLabel, discontinued, buy, refId,
   };
 }
 
@@ -256,13 +312,18 @@ function partRowHtml(v) {
       '<a class="buy-btn" href="' + esc(v.buy.href) + '" target="_blank" rel="' + v.buy.rel + '">' + esc(v.buy.label) + ' ↗</a>' +
     '</div>';
   }
-  return '<div class="pr">' +
+  return '<div class="pr"' + (v.refId ? ' data-ref="' + esc(v.refId) + '"' : '') + '>' +
     '<div class="pr-media">' + media + '</div>' +
     '<div class="pr-main">' +
       (v.catLabel ? '<div class="pr-cat">' + esc(v.catLabel) + '</div>' : '') +
       '<div class="pr-name">' + nameHtml +
         (v.optionLabel ? ' <span class="pr-opt">· ' + esc(v.optionLabel) + '</span>' : '') +
         (v.discontinued ? ' <span class="pr-disc">Discontinued</span>' : '') + '</div>' +
+      // The share page's fit tag lands here, drawn in the browser by
+      // js/armory-share.js through the shared fit module. Empty for
+      // everything else — crawlers never see a verdict the server did not
+      // compute.
+      '<span class="pr-fit" data-fit></span>' +
       buyHtml +
     '</div>' +
   '</div>';
@@ -308,10 +369,14 @@ function pageDescription({ title, kind, model, username, parts, count, totalText
 
 // `image` is the share image the handler resolved (shareImageFor()); without
 // one the page declares og-default.png at its real size.
-export function renderGuide({ kind, row, variants, username, image }) {
+// `share` ({ shareId, basedOn }) marks the /l/<share_id> rendering of an
+// Armory build: its own URL, the based-on credit, the share actions and
+// the client modules that make it the owner's share view. Null is the
+// /gg/ page exactly as before.
+export function renderGuide({ kind, row, variants, username, image, share }) {
   const id = String(row.id).toLowerCase();
   const title = guideTitle(row);
-  const canonical = gunGuideUrl(id, title);
+  const canonical = share ? SITE + '/l/' + share.shareId : gunGuideUrl(id, title);
   const model = guideModel(row);
   const theme = kind === 'curated' && row.guide_themes ? row.guide_themes.label : null;
   const parts = guideParts(row);
@@ -368,17 +433,43 @@ export function renderGuide({ kind, row, variants, username, image }) {
       '<div class="eyebrow">' + eyebrow + '</div>' +
       '<h1>' + esc(title) + '</h1>' +
       '<div class="model">' + esc(model) + ' &middot; ' + parts.length + (parts.length === 1 ? ' part' : ' parts') + '</div>' +
+      (share && share.basedOn
+        ? '<div class="based-on">Based on <a href="' + esc(share.basedOn.href) + '">' + esc(share.basedOn.text) + '</a></div>'
+        : '') +
       (kind === 'curated' && row.description ? '<p class="desc">' + esc(row.description) + '</p>' : '') +
+      // The anonymous-save banner and the claim/export panel are the
+      // OWNER's: js/armory-share.js shows them only in the browser that
+      // holds this build's edit token, or to its signed-in owner. Served
+      // empty, one cacheable page for everyone.
+      (share ? '<div id="ash-banner" hidden></div><div id="ash-fit" role="status"></div>' : '') +
       '<div class="parts">' + views.map(partRowHtml).join('') + '</div>' +
       (totalText ? '<div class="total">Total at today’s prices: <strong>' + esc(totalText) + '</strong></div>' : '') +
       (disclosure ? '<p class="disclosure">' + esc(disclosure) + '</p>' : '') +
       '<div class="actions">' +
-        '<a class="act primary" href="/gunforma-armory.html?from=' + esc(id) + '">Customize this build in the Armory &rarr;</a>' +
-        '<a class="act" href="' + GALLERY + '">More Gun Guides &rarr;</a>' +
+        (share
+          ? '<button type="button" class="act" id="ash-copy" data-url="' + esc(canonical) + '">Copy link</button>' +
+            '<a class="act primary" id="ash-edit" href="/gunforma-armory.html?from=' + esc(id) + '">Edit build &rarr;</a>' +
+            '<button type="button" class="act" id="ash-reddit">Copy for Reddit</button>'
+          : '<a class="act primary" href="/gunforma-armory.html?from=' + esc(id) + '">Customize this build in the Armory &rarr;</a>' +
+            '<a class="act" href="' + GALLERY + '">More Gun Guides &rarr;</a>') +
       '</div>' +
+      (share ? '<div id="ash-export" hidden></div>' : '') +
     '</div>' +
     footerHtml() +
-    navScript() + ANALYTICS_SNIPPET +
+    navScript() +
+    (share
+      ? '<script src="/js/category-map.js"></script>' +
+        '<script src="/js/display-name.js"></script>' +
+        '<script src="/js/variant-label.js"></script>' +
+        '<script src="/js/maker-link.js"></script>' +
+        '<script src="/js/option-price.js"></script>' +
+        '<script src="/js/affiliate.js"></script>' +
+        '<script src="/js/build-total.js"></script>' +
+        '<script src="/js/slide-fit.js"></script>' +
+        '<script src="/js/armory-fit.js"></script>' +
+        '<script src="/js/armory-share.js"></script>'
+      : '') +
+    ANALYTICS_SNIPPET +
     '</body></html>';
 
   return {
@@ -419,11 +510,84 @@ function guideCss() {
     '.actions { display: flex; flex-wrap: wrap; gap: 10px; margin: 22px 0 0; }' +
     '.act { display: inline-block; padding: 9px 14px; border-radius: 6px; border: 0.5px solid #d5d3ca; color: #1a1a1a; font-size: 13px; font-weight: 600; text-decoration: none; }' +
     '.act.primary { background: #2a7bbd; border-color: #2a7bbd; color: #fff; }' +
-    '@media (max-width: 480px) { .pr-media { flex-basis: 72px; } .buy-btn { margin-left: 0; } }'
+    '.act[hidden] { display: none; }' +
+    '.based-on { font-size: 12px; color: #888; margin: -2px 0 8px; }' +
+    '.based-on a { color: #2a7bbd; text-decoration: none; font-weight: 700; }' +
+    '.pr-fit:empty { display: none; }' +
+    '.pr-fit { display: block; margin-top: 6px; }' +
+    '.fit-tag { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }' +
+    '.fit-tag.green { background: #e7f6ee; color: #1e7a4d; border: 0.5px solid #9edbbb; }' +
+    '.fit-tag.neutral { background: #f0f1f3; color: #555; border: 0.5px solid #d9dbdf; }' +
+    '.fit-tag.amber { background: #fdf3e2; color: #8a6d3b; border: 0.5px solid #f3d9a8; }' +
+    '.fit-tag.red { background: #fdeae4; color: #b24a2a; border: 0.5px solid #f3bfae; }' +
+    '.fit-tag.muted { background: #f4f3ee; color: #999; border: 0.5px solid #e5e2d8; }' +
+    '.fit-reason { font-size: 11.5px; color: #8a6d3b; margin-left: 6px; }' +
+    '#ash-fit .bar { display: flex; gap: 10px; align-items: flex-start; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; border: 0.5px solid; margin: 0 0 14px; line-height: 1.5; }' +
+    '#ash-fit .bar.ok { background: #e7f6ee; border-color: #9edbbb; }' +
+    '#ash-fit .bar.warn { background: #fdf3e2; border-color: #f3d9a8; }' +
+    '#ash-fit .bar.bad { background: #fdeae4; border-color: #f3bfae; }' +
+    '#ash-fit ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }' +
+    '#ash-banner .banner { background: #eaf4fc; border: 0.5px solid #a7cdec; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; margin: 0 0 14px; display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }' +
+    '#ash-banner .banner.saved { background: #e7f6ee; border-color: #9edbbb; }' +
+    '#ash-banner button { font-family: inherit; font-size: 12px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 8px 14px; cursor: pointer; white-space: nowrap; }' +
+    '#ash-export .panel { border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; padding: 14px; margin-top: 16px; }' +
+    '#ash-export h3 { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #888; margin: 0 0 10px; }' +
+    '#ash-export label { display: block; font-size: 11.5px; color: #888; margin: 8px 0 4px; }' +
+    '#ash-export select, #ash-export textarea { width: 100%; font-family: inherit; font-size: 12.5px; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px; background: #fff; color: #1a1a1a; }' +
+    '#ash-export textarea { font-family: ui-monospace, Menlo, monospace; font-size: 11px; line-height: 1.5; resize: vertical; }' +
+    '#ash-export .seg { display: flex; border: 0.5px solid #d5d3ca; border-radius: 4px; overflow: hidden; margin: 8px 0; }' +
+    '#ash-export .seg button { flex: 1; border: 0; background: #fff; padding: 7px; font-size: 12px; font-weight: 700; color: #888; cursor: pointer; font-family: inherit; }' +
+    '#ash-export .seg button[aria-selected="true"] { background: #1a1a1a; color: #fff; }' +
+    '#ash-export .copy { margin-top: 8px; width: 100%; font-family: inherit; font-size: 12.5px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 9px; cursor: pointer; }'
   );
 }
 
+function pageHeaders(out, extra) {
+  return {
+    'Content-Type': 'text/html; charset=utf-8',
+    'Cache-Control': 'public, max-age=300',
+    // The build directive — an hour, no stale-while-revalidate — so an
+    // unpublished or taken-down guide leaves every reader within the hour,
+    // the same promise a corrected build makes (_cache.mjs).
+    'Netlify-CDN-Cache-Control': CDN_CACHE_BUILD,
+    'x-guide-share-index': out.indexable ? 'index' : 'noindex',
+    'x-guide-share-buy': String(out.buyCount),
+    'x-guide-share-priced': out.totalText || 'none',
+    'x-guide-share-image': out.collage ? 'collage' : 'default',
+    ...(out.indexable ? {} : { 'X-Robots-Tag': 'noindex' }),
+    ...extra,
+  };
+}
+
 export default async (req) => {
+  // /l/<share_id> — an Armory build's share link. noindex, never in the
+  // sitemap; zero rows (unknown slug, or taken down) is the 404.
+  const shareId = extractShareId(req);
+  if (shareId) {
+    let row, variants;
+    try {
+      row = await fetchByShareId(shareId);
+      if (!row) return notFound();
+      variants = await fetchVariants(guideParts(row));
+    } catch (err) {
+      console.error('[guide-share] /l/ lookup failed', err);
+      return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
+    }
+    const username = await fetchUsername(row.user_id);
+    const basedOn = await fetchBasedOn(row.based_on_id);
+    const image = await shareImageFor({ kind: 'community', row }, variants);
+    const out = renderGuide({ kind: 'community', row, variants, username, image,
+                              share: { shareId, basedOn } });
+    return new Response(out.html, {
+      status: 200,
+      headers: pageHeaders(out, {
+        'x-guide-share': 'community',
+        'x-armory-share': 'build',
+        'x-guide-share-parts': String(guideParts(row).length),
+      }),
+    });
+  }
+
   const id = extractId(req);
   if (!id) return notFound();   // nothing in the path that could be a guide: no read
 
@@ -438,27 +602,34 @@ export default async (req) => {
     console.error('[guide-share] lookup failed', err);
     return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
   }
+
+  // An Armory build's /gg/ link moves home: 301 to /l/<share_id> the
+  // moment the column exists, so nothing shared before the migration
+  // breaks and nothing keeps two live addresses after it. Gunforma guides
+  // keep their /gg/ pages untouched.
+  if (found.kind === 'community') {
+    const share = await shareIdFor(id);
+    if (share) {
+      return new Response(null, {
+        status: 301,
+        headers: {
+          Location: SITE + '/l/' + share,
+          'Netlify-CDN-Cache-Control': CDN_CACHE_BUILD,
+          'x-guide-share': 'community-moved',
+        },
+      });
+    }
+  }
+
   const username = found.kind === 'community' ? await fetchUsername(found.row.user_id) : null;
   const image = await shareImageFor(found, variants);   // never throws: og-default.png on any failure
 
   const out = renderGuide({ kind: found.kind, row: found.row, variants, username, image });
-  const parts = guideParts(found.row).length;
   return new Response(out.html, {
     status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'Cache-Control': 'public, max-age=300',
-      // The build directive — an hour, no stale-while-revalidate — so an
-      // unpublished or taken-down guide leaves every reader within the hour,
-      // the same promise a corrected build makes (_cache.mjs).
-      'Netlify-CDN-Cache-Control': CDN_CACHE_BUILD,
+    headers: pageHeaders(out, {
       'x-guide-share': found.kind,
-      'x-guide-share-index': out.indexable ? 'index' : 'noindex',
-      'x-guide-share-parts': String(parts),
-      'x-guide-share-buy': String(out.buyCount),
-      'x-guide-share-priced': out.totalText || 'none',
-      'x-guide-share-image': out.collage ? 'collage' : 'default',
-      ...(out.indexable ? {} : { 'X-Robots-Tag': 'noindex' }),
-    },
+      'x-guide-share-parts': String(guideParts(found.row).length),
+    }),
   });
 };

@@ -288,6 +288,15 @@
   to = "/.netlify/functions/guide-share?id=:splat"
   status = 200
 
+# Armory build share links, /l/<share_id> (the 2026-11-10 design, PR 3) —
+# the same function serves them, routed by the pathname it reads off the
+# original request. noindex, never in the sitemap; a /gg/ link to an Armory
+# build 301s here once gun_guides.share_id exists.
+[[redirects]]
+  from = "/l/*"
+  to = "/.netlify/functions/guide-share?share=:splat"
+  status = 200
+
 # A Gun Guide's share image, /gg-og/<uuid>-<hash>.png (guide-og.mjs). Same
 # shape as /gg/*: the function reads the original pathname; ?p= is what
 # `netlify dev` substitutes. /gg-og/ is its own prefix, so /gg/* above does

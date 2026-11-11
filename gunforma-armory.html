@@ -714,6 +714,9 @@ var STATE = {
   target: 'community',    // 'community' (gun_guides) | 'curated' (guides)
   savedId: null,          // that table's row id once saved; later saves update it
   ownerId: null,          // a community row's user_id — an admin's edit keeps it
+  shareId: null,          // the saved row's /l/ slug, once known (SHARE_LIVE)
+  basedOn: null,          // the gun_guides row this build is a copy of — the
+                          // "Based on …" credit, sent on the FIRST save only
   // A Gunforma guide starts as a draft; Published is a deliberate tick.
   curated: { theme: null, newTheme: '', published: false },
   draftOf: null,          // the live guide this draft will replace when published
@@ -754,6 +757,27 @@ var IS_ADMIN = false;
 var THEMES = [];                    // guide_themes rows, sort order
 var GUIDE_EDITING_LIVE = false;     // guide_themes readable = the migration is applied
 var DRAFT_OF_LIVE = false;          // guides.draft_of readable = the drafts migration is applied
+var SHARE_LIVE = false;             // gun_guides.share_id readable = *_armory_share_links.sql applied
+
+// The edit tokens of this browser's ANONYMOUS saves ({ buildId: token },
+// written once per create_armory_build and spent by a claim). The token is
+// ownership: it never goes in a URL, and losing storage just means the
+// list stays read-only by its link.
+var TOKENS_KEY = 'gf-armory-edit-tokens';
+function tokensMap() {
+  try { return JSON.parse(localStorage.getItem(TOKENS_KEY) || '{}') || {}; } catch (e) { return {}; }
+}
+function tokenFor(id) {
+  var t = tokensMap()[id];
+  return typeof t === 'string' && t ? t : null;
+}
+function rememberToken(id, token) {
+  try {
+    var map = tokensMap();
+    map[id] = token;
+    localStorage.setItem(TOKENS_KEY, JSON.stringify(map));
+  } catch (e) {}
+}
 
 // ─── AUTH ──────────────────────────────────────────────────────────────────
 // Admin is read from get_my_profile(), as the admin pages and nav.js do. It
@@ -961,13 +985,16 @@ async function loadArmoryRef() {
 // Add to build) then goes into that build, or waits for the model step.
 async function openOnLoad() {
   forgetNewBuildDraft();
+  // The build in progress comes back FIRST, so the ?edit= and ?from=
+  // prompts below ask about what is actually at stake — declining either
+  // leaves it on screen, and nothing overwrites its stored copy unasked.
+  var draft = readBuildDraft();
+  if (draft) restoreDraft(draft);
   var edit = editParam();
   var from = fromParam();
   var add = addParam();
   if (edit) { await openForEdit(edit.kind, edit.id); return; }
   if (from) { await openFromGuide(from); return; }
-  var draft = readBuildDraft();
-  if (draft) restoreDraft(draft);
   if (add) handleAdd(add);
 }
 
@@ -1047,6 +1074,13 @@ async function loadGuideThemes() {
     var d = await sb.from('guides').select('draft_of').limit(1);
     DRAFT_OF_LIVE = !d.error;
   } catch (e) { DRAFT_OF_LIVE = false; }
+  // gun_guides.share_id the same way: before *_armory_share_links.sql the
+  // anonymous save says sharing isn't switched on yet instead of sending
+  // an RPC that does not exist.
+  try {
+    var s = await sb.from('gun_guides').select('share_id').limit(1);
+    SHARE_LIVE = !s.error;
+  } catch (e) { SHARE_LIVE = false; }
 }
 function themeLabel(key) {
   var t = THEMES.find(function (x) { return x.key === key; });
@@ -1436,6 +1470,8 @@ function choosePlatform(id) {
     STATE.gunMode = null;
     STATE.savedId = null;
     STATE.ownerId = null;
+    STATE.shareId = null;
+    STATE.basedOn = null;
     STATE.dropped = [];
     STATE.startedFrom = '';
     SAVED_SIG = null;
@@ -2410,7 +2446,9 @@ function shareableId() {
 async function shareGuide() {
   var id = shareableId();
   if (!id) return;
-  var url = window.gunGuideUrl(id, (STATE.title || '').trim() || defaultBuildName());
+  var url = STATE.shareId
+    ? 'https://gunforma.com/l/' + STATE.shareId
+    : window.gunGuideUrl(id, (STATE.title || '').trim() || defaultBuildName());
   try {
     await navigator.clipboard.writeText(url);
     toast('Link copied — anyone can open your build at that address.');
@@ -2584,6 +2622,8 @@ function draftSnapshot() {
     target: STATE.target,
     savedId: STATE.savedId,
     ownerId: STATE.ownerId,
+    shareId: STATE.shareId,
+    basedOn: STATE.basedOn,
     curated: STATE.curated,
     draftOf: STATE.draftOf,
     draftOfTitle: STATE.draftOfTitle,
@@ -2647,6 +2687,8 @@ function restoreDraft(draft, opts) {
   STATE.target = draft.target === 'curated' ? 'curated' : 'community';
   STATE.savedId = adopt ? (draft.savedId || null) : null;
   STATE.ownerId = adopt ? (draft.ownerId || null) : null;
+  STATE.shareId = adopt ? (draft.shareId || null) : null;
+  STATE.basedOn = draft.basedOn || null;
   STATE.draftOf = adopt ? (draft.draftOf || null) : null;
   STATE.draftOfTitle = adopt ? (draft.draftOfTitle || '') : '';
   STATE.curated = Object.assign({ theme: null, newTheme: '', published: false }, draft.curated || {});
@@ -2730,6 +2772,9 @@ function picksFromSnapshot(snapshot, platformId) {
 }
 
 function canEditRow(kind, row) {
+  // An ANONYMOUS Armory build is edited by whoever holds its token —
+  // signed in or not; the RPC is what enforces it (update_armory_build).
+  if (kind === 'community' && !row.user_id) return !!tokenFor(row.id);
   if (!CURRENT_USER) return false;
   if (kind === 'curated') return IS_ADMIN;
   return IS_ADMIN || row.user_id === CURRENT_USER.id;
@@ -2755,7 +2800,9 @@ async function openForEdit(kind, id, opts) {
   var noun = kind === 'curated' ? 'guide' : 'build';
   // Not opening on a page load leaves the blank builder a plain visit has.
   function stay() { if (!inPage) clearEditParam(); }
-  if (!CURRENT_USER) {
+  // The holder of an anonymous build's edit token edits without an
+  // account — that IS its ownership. Everyone else signs in first.
+  if (!CURRENT_USER && !(kind === 'community' && tokenFor(id))) {
     toast('Sign in to edit this ' + noun + ', then open it again.',
       'gunforma-signin.html?next=' + encodeURIComponent('gunforma-armory.html?edit=' + kind + ':' + id), 'Sign in');
     if (!inPage) clearEditParam();
@@ -2774,7 +2821,10 @@ async function openForEdit(kind, id, opts) {
     return;
   }
 
-  var draft = inPage ? draftSnapshot() : readDraft();
+  // What a replacement would cost: in-page, the build on screen; on a page
+  // load, the stored edit draft when there is one (its identity decides
+  // whether this is a reopen), else the restored build in progress.
+  var draft = inPage ? draftSnapshot() : (readDraft() || draftSnapshot());
   // A published Gunforma guide is never opened in place: Edit opens a draft.
   if (kind === 'curated' && row.is_published !== false) return openDraftOf(row, draft);
 
@@ -2873,7 +2923,9 @@ async function openFromGuide(id) {
     toast('That guide isn’t available to start from.');
     return;
   }
-  if (!confirmStartFrom(readDraft(), row.title)) { clearEditParam(); return; }
+  // What is at stake is the build ON SCREEN — openOnLoad restored the one
+  // in progress before handling ?from=, so a "no" keeps it, store and all.
+  if (!confirmStartFrom(draftSnapshot(), row.title)) { clearEditParam(); return; }
   adoptGuideAsNew(row);
 }
 
@@ -2892,6 +2944,12 @@ function adoptGuideAsNew(row) {
   STATE.platform = PLATFORMS_BY_ID[row.platform_id];
   STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
   STATE.gunMode = STATE.gun ? 'model' : 'fcu';   // a saved row with no model is an FCU build
+  // "Based on …" credit: only for an Armory build (gun_guides) that is not
+  // this reader's own — a Gunforma guide (guides) is a template, not a
+  // thing to credit, and tells itself apart by having no user_id KEY.
+  STATE.basedOn = ('user_id' in row) && !(CURRENT_USER && row.user_id === CURRENT_USER.id)
+    ? row.id : null;
+  STATE.shareId = null;
   STATE.title = '';
   STATE.target = 'community';
   STATE.savedId = null;
@@ -2913,6 +2971,8 @@ function adoptRow(kind, row, id) {
   STATE.platform = PLATFORMS_BY_ID[row.platform_id];
   STATE.gun = row.gun_id ? (GUNS.find(function (g) { return g.id === row.gun_id; }) || null) : null;
   STATE.gunMode = STATE.gun ? 'model' : 'fcu';
+  STATE.basedOn = null;
+  STATE.shareId = kind === 'community' && row.share_id ? row.share_id : null;
   STATE.title = row.title || '';
   STATE.target = kind;
   STATE.savedId = id.savedId;
@@ -2944,6 +3004,8 @@ function resetBuild() {
   STATE.target = 'community';
   STATE.savedId = null;
   STATE.ownerId = null;
+  STATE.shareId = null;
+  STATE.basedOn = null;
   STATE.draftOf = null;
   STATE.draftOfTitle = '';
   STATE.curated = { theme: null, newTheme: '', published: false };
@@ -2978,27 +3040,6 @@ async function saveGuide() {
   var pairTag = currentPairTag();
   if (pairTag && pairTag.key === 'needs_comp') return;   // the button is disabled; belt and braces
 
-  if (!CURRENT_USER) {
-    persistDraft();
-    toast('Sign in to save — your picks are kept for when you’re back.',
-      'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
-    return;
-  }
-
-  // The admin-only writes are refused by RLS until the migration is applied;
-  // say so rather than send a write that cannot land.
-  var foreign = STATE.target === 'community' && STATE.savedId && STATE.ownerId && STATE.ownerId !== CURRENT_USER.id;
-  if (!GUIDE_EDITING_LIVE && (STATE.target === 'curated' || foreign)) {
-    toast(STATE.target === 'curated'
-      ? 'Saving Gunforma guides isn’t switched on yet — it needs the database update.'
-      : 'Editing someone else’s Armory build isn’t switched on yet — it needs the database update.');
-    return;
-  }
-  if (STATE.target === 'curated' && !IS_ADMIN) { toast('Only admins can save Gunforma guides.'); return; }
-
-  var btn = document.getElementById('btn-save');
-  btn.disabled = true; btn.textContent = 'Saving…';
-
   var snapshot = rows.map(function (r) {
     return {
       category: r.cat,
@@ -3015,6 +3056,43 @@ async function saveGuide() {
       msrp: r.price,
     };
   });
+
+  if (!CURRENT_USER) {
+    // No account needed (the 2026-11-10 design): the save goes through
+    // create_armory_build / update_armory_build — anon has no direct
+    // write on the table — and lands on the build's own /l/ page. Before
+    // the migration the RPCs don't exist, so the old offer stands.
+    if (STATE.target === 'curated') { toast('Only admins can save Gunforma guides.'); return; }
+    if (!SHARE_LIVE) {
+      persistDraft();
+      toast('Sign in to save — your picks are kept for when you’re back.',
+        'gunforma-signin.html?next=gunforma-armory.html', 'Sign in');
+      return;
+    }
+    return saveAnonymous(snapshot);
+  }
+
+  // The admin-only writes are refused by RLS until the migration is applied;
+  // say so rather than send a write that cannot land.
+  var foreign = STATE.target === 'community' && STATE.savedId && STATE.ownerId && STATE.ownerId !== CURRENT_USER.id;
+  if (!GUIDE_EDITING_LIVE && (STATE.target === 'curated' || foreign)) {
+    toast(STATE.target === 'curated'
+      ? 'Saving Gunforma guides isn’t switched on yet — it needs the database update.'
+      : 'Editing someone else’s Armory build isn’t switched on yet — it needs the database update.');
+    return;
+  }
+  if (STATE.target === 'curated' && !IS_ADMIN) { toast('Only admins can save Gunforma guides.'); return; }
+
+  // A signed-in reader editing an ANONYMOUS build this browser created:
+  // the token is still the proof (the row has no owner for RLS to match),
+  // so the update goes through the RPC — never a direct UPDATE that
+  // matches nothing and re-creates the build as a copy.
+  if (STATE.target === 'community' && STATE.savedId && !STATE.ownerId && SHARE_LIVE && tokenFor(STATE.savedId)) {
+    return saveAnonymous(snapshot);
+  }
+
+  var btn = document.getElementById('btn-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
   var res;
   if (STATE.target === 'curated' && STATE.curated.theme === NEW_THEME) {
     var themeRes = await ensureNewTheme(STATE.curated.newTheme);
@@ -3061,7 +3139,10 @@ async function saveGuide() {
       }
     }
   } else {
-    res = await sb.from(plan.table).insert(plan.payload).select('id');
+    // Once share links exist, the row's /l/ slug comes back with the save
+    // (pre-migration the column would fail the whole insert's select).
+    res = await sb.from(plan.table).insert(plan.payload)
+      .select(SHARE_LIVE && plan.table === 'gun_guides' ? 'id, share_id' : 'id');
   }
 
   if (res.error) {
@@ -3083,13 +3164,20 @@ async function saveGuide() {
   } else {
     var firstSave = !STATE.savedId;
     STATE.savedId = (res.data && res.data[0] && res.data[0].id) || STATE.savedId;
+    if (res.data && res.data[0] && res.data[0].share_id) STATE.shareId = res.data[0].share_id;
     if (STATE.target === 'community' && !STATE.ownerId) STATE.ownerId = CURRENT_USER.id;
+    if (STATE.target === 'community') STATE.basedOn = null;   // credited on the first save, once
     STATE.dropped = [];
     SAVED_SIG = buildSig();
     setEditParam(STATE.target, STATE.savedId);
     persistDraft();
     if (STATE.target === 'curated') {
       toast('Draft saved. It isn’t on Gun Guides until you publish it.', 'gunforma-gun-guides.html', 'See it there');
+    } else if (firstSave && STATE.shareId) {
+      // Save & share lands on the build's own share page (the 2026-11-10
+      // flow) — the link, the export panel and the fit bar live there.
+      location.href = '/l/' + STATE.shareId;
+      return;
     } else {
       // An Armory build has its own page, not a place on Gun Guides. "Save &
       // share" copies that page's link on the first save; later saves just
@@ -3101,6 +3189,52 @@ async function saveGuide() {
       toast(copied ? 'Saved — link copied, ready to share.' : 'Saved.', '#my-builds', 'See My builds');
     }
     loadMyArmory();
+  }
+  renderSidebar();
+}
+
+// The anonymous save (and the signed-in save of a token-held anonymous
+// build): create_armory_build / update_armory_build do the writing — the
+// validation and the ownership proof live in the database, not here. The
+// token comes back ONCE, goes straight into this browser's store, and the
+// first save lands on the build's own /l/ page.
+async function saveAnonymous(snapshot) {
+  var btn = document.getElementById('btn-save');
+  btn.disabled = true; btn.textContent = 'Saving…';
+  var payload = {
+    title: (STATE.title || '').trim() || defaultBuildName(),
+    platform_id: STATE.platform.id,
+    gun_id: STATE.gun ? STATE.gun.id : null,
+    parts_snapshot: snapshot,
+    based_on_id: STATE.basedOn,
+  };
+  var res;
+  var token = STATE.savedId ? tokenFor(STATE.savedId) : null;
+  if (STATE.savedId && token) {
+    res = await sb.rpc('update_armory_build', { p_id: STATE.savedId, p_edit_token: token, p_payload: payload });
+    if (!res.error) {
+      STATE.dropped = [];
+      SAVED_SIG = buildSig();
+      persistDraft();
+      toast('Saved.', '/l/' + ((res.data && res.data.share_id) || STATE.shareId), 'Open your build page');
+    }
+  } else {
+    res = await sb.rpc('create_armory_build', { p_payload: payload });
+    if (!res.error && res.data && res.data.id) {
+      if (res.data.edit_token) rememberToken(res.data.id, res.data.edit_token);
+      STATE.savedId = res.data.id;
+      STATE.shareId = res.data.share_id || null;
+      STATE.basedOn = null;
+      STATE.dropped = [];
+      SAVED_SIG = buildSig();
+      persistDraft();
+      if (STATE.shareId) { location.href = '/l/' + STATE.shareId; return; }
+      toast('Saved — your build has its own link now.');
+    }
+  }
+  if (res.error) {
+    console.error('[armory] anonymous save failed', res.error);
+    toast('Couldn’t save: ' + (res.error.message || 'unknown error'));
   }
   renderSidebar();
 }
@@ -3134,6 +3268,9 @@ function savePlan(snapshot) {
   }
   var community = Object.assign({}, base, { gun_id: gunId });
   var insert = Object.assign({}, community, { user_id: CURRENT_USER.id });
+  // The "Based on …" credit rides the FIRST save only, and only once the
+  // column exists — an UPDATE never rewrites where a build came from.
+  if (SHARE_LIVE && STATE.basedOn) insert.based_on_id = STATE.basedOn;
   if (!STATE.savedId) return { table: 'gun_guides', op: 'insert', payload: insert };
   var mine = !STATE.ownerId || STATE.ownerId === CURRENT_USER.id;
   return { table: 'gun_guides', op: 'update', payload: community, insertPayload: insert, reinsertOnMiss: mine };
@@ -3319,7 +3456,7 @@ function myBuildRow(id) {
 async function shareArmoryBuild(id) {
   var row = myBuildRow(id);
   if (!row || !window.ArmoryBuilds.shareable(row)) return;
-  await window.ArmoryBuilds.copyLink(row);
+  await window.ArmoryBuilds.copyLink(row, MY.builds);
   toast('Link copied — anyone can open “' + (row.title || 'your build') + '” at that address.');
 }
 
@@ -3344,6 +3481,7 @@ async function deleteArmoryBuild(id, btn) {
   if (STATE.target === 'community' && STATE.savedId === id) {
     STATE.savedId = null;
     STATE.ownerId = null;
+    STATE.shareId = null;
     STATE.draftOf = null;
     STATE.draftOfTitle = '';
     STATE.dropped = [];

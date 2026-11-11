@@ -44,13 +44,24 @@
   var THUMBS = 5;
 
   async function load(sb, userId) {
-    var out = { rows: [], variants: [], byId: {}, defaults: {}, error: null };
+    var out = { rows: [], variants: [], byId: {}, defaults: {}, shares: null, error: null };
     if (!userId) return out;
     var r = await sb.from('gun_guides').select(ROW_SELECT)
       .eq('user_id', userId)
       .order('created_at', { ascending: false });
     if (r.error) { out.error = r.error; return out; }
     out.rows = r.data || [];
+    // The /l/ slugs, in a read of their OWN: before *_armory_share_links.sql
+    // the column does not exist, this read fails, and every link below
+    // falls back to the /gg/ address (which still serves, and 301s here
+    // once the migration lands). Never name share_id in ROW_SELECT.
+    try {
+      var s = await sb.from('gun_guides').select('id, share_id').eq('user_id', userId);
+      if (!s.error) {
+        out.shares = {};
+        (s.data || []).forEach(function (row) { if (row.share_id) out.shares[row.id] = row.share_id; });
+      }
+    } catch (e) {}
     var ids = {};
     out.rows.forEach(function (row) {
       (row.parts_snapshot || []).forEach(function (p) { if (p && p.refId) ids[p.refId] = 1; });
@@ -78,6 +89,18 @@
   }
 
   function shareable(row) { return !!row && row.is_removed !== true; }
+
+  // The address a build is shared at: its /l/<share_id> page once the
+  // share-links migration has given it a slug, else its /gg/ page (still
+  // served pre-migration; a 301 onto /l/ after it).
+  function shareHref(row, data) {
+    var share = data && data.shares ? data.shares[row.id] : null;
+    return share ? '/l/' + share : global.gunGuidePath(row.id, row.title);
+  }
+  function shareUrl(row, data) {
+    var share = data && data.shares ? data.shares[row.id] : null;
+    return share ? 'https://gunforma.com/l/' + share : global.gunGuideUrl(row.id, row.title);
+  }
 
   function partMedia(p, data) {
     if (p.variantId) {
@@ -116,7 +139,7 @@
       '<div class="ab-body">' +
         '<div class="ab-kicker">' + esc(modelName(row) || 'Build') +
           (live ? '' : ' · <span class="ab-removed">Taken down</span>') + '</div>' +
-        '<div class="ab-title">' + (live ? '<a href="' + esc(global.gunGuidePath(row.id, row.title)) + '">' + title + '</a>' : title) + '</div>' +
+        '<div class="ab-title">' + (live ? '<a href="' + esc(shareHref(row, data)) + '">' + title + '</a>' : title) + '</div>' +
       '</div>' +
       '<div class="ab-foot">' +
         '<span class="ab-total">' + (today ? esc(today) + ' today' : '') + '</span>' +
@@ -128,8 +151,8 @@
 
   // The canonical the page declares, never location.origin. A browser
   // without clipboard access gets the link in a prompt to copy by hand.
-  async function copyLink(row) {
-    var url = global.gunGuideUrl(row.id, row.title);
+  async function copyLink(row, data) {
+    var url = shareUrl(row, data);
     try {
       await global.navigator.clipboard.writeText(url);
     } catch (e) {
@@ -198,6 +221,8 @@
     ensureCss: ensureCss,
     modelName: modelName,
     shareable: shareable,
+    shareHref: shareHref,
+    shareUrl: shareUrl,
     copyLink: copyLink,
     ROW_SELECT: ROW_SELECT,
   };

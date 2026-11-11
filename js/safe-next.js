@@ -35,8 +35,17 @@
 
   var SHAPE = /^(\/?)([a-z0-9-]+\.html)?(\?[A-Za-z0-9._~=&:-]*)?(#[A-Za-z0-9_-]*)?$/;
 
+  // The ONE path family beside the page list: an Armory build's share page,
+  // /l/<share_id> — exactly one segment of armory_share_id()'s alphabet,
+  // nothing after it. "Save to my account" on one sends the reader to
+  // sign-in and must land them back on that page to claim it. The alphabet
+  // has no "/", "\", "%", "." or scheme characters, so nothing here can
+  // name a host or traverse.
+  var SHARE_SHAPE = /^\/l\/[a-z0-9]{6,12}$/;
+
   function check(raw) {
     if (typeof raw !== 'string' || !raw || raw.length > 256) return null;
+    if (SHARE_SHAPE.test(raw)) return raw;
     var m = SHAPE.exec(raw);
     if (!m) return null;
     if (!m[1] && !m[2]) return null;              // a bare "?x" or "#x" names no page

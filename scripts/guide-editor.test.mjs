@@ -662,8 +662,10 @@ test('My builds / Saved parts reads only the signed-in reader\'s own rows; Add t
   const reads = myArmoryReads(ctx, { favs: [{ product_id: 'trig-2', created_at: '2026-11-01T00:00:00Z', products: { id: 'trig-2', name: 'Trigger Two' } }] });
   await ctx.loadMyArmory();
   const of = (t) => reads.filter((r) => r.table === t);
-  assert.equal(of('gun_guides').length, 1);
-  assert.deepEqual(of('gun_guides')[0].filters, [['user_id', JOE.id]], 'builds: user_id = the reader, nothing wider');
+  assert.equal(of('gun_guides').length, 2, 'the rows, and the /l/ slugs in their own tolerant read');
+  for (const read_ of of('gun_guides')) {
+    assert.deepEqual(read_.filters, [['user_id', JOE.id]], 'builds: user_id = the reader, nothing wider');
+  }
   assert.equal(of('part_favorites').length, 1);
   assert.deepEqual(of('part_favorites')[0].filters, [['user_id', JOE.id]], 'parts: user_id = the reader');
   assert.equal(els['tab-my-builds'].textContent, 'My builds (1)');

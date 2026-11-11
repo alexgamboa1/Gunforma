@@ -978,7 +978,7 @@ function armoryActionsHtml(row) {
 window.shareArmoryBuild = async function(id) {
   const row = ARMORY_BUILDS && ARMORY_BUILDS.rows.find(function(r){ return r.id === id; });
   if (!row) return;
-  await window.ArmoryBuilds.copyLink(row);
+  await window.ArmoryBuilds.copyLink(row, ARMORY_BUILDS);
   showToast('Link copied — anyone can open “'+(row.title || 'your build')+'” at that address.');
 };
 
