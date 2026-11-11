@@ -141,7 +141,7 @@ function notFound() {
 // failure to read (503), never a 404.
 const SHARE_SELECT = COMMUNITY_SELECT + ',share_id,based_on_id';
 async function fetchByShareId(shareId) {
-  const rows = await pgGet('gun_guides?share_id=eq.' + encodeURIComponent(shareId) +
+  const rows = await pgRows('gun_guides?share_id=eq.' + encodeURIComponent(shareId) +
     '&is_removed=eq.false&select=' + encodeURIComponent(SHARE_SELECT) + '&limit=1');
   return rows.length ? rows[0] : null;
 }
@@ -151,7 +151,7 @@ async function fetchByShareId(shareId) {
 // the page as before", never a 503 over a page that can render.
 async function shareIdFor(id) {
   try {
-    const rows = await pgGet('gun_guides?id=eq.' + id + '&select=share_id&limit=1');
+    const rows = await pgRows('gun_guides?id=eq.' + id + '&select=share_id&limit=1');
     return rows.length && rows[0].share_id ? rows[0].share_id : null;
   } catch (e) {
     return null;
@@ -163,7 +163,7 @@ async function shareIdFor(id) {
 async function fetchBasedOn(basedOnId) {
   if (!basedOnId) return null;
   try {
-    const rows = await pgGet('gun_guides?id=eq.' + basedOnId + '&is_removed=eq.false' +
+    const rows = await pgRows('gun_guides?id=eq.' + basedOnId + '&is_removed=eq.false' +
       '&select=' + encodeURIComponent('share_id,user_id,title') + '&limit=1');
     if (!rows.length) return null;
     const username = await fetchUsername(rows[0].user_id);

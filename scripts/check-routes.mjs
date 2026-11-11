@@ -572,6 +572,47 @@ for (const [label, path, want] of [
   }
 }
 
+// ── /l/ — Armory build share links ──────────────────────────────────────
+// One Armory build (gun_guides), on the wire: once *_armory_share_links.sql
+// is applied its /gg/ address 301s to /l/<share_id>, and the /l/ page
+// serves 200 with noindex BOTH ways (header and meta) and its own /l/
+// canonical — it is never in the sitemap, so noindex is all that stands
+// between a shared link and the index. Before the migration (share_id
+// probe refused) the /gg/ page must still serve, noindex, exactly as
+// before — never a 503 over a page that can render. No builds yet: skipped.
+{
+  console.log('\n── /l/ Armory build share links');
+  const res = await fetch(`${SB_URL}/rest/v1/gun_guides?select=id,title&is_removed=eq.false&order=created_at.asc&limit=1`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : null;
+  const b = Array.isArray(rows) && rows[0];
+  if (!b) {
+    console.log('   (no Armory builds yet — skipped)');
+  } else {
+    const probe = await fetch(`${SB_URL}/rest/v1/gun_guides?select=share_id&id=eq.${b.id}&limit=1`,
+      { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+    const share = probe.ok ? (((await probe.json())[0] || {}).share_id || null) : null;
+    const gg = await fetch(origin + '/gg/' + b.id, { redirect: 'manual' });
+    if (!share) {
+      ok(gg.status === 200 && gg.headers.get('x-robots-tag') === 'noindex',
+         '/gg/<armory build> pre-migration: served as before, noindex', gg.status + '/' + gg.headers.get('x-robots-tag'));
+    } else {
+      ok(gg.status === 301 && gg.headers.get('location') === 'https://gunforma.com/l/' + share,
+         '/gg/<armory build>: 301 to its /l/ page', gg.status + ' → ' + gg.headers.get('location'));
+      const r = await fetch(origin + '/l/' + share, { redirect: 'manual' });
+      const body = await r.text();
+      ok(r.status === 200 && r.headers.get('x-armory-share') === 'build', `/l/${share}: 200, the share page`, r.status);
+      ok(r.headers.get('x-robots-tag') === 'noindex' && /name=["']robots["'][^>]*noindex/.test(body),
+         `/l/${share}: noindex, header and meta`, r.headers.get('x-robots-tag'));
+      const canons = [...body.matchAll(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/g)].map((m) => m[1]);
+      ok(canons.length === 1 && canons[0] === 'https://gunforma.com/l/' + share,
+         `/l/${share}: one canonical, its own /l/ URL`, canons.join(' '));
+      const bogus = await fetch(origin + '/l/zzzzzz99', { redirect: 'manual' });
+      ok(bogus.status === 404, '/l/<unknown slug>: 404', bogus.status);
+    }
+  }
+}
+
 // ── /p365/ — the gun hubs ──────────────────────────────────────────────
 // The hubs are what un-orphan the /fit/ pages, so the assertion that
 // matters is not just "the hub renders" but "the hub links DOWN to its

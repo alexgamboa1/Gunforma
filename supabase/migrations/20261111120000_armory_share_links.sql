@@ -77,6 +77,64 @@ create policy gun_guides_admin_delete on public.gun_guides
 -- The public read already hides taken-down rows (gun_guides_public_read,
 -- 20261027120000): is_removed only, which now also covers anonymous rows.
 
+-- ── abuse protection for anonymous saves ──────────────────────────────────
+-- A per-visitor rate limit, enforced INSIDE create_armory_build — Turnstile
+-- guards Supabase Auth's endpoints, but an RPC has no captcha verify hook,
+-- and nothing client-side is protection at all. Bookkeeping, not tracking:
+-- the key is sha256(ip + day) — never the raw address — and rows older
+-- than seven days are swept on every write. definer-only: no grants, no
+-- policies, nothing reads it but the limiter.
+create table if not exists public.armory_save_limits (
+  ip_hash text not null,
+  day     date not null default current_date,
+  saves   integer not null default 0,
+  primary key (ip_hash, day)
+);
+alter table public.armory_save_limits enable row level security;
+revoke all on public.armory_save_limits from anon, authenticated;
+
+-- 20 anonymous saves per connection per day, and 500 across everyone — a
+-- person spec'ing builds never sees either; a script does. A request whose
+-- address Kong didn't forward lands in one shared 'unknown' bucket, so a
+-- platform header change degrades to throttling, never to an open door.
+create or replace function public.armory_anon_save_allowed()
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_ip text;
+  v_hash text;
+  v_count integer;
+  v_total integer;
+begin
+  begin
+    v_ip := coalesce(
+      current_setting('request.headers', true)::jsonb ->> 'cf-connecting-ip',
+      current_setting('request.headers', true)::jsonb ->> 'x-real-ip',
+      split_part(current_setting('request.headers', true)::jsonb ->> 'x-forwarded-for', ',', 1));
+  exception when others then
+    v_ip := null;
+  end;
+  v_hash := encode(sha256((coalesce(nullif(trim(v_ip), ''), 'unknown') || ':' || current_date::text)::bytea), 'hex');
+  delete from armory_save_limits where day < current_date - 7;
+  insert into armory_save_limits (ip_hash, day, saves)
+  values (v_hash, current_date, 1)
+  on conflict (ip_hash, day) do update set saves = armory_save_limits.saves + 1
+  returning saves into v_count;
+  if v_count > 20 then
+    raise exception 'too many builds saved from this connection today — sign in to keep saving';
+  end if;
+  select coalesce(sum(saves), 0) into v_total from armory_save_limits where day = current_date;
+  if v_total > 500 then
+    raise exception 'anonymous saving is briefly paused — sign in to save your build';
+  end if;
+end;
+$$;
+alter function public.armory_anon_save_allowed() owner to postgres;
+revoke execute on function public.armory_anon_save_allowed() from public, anon, authenticated;
+
 -- ── the RPCs ───────────────────────────────────────────────────────────────
 -- What a payload may say, checked once for the three writers: at most 18
 -- parts (one per catalog category), each naming a known category and a
@@ -173,6 +231,7 @@ declare
 begin
   v := armory_build_checked(p_payload);
   if v_uid is null then
+    perform armory_anon_save_allowed();   -- the per-visitor rate limit
     -- pgcrypto lives in the extensions schema, outside the pinned path.
     v_token := encode(extensions.gen_random_bytes(24), 'hex');
   end if;

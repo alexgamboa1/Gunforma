@@ -43,6 +43,11 @@ const ALLOWED = [
   ['/gunforma-post-build.html', '/gunforma-post-build.html'],
   ['/gunforma-admin-queue.html', '/gunforma-admin-queue.html'],
   ['/', '/'],
+  // The one path family beside the page list: an Armory build's share page
+  // (/l/<share_id>, armory_share_id()'s alphabet), so "Save to my account"
+  // can land its reader back on the page that claims it.
+  ['/l/abc123xy', '/l/abc123xy'],
+  ['/l/0a1b2c', '/l/0a1b2c'],
 ];
 
 const REFUSED = [
@@ -77,6 +82,20 @@ const REFUSED = [
   null,
   undefined,
   '/' + 'a'.repeat(300) + '.html',
+  // The /l/ family is exactly one slug segment — nothing shorter, longer,
+  // uppercase, dotted or nested, no query or hash riding on it, and never
+  // the bare prefix.
+  'l/abc123xy',
+  '/l/',
+  '/l/abc12',
+  '/l/ABC123XY',
+  '/l/abc123xy/',
+  '/l/abc123xy/x',
+  '/l/abc.123xy',
+  '/l/abc123xy?x=1',
+  '/l/abc123xy#x',
+  '/l/abc123xy%2F..',
+  '/l/aaaaaaaaaaaaa',
 ];
 
 test('allowed pages go through, normalised to one leading "/"', () => {

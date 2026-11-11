@@ -1568,7 +1568,7 @@ function renderModel() {
 // photo on its default variant gets its colour swatch (variant-swatch.js) —
 // never another variant's photo as a stand-in (loadouts-spec §9).
 // meta: { tag, recommended, note, blocked, spec, inBuild, compare, href } —
-// the fit verdict chip, the "Recommended" badge on a comp slide's own chunk
+// the fit verdict chip, the "Matched barrel" badge on a comp slide's own chunk
 // barrel, the key-specs line, and the part-page extras. A wont_fit tag
 // disables the card: shown, never hidden, with the reason — a disappeared
 // option is the old model's bug. The price is the hero retailer row when a
@@ -1613,7 +1613,11 @@ function partCardHtml(cat, p, meta) {
       (href ? '<a class="pc-link" href="' + escAttr(href) + '">' + nameHtml + '</a>' : nameHtml) +
       (p.discontinued ? '<span class="part-card-disc">Discontinued</span>' : '') +
       (meta.tag || meta.recommended
-        ? '<span class="part-card-tags">' + (meta.recommended ? '<span class="part-card-badge">Recommended</span> ' : '') + fitTagHtml(meta.tag) + '</span>'
+        // The maker's own matched barrel wears ONE "Matched barrel" badge
+        // (Alex, 2026-11-11 — it said "Recommended" first); the verdict tag
+        // is skipped when it would say the same two words beside it.
+        ? '<span class="part-card-tags">' + (meta.recommended ? '<span class="part-card-badge">Matched barrel</span> ' : '') +
+          (meta.recommended && meta.tag && meta.tag.label === 'Matched barrel' ? '' : fitTagHtml(meta.tag)) + '</span>'
         : '') +
       (disabled && reason ? '<span class="part-card-reason">' + esc(reason) + '</span>' : '') +
       (!disabled && meta.tag && meta.tag.reason && meta.tag.key !== 'wont_fit' ? '<span class="part-card-note">' + esc(meta.tag.reason) + '</span>' : '') +
@@ -1633,7 +1637,7 @@ function partCardHtml(cat, p, meta) {
 }
 
 // What a list says about one option beyond its verdict: on a ported-barrel
-// comp slide, which barrel is the maker's own chunk barrel ("Recommended",
+// comp slide, which barrel is the maker's own chunk barrel ("Matched barrel",
 // sorts first — the FDEZ shape; the threaded ones carry the module's note).
 function cardMetaFor(cat, p, ctx) {
   var tag = verdictFor(cat, p, ctx);
