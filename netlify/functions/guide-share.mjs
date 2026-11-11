@@ -158,6 +158,27 @@ async function shareIdFor(id) {
   }
 }
 
+// The build's comments, oldest first, with their writers' usernames. Null
+// means "cannot say" — the table not there yet (pre-migration), or a blip
+// — and the page then renders no thread and no box, never a guess and
+// never a 503 over a page that can render. [] is a real empty thread.
+async function fetchComments(buildId) {
+  try {
+    const rows = await pgRows('armory_build_comments?armory_build_id=eq.' + buildId +
+      '&select=' + encodeURIComponent('id,user_id,body,created_at') + '&order=created_at.asc');
+    const ids = [...new Set(rows.map((r) => r.user_id))];
+    let names = {};
+    if (ids.length) {
+      const profs = await pgRows('profiles?id=in.(' + ids.join(',') + ')&select=' + encodeURIComponent('id,username'));
+      names = Object.fromEntries(profs.map((p) => [p.id, p.username || null]));
+    }
+    return rows.map((r) => ({ id: r.id, userId: r.user_id, body: r.body, createdAt: r.created_at,
+                              username: names[r.user_id] || null }));
+  } catch (e) {
+    return null;
+  }
+}
+
 // "Based on @user's build" — credit, not a fact about this page, so any
 // failure (or a taken-down source) is a page without the line.
 async function fetchBasedOn(basedOnId) {
@@ -373,6 +394,21 @@ function pageDescription({ title, kind, model, username, parts, count, totalText
 // Armory build: its own URL, the based-on credit, the share actions and
 // the client modules that make it the owner's share view. Null is the
 // /gg/ page exactly as before.
+// One comment, server-rendered: the writer, the OP tag when they own the
+// list, the day, the body — and an empty action slot js/armory-share.js
+// fills for whoever may delete or report it.
+function commentHtml(c, ownerId) {
+  const who = c.username ? '@' + c.username : 'A reader';
+  const day = String(c.createdAt || '').slice(0, 10);
+  return '<div class="cmt" data-comment-id="' + esc(c.id) + '" data-commenter="' + esc(c.userId) + '">' +
+    '<div class="cmt-head"><strong>' + esc(who) + '</strong>' +
+    (ownerId && c.userId === ownerId ? ' <span class="optag">OP</span>' : '') +
+    (day ? ' <span class="cmt-day">' + esc(day) + '</span>' : '') +
+    '<span class="cmt-actions" data-cmt-actions></span></div>' +
+    '<p class="cmt-body">' + esc(c.body) + '</p>' +
+  '</div>';
+}
+
 export function renderGuide({ kind, row, variants, username, image, share }) {
   const id = String(row.id).toLowerCase();
   const title = guideTitle(row);
@@ -454,6 +490,17 @@ export function renderGuide({ kind, row, variants, username, image, share }) {
             '<a class="act" href="' + GALLERY + '">More Gun Guides &rarr;</a>') +
       '</div>' +
       (share ? '<div id="ash-export" hidden></div>' : '') +
+      // The thread, server-rendered like the rest of the page (the ship
+      // doc's call). Before the comments migration there is no table:
+      // share.comments is null, and there is no thread and NO comment box
+      // ("Sharing isn't switched on yet" shape — the section simply isn't).
+      (share && Array.isArray(share.comments)
+        ? '<section class="thread" id="ash-thread" aria-label="Comments">' +
+            '<h2>' + share.comments.length + (share.comments.length === 1 ? ' comment' : ' comments') + '</h2>' +
+            share.comments.map((c) => commentHtml(c, row.user_id || null)).join('') +
+            '<div id="ash-comment-box"></div>' +
+          '</section>'
+        : '') +
     '</div>' +
     footerHtml() +
     navScript() +
@@ -539,7 +586,22 @@ function guideCss() {
     '#ash-export .seg button { flex: 1; border: 0; background: #fff; padding: 7px; font-size: 12px; font-weight: 700; color: #888; cursor: pointer; font-family: inherit; }' +
     '#ash-export .seg button[aria-selected="true"] { background: #1a1a1a; color: #fff; }' +
     '#ash-export .hint { font-size: 11px; color: #888; margin: 0 0 6px; }' +
-    '#ash-export .copy { margin-top: 8px; width: 100%; font-family: inherit; font-size: 12.5px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 9px; cursor: pointer; }'
+    '#ash-export .copy { margin-top: 8px; width: 100%; font-family: inherit; font-size: 12.5px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 9px; cursor: pointer; }' +
+    '.thread { margin-top: 26px; }' +
+    '.thread h2 { font-size: 15px; margin: 0 0 4px; }' +
+    '.cmt { padding: 12px 0; border-bottom: 0.5px solid #eee; }' +
+    '.cmt-head { font-size: 12.5px; color: #1a1a1a; display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }' +
+    '.cmt-day { font-size: 11px; color: #999; }' +
+    '.optag { font-size: 9.5px; font-weight: 800; background: #eaf4fc; color: #2a7bbd; padding: 1px 6px; border-radius: 3px; }' +
+    '.cmt-body { font-size: 13.5px; line-height: 1.55; color: #333; margin: 4px 0 0; max-width: 68ch; overflow-wrap: anywhere; }' +
+    '.cmt-actions { margin-left: auto; display: flex; gap: 8px; }' +
+    '.cmt-actions button { font-family: inherit; font-size: 10.5px; font-weight: 700; color: #888; background: none; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 3px 8px; cursor: pointer; }' +
+    '.cmt-actions button:hover { color: #b24a2a; border-color: #f3bfae; }' +
+    '#ash-comment-box { margin-top: 14px; }' +
+    '#ash-comment-box textarea { width: 100%; font-family: inherit; font-size: 13px; border: 0.5px solid #d5d3ca; border-radius: 4px; padding: 8px 10px; background: #fff; color: #1a1a1a; resize: vertical; }' +
+    '#ash-comment-box .post { margin-top: 8px; font-family: inherit; font-size: 12.5px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 8px 14px; cursor: pointer; }' +
+    '#ash-comment-box .signin { font-size: 12.5px; color: #555; }' +
+    '#ash-comment-box .signin a { color: #2a7bbd; font-weight: 700; text-decoration: none; }'
   );
 }
 
@@ -576,15 +638,17 @@ export default async (req) => {
     }
     const username = await fetchUsername(row.user_id);
     const basedOn = await fetchBasedOn(row.based_on_id);
+    const comments = await fetchComments(row.id);
     const image = await shareImageFor({ kind: 'community', row }, variants);
     const out = renderGuide({ kind: 'community', row, variants, username, image,
-                              share: { shareId, basedOn } });
+                              share: { shareId, basedOn, comments } });
     return new Response(out.html, {
       status: 200,
       headers: pageHeaders(out, {
         'x-guide-share': 'community',
         'x-armory-share': 'build',
         'x-guide-share-parts': String(guideParts(row).length),
+        'x-armory-comments': comments === null ? 'n/a' : String(comments.length),
       }),
     });
   }

@@ -190,14 +190,28 @@ async function init() {
   }
 }
 
+var HAS_ARMORY_COL = true;   // flips false where armory_build_id doesn't exist yet
 async function loadPage(offset) {
   // profiles has two FKs from notifications (user_id + actor_id), so the
   // embed must name the constraint. builds has one, so it stays bare.
-  var res = await sb
-    .from('notifications')
-    .select('id,kind,build_id,comment_id,preview,created_at,read_at,profiles!notifications_actor_id_fkey(username,avatar_url),builds(name)')
-    .order('created_at', { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1);
+  // armory_build_id (and its gun_guides embed) arrives with the Armory
+  // comments migration; until then that select fails, and the legacy one
+  // runs instead — no armory_comment rows can exist before the column.
+  var base = 'id,kind,build_id,comment_id,preview,created_at,read_at,profiles!notifications_actor_id_fkey(username,avatar_url),builds(name)';
+  var res = HAS_ARMORY_COL
+    ? await sb.from('notifications')
+        .select(base + ',armory_build_id,gun_guides!notifications_armory_build_id_fkey(title,share_id)')
+        .order('created_at', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1)
+    : { error: { probe: true } };
+  if (res.error) {
+    HAS_ARMORY_COL = false;
+    res = await sb
+      .from('notifications')
+      .select(base)
+      .order('created_at', { ascending: false })
+      .range(offset, offset + PAGE_SIZE - 1);
+  }
   if (res.error) {
     console.error('notifications', res.error);
     document.getElementById('notif-list').innerHTML = '<div class="empty">Couldn\'t load your inbox — try again in a moment.</div>';
@@ -261,12 +275,20 @@ function rowHtml(n) {
   var name = actor.username || 'Someone';
   var build = n.builds ? n.builds.name : 'your build';
   var href = buildPath(n.build_id, n.builds && n.builds.name) + (n.comment_id ? '#c-' + n.comment_id : '');
+  // A comment on an ARMORY build links its /l/ page, named by its title.
+  if (n.kind === 'armory_comment') {
+    build = n.gun_guides && n.gun_guides.title ? n.gun_guides.title : 'your Armory build';
+    href = n.gun_guides && n.gun_guides.share_id ? '/l/' + n.gun_guides.share_id : 'gunforma-armory.html#my-builds';
+  }
   var verb = n.kind === 'like' ? 'liked' : n.kind === 'reply' ? 'replied to your comment on' : 'commented on';
   var initial = name.charAt(0);
+  // An Armory comment wears the comment chip: the kind value is plumbing,
+  // not copy.
+  var chip = n.kind === 'armory_comment' ? 'comment' : n.kind;
   return '<a class="notif' + (n.read_at ? '' : ' unread') + '" href="' + escH(href) + '">' +
     '<div class="notif-avatar">' + (actor.avatar_url ? '<img src="' + escH(actor.avatar_url) + '" alt="" loading="lazy"/>' : escH(initial)) + '</div>' +
     '<div>' +
-      '<div class="notif-line"><span class="notif-kind ' + escH(n.kind) + '">' + escH(n.kind) + '</span>' +
+      '<div class="notif-line"><span class="notif-kind ' + escH(chip) + '">' + escH(chip) + '</span>' +
         '<strong>' + escH(name) + '</strong> ' + verb + ' <span class="build">' + escH(build) + '</span></div>' +
       (n.preview ? '<div class="notif-preview">' + escH(n.preview) + '</div>' : '') +
     '</div>' +

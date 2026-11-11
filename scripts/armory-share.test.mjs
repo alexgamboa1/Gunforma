@@ -73,6 +73,12 @@ function db({ row = ROW, basedRow, shareColumn = true, fail = null } = {}) {
     }
     if (u.includes('/rest/v1/guides?')) return json([]);
     if (u.includes('/rest/v1/profiles?')) {
+      if (u.includes('id=in.')) {
+        const out = [];
+        if (u.includes(UID)) out.push({ id: UID, username: 'wraythe' });
+        if (u.includes(BASED_UID)) out.push({ id: BASED_UID, username: 'origiver' });
+        return json(out);
+      }
       if (u.includes('id=eq.' + UID)) return json([{ username: 'wraythe' }]);
       if (u.includes('id=eq.' + BASED_UID)) return json([{ username: 'origiver' }]);
       return json([]);
@@ -180,6 +186,141 @@ test('a Gunforma guide’s /gg/ page is untouched: no share probe, no redirect',
   assert.equal(res.headers.get('x-guide-share'), 'curated');
   assert.equal(res.headers.get('x-guide-share-index'), 'index');
   assert.ok(!seen.urls.some((u) => u.includes('select=share_id')), 'no share probe for a curated guide');
+});
+
+// ── comments on /l/ (PR 4) ────────────────────────────────────────────────
+const C1 = '22222222-0000-4000-8000-000000000021';
+const C2 = '22222222-0000-4000-8000-000000000022';
+const COMMENTS = [
+  { id: C1, user_id: UID, body: 'Owner here — ask away <b>no html</b>', created_at: '2026-11-10T10:00:00Z' },
+  { id: C2, user_id: BASED_UID, body: 'Does the comp clear the light?', created_at: '2026-11-11T10:00:00Z' },
+];
+function dbWithComments(opts = {}) {
+  const inner = db(opts);
+  return (n, url) => {
+    const u = String(url);
+    if (u.includes('/rest/v1/armory_build_comments?')) {
+      if (opts.commentsTable === false) return json({ message: 'relation "armory_build_comments" does not exist' }, 404);
+      return json(COMMENTS);
+    }
+    return inner(n, url);
+  };
+}
+
+test('/l/ renders the thread server-side: count, OP tag on the owner alone, escaped bodies, an empty box', async () => {
+  stubFetch(dbWithComments());
+  const res = await get('/l/' + SHARE);
+  assert.equal(res.headers.get('x-armory-comments'), '2');
+  const html = await res.text();
+  assert.match(html, /<h2>2 comments<\/h2>/);
+  const owner = html.slice(html.indexOf('data-comment-id="' + C1 + '"'), html.indexOf('data-comment-id="' + C2 + '"'));
+  assert.match(owner, /@wraythe/);
+  assert.match(owner, /<span class="optag">OP<\/span>/, 'the list’s owner wears OP');
+  assert.match(owner, /ask away &lt;b&gt;no html&lt;\/b&gt;/, 'a body is text, never markup');
+  const other = html.slice(html.indexOf('data-comment-id="' + C2 + '"'));
+  assert.match(other, /@origiver/);
+  assert.doesNotMatch(other.slice(0, other.indexOf('</div></div>')), /optag/, 'nobody else does');
+  assert.match(html, new RegExp('data-comment-id="' + C2 + '" data-commenter="' + BASED_UID + '"'),
+    'rows carry the writer for the browser’s delete/report wiring');
+  assert.match(html, /<span class="cmt-actions" data-cmt-actions><\/span>/, 'action slots ship EMPTY: one cacheable page');
+  assert.match(html, /<div id="ash-comment-box"><\/div>/, 'the box ships empty too — sign-in decides what it holds');
+});
+
+test('/l/ before the comments migration: the page serves, with no thread and no box', async () => {
+  stubFetch(dbWithComments({ commentsTable: false }));
+  const res = await get('/l/' + SHARE);
+  assert.equal(res.status, 200, 'never a 503 over a page that can render');
+  assert.equal(res.headers.get('x-armory-comments'), 'n/a');
+  const html = await res.text();
+  assert.doesNotMatch(html, /id="ash-thread"|id="ash-comment-box"/, 'no thread section, no comment box');
+});
+
+test('comments wiring: posts and deletes are believed only when a row comes back; a report is idempotent', async () => {
+  const ctx = shareCtx();
+  const calls = [];
+  const answers = { insert: { data: [{ id: 'new-c', user_id: 'viewer-1', body: 'hi', created_at: '2026-11-11T12:00:00Z' }], error: null },
+                    delete: { data: [], error: null }, report: { data: [{ comment_id: C2 }], error: null } };
+  ctx.sb = { from: (table) => {
+    const call = { table, op: null, payload: null, filters: [] };
+    const q = {
+      insert(p) { call.op = 'insert'; call.payload = p; calls.push(call); return q; },
+      delete() { call.op = 'delete'; calls.push(call); return q; },
+      select() { return q; },
+      eq(c, v) { call.filters.push([c, v]); return q; },
+      then(res) { return Promise.resolve(call.table === 'armory_comment_reports' ? answers.report
+        : call.op === 'insert' ? answers.insert : answers.delete).then(res); },
+    };
+    return q;
+  } };
+  ctx.confirm = () => true;
+  ctx.alert = (m) => { ctx._alerted = m; };
+
+  // A pocket DOM: one existing comment by someone else, the thread, the box.
+  const mkEl = () => {
+    const el = { attrs: {}, children: [], innerHTML: '', className: '',
+      setAttribute(k, v) { this.attrs[k] = v; }, getAttribute(k) { return this.attrs[k] || null; },
+      remove() { this.removed = true; },
+      querySelector(sel) {
+        if (sel === '[data-cmt-actions]') return this.slot;
+        if (sel.includes('data-cmt-delete')) return this.slot && /data-cmt-delete/.test(this.slot.innerHTML) ? (this.delBtn = this.delBtn || { disabled: false }) : null;
+        if (sel.includes('data-cmt-report')) return this.slot && /data-cmt-report/.test(this.slot.innerHTML) ? (this.repBtn = this.repBtn || { disabled: false, textContent: '' }) : null;
+        if (sel === 'textarea') return this.ta;
+        if (sel === 'button.post') return this.postBtn;
+        if (sel === 'h2') return this.h2;
+        return null;
+      },
+      querySelectorAll(sel) { return sel === '.cmt' ? this.cmts : []; },
+      insertBefore(node) { this.children.push(node); } };
+    return el;
+  };
+  const cmt = mkEl();
+  cmt.attrs = { 'data-comment-id': C2, 'data-commenter': BASED_UID };
+  cmt.slot = mkEl();
+  const thread = mkEl();
+  thread.cmts = [cmt];
+  thread.h2 = { textContent: '1 comment' };
+  const box = mkEl();
+  box.ta = { value: '  hi  ', focus() {} };
+  box.postBtn = { disabled: false };
+  const doc = { getElementById: (id) => (id === 'ash-thread' ? thread : id === 'ash-comment-box' ? box : null),
+    createElement: () => mkEl() };
+  const row = { id: ID, user_id: UID, share_id: SHARE };
+  const viewer = { user: { id: 'viewer-1' }, isOwner: false, isAdmin: false };
+
+  ctx.ArmoryShare.wireComments(doc, row, viewer);
+  // Another reader's comment: no Delete for a stranger, Report present.
+  assert.doesNotMatch(cmt.slot.innerHTML, /data-cmt-delete/, 'a stranger cannot delete');
+  assert.match(cmt.slot.innerHTML, /data-cmt-report/);
+
+  // Post: the write names the build and the writer, and the box clears
+  // only on a returned row.
+  await box.postBtn.onclick();
+  const ins = calls.find((c) => c.table === 'armory_build_comments' && c.op === 'insert');
+  assert.deepEqual(JSON.parse(JSON.stringify(ins.payload)), { armory_build_id: ID, user_id: 'viewer-1', body: 'hi' }, 'trimmed, as the viewer');
+  assert.equal(box.ta.value, '', 'cleared after the row came back');
+  assert.equal(thread.h2.textContent, '2 comments');
+
+  // The owner deletes a stranger's comment — refused by RLS (zero rows):
+  // the comment STAYS and the failure is said.
+  const owner = { user: { id: UID }, isOwner: true, isAdmin: false };
+  cmt.slot.innerHTML = ''; cmt.delBtn = null;
+  ctx.ArmoryShare.wireComments(doc, row, owner);
+  assert.match(cmt.slot.innerHTML, /data-cmt-delete/, 'the list’s owner may delete any comment on it');
+  await cmt.delBtn.onclick();
+  assert.ok(!cmt.removed, 'zero rows back: not reported as deleted');
+  assert.match(String(ctx._alerted), /Couldn’t delete/);
+
+  // Report: a duplicate (already reported) reads as reported, not an error.
+  answers.report = { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
+  await cmt.repBtn.onclick();
+  assert.equal(cmt.repBtn.textContent, 'Reported');
+
+  // Signed out: the box is a sign-in door that lands back on this page.
+  const box2 = mkEl();
+  const doc2 = { getElementById: (id) => (id === 'ash-thread' ? thread : id === 'ash-comment-box' ? box2 : null), createElement: () => mkEl() };
+  ctx.ArmoryShare.wireComments(doc2, row, { user: null, isOwner: false, isAdmin: false });
+  assert.match(box2.innerHTML, /Sign in to comment/);
+  assert.match(box2.innerHTML, new RegExp('next=' + encodeURIComponent('/l/' + SHARE).replace(/%/g, '%')), 'back to this /l/ page');
 });
 
 // ── js/armory-share.js: the export ───────────────────────────────────────
