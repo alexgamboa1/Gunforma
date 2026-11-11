@@ -1310,6 +1310,18 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.successor-name { font-size: 15px; font-weight: 700; color: #1a1a1a; text-decoration: none; } .successor-name:hover { color: #1d6fb8; }' +
 '.successor-note { font-size: 12px; color: #777; }' +
 '.successor-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 6px; }' +
+'.build-fit-line { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 10px 0 2px; font-size: 12.5px; }' +
+'.build-fit-line[hidden] { display: none; }' +
+'.bfl-tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }' +
+'.bfl-tag.green { background: #e7f6ee; color: #1e7a4d; border: 0.5px solid #9edbbb; }' +
+'.bfl-tag.neutral { background: #f0f1f3; color: #555; border: 0.5px solid #d9dbdf; }' +
+'.bfl-tag.amber { background: #fdf3e2; color: #8a6d3b; border: 0.5px solid #f3d9a8; }' +
+'.bfl-tag.red { background: #fdeae4; color: #b24a2a; border: 0.5px solid #f3bfae; }' +
+'.bfl-tag.muted { background: #f4f3ee; color: #888; border: 0.5px solid #e5e2d8; }' +
+'.bfl-why { color: #777; }' +
+'.bfl-link { color: #2a7bbd; font-weight: 700; text-decoration: none; white-space: nowrap; }' +
+'.add-to-build { display: inline-block; margin-top: 12px; font-size: 12px; font-weight: 700; color: #2a7bbd; background: #fff; border: 0.5px solid #a7cdec; border-radius: 4px; padding: 8px 14px; text-decoration: none; }' +
+'.add-to-build:hover { background: #eaf4fc; }' +
 '.successor-link { font-size: 12px; color: #1d6fb8; text-decoration: none; } .successor-link:hover { text-decoration: underline; }' +
 '@media (max-width: 480px) { .successor-media { flex-basis: 64px; width: 64px; height: 64px; } }' +
 '.restricted { font-size: 13px; font-weight: 600; line-height: 1.45; color: #8a3b12; background: #fff4ec; border: 0.5px solid #f0c9ad; border-radius: 6px; padding: 9px 12px; margin-bottom: 10px; }' +
@@ -1423,6 +1435,13 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     '<h1>' + esc(shownName) + '</h1>' +
     (discontinued ? '<div class="disc-badge">Discontinued</div>' : '') +
     (priceText ? '<div class="price-line">' + esc(priceText) + '</div>' : '') +
+    // "Fits your build": an empty placeholder in the served document — one
+    // page for everyone, cacheable, nothing a crawler sees — filled by
+    // js/build-fit-line.js only when a build in progress exists in this
+    // browser (the Armory's localStorage draft), judged by the SAME module
+    // as the Armory (js/armory-fit.js).
+    (discontinued ? '' :
+      '<div id="build-fit-line" class="build-fit-line" data-product-id="' + esc(product.id) + '" data-category="' + esc(product.category) + '" hidden></div>') +
     (product.description ? '<div class="desc">' + esc(product.description) + '</div>' : '') +
     bestForHtml +
     (product.fitment_notes ? '<div class="desc"><strong>Fitment notes:</strong> ' + esc(product.fitment_notes) + '</div>' : '') +
@@ -1452,7 +1471,11 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
         variantRowsHtml +
         // Says what is true of the links above it: partner-only, maker-only,
         // both — or nothing at all when there is no link to disclose.
-        (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '')) +
+        (disclosure ? '<div class="disclosure">' + esc(disclosure) + '</div>' : '') +
+        // Into the Armory: with a build in progress the part goes straight
+        // in; without one the Armory asks what you're starting with first
+        // (?add= — the 2026-11-10 flow). An internal link, never a buy link.
+        '<a class="add-to-build" href="gunforma-armory.html?add=' + esc(product.id) + '">+ Add to Armory build</a>') +
     // What fits this part, after the buy rows so a long list never pushes
     // them down. Nothing renders when nothing is listed.
     fitsOnHtml(fitsOn) +
@@ -1468,6 +1491,13 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 // crawler sees); navScript() loads nav.js, which repaints it for a
 // signed-in visitor and wires the hamburger. See _page-chrome.mjs.
 navScript() +
+// The fit line's modules, after navScript() so window.sb exists when
+// build-fit-line.js initialises. slide-fit stays the ONE copy of the tier
+// rule — the browser file, which this function also evaluates server-side
+// for the "Fits on" grids (_slide-fit.mjs).
+'<script src="js/slide-fit.js"></script>' +
+'<script src="js/armory-fit.js"></script>' +
+'<script src="js/build-fit-line.js"></script>' +
 ANALYTICS_SNIPPET + '</body></html>';
 }
 
