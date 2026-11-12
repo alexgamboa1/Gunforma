@@ -1245,7 +1245,7 @@ async function publishBuild() {
   setResultNote('ok', wasCreatorDraft ? 'Saved as private creator draft' : 'Published',
     '<div style="margin-bottom:6px;">Build UUID: <code style="font-size:10px;">' + esc(result.buildId) + '</code></div>' +
     (wasCreatorDraft
-      ? '<div>Hidden from everyone. Copy the UUID into <code style="font-size:10px;">node scripts/creator-invites.js --invite &lt;handle&gt; --builds &lt;uuid&gt;</code> to put it on an invite.</div>'
+      ? '<div>Hidden from everyone. <a href="gunforma-admin-creators.html" style="color:#166534;font-weight:700;text-decoration:underline;">Create invite →</a> — it lists this draft in its build picker. (The CLI still works too: <code style="font-size:10px;">node scripts/creator-invites.js --invite &lt;handle&gt; --builds &lt;uuid&gt;</code>.)</div>'
       : '<a href="' + esc(detailUrl) + '" target="_blank" style="color:#166534;font-weight:700;text-decoration:underline;">Open build detail →</a>'));
 
   btn.style.display = 'none';

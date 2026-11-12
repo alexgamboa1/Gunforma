@@ -107,6 +107,33 @@ NOTHING until the creator signs in themselves.
   never claims mail it cannot prove (#216). Google remains the one-click
   path.
 
+## The admin portal page (2026-11-12)
+
+`gunforma-admin-creators.html` manages invites from the portal — everything
+AFTER drafting the builds (which stays in `/gunforma-admin-post`): pick
+drafts, record where the creator was found, mint, copy the link, track,
+new-link, revoke. What changed around it:
+
+- **The creator-invite Edge Function accepts a signed-in ADMIN's session**
+  beside the unchanged service-role path: `auth.getUser(jwt)` then
+  `profiles.role = 'admin'` read with the service client (NOT `is_admin()`
+  — no request context in a service-client query). It grew CORS (same
+  `ALLOWED_ORIGINS` as creator-claim) and an **`update`** action:
+  `source` / `notes` / `sent_via` editable in every state; display name,
+  bio and socials refused once claimed. The raw claim link going back to
+  an admin's browser is deliberate — it is the only copy, and the admin is
+  the person who DMs it.
+- **Two new `creator_invites` columns**
+  (`supabase/migrations/20261112090000_creator_invite_source_notes.sql`):
+  `source` is where the creator was FOUND; `sent_via` stays how the link
+  was delivered. `notes` is the admin trail (≤ 4000). The table stays
+  deny-all; the function tolerates the columns' absence until the push.
+- **The CLI is unchanged in behavior**, plus `--source` on `--invite` and
+  source in the status report.
+
+After a merge that touches the function: redeploy `creator-invite`, then
+`supabase db push --linked` — code first, as below.
+
 ## Deploy / config (one-time)
 
 In order (CLAUDE.md: code first, then migration):

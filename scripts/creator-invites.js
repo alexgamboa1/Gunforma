@@ -13,7 +13,10 @@
 //   2. node scripts/creator-invites.js --invite <handle> \
 //        --builds <uuid,uuid> [--name "Display Name"] [--bio "..."] \
 //        [--ig https://instagram.com/...] [--yt https://youtube.com/@...] \
-//        [--via "IG DM"]
+//        [--via "IG DM"] [--source "r/P365 top post"]
+//      --via is how the link is delivered; --source is where the creator
+//      was FOUND (two different facts, two columns). --source needs the
+//      source/notes migration applied, and the function says so if not.
 //   3. DM the printed link. It lasts 30 days and this is its ONLY copy —
 //      the database stores a hash. Lose it: --new-link mints another.
 //   4. node scripts/creator-invites.js            ← the status report
@@ -95,6 +98,7 @@ const bold   = (s) => `\x1b[1m${s}\x1b[0m`;
       instagram_url: flagValue('--ig') || undefined,
       youtube_url:   flagValue('--yt') || undefined,
       sent_via:      flagValue('--via') || undefined,
+      source:        flagValue('--source') || undefined,
     });
     if (data.error)   { console.error(red('✗ ' + data.error)); process.exit(1); }
     if (data.skipped) { console.log(yellow('– skipped: ' + data.reason)); process.exit(0); }
@@ -141,7 +145,7 @@ const bold   = (s) => `\x1b[1m${s}\x1b[0m`;
       ? (expired ? 'invited, link EXPIRED — --new-link to refresh'
                  : (i.opened ? 'invited, opened, not claimed' : 'invited, never opened'))
       : i.status + (i.claimed_at ? ' ' + String(i.claimed_at).slice(0, 10) : '');
-    console.log(`  ${MARK[i.status] || '?'} @${String(i.handle).padEnd(24)} ${String(i.builds).padStart(2)} build(s)  ${state}${i.sent_via ? '  via ' + i.sent_via : ''}`);
+    console.log(`  ${MARK[i.status] || '?'} @${String(i.handle).padEnd(24)} ${String(i.builds).padStart(2)} build(s)  ${state}${i.sent_via ? '  via ' + i.sent_via : ''}${i.source ? '  found: ' + i.source : ''}`);
   }
   process.exit(0);
 })().catch((e) => {
