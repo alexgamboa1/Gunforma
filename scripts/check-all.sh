@@ -97,6 +97,7 @@ check "headline price follows option" scripts/option-price.test.mjs
 check "guide editor writes"       scripts/guide-editor.test.mjs
 check "armory fit verdicts"       scripts/armory-fit.test.mjs
 check "product-page fit line"     scripts/build-fit-line.test.mjs
+check "armory share pages"        scripts/armory-share.test.mjs
 check "the ♥ is one module"       scripts/favorites.test.mjs
 check "sign-in ?next= is safe"     scripts/safe-next.test.mjs
 

@@ -40,7 +40,20 @@ function makeSb(state) {
       getSession: () => new Promise(() => {}),
       onAuthStateChange() {},
     },
-    rpc: () => ({ maybeSingle: () => new Promise(() => {}) }),
+    // An awaited rpc records like a write and must be answered; the
+    // .maybeSingle() probes (get_my_profile) never settle, like any read.
+    rpc(fn, args) {
+      const call = { table: fn, op: 'rpc', payload: args, filters: [] };
+      return {
+        maybeSingle: () => new Promise(() => {}),
+        then(res, rej) {
+          sb.calls.push(call);
+          let a = sb.answer(call);
+          if (a === undefined) a = { data: null, error: { message: `unexpected rpc ${fn}` } };
+          return Promise.resolve(a).then(res, rej);
+        },
+      };
+    },
     from(table) {
       const call = { table, op: 'select', payload: null, filters: [] };
       const q = {
@@ -91,7 +104,7 @@ function loadPage(file, marker, { confirm = () => true, store = {}, session = {}
   for (const f of ['js/category-map.js', 'js/build-categories.js', 'js/display-name.js',
     'js/variant-label.js', 'js/variant-swatch.js', 'js/option-price.js', 'js/maker-link.js', 'js/affiliate.js',
     'js/frame-fit.js', 'js/slide-fit.js', 'js/armory-fit.js', 'js/guide-url.js',
-    'js/build-total.js', 'js/armory-builds.js', 'js/favorites.js']) {
+    'js/build-total.js', 'js/armory-builds.js', 'js/favorites.js', 'js/armory-share.js']) {
     vm.runInContext(read(f), ctx, { filename: f });
   }
   const dom = makeDom();
@@ -555,6 +568,204 @@ test('no "Leave site?" prompt, because nothing is lost: the build persists throu
   assert.equal(ctx.hasUnsavedPicks(), true, 'hasUnsavedPicks still tracks the saved signature');
 });
 
+// ── Share / Save: the two buttons (2026-11-11) ─────────────────────────────
+// Share gets a link with no account and opens the panel HERE; Save puts the
+// build in the account. Every rule below renders fine broken: a Share that
+// quietly redirects, a Save that writes an anonymous row, a claim skipped so
+// the update matches nothing and copies the build, a rate-limit error shown
+// raw, a panel whose export is a second copy of the Reddit format.
+
+const ONE_PICK = `STATE.gunMode = 'fcu'; STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`;
+
+test('Share, signed out: the anonymous RPC, then the panel — link, export tabs, "Don\'t lose it" — and no redirect', async () => {
+  const { ctx, els, store } = armory();
+  set(ctx, `CURRENT_USER = null; SHARE_LIVE = true; STATE.title = 'My WIP'; ${ONE_PICK}`);
+  ctx.sb.answer = (call) => (call.op === 'rpc' && call.table === 'create_armory_build'
+    ? { data: { id: DRAFT_ID, share_id: 'abc123', edit_token: 'tok-1' }, error: null } : undefined);
+  await ctx.shareFlow();
+  assert.deepEqual(ctx.sb.calls.map((c) => `${c.op} ${c.table}`), ['rpc create_armory_build']);
+  assert.equal(ctx.location.href, undefined, 'the panel is the landing — no redirect to /l/');
+  const panel = els['share-modal'].innerHTML;
+  assert.match(panel, /value="https:\/\/gunforma\.com\/l\/abc123"/, 'the link, ready to copy');
+  assert.match(panel, /Copy for Reddit/);
+  assert.match(panel, /Plain text/);
+  assert.match(panel, /Don’t lose it\. <\/b>|Don’t lose it\./, 'the unsaved box');
+  assert.match(panel, /id="share-save"/, 'with its Save button');
+  assert.match(panel, /href="https:\/\/gunforma\.com\/l\/abc123">Open the share page ›/);
+  assert.equal(JSON.parse(store['gf-armory-edit-tokens'])[DRAFT_ID], 'tok-1', 'the token came back once and was kept');
+  assert.equal(ctx.STATE.savedId, DRAFT_ID);
+  assert.match(ctx.replaced.at(-1) || '', /edit=community%3A|edit=community:/, 'a reload keeps the build through ?edit=');
+});
+
+test('Share, rate-limited: the friendly hold pointing at sign-in, never the raw error, never a panel', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = null; SHARE_LIVE = true; ${ONE_PICK}`);
+  ctx.sb.answer = (call) => (call.op === 'rpc'
+    ? { data: null, error: { message: 'too many builds saved from this connection today — sign in to keep saving' } } : undefined);
+  await ctx.shareFlow();
+  assert.equal(els['toast-msg'].textContent, 'Sharing is busy right now. Sign in to save your build.');
+  assert.match(els['toast-link-wrap'].innerHTML, /gunforma-signin\.html\?next=gunforma-armory\.html/);
+  assert.equal((els['share-modal'] || { innerHTML: '' }).innerHTML, '', 'no panel over a failed save');
+  // The daily cap reads the same way.
+  set(ctx, `STATE.savedId = null;`);
+  ctx.sb.answer = (call) => (call.op === 'rpc'
+    ? { data: null, error: { message: 'anonymous saving is briefly paused — sign in to save your build' } } : undefined);
+  await ctx.shareFlow();
+  assert.equal(els['toast-msg'].textContent, 'Sharing is busy right now. Sign in to save your build.');
+});
+
+test('Share before the migration falls back to the sign-in prompt, and sends nothing', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = null; ${ONE_PICK}`);
+  await ctx.shareFlow();
+  assert.equal(ctx.sb.calls.length, 0, 'no RPC that does not exist yet');
+  assert.match(els['toast-link-wrap'].innerHTML, /gunforma-signin\.html/);
+  assert.equal((els['share-modal'] || { innerHTML: '' }).innerHTML, '');
+});
+
+test('Save, signed out: the sign-in modal — nothing written, the picks held, the round trip finishing the save', () => {
+  const { ctx, els, store, session } = armory();
+  set(ctx, `CURRENT_USER = null; SHARE_LIVE = true; ${ONE_PICK}`);
+  ctx.saveFlow();
+  assert.equal(ctx.sb.calls.length, 0, 'Save signed out writes nothing — not even an anonymous row');
+  const modal = els['auth-modal'].innerHTML;
+  assert.match(modal, /Save your build/);
+  assert.match(modal, /My builds on any device, and your picks stay right here while you sign in/);
+  assert.match(modal, /gunforma-signup\.html\?next=gunforma-armory\.html/);
+  assert.match(modal, /gunforma-signin\.html\?next=gunforma-armory\.html/);
+  assert.ok(store['gf-armory-build-v2'], 'the build is held for the round trip');
+  els['auth-new'].onclick();
+  assert.equal(session['gf-armory-save-v1'], '1', 'the next signed-in load finishes the save');
+});
+
+test('Save, signed in, on an anonymous build this browser created: claim first, then the owner update — same link', async () => {
+  const { ctx, els, store } = armory({ store: { 'gf-armory-edit-tokens': JSON.stringify({ [DRAFT_ID]: 'tok-1' }) } });
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; SHARE_LIVE = true; STATE.target = 'community';
+    STATE.savedId = '${DRAFT_ID}'; STATE.ownerId = null; STATE.shareId = 'abc123'; ${ONE_PICK}`);
+  ctx.sb.answer = (call) => {
+    if (call.op === 'rpc' && call.table === 'claim_armory_build') return { data: { id: DRAFT_ID, share_id: 'abc123' }, error: null };
+    if (call.op === 'update' && call.table === 'gun_guides') return { data: [{ id: DRAFT_ID }], error: null };
+    return undefined;
+  };
+  await ctx.saveFlow();
+  assert.deepEqual(ctx.sb.calls.map((c) => `${c.op} ${c.table}`), ['rpc claim_armory_build', 'update gun_guides'],
+    'never a direct UPDATE on the unowned row, never update_armory_build for an account');
+  assert.equal(ctx.sb.calls[0].payload.p_edit_token, 'tok-1');
+  assert.ok(!('user_id' in ctx.sb.calls[1].payload), 'the claim moved ownership; the update never writes it');
+  assert.equal(ctx.STATE.ownerId, JOE.id);
+  assert.equal(JSON.parse(store['gf-armory-edit-tokens'])[DRAFT_ID], undefined, 'the token is spent');
+  assert.equal(els['toast-msg'].textContent, 'Saved to your account. Find it under My builds.');
+  assert.equal(els['btn-save'].textContent, 'Saved to My builds ✓', 'saved and clean');
+});
+
+test('Share, signed in: saves to the account too — never a link that isn\'t in My builds — then the panel', async () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; SHARE_LIVE = true; STATE.target = 'community';
+    STATE.savedId = null; STATE.ownerId = null; ${ONE_PICK}`);
+  ctx.sb.answer = (call) => (call.op === 'insert' && call.table === 'gun_guides'
+    ? { data: [{ id: DRAFT_ID, share_id: 'abc123' }], error: null } : undefined);
+  await ctx.shareFlow();
+  assert.deepEqual(ctx.sb.calls.map((c) => `${c.op} ${c.table}`), ['insert gun_guides'], 'an account save, not the anonymous RPC');
+  assert.equal(ctx.sb.calls[0].payload.user_id, JOE.id, 'the row is the account\'s');
+  const panel = els['share-modal'].innerHTML;
+  assert.match(panel, /\/l\/abc123/);
+  assert.match(panel, /Saved to your account under My builds\./);
+  assert.doesNotMatch(panel, /Don’t lose it/, 'no nudge for a build already in the account');
+});
+
+test('the panel\'s export rides ArmoryShare — the one copy of the Reddit format — lowest price by default', async () => {
+  const { ctx } = armory();
+  set(ctx, `CURRENT_USER = null; SHARE_LIVE = true; STATE.shareId = 'abc123'; STATE.title = 'My WIP';
+    affiliate = { getFor: function () { return null; }, loadFor: function () { return Promise.resolve(); } }; ${ONE_PICK}`);
+  const info = await ctx.shareExportInfo();
+  assert.equal(info.shareId, 'abc123');
+  assert.equal(info.gunName, 'SIG P365 FCU');
+  assert.equal(info.rows.length, 1);
+  assert.equal(info.rows[0].catLabel, 'Trigger');
+  assert.equal(info.rows[0].price, 150, 'no retailer data loaded: MSRP, labelled MSRP');
+  assert.equal(info.rows[0].shop, null);
+  const text = ctx.ArmoryShare.exportText('reddit', info);
+  assert.match(text, /\[Gunforma Part List\]\(https:\/\/gunforma\.com\/l\/abc123\)/);
+  assert.match(text, /\$150 MSRP/);
+});
+
+test('the split: a Gunforma guide draft keeps the one-button save — Share and its note are hidden', () => {
+  const { ctx, els } = armory();
+  set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; STATE.target = 'curated';
+    STATE.curated = { theme: 'duty', newTheme: '', published: false }; ${ONE_PICK}`);
+  ctx.renderSidebar();
+  assert.equal(els['btn-share'].hidden, true);
+  assert.equal(els['save-note'].hidden, true);
+  assert.equal(els['btn-save'].textContent, 'Save as a draft →');
+  assert.equal(els['btn-save'].className, 'btn-block primary', 'the one button keeps the primary style');
+});
+
+// The edit token is the ownership and it lives in localStorage only. The
+// address bar reads ?edit=community:<id> right after a Share, so that URL
+// is what gets pasted by mistake — whoever opens it without the token
+// lands on the /l/ page, never in the editor and never near a write.
+test('the edit token lives in localStorage only — never in ?edit=, a toast link, or the panel', async () => {
+  const { ctx, els, store } = armory();
+  set(ctx, `CURRENT_USER = null; SHARE_LIVE = true; STATE.title = 'My WIP'; ${ONE_PICK}`);
+  ctx.sb.answer = (call) => (call.op === 'rpc' && call.table === 'create_armory_build'
+    ? { data: { id: DRAFT_ID, share_id: 'abc123', edit_token: 'tok5ecre7' }, error: null } : undefined);
+  await ctx.shareFlow();
+  assert.equal(JSON.parse(store['gf-armory-edit-tokens'])[DRAFT_ID], 'tok5ecre7', 'kept, in this browser\'s store');
+  const everywhereElse = ctx.replaced
+    .concat([ctx.location.href || ''], Object.values(els).map((e) => e.innerHTML + ' ' + e.textContent))
+    .join(' ');
+  assert.match(everywhereElse, /edit=community:/, 'the URL names the row');
+  assert.doesNotMatch(everywhereElse, /tok5ecre7/, 'and nothing but the store carries the token');
+});
+
+test('?edit= of an anonymous build without its token: the /l/ page, never the editor — signed out or in', async () => {
+  const anonRow = { id: DRAFT_ID, user_id: null, share_id: 'abc123', title: 'Joe carry',
+    platform_id: PLAT, parts_snapshot: [] };
+  for (const user of [null, JOE]) {
+    const { ctx } = armory({ blank: true });
+    set(ctx, `CURRENT_USER = ${JSON.stringify(user)}; SHARE_LIVE = true;`);
+    ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+      ? { data: [anonRow], error: null } : undefined);
+    await ctx.openForEdit('community', DRAFT_ID);
+    assert.equal(ctx.location.href, '/l/abc123', 'the share page is the landing');
+    assert.equal(ctx.STATE.savedId, null, 'the identity is never adopted');
+    assert.deepEqual(ctx.sb.calls, [], 'and nothing is written');
+  }
+});
+
+test('?edit= of someone else\'s account build, signed in: the /l/ page, not a dead toast', async () => {
+  const { ctx } = armory({ blank: true });
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; SHARE_LIVE = true;`);
+  ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+    ? { data: [{ id: DRAFT_ID, user_id: 'somebody-else', share_id: 'abc123', title: 'Carry',
+        platform_id: PLAT, parts_snapshot: [] }], error: null } : undefined);
+  await ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(ctx.location.href, '/l/abc123');
+  assert.equal(ctx.STATE.savedId, null);
+  assert.deepEqual(ctx.sb.calls, []);
+});
+
+test('?edit= without rights, pre-migration (no share_id): today\'s toasts stand, and nothing opens', async () => {
+  // Signed out on an OWNED build: its owner may just be signed out here.
+  const out = armory({ blank: true });
+  set(out.ctx, `CURRENT_USER = null;`);
+  out.ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+    ? { data: [{ id: DRAFT_ID, user_id: JOE.id, title: 'Carry', platform_id: PLAT, parts_snapshot: [] }], error: null } : undefined);
+  await out.ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(out.ctx.location.href, undefined, 'no /l/ to go to');
+  assert.match(out.els['toast-link-wrap'].innerHTML, /gunforma-signin\.html\?next=/);
+  assert.equal(out.ctx.STATE.savedId, null);
+  // Signed in on someone else's build.
+  const inn = armory({ blank: true });
+  set(inn.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
+  inn.ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+    ? { data: [{ id: DRAFT_ID, user_id: 'somebody-else', title: 'Carry', platform_id: PLAT, parts_snapshot: [] }], error: null } : undefined);
+  await inn.ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(inn.ctx.location.href, undefined);
+  assert.equal(inn.els['toast-msg'].textContent, 'Only this build’s owner can edit it.');
+  assert.deepEqual(inn.ctx.sb.calls, []);
+});
+
 test('Edit on a PUBLISHED Gunforma guide opens a new draft of it, never the live row', async () => {
   const { ctx } = armory();
   set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; GUIDE_EDITING_LIVE = true; DRAFT_OF_LIVE = true;`);
@@ -662,8 +873,10 @@ test('My builds / Saved parts reads only the signed-in reader\'s own rows; Add t
   const reads = myArmoryReads(ctx, { favs: [{ product_id: 'trig-2', created_at: '2026-11-01T00:00:00Z', products: { id: 'trig-2', name: 'Trigger Two' } }] });
   await ctx.loadMyArmory();
   const of = (t) => reads.filter((r) => r.table === t);
-  assert.equal(of('gun_guides').length, 1);
-  assert.deepEqual(of('gun_guides')[0].filters, [['user_id', JOE.id]], 'builds: user_id = the reader, nothing wider');
+  assert.equal(of('gun_guides').length, 2, 'the rows, and the /l/ slugs in their own tolerant read');
+  for (const read_ of of('gun_guides')) {
+    assert.deepEqual(read_.filters, [['user_id', JOE.id]], 'builds: user_id = the reader, nothing wider');
+  }
   assert.equal(of('part_favorites').length, 1);
   assert.deepEqual(of('part_favorites')[0].filters, [['user_id', JOE.id]], 'parts: user_id = the reader');
   assert.equal(els['tab-my-builds'].textContent, 'My builds (1)');
@@ -1040,10 +1253,13 @@ test('names: a reader\'s build reads "Armory build" in the Armory, never "commun
   set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; STATE.target = 'community'; STATE.savedId = null;
     STATE.picks = { trigger: { productId: 'trig-1', variantId: 'tv1' } };`);
   ctx.renderSidebar();
-  assert.equal(els['btn-save'].textContent, 'Save & share →');
+  assert.equal(els['btn-save'].textContent, 'Save');
+  assert.equal(els['btn-share'].textContent, 'Share');
+  assert.equal(els['save-note'].textContent, 'Share gets you a link, no account needed. Save keeps it in your account.');
   set(ctx, `STATE.savedId = '${GUIDE_ID}'; STATE.ownerId = '${JOE.id}';`);
   ctx.renderSidebar();
-  assert.equal(els['btn-save'].textContent, 'Update your Armory build →');
+  assert.equal(els['btn-save'].textContent, 'Update your Armory build →', 'unsaved changes: the save is an update');
+  assert.equal(els['save-note'].textContent, 'It’s in My builds on any device.');
   assert.match(els['edit-banner'].innerHTML, /Editing · Armory build/);
   set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true;`);
   ctx.renderSidebar();
