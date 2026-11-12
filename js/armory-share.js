@@ -432,6 +432,21 @@
       }
     }
 
+    // Comments: the box for whoever is signed in, delete for a comment's
+    // writer / the list's owner / an admin, report for everyone else —
+    // all on the server-rendered thread. No thread section means the
+    // comments migration isn't applied: nothing is wired, no box appears.
+    if (doc.getElementById('ash-thread')) {
+      var isAdmin = false;
+      if (user) {
+        try {
+          var prof = await global.sb.rpc('get_my_profile').maybeSingle();
+          isAdmin = !!(prof && prof.data && prof.data.role === 'admin');
+        } catch (e2) { isAdmin = false; }
+      }
+      wireComments(doc, row, { user: user, isOwner: isOwner, isAdmin: isAdmin });
+    }
+
     // The owner's extras.
     if (!isOwner) return;
     var banner = doc.getElementById('ash-banner');
@@ -480,8 +495,110 @@
     }
   }
 
+  // ── comments ────────────────────────────────────────────────────────────
+  // Every write is believed only when a row comes back — an RLS-refused
+  // insert or delete matches nothing and returns no error (CLAUDE.md,
+  // "A green result is not evidence").
+  function wireComments(doc, row, viewer) {
+    var thread = doc.getElementById('ash-thread');
+    var box = doc.getElementById('ash-comment-box');
+    if (!thread || !box) return;
+
+    // Who may do what, per comment.
+    thread.querySelectorAll('.cmt').forEach(function (el) {
+      var slot = el.querySelector('[data-cmt-actions]');
+      if (!slot || !viewer.user) return;
+      var commenter = el.getAttribute('data-commenter');
+      var mine = commenter === viewer.user.id;
+      var html = '';
+      if (mine || viewer.isOwner || viewer.isAdmin) {
+        html += '<button type="button" data-cmt-delete>Delete</button>';
+      }
+      if (!mine) {
+        html += '<button type="button" data-cmt-report>Report</button>';
+      }
+      slot.innerHTML = html;
+      var del = el.querySelector('button[data-cmt-delete]');
+      if (del) del.onclick = async function () {
+        if (!global.confirm('Delete this comment? This can’t be undone.')) return;
+        del.disabled = true;
+        var r = await global.sb.from('armory_build_comments').delete()
+          .eq('id', el.getAttribute('data-comment-id')).select('id');
+        if (r.error || !Array.isArray(r.data) || r.data.length !== 1) {
+          del.disabled = false;
+          global.alert('Couldn’t delete it' + (r.error ? ': ' + (r.error.message || 'unknown error') : ' — it may already be gone.'));
+          return;
+        }
+        el.remove();
+        bumpCount(thread, -1);
+      };
+      var rep = el.querySelector('button[data-cmt-report]');
+      if (rep) rep.onclick = async function () {
+        rep.disabled = true;
+        var r = await global.sb.from('armory_comment_reports')
+          .insert({ comment_id: el.getAttribute('data-comment-id'), user_id: viewer.user.id }).select('comment_id');
+        // A duplicate (already reported) is the same outcome for the reader.
+        var dup = r.error && /duplicate|23505/i.test((r.error.message || '') + (r.error.code || ''));
+        if (r.error && !dup) {
+          rep.disabled = false;
+          global.alert('Couldn’t report it: ' + (r.error.message || 'unknown error'));
+          return;
+        }
+        rep.textContent = 'Reported';
+      };
+    });
+
+    // The box: signed in writes; signed out is sent to sign in, back here.
+    if (!viewer.user) {
+      // encodeURIComponent's output is href-safe by construction.
+      box.innerHTML = '<p class="signin">' +
+        '<a href="gunforma-signin.html?next=' + encodeURIComponent('/l/' + row.share_id) + '">Sign in to comment</a>' +
+        ' — ask a question or share what worked for you.</p>';
+      return;
+    }
+    box.innerHTML =
+      '<textarea rows="3" maxlength="2000" placeholder="Ask a question or share what worked for you" aria-label="Add a comment"></textarea>' +
+      '<button type="button" class="post">Post comment</button>';
+    var ta = box.querySelector('textarea');
+    var post = box.querySelector('button.post');
+    post.onclick = async function () {
+      var body = (ta.value || '').trim();
+      if (!body) { ta.focus(); return; }
+      post.disabled = true;
+      var r = await global.sb.from('armory_build_comments')
+        .insert({ armory_build_id: row.id, user_id: viewer.user.id, body: body })
+        .select('id, user_id, body, created_at');
+      post.disabled = false;
+      if (r.error || !Array.isArray(r.data) || r.data.length !== 1) {
+        global.alert('Couldn’t post: ' + ((r.error && r.error.message) || 'refused'));
+        return;
+      }
+      var c = r.data[0];
+      var el = doc.createElement('div');
+      el.className = 'cmt';
+      el.setAttribute('data-comment-id', c.id);
+      el.setAttribute('data-commenter', c.user_id);
+      el.innerHTML = '<div class="cmt-head"><strong>You</strong>' +
+        (viewer.isOwner && row.user_id === viewer.user.id ? ' <span class="optag">OP</span>' : '') +
+        ' <span class="cmt-day">' + esc(String(c.created_at || '').slice(0, 10)) + '</span>' +
+        '<span class="cmt-actions" data-cmt-actions></span></div>' +
+        '<p class="cmt-body">' + esc(c.body) + '</p>';
+      thread.insertBefore(el, box);
+      bumpCount(thread, 1);
+      ta.value = '';
+      // The new comment's own Delete, same verified path.
+      wireComments(doc, row, viewer);
+    };
+  }
+  function bumpCount(thread, delta) {
+    var h = thread.querySelector('h2');
+    if (!h) return;
+    var n = Math.max(0, (parseInt(h.textContent, 10) || 0) + delta);
+    h.textContent = n + (n === 1 ? ' comment' : ' comments');
+  }
+
   global.ArmoryShare = { init: init, exportText: exportText, exportHtml: exportHtml, exportRows: exportRows,
     copyExport: copyExport, CAT_ORDER: CAT_ORDER,
-    shareIdFromPath: shareIdFromPath, tokenFor: tokenFor, TOKENS_KEY: TOKENS_KEY };
+    shareIdFromPath: shareIdFromPath, tokenFor: tokenFor, TOKENS_KEY: TOKENS_KEY, wireComments: wireComments };
   if (global.document && global.document.getElementById) init();
 })(typeof window !== 'undefined' ? window : this);
