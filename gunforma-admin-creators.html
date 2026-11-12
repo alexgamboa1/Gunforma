@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Admin — Creator invites — Gunforma</title>
+<meta name="description" content="Admin management of creator invites: mint, track, refresh and revoke claimable creator pages." />
+<meta name="robots" content="noindex, nofollow" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+/* Chrome copied from gunforma-admin-data.html — the admin pages share this
+   look by convention (each carries its own copy; they are not site-nav
+   copies, see CLAUDE.md "The nav exists in 16 places"). */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 200; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav { padding: 0 16px; } .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
+.nav-admin-tag { font-size: 9px; color: #f9b860; background: rgba(249,184,96,0.12); border: 0.5px solid #6b4a1e; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-left: 12px; }
+.nav-right-link { font-size: 11px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-right-link.here { color: #f9b860; }
+/* One line at any width (see gunforma-admin-post.html): the bar is 52px tall. */
+.nav-right { display: flex; align-items: center; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; margin-left: 12px; }
+.nav-right .nav-right-link { margin-left: 0; white-space: nowrap; }
+@media (max-width: 600px) { .nav-right { gap: 11px; } .nav-right .nav-right-link { font-size: 10px; letter-spacing: 0.03em; } }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 720px; line-height: 1.6; }
+.gate { padding: 60px 36px; font-size: 14px; color: #666; }
+.gate strong { color: #1a1a1a; font-size: 18px; display: block; margin-bottom: 6px; }
+.wrap { padding: 24px 36px 80px; display: flex; flex-direction: column; gap: 22px; max-width: 1100px; }
+@media (max-width: 700px) { .page-header, .wrap { padding-left: 16px; padding-right: 16px; } }
+
+.card { border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 18px 20px; }
+.card-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 4px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.card-hint { font-size: 11px; color: #888; line-height: 1.5; margin-bottom: 12px; }
+.banner { border-radius: 6px; padding: 11px 13px; font-size: 12px; line-height: 1.6; background: #eef6fd; border: 0.5px solid #b9d7f0; color: #24557d; }
+.banner.warn { background: #fdf6ec; border-color: #ecd4ad; color: #7d5a24; }
+.banner.err { background: #fdeeee; border-color: #efbcbc; color: #7d2424; }
+
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; font-weight: 700; padding: 6px 8px; border-bottom: 0.5px solid #e5e5e5; }
+td { padding: 8px; border-bottom: 0.5px solid #f0f0f0; vertical-align: top; line-height: 1.5; }
+tr.inv-row { cursor: pointer; }
+tr.inv-row:hover td { background: #fafaf8; }
+tr.inv-detail-row td { background: #fafaf8; padding: 14px 12px; cursor: default; }
+.empty { font-size: 12px; color: #888; padding: 6px 0; }
+@media (max-width: 700px) { .hide-sm { display: none; } }
+
+.pill { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; border-radius: 3px; padding: 2px 7px; border: 0.5px solid transparent; }
+.pill-invited  { background: #fdf6ec; border-color: #ecd4ad; color: #7d5a24; }
+.pill-opened   { background: #eef6fd; border-color: #b9d7f0; color: #24557d; }
+.pill-claimed  { background: #eefdf0; border-color: #b9e8c2; color: #1d6b2e; }
+.pill-declined { background: #fdeeee; border-color: #efbcbc; color: #7d2424; }
+.pill-revoked  { background: #f3f3f1; border-color: #ddd;    color: #666; }
+.pill-expired  { background: #fdeeee; border-color: #efbcbc; color: #7d2424; }
+
+.btn { font: inherit; font-size: 12px; font-weight: 700; padding: 7px 14px; border-radius: 4px; border: 0.5px solid #ccc; background: #fff; color: #1a1a1a; cursor: pointer; }
+.btn:hover { background: #f6f6f4; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: #0e0f11; border-color: #0e0f11; color: #fff; }
+.btn-primary:hover { background: #26272b; }
+.btn-danger { border-color: #d7a2a2; color: #8a2a2a; }
+.btn-danger:hover { background: #fdeeee; }
+.btn-sm { font-size: 11px; padding: 5px 10px; }
+
+.detail-grid { display: grid; grid-template-columns: 110px 1fr; gap: 6px 14px; font-size: 12px; max-width: 640px; }
+.detail-grid .dl { color: #888; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; font-weight: 700; padding-top: 2px; }
+.detail-actions { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.detail-note { font-size: 11px; color: #888; }
+
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #666; font-weight: 700; margin-bottom: 5px; }
+.field input[type=text], .field input[type=url], .field textarea, .field select {
+  font: inherit; font-size: 13px; width: 100%; max-width: 480px; padding: 8px 10px;
+  border: 0.5px solid #ccc; border-radius: 4px; background: #fff;
+}
+.field textarea { min-height: 64px; resize: vertical; }
+.field .field-help { font-size: 11px; color: #888; margin-top: 4px; }
+.field .field-help.error { color: #8a2a2a; }
+.username-status { font-size: 11px; font-weight: 700; margin-left: 10px; }
+.username-status.taken { color: #8a2a2a; }
+.username-status.available { color: #1d6b2e; }
+.username-status.checking { color: #888; }
+.char-count { font-size: 11px; color: #888; }
+.char-count.over { color: #8a2a2a; font-weight: 700; }
+
+.picker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 8px; }
+.pick-card { display: flex; gap: 10px; border: 0.5px solid #e5e5e5; border-radius: 6px; padding: 8px; cursor: pointer; text-align: left; background: #fff; font: inherit; position: relative; align-items: center; }
+.pick-card:hover { border-color: #bbb; }
+.pick-card.selected { border-color: #0e0f11; box-shadow: 0 0 0 1px #0e0f11; }
+.pick-card.taken { opacity: 0.45; cursor: not-allowed; }
+.pick-thumb { width: 56px; height: 56px; border-radius: 4px; background: #f3f3f1; object-fit: cover; flex: 0 0 56px; }
+.pick-thumb-fallback { width: 56px; height: 56px; border-radius: 4px; background: #f3f3f1; flex: 0 0 56px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: #999; text-align: center; }
+.pick-body { min-width: 0; }
+.pick-name { font-size: 12px; font-weight: 700; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pick-meta { font-size: 11px; color: #888; margin-top: 2px; }
+.pick-order { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; border-radius: 50%; background: #0e0f11; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.pick-taken-tag { font-size: 9px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #8a2a2a; }
+
+.handoff-url { display: flex; gap: 8px; margin: 12px 0; max-width: 720px; }
+.handoff-url input { flex: 1; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; padding: 10px 12px; border: 0.5px solid #ccc; border-radius: 4px; background: #fafaf8; }
+
+.toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px); background: #0e0f11; color: #fff; font-size: 13px; padding: 10px 18px; border-radius: 6px; opacity: 0; transition: all 0.2s ease; z-index: 500; max-width: 90vw; }
+.toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div style="display:flex;align-items:center;">
+    <a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
+    <span class="nav-admin-tag">Admin</span>
+  </div>
+  <div class="nav-right">
+    <a href="gunforma-admin-queue.html" class="nav-right-link">Review queue</a>
+    <a href="gunforma-admin-post.html" class="nav-right-link">Post a build</a>
+    <a href="gunforma-admin-part.html" class="nav-right-link">Add a part</a>
+    <a href="gunforma-admin-data.html" class="nav-right-link">Needs data</a>
+    <a href="gunforma-admin-creators.html" class="nav-right-link here">Creators</a>
+    <a href="/" class="nav-right-link">← Site</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="page-eyebrow">Admin — Creator invites</div>
+  <div class="page-title">Claimable creator pages</div>
+  <p class="page-sub">Draft their builds in <a href="gunforma-admin-post.html">Post a build</a> (Private creator draft), then mint the invite here: the handle is held, one private link goes out in a DM, and nothing is public until they claim. <code>scripts/creator-invites.js</code> keeps working unchanged on the service-role path.</p>
+</div>
+
+<!-- Nothing below renders until requireAdmin() passes. -->
+<div id="gate" class="gate">Checking your session…</div>
+<div id="app" class="wrap" style="display:none">
+
+  <!-- ZONE C — link handoff after a mint (hidden until an invite or a new
+       link returns a claim URL; replaces the other zones while shown). -->
+  <section id="zone-handoff" class="card" style="display:none">
+    <div class="card-title">The claim link — its only copy</div>
+    <div class="banner warn" style="margin-bottom:4px;">The database stores only a hash of this link. Once you leave this screen it cannot be shown again — <strong>copy it and DM it now</strong> (a lost link is not a disaster: New link mints another and kills this one).</div>
+    <div class="handoff-url">
+      <input id="handoff-url" type="text" readonly />
+      <button type="button" class="btn btn-primary" onclick="copyHandoffUrl()">Copy</button>
+    </div>
+    <div id="handoff-meta" class="detail-note" style="margin-bottom:14px;"></div>
+    <div class="field" style="margin-bottom:10px;">
+      <label for="handoff-via">Mark sent via…</label>
+      <div style="display:flex;gap:8px;max-width:480px;">
+        <input id="handoff-via" type="text" placeholder='e.g. IG DM from @gunforma' />
+        <button type="button" class="btn" onclick="saveHandoffVia()">Save</button>
+      </div>
+      <div class="field-help">How the link was delivered. Where they were found is the invite's source, back in the table.</div>
+    </div>
+    <a href="#" onclick="closeHandoff(); return false;" style="font-size:12px;font-weight:700;">← Back to the invites table</a>
+  </section>
+
+  <!-- ZONE A — the table (the default view). -->
+  <section id="zone-table" class="card">
+    <div class="card-title">Invites <span id="invite-count" style="color:#888;font-weight:400;"></span>
+      <button type="button" class="btn btn-sm" style="margin-left:auto;" onclick="loadInvites()">Refresh</button>
+    </div>
+    <div class="card-hint">Click a row for the drafted page, notes and actions. No polling — Refresh re-reads.</div>
+    <div id="migration-banner" class="banner warn" style="display:none;margin-bottom:10px;">The <code>source</code>/<code>notes</code> columns are not in the database yet (<code>supabase db push --linked</code> after the merge). Until then they read blank and cannot be saved; everything else works.</div>
+    <div id="invites-error" class="banner err" style="display:none;margin-bottom:10px;"></div>
+    <div style="overflow-x:auto;">
+    <table>
+      <thead><tr>
+        <th>Handle</th><th>Status</th><th class="num">Builds</th><th>Source</th>
+        <th class="hide-sm">Sent via</th><th class="hide-sm">Created</th><th>Expires</th><th class="hide-sm">Claimed</th>
+      </tr></thead>
+      <tbody id="invites-tbody"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+    </table>
+    </div>
+  </section>
+
+  <!-- ZONE B — the new-invite form. -->
+  <section id="zone-form" class="card">
+    <div class="card-title">New invite</div>
+    <div class="card-hint">Post their builds first (Post a build → Private creator draft) — only unowned drafts appear in the picker. Submitting holds the handle and mints the one-copy claim link.</div>
+
+    <div class="field">
+      <label for="f-handle">Handle <span id="handle-status" class="username-status"></span></label>
+      <input id="f-handle" type="text" maxlength="24" autocomplete="off" spellcheck="false" placeholder="their IG/YT handle, 3–24 chars" oninput="onHandleInput()" />
+      <div id="handle-help" class="field-help">Letters, numbers and underscores. Checked live against profiles and held handles — the same “Taken” as signup.</div>
+    </div>
+    <div class="field">
+      <label for="f-name">Display name</label>
+      <input id="f-name" type="text" maxlength="60" placeholder="e.g. MTZ Builds" />
+    </div>
+    <div class="field">
+      <label for="f-bio">Bio <span id="bio-count" class="char-count">0 / 280</span></label>
+      <textarea id="f-bio" maxlength="280" placeholder="One or two lines, in their voice. They can change it after claiming." oninput="onBioInput()"></textarea>
+    </div>
+    <div class="field">
+      <label for="f-ig">Instagram URL</label>
+      <input id="f-ig" type="url" placeholder="https://instagram.com/…" />
+    </div>
+    <div class="field">
+      <label for="f-yt">YouTube URL</label>
+      <input id="f-yt" type="url" placeholder="https://youtube.com/@…" />
+    </div>
+    <div class="field">
+      <label for="f-source">Source — where they were found</label>
+      <input id="f-source" type="text" placeholder='e.g. "r/P365 top post", "IG explore"' />
+    </div>
+    <div class="field">
+      <label for="f-via">Sent via — how the link will be delivered</label>
+      <input id="f-via" type="text" placeholder='e.g. "IG DM from @gunforma"' />
+    </div>
+
+    <div class="field" style="margin-bottom:6px;">
+      <label>Builds <span id="picker-count" class="char-count"></span></label>
+      <div class="field-help" style="margin-top:0;">Unowned drafts only. Click to pick; the click order is the page order. A greyed build is already on another invite.</div>
+      <div id="picker-error" class="banner err" style="display:none;margin-top:8px;"></div>
+      <div id="picker-grid" class="picker-grid"><div class="empty">Loading draft builds…</div></div>
+    </div>
+
+    <div id="form-error" class="banner err" style="display:none;margin:10px 0;"></div>
+    <button type="button" id="submit-btn" class="btn btn-primary" onclick="submitInvite()" disabled>Create invite &amp; mint the link</button>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"><span id="toast-msg"></span></div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+var sb = window.sb;
+var SUPABASE_URL = 'https://lagjjcpclvzrjlrswojt.supabase.co';  // for photoUrl below
+
+// Session watchdog — copied from gunforma-admin-post.html.
+sb.auth.onAuthStateChange(function (event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+function $(id) { return document.getElementById(id); }
+function day(iso) { return iso ? String(iso).slice(0, 10) : '—'; }
+function photoUrl(path) { return SUPABASE_URL + '/storage/v1/object/public/build-photos/' + path; }
+function showToast(msg) {
+  $('toast-msg').textContent = msg;
+  var t = $('toast');
+  t.classList.add('show'); clearTimeout(window._tt);
+  window._tt = setTimeout(function () { t.classList.remove('show'); }, 2800);
+}
+
+// ============================================================
+// AUTH GATE — the same requireAdmin() as gunforma-admin-data.html (copied
+// from gunforma-admin-post.html): no onboarding bounce, nothing renders
+// until it passes, and a signed-in non-admin is told "Admins only".
+// ============================================================
+async function requireAdmin() {
+  const { data } = await sb.auth.getSession();
+  const session = data && data.session;
+  if (!session) { window.location.href = 'gunforma-signin.html'; return false; }
+  const { data: profile } = await sb.rpc('get_my_profile').maybeSingle();
+  if (!profile || profile.role !== 'admin') {
+    $('gate').innerHTML = '<strong>Admins only</strong>This page manages creator invites. Your account is not an admin.';
+    return false;
+  }
+  return true;
+}
+
+// ============================================================
+// THE FUNCTION CALL — everything goes through the creator-invite Edge
+// Function; supabase-js attaches the admin's session JWT, which the
+// function verifies itself (profiles.role = 'admin'). Returns the parsed
+// body either way: { error } on failure, the action's payload on success.
+// A failure to REACH the function is reported as such, never as a verdict
+// (same reasoning as gunforma-creator.html's preview load).
+// ============================================================
+async function callInvite(body) {
+  var res;
+  try { res = await sb.functions.invoke('creator-invite', { body: body }); }
+  catch (e) { return { error: 'Could not reach the invite function. Check your connection and try again.' }; }
+  if (res.error) {
+    if (!res.error.context) return { error: 'Could not reach the invite function. Check your connection and try again.' };
+    try {
+      var b = await res.error.context.json();
+      return (b && b.error) ? b : { error: 'The invite function answered an error without a message.' };
+    } catch (e2) { return { error: 'The invite function answered an error without a message.' }; }
+  }
+  return res.data || {};
+}
+
+// ============================================================
+// ZONE A — the invites table
+// ============================================================
+var INVITES = [];        // rows from "status", newest first
+var MIGRATED = true;     // false until the source/notes migration is applied
+var EXPANDED = null;     // handle of the expanded row
+
+function pillFor(inv) {
+  // invited/opened/claimed/declined/revoked/EXPIRED — EXPIRED and opened are
+  // derived states of 'invited'; the database stores only the four.
+  if (inv.status === 'invited') {
+    if (new Date(inv.expires_at) < new Date()) return '<span class="pill pill-expired">Expired</span>';
+    if (inv.opened) return '<span class="pill pill-opened">Opened</span>';
+    return '<span class="pill pill-invited">Invited</span>';
+  }
+  var cls = { claimed: 'pill-claimed', declined: 'pill-declined', revoked: 'pill-revoked' }[inv.status] || 'pill-invited';
+  return '<span class="pill ' + cls + '">' + esc(inv.status) + '</span>';
+}
+
+async function loadInvites() {
+  $('invites-error').style.display = 'none';
+  $('invites-tbody').innerHTML = '<tr><td colspan="8" class="empty">Loading…</td></tr>';
+  var data = await callInvite({ action: 'status' });
+  if (data.error) {
+    $('invites-tbody').innerHTML = '<tr><td colspan="8" class="empty">—</td></tr>';
+    $('invites-error').textContent = 'Could not load invites: ' + data.error;
+    $('invites-error').style.display = 'block';
+    return;
+  }
+  INVITES = data.invites || [];
+  MIGRATED = data.migrated !== false;
+  $('migration-banner').style.display = MIGRATED ? 'none' : 'block';
+  EXPANDED = null;
+  renderInvites();
+  renderPicker();   // attached builds may have changed
+}
+
+function renderInvites() {
+  $('invite-count').textContent = '(' + INVITES.length + ')';
+  if (!INVITES.length) {
+    $('invites-tbody').innerHTML = '<tr><td colspan="8" class="empty">No creator invites yet — mint the first one below.</td></tr>';
+    return;
+  }
+  var html = '';
+  INVITES.forEach(function (inv, idx) {
+    html += '<tr class="inv-row" onclick="toggleRow(' + idx + ')">' +
+      '<td><strong>@' + esc(inv.handle) + '</strong></td>' +
+      '<td>' + pillFor(inv) + '</td>' +
+      '<td class="num">' + inv.builds + '</td>' +
+      '<td>' + esc(inv.source || '—') + '</td>' +
+      '<td class="hide-sm">' + esc(inv.sent_via || '—') + '</td>' +
+      '<td class="hide-sm">' + day(inv.created_at) + '</td>' +
+      '<td>' + day(inv.expires_at) + '</td>' +
+      '<td class="hide-sm">' + day(inv.claimed_at) + '</td>' +
+      '</tr>';
+    if (EXPANDED === inv.handle) html += detailRowHtml(inv, idx);
+  });
+  $('invites-tbody').innerHTML = html;
+}
+
+function toggleRow(idx) {
+  var inv = INVITES[idx];
+  EXPANDED = (EXPANDED === inv.handle) ? null : inv.handle;
+  renderInvites();
+}
+
+function detailRowHtml(inv, idx) {
+  var expired = inv.status === 'invited' && new Date(inv.expires_at) < new Date();
+  var socials = '';
+  if (inv.instagram_url) socials += '<a href="' + esc(inv.instagram_url) + '" target="_blank" rel="noopener">Instagram</a> ';
+  if (inv.youtube_url)   socials += '<a href="' + esc(inv.youtube_url) + '" target="_blank" rel="noopener">YouTube</a>';
+
+  // State-appropriate actions: invited/opened (expired included) can mint a
+  // fresh link or be withdrawn; declined only revoked (they said no — no new
+  // link); claimed is a real account now, so no actions, just the live page;
+  // revoked rows are history.
+  var actions = '';
+  if (inv.status === 'invited') {
+    actions =
+      '<button type="button" class="btn btn-sm" onclick="event.stopPropagation(); newLink(' + idx + ')">New link</button>' +
+      '<button type="button" class="btn btn-sm btn-danger" onclick="event.stopPropagation(); revokeInvite(' + idx + ')">Revoke</button>' +
+      (expired ? '<span class="detail-note">The link expired — New link mints a fresh 30 days.</span>' : '');
+  } else if (inv.status === 'declined') {
+    actions =
+      '<button type="button" class="btn btn-sm btn-danger" onclick="event.stopPropagation(); revokeInvite(' + idx + ')">Revoke (release the handle)</button>' +
+      '<span class="detail-note">They said no — no new link. Revoke releases the held handle.</span>';
+  } else if (inv.status === 'claimed') {
+    actions = '<a href="/u/' + esc(inv.handle) + '" target="_blank" rel="noopener" style="font-size:12px;font-weight:700;">Open /u/' + esc(inv.handle) + ' →</a>' +
+      '<span class="detail-note">Claimed: this is a real account now, nothing here can act on it.</span>';
+  } else {
+    actions = '<span class="detail-note">Revoked — the handle is free again.</span>';
+  }
+
+  return '<tr class="inv-detail-row"><td colspan="8">' +
+    '<div class="detail-grid">' +
+      '<div class="dl">Display name</div><div>' + esc(inv.display_name || '—') + '</div>' +
+      '<div class="dl">Bio</div><div>' + esc(inv.bio || '—') + '</div>' +
+      '<div class="dl">Links</div><div>' + (socials || '—') + '</div>' +
+      '<div class="dl">Source</div><div><input id="d-source-' + idx + '" type="text" value="' + esc(inv.source || '') + '" ' + (MIGRATED ? '' : 'disabled title="needs the source/notes migration"') + ' style="font:inherit;font-size:12px;width:100%;max-width:420px;padding:5px 8px;border:0.5px solid #ccc;border-radius:4px;" onclick="event.stopPropagation()" /></div>' +
+      '<div class="dl">Notes</div><div><textarea id="d-notes-' + idx + '" ' + (MIGRATED ? '' : 'disabled title="needs the source/notes migration"') + ' style="font:inherit;font-size:12px;width:100%;max-width:420px;min-height:56px;padding:5px 8px;border:0.5px solid #ccc;border-radius:4px;resize:vertical;" onclick="event.stopPropagation()">' + esc(inv.notes || '') + '</textarea></div>' +
+    '</div>' +
+    '<div class="detail-actions">' +
+      '<button type="button" class="btn btn-sm" ' + (MIGRATED ? '' : 'disabled title="needs the source/notes migration"') + ' onclick="event.stopPropagation(); saveRowEdits(' + idx + ')">Save source &amp; notes</button>' +
+      actions +
+    '</div>' +
+  '</td></tr>';
+}
+
+async function saveRowEdits(idx) {
+  var inv = INVITES[idx];
+  var data = await callInvite({
+    action: 'update', handle: inv.handle,
+    source: $('d-source-' + idx).value,
+    notes:  $('d-notes-' + idx).value,
+  });
+  if (data.error) { showToast('Not saved — ' + data.error); return; }
+  // Believe the row that came back, not the request (CLAUDE.md: a green
+  // result is not evidence — this one carries the row).
+  if (data.invite) { INVITES[idx] = data.invite; renderInvites(); }
+  showToast('Saved for @' + inv.handle);
+}
+
+async function newLink(idx) {
+  var inv = INVITES[idx];
+  if (!confirm('Mint a fresh link for @' + inv.handle + '?\n\nThis KILLS the old link — the one already DM’d stops working the moment the new one exists.')) return;
+  var data = await callInvite({ action: 'new-link', handle: inv.handle });
+  if (data.error) { showToast('No new link — ' + data.error); return; }
+  showHandoff(data.handle, data.claim_url, data.expires_at, inv.sent_via || '');
+  loadInvites();
+}
+
+async function revokeInvite(idx) {
+  var inv = INVITES[idx];
+  var msg = inv.status === 'declined'
+    ? 'Release @' + inv.handle + '?\n\nThey declined; the handle is held so nobody can pose as them. Revoking frees it for anyone to register.'
+    : 'Revoke the invite for @' + inv.handle + '?\n\nThe link stops working and the handle is released. The hidden draft builds are kept.';
+  if (!confirm(msg)) return;
+  var data = await callInvite({ action: 'revoke', handle: inv.handle });
+  if (data.error) { showToast('Not revoked — ' + data.error); return; }
+  var kept = (data.draft_builds_kept || []).length;
+  showToast('@' + inv.handle + ' revoked — handle released' + (kept ? ', ' + kept + ' hidden draft(s) kept' : ''));
+  loadInvites();
+}
+
+// ============================================================
+// ZONE C — the link handoff
+// ============================================================
+var HANDOFF_HANDLE = null;
+
+function showHandoff(handle, claimUrl, expiresAt, sentVia) {
+  HANDOFF_HANDLE = handle;
+  $('handoff-url').value = claimUrl;
+  $('handoff-meta').textContent = '@' + handle + ' — the link expires ' + day(expiresAt) + '. Until they claim, nothing is public and /u/' + handle + ' is a 404.';
+  $('handoff-via').value = sentVia || '';
+  $('zone-handoff').style.display = 'block';
+  $('zone-table').style.display = 'none';
+  $('zone-form').style.display = 'none';
+  window.scrollTo(0, 0);
+}
+
+function closeHandoff() {
+  HANDOFF_HANDLE = null;
+  $('handoff-url').value = '';
+  $('zone-handoff').style.display = 'none';
+  $('zone-table').style.display = 'block';
+  $('zone-form').style.display = 'block';
+  loadInvites();
+}
+
+async function copyHandoffUrl() {
+  var input = $('handoff-url');
+  try {
+    await navigator.clipboard.writeText(input.value);
+    showToast('Link copied — DM it now');
+  } catch (e) {
+    input.focus(); input.select();
+    showToast('Copy blocked — the link is selected, press ⌘C / Ctrl+C');
+  }
+}
+
+async function saveHandoffVia() {
+  if (!HANDOFF_HANDLE) return;
+  var data = await callInvite({ action: 'update', handle: HANDOFF_HANDLE, sent_via: $('handoff-via').value });
+  if (data.error) { showToast('Not saved — ' + data.error); return; }
+  showToast('Marked sent via ' + ($('handoff-via').value.trim() || '(cleared)'));
+}
+
+// ============================================================
+// ZONE B — the new-invite form
+// ============================================================
+var HANDLE_RE = /^[a-zA-Z0-9_]{3,24}$/;
+var handleTimer = null;
+var handleValid = false;
+
+function onHandleInput() {
+  var val = $('f-handle').value.trim();
+  var status = $('handle-status'), help = $('handle-help');
+  handleValid = false; updateSubmit();
+  clearTimeout(handleTimer);
+  if (!val) { status.textContent = ''; status.className = 'username-status'; help.className = 'field-help'; return; }
+  if (!HANDLE_RE.test(val)) {
+    status.textContent = 'Invalid'; status.className = 'username-status taken';
+    help.className = 'field-help error';
+    return;
+  }
+  status.textContent = 'Checking…'; status.className = 'username-status checking';
+  help.className = 'field-help';
+  handleTimer = setTimeout(async function () {
+    // Same two checks as signup: a real profile (ilike — the function
+    // refuses case-insensitively), then a handle HELD for another invite
+    // (username_is_held — one exact name in, one boolean out). Held and
+    // taken read the same word on purpose.
+    var res = await sb.from('profiles').select('username').ilike('username', val).limit(1);
+    var taken = !!(res.data && res.data.length);
+    if (!taken) {
+      try {
+        var held = await sb.rpc('username_is_held', { p_username: val });
+        if (held.data === true) taken = true;
+      } catch (e) { /* the function still refuses at submit */ }
+    }
+    if ($('f-handle').value.trim() !== val) return;  // they kept typing
+    if (taken) {
+      status.textContent = 'Taken'; status.className = 'username-status taken';
+      help.className = 'field-help error';
+      handleValid = false;
+    } else {
+      status.textContent = 'Available ✓'; status.className = 'username-status available';
+      handleValid = true;
+    }
+    updateSubmit();
+  }, 500);
+}
+
+function onBioInput() {
+  var n = $('f-bio').value.length;
+  var c = $('bio-count');
+  c.textContent = n + ' / 280';
+  c.className = 'char-count' + (n > 280 ? ' over' : '');
+}
+
+// ── the build picker ─────────────────────────────────────────
+var DRAFTS = [];          // unowned draft builds, newest first
+var DRAFTS_ERROR = null;
+var SELECTED = [];        // build ids in CLICK order — order = position = page order
+
+function attachedBuildIds() {
+  var set = {};
+  INVITES.forEach(function (inv) { (inv.build_ids || []).forEach(function (id) { set[id] = inv.handle; }); });
+  return set;
+}
+
+async function loadDrafts() {
+  DRAFTS_ERROR = null;
+  // Admin RLS allows this read; anyone else sees zero rows, and the edge
+  // function re-checks every build at mint anyway.
+  var res = await sb.from('builds')
+    .select('id, name, created_at, platforms(name), build_photos(storage_path, thumb_path, is_hero, position)')
+    .eq('status', 'draft')
+    .is('user_id', null)
+    .order('created_at', { ascending: false });
+  if (res.error) { DRAFTS_ERROR = res.error.message; DRAFTS = []; renderPicker(); return; }
+  DRAFTS = res.data || [];
+  renderPicker();
+}
+
+function heroThumb(b) {
+  var ph = (b.build_photos || []).slice().sort(function (a, c) {
+    return (c.is_hero ? 1 : 0) - (a.is_hero ? 1 : 0) || (a.position || 0) - (c.position || 0);
+  })[0];
+  if (!ph) return null;
+  // thumb_path can be null on a photo whose thumbnail never generated.
+  return photoUrl(ph.thumb_path || ph.storage_path);
+}
+
+function renderPicker() {
+  var grid = $('picker-grid');
+  if (DRAFTS_ERROR) {
+    $('picker-error').textContent = 'Could not load draft builds: ' + DRAFTS_ERROR;
+    $('picker-error').style.display = 'block';
+    grid.innerHTML = '<div class="empty">—</div>';
+    return;
+  }
+  $('picker-error').style.display = 'none';
+  if (!DRAFTS.length) {
+    grid.innerHTML = '<div class="empty">No unowned draft builds. Post them first: <a href="gunforma-admin-post.html">Post a build</a> with “Private creator draft” checked.</div>';
+    updateSubmit();
+    return;
+  }
+  var attached = attachedBuildIds();
+  grid.innerHTML = DRAFTS.map(function (b) {
+    var takenBy = attached[b.id];
+    var pos = SELECTED.indexOf(b.id);
+    var thumb = heroThumb(b);
+    return '<button type="button" class="pick-card' + (takenBy ? ' taken' : '') + (pos >= 0 ? ' selected' : '') + '"' +
+      (takenBy ? ' disabled title="already on @' + esc(takenBy) + '’s invite"' : ' onclick="togglePick(\'' + b.id + '\')"') + '>' +
+      (pos >= 0 ? '<span class="pick-order">' + (pos + 1) + '</span>' : '') +
+      (thumb ? '<img class="pick-thumb" src="' + esc(thumb) + '" alt="" loading="lazy" />'
+             : '<span class="pick-thumb-fallback">No photo</span>') +
+      '<span class="pick-body">' +
+        '<span class="pick-name">' + esc(b.name || '(unnamed build)') + '</span>' +
+        '<span class="pick-meta">' + esc((b.platforms && b.platforms.name) || '') + ' · ' + day(b.created_at) + '</span>' +
+        (takenBy ? '<span class="pick-taken-tag">On @' + esc(takenBy) + '’s invite</span>' : '') +
+      '</span>' +
+    '</button>';
+  }).join('');
+  $('picker-count').textContent = SELECTED.length ? SELECTED.length + ' picked — click order is page order' : '';
+  updateSubmit();
+}
+
+function togglePick(id) {
+  var i = SELECTED.indexOf(id);
+  if (i >= 0) SELECTED.splice(i, 1); else SELECTED.push(id);
+  renderPicker();
+}
+
+function updateSubmit() {
+  $('submit-btn').disabled = !(handleValid && SELECTED.length);
+}
+
+async function submitInvite() {
+  var btn = $('submit-btn');
+  var err = $('form-error');
+  err.style.display = 'none';
+  btn.disabled = true; btn.textContent = 'Minting…';
+  var data = await callInvite({
+    action: 'invite',
+    handle: $('f-handle').value.trim(),
+    build_ids: SELECTED.slice(),
+    display_name:  $('f-name').value.trim() || undefined,
+    bio:           $('f-bio').value.trim() || undefined,
+    instagram_url: $('f-ig').value.trim() || undefined,
+    youtube_url:   $('f-yt').value.trim() || undefined,
+    source:        $('f-source').value.trim() || undefined,
+    sent_via:      $('f-via').value.trim() || undefined,
+  });
+  btn.textContent = 'Create invite & mint the link';
+  if (data.error || data.skipped) {
+    err.textContent = data.error || ('Skipped: ' + data.reason);
+    err.style.display = 'block';
+    btn.disabled = false;
+    return;
+  }
+  // Success: show the one-copy link, reset the form for the next invite.
+  var handle = data.handle, url = data.claim_url, exp = data.expires_at;
+  var via = $('f-via').value.trim();
+  ['f-handle', 'f-name', 'f-bio', 'f-ig', 'f-yt', 'f-source', 'f-via'].forEach(function (id) { $(id).value = ''; });
+  onBioInput();
+  $('handle-status').textContent = ''; handleValid = false;
+  SELECTED = [];
+  showHandoff(handle, url, exp, via);
+  loadDrafts();
+}
+
+// ============================================================
+// INIT
+// ============================================================
+(async function init() {
+  var ok = await requireAdmin();
+  if (!ok) return;
+  $('gate').style.display = 'none';
+  $('app').style.display = 'flex';
+  loadInvites();   // also renders the picker's greying once it lands
+  loadDrafts();
+})();
+</script>
+</body>
+</html>
