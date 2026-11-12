@@ -538,6 +538,7 @@ function guideCss() {
     '#ash-export .seg { display: flex; border: 0.5px solid #d5d3ca; border-radius: 4px; overflow: hidden; margin: 8px 0; }' +
     '#ash-export .seg button { flex: 1; border: 0; background: #fff; padding: 7px; font-size: 12px; font-weight: 700; color: #888; cursor: pointer; font-family: inherit; }' +
     '#ash-export .seg button[aria-selected="true"] { background: #1a1a1a; color: #fff; }' +
+    '#ash-export .hint { font-size: 11px; color: #888; margin: 0 0 6px; }' +
     '#ash-export .copy { margin-top: 8px; width: 100%; font-family: inherit; font-size: 12.5px; font-weight: 700; color: #fff; background: #4a9edd; border: 0.5px solid #4a9edd; border-radius: 4px; padding: 9px; cursor: pointer; }'
   );
 }
