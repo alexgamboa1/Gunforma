@@ -700,6 +700,72 @@ test('the split: a Gunforma guide draft keeps the one-button save — Share and 
   assert.equal(els['btn-save'].className, 'btn-block primary', 'the one button keeps the primary style');
 });
 
+// The edit token is the ownership and it lives in localStorage only. The
+// address bar reads ?edit=community:<id> right after a Share, so that URL
+// is what gets pasted by mistake — whoever opens it without the token
+// lands on the /l/ page, never in the editor and never near a write.
+test('the edit token lives in localStorage only — never in ?edit=, a toast link, or the panel', async () => {
+  const { ctx, els, store } = armory();
+  set(ctx, `CURRENT_USER = null; SHARE_LIVE = true; STATE.title = 'My WIP'; ${ONE_PICK}`);
+  ctx.sb.answer = (call) => (call.op === 'rpc' && call.table === 'create_armory_build'
+    ? { data: { id: DRAFT_ID, share_id: 'abc123', edit_token: 'tok5ecre7' }, error: null } : undefined);
+  await ctx.shareFlow();
+  assert.equal(JSON.parse(store['gf-armory-edit-tokens'])[DRAFT_ID], 'tok5ecre7', 'kept, in this browser\'s store');
+  const everywhereElse = ctx.replaced
+    .concat([ctx.location.href || ''], Object.values(els).map((e) => e.innerHTML + ' ' + e.textContent))
+    .join(' ');
+  assert.match(everywhereElse, /edit=community:/, 'the URL names the row');
+  assert.doesNotMatch(everywhereElse, /tok5ecre7/, 'and nothing but the store carries the token');
+});
+
+test('?edit= of an anonymous build without its token: the /l/ page, never the editor — signed out or in', async () => {
+  const anonRow = { id: DRAFT_ID, user_id: null, share_id: 'abc123', title: 'Joe carry',
+    platform_id: PLAT, parts_snapshot: [] };
+  for (const user of [null, JOE]) {
+    const { ctx } = armory({ blank: true });
+    set(ctx, `CURRENT_USER = ${JSON.stringify(user)}; SHARE_LIVE = true;`);
+    ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+      ? { data: [anonRow], error: null } : undefined);
+    await ctx.openForEdit('community', DRAFT_ID);
+    assert.equal(ctx.location.href, '/l/abc123', 'the share page is the landing');
+    assert.equal(ctx.STATE.savedId, null, 'the identity is never adopted');
+    assert.deepEqual(ctx.sb.calls, [], 'and nothing is written');
+  }
+});
+
+test('?edit= of someone else\'s account build, signed in: the /l/ page, not a dead toast', async () => {
+  const { ctx } = armory({ blank: true });
+  set(ctx, `CURRENT_USER = ${JSON.stringify(JOE)}; SHARE_LIVE = true;`);
+  ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+    ? { data: [{ id: DRAFT_ID, user_id: 'somebody-else', share_id: 'abc123', title: 'Carry',
+        platform_id: PLAT, parts_snapshot: [] }], error: null } : undefined);
+  await ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(ctx.location.href, '/l/abc123');
+  assert.equal(ctx.STATE.savedId, null);
+  assert.deepEqual(ctx.sb.calls, []);
+});
+
+test('?edit= without rights, pre-migration (no share_id): today\'s toasts stand, and nothing opens', async () => {
+  // Signed out on an OWNED build: its owner may just be signed out here.
+  const out = armory({ blank: true });
+  set(out.ctx, `CURRENT_USER = null;`);
+  out.ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+    ? { data: [{ id: DRAFT_ID, user_id: JOE.id, title: 'Carry', platform_id: PLAT, parts_snapshot: [] }], error: null } : undefined);
+  await out.ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(out.ctx.location.href, undefined, 'no /l/ to go to');
+  assert.match(out.els['toast-link-wrap'].innerHTML, /gunforma-signin\.html\?next=/);
+  assert.equal(out.ctx.STATE.savedId, null);
+  // Signed in on someone else's build.
+  const inn = armory({ blank: true });
+  set(inn.ctx, `CURRENT_USER = ${JSON.stringify(JOE)};`);
+  inn.ctx.sb.answer = (call) => (call.table === 'gun_guides' && call.op === 'select'
+    ? { data: [{ id: DRAFT_ID, user_id: 'somebody-else', title: 'Carry', platform_id: PLAT, parts_snapshot: [] }], error: null } : undefined);
+  await inn.ctx.openForEdit('community', DRAFT_ID);
+  assert.equal(inn.ctx.location.href, undefined);
+  assert.equal(inn.els['toast-msg'].textContent, 'Only this build’s owner can edit it.');
+  assert.deepEqual(inn.ctx.sb.calls, []);
+});
+
 test('Edit on a PUBLISHED Gunforma guide opens a new draft of it, never the live row', async () => {
   const { ctx } = armory();
   set(ctx, `CURRENT_USER = ${JSON.stringify(ADMIN)}; IS_ADMIN = true; GUIDE_EDITING_LIVE = true; DRAFT_OF_LIVE = true;`);

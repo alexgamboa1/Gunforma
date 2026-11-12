@@ -2989,8 +2989,21 @@ async function openForEdit(kind, id, opts) {
   // Not opening on a page load leaves the blank builder a plain visit has.
   function stay() { if (!inPage) clearEditParam(); }
   // The holder of an anonymous build's edit token edits without an
-  // account — that IS its ownership. Everyone else signs in first.
+  // account — that IS its ownership. Everyone else signs in first —
+  // except on an ANONYMOUS build, which no sign-in can open (the token,
+  // never in any URL, is the only key): the address bar reads
+  // ?edit=community:<id> right after a Share, so that URL is what gets
+  // pasted by mistake, and whoever opens it lands on the build's /l/
+  // page (where Edit offers a copy), never a dead sign-in prompt. An
+  // OWNED build keeps the prompt: its owner may just be signed out here.
   if (!CURRENT_USER && !(kind === 'community' && tokenFor(id))) {
+    if (kind === 'community') {
+      var peek = await readGuideRow(kind, id);
+      if (peek.row && !peek.row.user_id && peek.row.share_id) {
+        location.href = '/l/' + peek.row.share_id;
+        return;
+      }
+    }
     toast('Sign in to edit this ' + noun + ', then open it again.',
       'gunforma-signin.html?next=' + encodeURIComponent('gunforma-armory.html?edit=' + kind + ':' + id), 'Sign in');
     if (!inPage) clearEditParam();
@@ -3004,6 +3017,15 @@ async function openForEdit(kind, id, opts) {
     return;
   }
   if (!canEditRow(kind, row)) {
+    // Someone else's Armory build: its /l/ page is the landing (its Edit
+    // button offers a copy), same as the signed-out case above. The
+    // database refuses the write anyway (RLS, and the RPCs demand the
+    // token); this is the honest front door. Pre-migration there is no
+    // share_id, and the toast stands.
+    if (!inPage && kind === 'community' && row.share_id) {
+      location.href = '/l/' + row.share_id;
+      return;
+    }
     stay();
     toast(kind === 'curated' ? 'Only admins can edit Gunforma guides.' : 'Only this build’s owner can edit it.');
     return;
