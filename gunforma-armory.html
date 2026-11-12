@@ -2577,6 +2577,7 @@ function openSharePanel() {
     '<div class="share-seg" role="tablist" aria-label="Format">' +
       '<button type="button" role="tab" data-fmt="reddit" aria-selected="true">Copy for Reddit</button>' +
       '<button type="button" role="tab" data-fmt="text" aria-selected="false">Plain text</button></div>' +
+    '<p class="share-sub" id="share-md-hint" style="margin:0 0 6px">On Reddit, if you see | and ** after pasting, switch the comment box to Markdown mode.</p>' +
     '<textarea id="share-text" class="share-text" rows="9" readonly aria-label="Part list to paste">Building the part list…</textarea>' +
     '<button type="button" class="btn-block ghost" id="share-copy-text">Copy</button>' +
     (savedToAccount()
@@ -2598,11 +2599,17 @@ function openSharePanel() {
     b.onclick = function () {
       fmt = b.dataset.fmt;
       m.querySelectorAll('[data-fmt]').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+      var hint = document.getElementById('share-md-hint');
+      if (hint) hint.hidden = fmt !== 'reddit';
       fill();
     };
   });
   document.getElementById('share-copy').onclick = function () { copyFromPanel(shareUrl, this); };
   document.getElementById('share-copy-text').onclick = function () {
+    // Copy for Reddit rides the one module: text/html (a real table) +
+    // text/plain (the Markdown), falling back to plain if rich copy is
+    // blocked. Before the export is built, copy what the box shows.
+    if (info) return window.ArmoryShare.copyExport(fmt, info, this);
     var ta = document.getElementById('share-text');
     copyFromPanel(ta ? ta.value : '', this);
   };

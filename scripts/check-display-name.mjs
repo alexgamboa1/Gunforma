@@ -86,6 +86,12 @@ export const ALLOWLIST = [
   //    options, sidebar, alt text) goes through displayProductName().
   { file: 'gunforma-armory.html', match: "'<span class=\"picked-name\">' + esc(p.name) + '</span>'", reason: 'brand line directly above the name (picked card)' },
   { file: 'gunforma-armory.html', match: "'<span class=\"part-card-name\">' + esc(p.name) + '</span>'", reason: 'brand line directly above the name (picker card)' },
+  // ── The Reddit export's rows: r.name is ALREADY the display name —
+  //    exportRows builds it through displayProductName() — and exportHtml
+  //    only re-prints the row. Same row shape as exportText's Markdown,
+  //    which the scan does not see because those lines emit no HTML.
+  { file: 'js/armory-share.js', match: "'<a href=\"' + esc(r.href) + '\">' + esc(r.name", reason: 'export row: name built by displayProductName() in exportRows' },
+  { file: 'js/armory-share.js', match: ": esc(r.name + (r.option ? ' (' + r.option + ')' : '')));", reason: 'export row, unlinked branch of the line above' },
 ];
 
 const NAME_READ = /\b(?:p|product|item|part|prod|pr|r)\.name\b/;
