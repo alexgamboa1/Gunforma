@@ -538,6 +538,7 @@ function onBioInput() {
 
 // ── the build picker ─────────────────────────────────────────
 var DRAFTS = [];          // unowned draft builds, newest first
+var DRAFTS_LOADED = false; // keeps loadInvites() from repainting "Loading…" as empty
 var DRAFTS_ERROR = null;
 var SELECTED = [];        // build ids in CLICK order — order = position = page order
 
@@ -556,6 +557,7 @@ async function loadDrafts() {
     .eq('status', 'draft')
     .is('user_id', null)
     .order('created_at', { ascending: false });
+  DRAFTS_LOADED = true;
   if (res.error) { DRAFTS_ERROR = res.error.message; DRAFTS = []; renderPicker(); return; }
   DRAFTS = res.data || [];
   renderPicker();
@@ -572,6 +574,7 @@ function heroThumb(b) {
 
 function renderPicker() {
   var grid = $('picker-grid');
+  if (!DRAFTS_LOADED) return;   // the static "Loading draft builds…" stays
   if (DRAFTS_ERROR) {
     $('picker-error').textContent = 'Could not load draft builds: ' + DRAFTS_ERROR;
     $('picker-error').style.display = 'block';
