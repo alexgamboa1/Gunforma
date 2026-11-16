@@ -165,6 +165,29 @@ export function gtinNorm(val) {
   return digits || null;
 }
 
+// ─── feed images ────────────────────────────────────────────────────────────
+// Awin puts "https://images2.productserve.com/noimage.gif" in the image
+// columns when a merchant supplied no photo. That placeholder is not a picture
+// of the product, and it was stored as one on two variants (found 2026-11-16:
+// a Timber Creek mag release and a Zaffiri barrel "sharing" one photo — the
+// placeholder, one variant each, which the per-product photo audit could not
+// see). Rejected AT THE DOOR, before the proposal is even recorded, so the
+// image fill below can never deposit it — nulling the stored copies without
+// this would last exactly until the next sync night refilled them.
+//
+// The productserve host is rejected whole, not just noimage.gif: it is Awin's
+// own image CDN, its copies are low-res feed previews, and every real photo
+// this feed has ever supplied came on the merchant's own host
+// (merchant_image_url). scripts/check-routes.mjs audits the same rule over
+// the live rows, so a placeholder that arrives by any other route still fails
+// the scheduled run.
+export function feedImage(row) {
+  const url = ((row.merchant_image_url || '').trim() || (row.aw_image_url || '').trim()) || null;
+  if (!url) return null;
+  if (/noimage/i.test(url) || /\/\/images\d*\.productserve\.com\//i.test(url)) return null;
+  return url;
+}
+
 // ─── non-retail listings ────────────────────────────────────────────────────
 // OpticsPlanet lists open-box and demo units as separate feed rows on the SAME
 // product page as the retail item. They therefore land in the same URL
@@ -514,7 +537,8 @@ function processFeedRow(st, row, today) {
     // PER COLOUR SKU, which is the whole reason this is worth doing: the feed
     // carries a distinct photo for each of True Precision's seven barrel
     // finishes, and 244 of our 649 live variants have no image at all.
-    rawImage: ((row.merchant_image_url || '').trim() || (row.aw_image_url || '').trim()) || null,
+    // feedImage() rejects Awin's noimage/productserve placeholders — see it.
+    rawImage: feedImage(row),
     url: canonicalDest,
   });
 }
