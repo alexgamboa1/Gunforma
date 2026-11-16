@@ -15,6 +15,15 @@
 --   approve_fuse_grips mechanism — the gap moves to optional_blank and the
 --   part stays approved). Alex, 2026-11-16.
 --
+-- * zaffiri-p365-xl-flush-crown-spectrum — RETIRED (Alex, 2026-11-16):
+--   Zaffiri no longer offers the Spectrum finish on this barrel (their
+--   page's variations list Black Nitride, Gold PVD and Polished Stainless;
+--   the Spectrum they still sell is the threaded barrel, a different
+--   product) and its one retailer link was out of stock at the feed's last
+--   word (2026-11-01). Retirement, never deletion —
+--   trg_retire_links_with_variant retires its link with it — and the
+--   placeholder URL is nulled so no row anywhere keeps the noimage gif.
+--
 -- refresh-affiliate-prices.mjs's image backfill rejects these URLs at import
 -- (feedImage(), same change) — without that, the next sync night would
 -- refill exactly this placeholder onto the nulled row.
@@ -55,14 +64,34 @@ begin
     raise exception 'feed_placeholder_photos: timber-creek FDE update touched % rows', n;
   end if;
 
-  -- No live variant anywhere is left on a noimage/productserve URL except
-  -- the Zaffiri Spectrum, which has its own ruling pending.
+  -- Refuse drift: the Spectrum must still be live and on the placeholder.
+  if not exists (
+    select 1 from public.product_variants v join public.products p on p.id = v.product_id
+     where p.slug = 'zaffiri-p365-xl-flush-crown'
+       and v.slug = 'zaffiri-p365-xl-flush-crown-spectrum'
+       and v.retired_at is null
+       and v.primary_image_url = 'https://images2.productserve.com/noimage.gif'
+  ) then
+    raise exception 'feed_placeholder_photos: zaffiri spectrum is not live on the noimage placeholder; refusing';
+  end if;
+
+  update public.product_variants v
+     set retired_at = now(), primary_image_url = null
+    from public.products p
+   where p.id = v.product_id
+     and p.slug = 'zaffiri-p365-xl-flush-crown'
+     and v.slug = 'zaffiri-p365-xl-flush-crown-spectrum'
+     and v.retired_at is null;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'feed_placeholder_photos: zaffiri spectrum retire touched % rows', n;
+  end if;
+
+  -- No variant anywhere — retired included — is left on a placeholder URL.
   select count(*) into n
     from public.product_variants v
-   where v.retired_at is null
-     and (v.primary_image_url ilike '%noimage%' or v.primary_image_url ilike '%productserve.com%')
-     and v.slug <> 'zaffiri-p365-xl-flush-crown-spectrum';
+   where v.primary_image_url ilike '%noimage%' or v.primary_image_url ilike '%productserve.com%';
   if n <> 0 then
-    raise exception 'feed_placeholder_photos: % live variant(s) still on a placeholder URL', n;
+    raise exception 'feed_placeholder_photos: % variant(s) still on a placeholder URL', n;
   end if;
 end $$;

@@ -1169,14 +1169,30 @@ for (const [label, path, want] of [
     }
     ok(shared === 0, 'no two variants of different colour or finish share a primary_image_url', shared + ' shared photo(s) over ' + byProduct.size + ' products, ' + allowed + ' allowlisted');
 
-    // Cross-product: one photo never sits on two DIFFERENT products. The
-    // per-product audit above cannot see this — each product's group holds
-    // one variant — which is how Awin's noimage.gif placeholder sat on a
-    // Timber Creek mag release AND a Zaffiri barrel from the bulk load until
-    // 2026-11-16, each the only variant of its product on that URL. No
-    // allowlist to start: no two products legitimately share a primary
-    // photo; a ruling that one may would add an entry here with the reason,
-    // the SHARED_PHOTO_ALLOWED shape.
+    // Cross-product: one photo never sits on two DIFFERENT products unless
+    // Alex has ruled that it genuinely shows both. The per-product audit
+    // above cannot see this — each product's group holds one variant —
+    // which is how Awin's noimage.gif placeholder sat on a Timber Creek
+    // mag release AND a Zaffiri barrel from the bulk load until 2026-11-16,
+    // each the only variant of its product on that URL. The first sweep
+    // found eleven shares; Alex ruled five sibling pairs stay (the photo
+    // shows both products) and the rest get their own photos or none.
+    // Keyed by the sorted product slugs, not the URL — the mischief pairs
+    // share one image under two size paths, so the URL is not the stable
+    // half of the ruling. A pair here passes whatever photo it shares,
+    // which is as precise as the data lets the ruling be.
+    const CROSS_PRODUCT_PHOTO_ALLOWED = {
+      'killer-innovations-velo-v1-p365 + killer-innovations-velo-v1-p365-xl':
+        "the maker's quarter-view group shot shows both slides, both colours (Alex, 2026-11-16)",
+      'pmm-tbarrel-comp-p365 + pmm-tbarrel-comp-p365xl':
+        "PMM's one photo covers both lengths of the same comp (Alex, 2026-11-16)",
+      'radian-ramjet-afterburner-p365-comp + radian-ramjet-afterburner-p365-xl-comp':
+        'one OpticsPlanet photo for both lengths of the Ramjet/Afterburner (Alex, 2026-11-16)',
+      'mischief-machine-com-g2-fuse + mischief-machine-com-g2-xl':
+        'one Commander G2 photo for the sibling slides (Alex, 2026-11-16)',
+      'mischief-machine-com-g2-xmacro + mischief-machine-com-g2-xxl':
+        "one Commander G2 photo for the sibling slides — the XXL's own photo stays an open outreach item (Alex, 2026-11-16)",
+    };
     const byUrlAll = new Map();
     for (const [slug, vs] of byProduct)
       for (const v of vs) {
@@ -1184,13 +1200,20 @@ for (const [label, path, want] of [
         const m = byUrlAll.get(v.primary_image_url);
         m.set(slug, (m.get(slug) || []).concat(v.slug));
       }
-    let cross = 0;
+    let cross = 0, crossAllowed = 0;
     for (const [url, prods] of byUrlAll) {
       if (prods.size < 2) continue;
+      const pairKey = [...prods.keys()].sort().join(' + ');
+      if (CROSS_PRODUCT_PHOTO_ALLOWED[pairKey]) {
+        crossAllowed++;
+        note(pairKey + ': allowed', CROSS_PRODUCT_PHOTO_ALLOWED[pairKey]);
+        continue;
+      }
       cross++;
       note([...prods.entries()].map(([p, vs]) => `${p} (${vs.join(', ')})`).join(' and ') + ' share one photo', url);
     }
-    ok(cross === 0, 'no two different products share a primary_image_url', cross + ' cross-product shared photo(s)');
+    ok(cross === 0, 'no two different products share a primary_image_url',
+      cross + ' cross-product shared photo(s), ' + crossAllowed + ' allowlisted');
 
     // And no live photo is a feed placeholder at all. The cross-product
     // check only fires when a placeholder lands on TWO products; this
