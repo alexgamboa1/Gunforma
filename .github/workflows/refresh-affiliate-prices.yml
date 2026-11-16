@@ -61,19 +61,27 @@ jobs:
 
       - name: Unit tests
         working-directory: scripts
-        # The glob is load-bearing — do NOT go back to a bare `node --test`.
-        # With no file arguments Node uses its OWN discovery patterns, which
-        # are wider than this repo's `*.test.mjs` convention: they also match
-        # `*-test.mjs`, `*_test.mjs` and `test-*.mjs`. So bare `node --test`
-        # picked up scripts/smoke-test.mjs — a live signed-in end-to-end test
-        # owned by .github/workflows/smoke-test.yml, whose SMOKE_TEST_* secrets
-        # this workflow does not have and should not have. Node runs each
-        # discovered file as a child process and counts a non-zero exit as a
-        # failed test, so the step exited 1 and the sync below never ran.
-        # That silently killed the nightly price refresh from 2026-09-25 to
-        # 2026-09-29 — four missed runs, no price_history rows, and the job
-        # failing for a reason that had nothing to do with prices.
-        run: node --test *.test.mjs
+        # ONE file, named explicitly — do NOT widen this back to a glob or a
+        # bare `node --test`. This step exists to run gtin-norm.test.mjs, the
+        # sync's own guard, which cannot run in the site build because its
+        # dependency (csv-parse, scripts/package.json) is only installed
+        # here. Every other scripts test already runs on every deploy via
+        # check-all.sh, so running them again here adds nothing and has now
+        # killed the sync twice:
+        #   - bare `node --test` used Node's own discovery, swept in
+        #     scripts/smoke-test.mjs (whose SMOKE_TEST_* secrets this
+        #     workflow rightly lacks), and silently killed the nightly
+        #     refresh from 2026-09-25 to 2026-09-29.
+        #   - the `*.test.mjs` glob that replaced it swept in every repo
+        #     test, and guide-og.test.mjs (2026-11-01) imports
+        #     @resvg/resvg-wasm from the ROOT package.json, which this
+        #     workflow's `npm ci` (scripts/) never installs. ERR_MODULE_NOT_
+        #     FOUND, step exits 1, and the sync was dead from 2026-11-01 to
+        #     2026-11-16 — fifteen nights, every price on the site stale,
+        #     and the job red for a reason that had nothing to do with
+        #     prices. check-routes' sync-freshness assertion now catches the
+        #     symptom; this line is the cause.
+        run: node --test gtin-norm.test.mjs
 
       - name: Refresh affiliate prices
         working-directory: scripts

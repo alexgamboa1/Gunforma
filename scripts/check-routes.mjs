@@ -1088,6 +1088,32 @@ for (const [label, path, want] of [
   }
 }
 
+// ── the nightly price sync is alive ─────────────────────────────────────
+// max(last_checked) over live links, read fresh from PostgREST. The sync
+// was dead from 2026-11-01 to 2026-11-16 — guide-og.test.mjs, swept into
+// its workflow's test step by a glob, needed the root package.json's
+// dependencies, which that workflow never installs — and NOTHING reported
+// it: the Actions emails looked like any other red, every price just went
+// quietly stale, and every buy row read "Check price". The workflow step
+// is fixed (named file, not a glob); this is the alarm on the symptom, so
+// the next silent death of the sync fails the scheduled run within a day.
+//
+// last_checked is a DATE (whole UTC days — the stale-price rule's own
+// granularity), so "older than 48h" is day-granular here: today, yesterday
+// and the day before pass — one missed night plus GitHub's documented
+// schedule slip never false-alarms — and three days with no write fails.
+{
+  console.log('\n── affiliate price sync freshness');
+  const res = await fetch(`${SB_URL}/rest/v1/affiliate_links?select=last_checked&retired_at=is.null&order=last_checked.desc.nullslast&limit=1`,
+    { headers: { apikey: SB_ANON, Authorization: 'Bearer ' + SB_ANON } });
+  const rows = res.ok ? await res.json() : null;
+  const newest = Array.isArray(rows) && rows[0] ? rows[0].last_checked : null;
+  const floorDate = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+  ok(newest != null && newest >= floorDate,
+    'a live link was price-checked in the last 48h (day-granular)',
+    'newest last_checked: ' + (newest || 'none') + ', floor: ' + floorDate);
+}
+
 // ── a variant's photo is its own: no two colours share one ─────────────
 // Live data, so it lives here and not in check-all.sh (same reasoning as
 // check-variant-image-sku.mjs, which only sees a sibling's SKU in a
