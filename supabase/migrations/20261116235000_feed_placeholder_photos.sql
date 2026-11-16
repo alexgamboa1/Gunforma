@@ -28,6 +28,27 @@
 -- (feedImage(), same change) — without that, the next sync night would
 -- refill exactly this placeholder onto the nulled row.
 --
+-- And three variants wearing ANOTHER PRODUCT's photo (the cross-product
+-- audit's first sweep, 2026-11-16; Alex approved each replacement as
+-- tabled). The rule: a photo may sit on two products only if it genuinely
+-- shows both — these three did not, so each gets its own verified photo:
+--
+-- * grey-ghost-precision-v2-p365-black-rmsc wore the V1 slide's bigcommerce
+--   png; replaced with OpticsPlanet's own v2-black photo (eyeballed: black
+--   V2 slide; same URL pattern as its FDE / Grey / OD siblings).
+-- * sig-sauer-romeo-x-enclosed-compact-red-circle-dot-rose-black wore the
+--   OPEN-emitter Compact's rose hero; replaced with SIG's SKU-named
+--   sorx1408 hero (eyeballed: enclosed housing, rose-gold buttons — the FDE
+--   sibling already uses the SKU-named sorx1402 hero).
+-- * streamlight-tlr-1-hl-x-black (69500) wore OpticsPlanet's photo of the
+--   69501 USB model; replaced with Streamlight's own TLR-1 HL-X hero from
+--   the stored product page (eyeballed: body marked TLR-1 HL-X).
+--
+-- The two remaining cross-product shares — the Holosun 407C-X3/507C-X3 set
+-- and ECM's R11 Edge Fuse / Fuse-for-comp — are RULINGS, not fixes: no
+-- distinct photo exists for either (Alex, 2026-11-16), so they live in
+-- CROSS_PRODUCT_PHOTO_ALLOWED in scripts/check-routes.mjs, not here.
+--
 -- Fresh database: no variants exist when migrations replay (seed.sql is
 -- reference data only), so this NOTICEs and returns. A drifted row refuses.
 
@@ -85,6 +106,81 @@ begin
   get diagnostics n = row_count;
   if n <> 1 then
     raise exception 'feed_placeholder_photos: zaffiri spectrum retire touched % rows', n;
+  end if;
+
+  -- The three wrong-product photos. Same shape each time: refuse unless the
+  -- variant is live and still wearing exactly the photo this ruling was made
+  -- about, then replace it, one row.
+
+  -- Grey Ghost v2 black: the V1 slide's png → OP's own v2-black photo.
+  if not exists (
+    select 1 from public.product_variants v join public.products p on p.id = v.product_id
+     where p.slug = 'grey-ghost-precision-v2-p365'
+       and v.slug = 'grey-ghost-precision-v2-p365-black-rmsc'
+       and v.retired_at is null
+       and v.primary_image_url = 'https://cdn11.bigcommerce.com/s-uufzxxrapg/products/493/images/1287/GGP-365__34746.1581442004.386.513.png?c=2'
+  ) then
+    raise exception 'feed_placeholder_photos: GGP v2 black is not on the V1 png; refusing';
+  end if;
+
+  update public.product_variants v
+     set primary_image_url = 'https://op1.0ps.us/640-640/opplanet-grey-ghost-precision-sig-p365-pistol-slide-version-2-black-ggp-365-blk-2-main.jpg'
+    from public.products p
+   where p.id = v.product_id
+     and p.slug = 'grey-ghost-precision-v2-p365'
+     and v.slug = 'grey-ghost-precision-v2-p365-black-rmsc'
+     and v.retired_at is null;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'feed_placeholder_photos: GGP v2 black update touched % rows', n;
+  end if;
+
+  -- Romeo-X Enclosed rose/black: the open-emitter Compact's rose hero →
+  -- SIG's SKU-named enclosed hero (sorx1408).
+  if not exists (
+    select 1 from public.product_variants v join public.products p on p.id = v.product_id
+     where p.slug = 'sig-sauer-romeo-x-enclosed-compact'
+       and v.slug = 'sig-sauer-romeo-x-enclosed-compact-red-circle-dot-rose-black'
+       and v.retired_at is null
+       and v.primary_image_url = 'https://www.sigsauer.com/media/catalog/product/cache/2f7933e2ff16f0ec074a16ab6b6195f2/r/o/romeo-x-rose-hero-left_1.jpg'
+  ) then
+    raise exception 'feed_placeholder_photos: Romeo-X Enclosed rose is not on the open-emitter hero; refusing';
+  end if;
+
+  update public.product_variants v
+     set primary_image_url = 'https://www.sigsauer.com/media/catalog/product/cache/2f7933e2ff16f0ec074a16ab6b6195f2/s/o/sorx1408-hero-left.jpg'
+    from public.products p
+   where p.id = v.product_id
+     and p.slug = 'sig-sauer-romeo-x-enclosed-compact'
+     and v.slug = 'sig-sauer-romeo-x-enclosed-compact-red-circle-dot-rose-black'
+     and v.retired_at is null;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'feed_placeholder_photos: Romeo-X Enclosed rose update touched % rows', n;
+  end if;
+
+  -- Streamlight TLR-1 HL-X (69500): OP's photo of the 69501 USB model →
+  -- Streamlight's own hero from the stored product page.
+  if not exists (
+    select 1 from public.product_variants v join public.products p on p.id = v.product_id
+     where p.slug = 'streamlight-tlr-1-hl-x'
+       and v.slug = 'streamlight-tlr-1-hl-x-black'
+       and v.retired_at is null
+       and v.primary_image_url = 'https://www.opticsplanet.com/i/978-550-ffffff-no-upscale/opplanet-streamlight-tlr-1-hl-x-usb-multi-fuel-high-lumen-rail-mounted-tactical-light-black-69501-main.webp'
+  ) then
+    raise exception 'feed_placeholder_photos: TLR-1 HL-X black is not on the USB model''s photo; refusing';
+  end if;
+
+  update public.product_variants v
+     set primary_image_url = 'https://www.streamlight.com/images/default-source/product-large-images/tlr-1-hl-x/tlr-1-hl-x_1.jpg'
+    from public.products p
+   where p.id = v.product_id
+     and p.slug = 'streamlight-tlr-1-hl-x'
+     and v.slug = 'streamlight-tlr-1-hl-x-black'
+     and v.retired_at is null;
+  get diagnostics n = row_count;
+  if n <> 1 then
+    raise exception 'feed_placeholder_photos: TLR-1 HL-X black update touched % rows', n;
   end if;
 
   -- No variant anywhere — retired included — is left on a placeholder URL.
