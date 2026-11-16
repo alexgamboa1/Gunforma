@@ -2156,8 +2156,13 @@ and `scripts/slide-fit.test.mjs` pins the signed-off 30-cell matrix
   with a note; the maker's own chunk barrel (its
   `barrel_slide_requirements` row) is badged **Matched barrel** (Alex,
   2026-11-11 — it said "Recommended" first) and sorts
-  first. `slide_specs.includes_barrel` (the ARC Reactor kits) hides the
-  barrel picker: "Barrel included with this kit".
+  first. `slide_specs.barrel_included` (the ARC Reactor kits, the MCARBO
+  set, the Norsso bull-barrel set) hides the barrel picker: "Barrel
+  included with this kit". It used to key on `includes_barrel`, a
+  duplicate column that disagreed with `barrel_included` on two of the
+  four sets (FALSE on MCARBO and the bull set), so those two were still
+  offered a barrel picker — the column is dropped (2026-11-16) and
+  `armory-fit.test.mjs` pins both sets.
 - **The model prefills, never filters.** Choosing a model sets the stock
   slide and grip tier from `guns.grip_fit_tier` / `slide_fit_tier` /
   `slide_comp_style`; every grip stays listed, tagged. "Won't fit" options
@@ -2217,6 +2222,65 @@ and `scripts/slide-fit.test.mjs` pins the signed-off 30-cell matrix
     signed-off matrix, written out in labels; `scripts/check-routes.mjs`
     fetches one live part of every kind and every untiered grip and
     requires the header to match the database and the grid to be served.
+
+### Slide porting vocabulary, and what each column means (2026-11-16)
+
+The slide comp/porting cleanup (every value verified by Alex,
+2026-11-15/16) settled this vocabulary. Read it before touching
+`slide_specs`, `barrel_specs.port_style` or `port_styles`:
+
+- **`lightening_cuts`** (renamed from `window_cuts`): openings milled into
+  the slide to reduce mass — **not** gas-venting. Industry "window" often
+  means gas-venting, and Gunforma does not use that word here.
+- **`port_count`**: gas openings in the SLIDE, null when none. Null if and
+  only if `port_style` is null (`slide_specs_port_count_matches_port_style`
+  enforces the pair).
+- **`port_styles.port_style` vs `port_styles.geometry`**: `port_style` is
+  the maker's own word for the pattern; `geometry` is Gunforma's
+  plain-words classification. Several maker names may share one geometry —
+  e-port and geo-port are both a straight port. Pages render
+  **"{display_name} ({geometry})"**. `display_name` copies each maker
+  exactly ("E Port" has no hyphen because Norsso writes it that way,
+  "C-Port" keeps its hyphen) — do not normalise.
+- **`ported_barrel_ok`**: may this slide take a ported barrel? Null = the
+  maker has not stated it; FALSE only where a maker says so (SIG's
+  Spectre Comp, Norsso's N365DG non-XP slides). The threaded_barrel_ok
+  convention.
+- **`comp_style`**: `short_barrel` = a comp chamber ahead of a shorter
+  barrel (slide longer than its barrel); `ported_barrel` = slide ports fed
+  by a matching ported barrel (equal lengths, `port_style` set). **Classify
+  by MECHANISM, never by the maker's marketing word** — 13 Norsso/Zaffiri
+  slides sat at 'none' while 8 mechanically identical Fdez/ARC rows said
+  'ported_barrel', pure data-entry drift along maker lines.
+  `is_comped_or_ported` is the generated combined fact (`comp_style <>
+  'none' OR port_style IS NOT NULL`); `internally_ported` is GONE — it
+  equalled `port_style IS NOT NULL` on every row.
+- Classification basis (Alex, 2026-11-15): port systems reduce muzzle
+  rise; the matched barrel is required because port angles differ between
+  makers; on the DG XP slides the comp chamber and the ports work
+  together.
+
+**XMacro is a GRIP MODULE class** — longer frame covering the slide,
+picatinny rail, longer grip for 17-round MACRO magazines — running the
+same 3.7in slide as the XL. `fit_tier='xmacro'` is the 3.7in SLIDE tier
+and fits both XL and XMacro grips. `part_classes.xmacro` is a separate
+unused class. Never conflate the three.
+
+**The guards.** Three are CHECK constraints on `slide_specs`
+(`*_slide_port_guards.sql`): slide longer than barrel ⇒ `short_barrel`;
+equal lengths + port ⇒ `ported_barrel`; port_count ⇔ port_style. A NULL
+length passes them (unjudged, never wrong). All six invariants — those
+three plus: every ported slide has a barrel lock or `barrel_included`,
+every `barrel_slide_requirements` row has a `source`, and
+(platform, slide_length_in) is 1:1 with `slide_class` / `fit_tier` /
+`required_spring_weight` — run against the live database in
+`scripts/check-fitment-data.mjs` (check-routes.yml; under
+`NOT_BUILD_CHECKS` because the build cannot see the database), which also
+fails a NULL length so it cannot hide. And one rule-row wrinkle:
+`spec_field_rules.only_when_values` can only express value LISTS (both
+SQL readers evaluate `= any(...)`), so the port_count rule names the six
+live styles by hand — **a seventh port style must be added to that row
+too**, and guard 4 is the backstop that catches the omission.
 
 ### Grip-module fit in the catalog: `js/frame-fit.js`
 

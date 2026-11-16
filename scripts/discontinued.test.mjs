@@ -45,7 +45,7 @@ const variant = (id, extra = {}) => ({
   reticle: null, reticle_color: null, variant_label: null, variant_images: [], affiliate_links: [], ...extra,
 });
 const product = (id, slug, name, extra = {}) => ({
-  id, slug, name, category: 'light', description: 'A weapon light.', best_for: [], pros: null, cons: null,
+  id, slug, name, category: 'light', description: 'A weapon light.', best_for: [],
   material: null, material_family: null, weight_oz: null, installation_difficulty: null, fitment_confidence: 'verified',
   build_warning: null, fitment_notes: null, lowest_price: null, url: 'https://streamlight.example/' + slug,
   is_discontinued: false, manufacturers: { name: 'Streamlight', slug: 'streamlight', website_url: 'https://streamlight.example' },

@@ -320,10 +320,10 @@ INSERT INTO "public"."optic_cut_footprints" ("optic_cut", "footprint_id", "fit",
 -- Data for Name: part_classes; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('p365', 'P365', 10, NULL);
-INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('xl', 'P365 X / XL', 20, NULL);
-INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('xmacro', 'P365 XMACRO', 30, 'No slides or barrels use this yet');
-INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('fuse', 'P365 FUSE', 40, NULL);
+INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('p365', '3.1in (P365, P365 X)', 10, NULL);
+INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('xl', '3.7in (P365 X, XL, XMacro, AXG)', 20, NULL);
+INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('xmacro', 'P365 XMACRO', 30, 'Unused — no slides or barrels use this. Distinct from fit_tier=''xmacro'', which means the 3.7in slide tier. XMacro proper is a grip-module class — see housing_classes.');
+INSERT INTO "public"."part_classes" ("part_class", "display_name", "sort_order", "notes") VALUES ('fuse', '4.3in (P365 FUSE)', 40, NULL);
 
 --
 -- Data for Name: partners; Type: TABLE DATA; Schema: public; Owner: postgres
@@ -367,12 +367,12 @@ INSERT INTO "public"."platform_skus" ("gun_id", "gun_db_platform_id") VALUES ('f
 -- Data for Name: port_styles; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('c-port', 'C-Port', 10, NULL);
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('e-port', 'E-Port', 20, NULL);
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('slide-matched', 'Slide-Matched', 30, 'Barrel port matches whatever slide it is fitted to');
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('chunk-port', 'Chunk Port', 40, 'Chunk port only, no top port (Fdez Werx Chunk Port 4.3" barrel).');
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('top-and-chunk', 'Top & Chunk', 50, 'Top port plus a chunk port (Fdez Werx FUSE slides and their Top & Chunk ported barrel).');
-INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "notes") VALUES ('v-port', 'V-Port', 60, 'V-shaped port pattern (Fdez Werx XL 3.0 V-Ported 3.7" barrel). Fit is set by barrel locks, not this label.');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "geometry", "notes") VALUES ('c-port', 'C-Port', 10, 'Two Openings', 'Vents on the top side of the barrel. Norsso, Zaffiri. (Alex 2026-11-15)');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "geometry", "notes") VALUES ('e-port', 'E Port', 20, 'Straight Port', 'A straight line of ports along the top of the barrel. Norsso''s name for a straight port. (Alex 2026-11-15)');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "geometry", "notes") VALUES ('geo-port', 'GEO Port', 30, 'Straight Port', 'Norsso''s name for the straight port on the N365XL Bull Barrel set. (Alex 2026-11-16)');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "geometry", "notes") VALUES ('chunk-port', 'Chunk Port', 40, 'Front Port', 'Chunk port only, no top port (Fdez Werx Chunk Port 4.3" barrel).');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "geometry", "notes") VALUES ('top-and-chunk', 'Top & Chunk', 50, 'Top + Front', 'Top port plus a chunk port (Fdez Werx FUSE slides and their Top & Chunk ported barrel).');
+INSERT INTO "public"."port_styles" ("port_style", "display_name", "sort_order", "geometry", "notes") VALUES ('v-port', 'V-Port', 60, 'V-Shaped', 'V-shaped port pattern (Fdez Werx XL 3.0 V-Ported 3.7" barrel). Fit is set by barrel locks, not this label.');
 
 --
 -- Data for Name: rail_types; Type: TABLE DATA; Schema: public; Owner: postgres
@@ -410,10 +410,12 @@ INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "on
 INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'barrel_length_in', 'required', NULL, NULL, 'Barrel length (in)', 30);
 INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'comes_with_sights', 'required', NULL, NULL, 'Comes with sights', 40);
 INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'barrel_included', 'required', NULL, NULL, 'Barrel included', 50);
-INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'window_cuts', 'required', NULL, NULL, 'Window cuts', 60);
-INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'internally_ported', 'required', NULL, NULL, 'Internally ported', 70);
-INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'port_style', 'required', 'internally_ported', '{true}', 'Port style', 80);
-INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'port_count', 'required', 'internally_ported', '{true}', 'Number of ports', 90);
+INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'lightening_cuts', 'required', NULL, NULL, 'Lightening cuts', 60);
+-- port_style blank = no external slide ports. port_count's scope is a
+-- value LIST because that is all only_when_values can express; a seventh
+-- port style must be added here too (guard 4 is the backstop).
+INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'port_style', 'optional', NULL, NULL, 'Port style', 80);
+INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'port_count', 'required', 'port_style', '{c-port,e-port,geo-port,v-port,chunk-port,top-and-chunk}', 'Number of ports', 90);
 INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'integrated_comp', 'required', NULL, NULL, 'Integrated compensator', 100);
 INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'threaded_barrel_ok', 'optional', NULL, NULL, 'Takes a threaded barrel', 110);
 INSERT INTO "public"."spec_field_rules" ("category", "field", "requirement", "only_when_field", "only_when_values", "label", "sort_order") VALUES ('slide', 'required_spring_weight', 'required', NULL, NULL, 'Recoil spring weight it needs', 120);

@@ -84,3 +84,11 @@ jobs:
                 || github.event.deployment_status.environment_url
                 || 'https://gunforma.com' }}
         run: node scripts/check-og-image.mjs "$DEPLOY_URL"
+
+      # The six slide/barrel data invariants (comp_style by mechanism,
+      # ported slides fed by a lock or an included barrel, lock provenance,
+      # the platform+length ↔ class/tier/spring 1:1). Data facts, so the
+      # origin input does not apply — it always asks the live database.
+      - name: Check fitment data invariants
+        if: always()
+        run: node scripts/check-fitment-data.mjs

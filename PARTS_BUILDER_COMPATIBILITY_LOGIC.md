@@ -74,7 +74,7 @@ Note: Ported slides CAN also accept standard (non-ported, non-threaded) barrels.
 **Radian Ramjet barrels (threaded-and-ported, INTRA-LOK):**
 The Ramjet barrel uses a proprietary INTRA-LOK mounting system with an Afterburner compensator that clamps onto the barrel muzzle. This comp physically extends beyond the slide. It is NOT compatible with:
 - Slides with `integrated_comp = true` (stacking two comps)
-- Slides with `internally_ported = true` (port-alignment conflict + the Afterburner extends past where ports would vent)
+- Slides with `port_style` set (externally ported — port-alignment conflict + the Afterburner extends past where ports would vent; `internally_ported` was dropped 2026-11-16, it equalled `port_style IS NOT NULL` on every row)
 
 The Ramjet barrels are whitelisted to all standard (non-comp, non-ported) slides at their barrel length.
 
@@ -263,7 +263,7 @@ BIDIRECTIONAL FILTERING:
 
 | Table | Purpose |
 |---|---|
-| `slide_specs` | `barrel_length_in`, `integrated_comp`, `internally_ported`, `port_style` |
+| `slide_specs` | `barrel_length_in`, `integrated_comp`, `port_style` (set = externally ported), `ported_barrel_ok` |
 | `barrel_specs` | `barrel_length_in`, `barrel_type`, `thread_pitch`, `port_style`, `requires_slide_text` |
 | `barrel_slide_requirements` | Whitelist: which slides a barrel fits. Columns: `barrel_product_id`, `slide_product_id`, `source`, `compatibility_note` |
 | `compensator_specs` | `mounting_type`, `requires_threaded_barrel`, `thread_pitch`, `comes_with_barrel`, `barrel_length_in` |
