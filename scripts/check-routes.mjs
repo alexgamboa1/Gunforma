@@ -1123,6 +1123,16 @@ for (const [label, path, want] of [
       variants: ['anarchy-outdoors-slide-plate-p365-black'],
       reason: 'five-colour composite kept on the default variant only (audit 2026-10-21, item 3; Alex, 2026-10-30)',
     },
+    // OpticsPlanet photographs ONE black of this plate: every other colour
+    // has its own -<code>-rms-main.jpg, and the Nitride's BL code 404s on
+    // every image pattern (probed 2026-11-16). Black DLC (the default) and
+    // Black Nitride are the same housing in the same colour, two
+    // coatings, so the one photo is not misleading. Alex, 2026-11-16:
+    // "if the retailer only has one photo, allowlist it with a note".
+    'true-precision-p365-fuse': {
+      variants: ['true-precision-p365-fuse-black-dl-rmsc', 'true-precision-p365-fuse-black-n-rmsc'],
+      reason: 'OpticsPlanet has one black photo; DLC (default) and Nitride share it (Alex, 2026-11-16)',
+    },
     // Fdez's group photo of all four finishes (image 4496: copper, gold,
     // stainless, black). Black DLC, Copper (the default) and Stainless
     // share it; Gold keeps its own photo (4500). Alex's choice, 2026-10-22.
