@@ -61,7 +61,7 @@
       draft.gunId
         ? sb.from('guns').select('id, slug, name, housing_class, barrel_length_in, slide_length_in, integrated_comp, grip_fit_tier, slide_fit_tier, slide_comp_style').eq('id', draft.gunId)
         : Promise.resolve({ data: [], error: null }),
-      inList(sb.from('slide_specs').select('product_id, slide_length_in, barrel_length_in, integrated_comp, internally_ported, threaded_barrel_ok, port_style, fit_tier, comp_style, includes_barrel'), 'product_id', specIds('slide')),
+      inList(sb.from('slide_specs').select('product_id, slide_length_in, barrel_length_in, integrated_comp, threaded_barrel_ok, port_style, fit_tier, comp_style, barrel_included'), 'product_id', specIds('slide')),
       inList(sb.from('frame_specs').select('product_id, housing_class, fit_tier'), 'product_id', specIds('frame')),
       inList(sb.from('barrel_specs').select('product_id, barrel_length_in, barrel_type, thread_pitch, port_style'), 'product_id', specIds('barrel')),
       inList(sb.from('compensator_specs').select('product_id, mounting_type, requires_threaded_barrel, thread_pitch, comes_with_barrel, barrel_length_in, fit_result'), 'product_id', specIds('compensator')),

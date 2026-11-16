@@ -113,6 +113,10 @@ NOT_BUILD_CHECKS=(
   # It runs from .github/workflows/check-routes.yml — on a schedule against
   # production, and on demand against a deploy-preview URL before merging.
   scripts/check-routes.mjs
+  # The six slide/barrel data invariants are facts about production rows,
+  # and the build cannot see the database. Runs beside check-routes in the
+  # same workflow; guards 1/2/4 are also CHECK constraints on slide_specs.
+  scripts/check-fitment-data.mjs
   # Imports refresh-affiliate-prices.mjs, which needs csv-parse from
   # scripts/package.json. Nothing installs that during the site build, so it
   # would fail for the wrong reason. It runs in

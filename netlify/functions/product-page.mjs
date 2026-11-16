@@ -87,7 +87,11 @@ const YESNO = (v) => (v === true ? 'Yes' : v === false ? 'No' : null);
 // sees its display_name ("C-Port", "Chunk Port"), read through the one FK
 // each spec table has to port_styles (barrel_specs_port_style_fk,
 // slide_specs_port_style_fk), so a new style needs a row, not a code change.
-const PORT_STYLE = ['port_styles(display_name)', 'Port Style', (v) => (v && v.display_name) || null];
+// Rendered "{display_name} ({geometry})" — the maker's own word, then
+// Gunforma's plain-words classification (several maker names share one:
+// e-port and geo-port are both a straight port).
+const PORT_STYLE = ['port_styles(display_name,geometry)', 'Port Style',
+  (v) => (v && v.display_name) ? (v.geometry ? v.display_name + ' (' + v.geometry + ')' : v.display_name) : null];
 const SPEC_TABLES = {
   barrel: ['barrel_specs', [
     ['barrel_length_in', 'Barrel Length', (v) => v + '"'],
@@ -102,8 +106,11 @@ const SPEC_TABLES = {
     ['barrel_length_in', 'Barrel Length', (v) => v + '"'],
     ['comes_with_sights', 'Comes With Sights', YESNO],
     ['barrel_included', 'Barrel Included', YESNO],
-    ['window_cuts', 'Window Cuts', YESNO],
-    ['internally_ported', 'Internally Ported', YESNO],
+    // Openings milled to reduce mass, not gas-venting — the Port Style row
+    // below carries the venting. internally_ported was dropped with the
+    // 2026-11-16 migration: it equalled (port_style IS NOT NULL) on every
+    // row, so the Port Style row already says it.
+    ['lightening_cuts', 'Lightening Cuts', YESNO],
     PORT_STYLE,
     ['integrated_comp', 'Integrated Compensator', YESNO],
     ['threaded_barrel_ok', 'Fits Threaded Barrel', YESNO],
@@ -297,7 +304,7 @@ async function fetchProduct(slug) {
 // discontinued part's successor by id (fetchSuccessor).
 async function fetchProductWhere(filter) {
   const cols = [
-    'id', 'slug', 'name', 'category', 'description', 'best_for', 'pros', 'cons',
+    'id', 'slug', 'name', 'category', 'description', 'best_for',
     'material', 'material_family', 'weight_oz', 'installation_difficulty', 'fitment_confidence',
     'build_warning', 'fitment_notes', 'lowest_price', 'url', 'is_discontinued',
     'manufacturers!products_brand_id_fkey(name,slug,website_url)',

@@ -686,7 +686,7 @@ var BLURBS = {};                    // gun id -> guns.armory_blurb
 var FIT = {
   supported: null,   // null = not probed; then true/false for good
   frame: {},         // product id -> { fit_tier }
-  slide: {},         // product id -> { fit_tier, comp_style, includes_barrel }
+  slide: {},         // product id -> { fit_tier, comp_style, barrel_included }
   comp: {},          // product id -> { fit_result }
   gun: {},           // guns id   -> { slide_fit_tier, slide_comp_style, grip_fit_tier }
 };
@@ -898,7 +898,7 @@ async function loadAll() {
       // (picksFromSnapshot), and the pickers offer them behind the "Show
       // discontinued" toggle (SHOW_DISCONTINUED) — fit rules apply as ever.
       .is('product_variants.retired_at', null),
-    sb.from('slide_specs').select('product_id, slide_length_in, barrel_length_in, integrated_comp, internally_ported, threaded_barrel_ok, port_style'),
+    sb.from('slide_specs').select('product_id, slide_length_in, barrel_length_in, integrated_comp, threaded_barrel_ok, port_style'),
     sb.from('barrel_specs').select('product_id, barrel_length_in, barrel_type, thread_pitch, requires_slide_text, port_style'),
     sb.from('compensator_specs').select('product_id, mounting_type, requires_threaded_barrel, thread_pitch, comes_with_barrel, barrel_length_in'),
     sb.from('frame_specs').select('product_id, housing_class'),
@@ -1146,7 +1146,7 @@ async function loadFitTiers() {
   try {
     r = await Promise.all([
       sb.from('frame_specs').select('product_id, fit_tier'),
-      sb.from('slide_specs').select('product_id, fit_tier, comp_style, includes_barrel'),
+      sb.from('slide_specs').select('product_id, fit_tier, comp_style, barrel_included'),
       sb.from('compensator_specs').select('product_id, fit_result'),
       sb.from('guns').select('id, grip_fit_tier, slide_fit_tier, slide_comp_style'),
     ]);
@@ -1277,7 +1277,7 @@ function compHiddenReason() {
   if (slideStyle ? slideStyle !== 'none' : (slideSpec && slideSpec.integrated_comp === true)) {
     return 'Your slide has a built-in compensator.';
   }
-  if (slideSpec && slideSpec.internally_ported === true) {
+  if (slideSpec && slideSpec.port_style != null) {
     return 'Your ported slide’s porting already reduces muzzle flip — and its matched barrel isn’t threaded, so no add-on comp attaches.';
   }
   var barrelSpec = pickedSpec('barrel');
@@ -1301,7 +1301,7 @@ function availableFor(cat) {
     // An ARC Reactor kit ships its own chunk-port barrel: the slot says so
     // and offers nothing (slotHtml), and a barrel picked before the slide is
     // reconciled away rather than priced twice.
-    if (tierMode() && slide && (FIT.slide[slide.id] || {}).includes_barrel === true) return [];
+    if (tierMode() && slide && (FIT.slide[slide.id] || {}).barrel_included === true) return [];
     var comp = pickedProduct('compensator'), compSpec = comp ? SPEC.compensator[comp.id] : null;
     return all.filter(function (b) {
       var bs = SPEC.barrel[b.id];
@@ -2004,7 +2004,7 @@ function compStyleLabel(p) {
   if (f.comp_style === 'ported_barrel') return 'Ported, matched barrel';
   if (f.comp_style === 'none') return 'Standard';
   var s = SPEC.slide[p.id] || {};
-  return s.integrated_comp === true ? 'Integrated comp' : s.internally_ported === true ? 'Ported, matched barrel' : 'Standard';
+  return s.integrated_comp === true ? 'Integrated comp' : s.port_style != null ? 'Ported, matched barrel' : 'Standard';
 }
 function lenOf(spec, key) { var v = spec && spec[key]; return v == null ? null : Number(v); }
 // cols: [label, fn] pairs for the spec line and compare table; facets:
@@ -3774,7 +3774,7 @@ function whyNotAvailable(cat, p) {
   if (cat === 'compensator') { var hidden = compHiddenReason(); if (hidden) return hidden; }
   if (cat === 'barrel' && tierMode()) {
     var kit = pickedProduct('slide');
-    if (kit && (FIT.slide[kit.id] || {}).includes_barrel === true) return 'Your slide kit comes with its own barrel.';
+    if (kit && (FIT.slide[kit.id] || {}).barrel_included === true) return 'Your slide kit comes with its own barrel.';
   }
   if (SPEC[cat] && !SPEC[cat][p.id]) return 'No fit data for this part yet, so the Armory can’t place it.';
   var picks = STATE.picks, gun = STATE.gun, culprit = null;

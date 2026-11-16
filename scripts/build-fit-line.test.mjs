@@ -90,7 +90,7 @@ test('a barrel the picked ported slide refuses reads the right rows and says why
   const answers = (call) => {
     if (call.table === 'guns') return { data: [GUN], error: null };
     if (call.table === 'slide_specs') return { data: [{ product_id: 'slide-c', barrel_length_in: '3.7', slide_length_in: '3.7',
-      internally_ported: true, integrated_comp: false, threaded_barrel_ok: false, port_style: 'c-port', fit_tier: 'xmacro', comp_style: 'none' }], error: null };
+      integrated_comp: false, threaded_barrel_ok: false, port_style: 'c-port', fit_tier: 'xmacro', comp_style: 'none' }], error: null };
     if (call.table === 'barrel_specs') return { data: [{ product_id: 'b-std', barrel_length_in: '3.7', barrel_type: 'standard' }], error: null };
     if (call.table === 'barrel_slide_requirements') return { data: [], error: null };
   };

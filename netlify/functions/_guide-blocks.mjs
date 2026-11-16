@@ -83,11 +83,11 @@ export const GUIDE_SPECS = {
     cols: {
       slide_length_in:    { label: 'Slide Length', fmt: IN },
       comes_with_sights:  { label: 'Comes With Sights', fmt: YESNO },
-      window_cuts:        { label: 'Window Cuts', fmt: YESNO },
+      lightening_cuts:    { label: 'Lightening Cuts', fmt: YESNO },
       threaded_barrel_ok: { label: 'Fits Threaded Barrel', fmt: YESNO },
       integrated_comp:    { label: 'Integrated Compensator', fmt: YESNO },
     },
-    rank: ['slide_length_in', 'window_cuts', 'threaded_barrel_ok', 'material', 'weight_oz'],
+    rank: ['slide_length_in', 'lightening_cuts', 'threaded_barrel_ok', 'material', 'weight_oz'],
   },
   compensator: {
     table: 'compensator_specs',

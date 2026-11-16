@@ -40,12 +40,14 @@ const base = (over) => Object.assign({
 }, over);
 const withHC = (c) => { c.gripHC = AF.gripHousingClass(c); return c; };
 
-// A picked slide: Norsso-style ported "C" slide, 3.7", internally ported.
+// A picked slide: Norsso-style ported "C" slide, 3.7". port_style set IS
+// "externally ported" — internally_ported was dropped 2026-11-16, it
+// equalled (port_style IS NOT NULL) on every row.
 const NORSSO_C = AF.slideRef({ id: 'slide-c', brand: 'Norsso' },
-  { barrel_length_in: '3.7', slide_length_in: '3.7', internally_ported: true, integrated_comp: false, threaded_barrel_ok: false, port_style: 'c-port' },
+  { barrel_length_in: '3.7', slide_length_in: '3.7', integrated_comp: false, threaded_barrel_ok: false, port_style: 'c-port' },
   { fit_tier: 'xmacro', comp_style: 'ported_barrel' });
 const PLAIN_37 = AF.slideRef({ id: 'slide-p', brand: 'True Precision' },
-  { barrel_length_in: '3.7', slide_length_in: '3.7', internally_ported: false, integrated_comp: false, threaded_barrel_ok: true },
+  { barrel_length_in: '3.7', slide_length_in: '3.7', integrated_comp: false, threaded_barrel_ok: true },
   { fit_tier: 'xmacro', comp_style: 'none' });
 
 test('stock barrel: a ported slide is a Must fix; a wrong length names both numbers; a plain match fits', () => {
@@ -88,9 +90,32 @@ test('barrel ↔ slide: matched ported barrel fits, the maker’s lock binds, th
     base({ gun: XMACRO_COMP, slide: AF.stockSlideRef(XMACRO_COMP) }));
   assert.equal(factoryComp.key, 'unconfirmed', 'factory comp slide + aftermarket barrel is never a guess');
 
-  const kit = AF.slideRef({ id: 'kit', brand: 'Arc Division' }, { barrel_length_in: '3.7' }, { fit_tier: 'xmacro', comp_style: 'chunk-port', includes_barrel: true });
+  const kit = AF.slideRef({ id: 'kit', brand: 'Arc Division' }, { barrel_length_in: '3.7' }, { fit_tier: 'xmacro', comp_style: 'ported_barrel', barrel_included: true });
   assert.equal(AF.barrelVerdict({ spec: { barrel_length_in: '3.7', barrel_type: 'standard' }, locks: null }, base({ slide: kit })).key, 'na',
     'a slide kit brings its own barrel');
+});
+
+test('the two sets that ship their own barrel close the barrel question (the includes_barrel bug)', () => {
+  // These two shipped with barrel_included = true but the old
+  // includes_barrel = false, so the Armory offered them a barrel picker
+  // for a barrel the box already holds. The verdicts read barrel_included
+  // now; these pin the two real shapes so the split cannot come back.
+  // mcarbo-stainless-slide-ported-barrel-p365xl: 3.7" slide over its
+  // included 3.1" barrel, internally ported into the comp chamber — no
+  // external port_style.
+  const mcarbo = AF.slideRef({ id: 'mcarbo', brand: 'MCARBO' },
+    { barrel_length_in: '3.1', slide_length_in: '3.7', integrated_comp: false, threaded_barrel_ok: false },
+    { fit_tier: 'xmacro', comp_style: 'short_barrel', barrel_included: true });
+  assert.equal(AF.barrelVerdict({ spec: { barrel_length_in: '3.1', barrel_type: 'standard' }, locks: null },
+    base({ slide: mcarbo })).key, 'na', 'the MCARBO set brings its own barrel');
+
+  // norsso-spec-ops-bull-barrel-ported-set-p365-xl: geo-port slide sold
+  // with its matched bull barrel.
+  const bull = AF.slideRef({ id: 'bull', brand: 'Norsso' },
+    { barrel_length_in: '3.7', slide_length_in: '3.7', integrated_comp: false, threaded_barrel_ok: false, port_style: 'geo-port' },
+    { fit_tier: 'xmacro', comp_style: 'ported_barrel', barrel_included: true });
+  assert.equal(AF.barrelVerdict({ spec: { barrel_length_in: '3.7', barrel_type: 'standard' }, locks: null },
+    base({ slide: bull })).key, 'na', 'the bull-barrel set brings its own barrel');
 });
 
 test('compensator: built-in comps refuse, threads must match, kits must match the slide length', () => {

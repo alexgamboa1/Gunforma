@@ -72,7 +72,7 @@ const PAGE_NEEDS = 'Needs a threaded barrel and add-on comp to cover the grip.';
 function product(category) {
   return {
     id: '00000000-0000-4000-8000-000000000001', slug: 'test-' + category, name: 'Test ' + category, category,
-    description: 'A test part.', best_for: [], pros: null, cons: null, material: null, material_family: null,
+    description: 'A test part.', best_for: [], material: null, material_family: null,
     weight_oz: null, installation_difficulty: null, fitment_confidence: 'verified', build_warning: null,
     fitment_notes: null, lowest_price: null, url: 'https://acme.example/part', is_discontinued: false,
     manufacturers: { name: 'Acme', slug: 'acme', website_url: 'https://acme.example' },
