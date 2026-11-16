@@ -1202,6 +1202,68 @@ for (const [label, path, want] of [
       }
     }
     ok(shared === 0, 'no two variants of different colour or finish share a primary_image_url', shared + ' shared photo(s) over ' + byProduct.size + ' products, ' + allowed + ' allowlisted');
+
+    // Cross-product: one photo never sits on two DIFFERENT products unless
+    // Alex has ruled that it genuinely shows both. The per-product audit
+    // above cannot see this — each product's group holds one variant —
+    // which is how Awin's noimage.gif placeholder sat on a Timber Creek
+    // mag release AND a Zaffiri barrel from the bulk load until 2026-11-16,
+    // each the only variant of its product on that URL. The first sweep
+    // found eleven shares; Alex ruled seven pairs stay (the photo
+    // genuinely shows both products) and the rest get their own photos
+    // (the 2026-11-16 feed_placeholder_photos migration) or none.
+    // Keyed by the sorted product slugs, not the URL — the mischief pairs
+    // share one image under two size paths, so the URL is not the stable
+    // half of the ruling. A pair here passes whatever photo it shares,
+    // which is as precise as the data lets the ruling be.
+    const CROSS_PRODUCT_PHOTO_ALLOWED = {
+      'killer-innovations-velo-v1-p365 + killer-innovations-velo-v1-p365-xl':
+        "the maker's quarter-view group shot shows both slides, both colours (Alex, 2026-11-16)",
+      'pmm-tbarrel-comp-p365 + pmm-tbarrel-comp-p365xl':
+        "PMM's one photo covers both lengths of the same comp (Alex, 2026-11-16)",
+      'radian-ramjet-afterburner-p365-comp + radian-ramjet-afterburner-p365-xl-comp':
+        'one OpticsPlanet photo for both lengths of the Ramjet/Afterburner (Alex, 2026-11-16)',
+      'mischief-machine-com-g2-fuse + mischief-machine-com-g2-xl':
+        'one Commander G2 photo for the sibling slides (Alex, 2026-11-16)',
+      'mischief-machine-com-g2-xmacro + mischief-machine-com-g2-xxl':
+        "one Commander G2 photo for the sibling slides — the XXL's own photo stays an open outreach item (Alex, 2026-11-16)",
+      'ecm-precision-r11-edge-fuse + ecm-precision-r11-edge-fuse-comp':
+        'ECM sells the R11 Edge as ONE page (r11-edge-macro, size options Macro / Fuse / Fuse for comp) with exactly one photo; no per-size photo exists (Alex, 2026-11-16)',
+      'holosun-407c-x3 + holosun-507c-x3':
+        "no 507C-X3 photo exists anywhere — Holosun's own 507C-X3 page and OpticsPlanet's 507C-X3 gallery both use the 407C-X3 image set; no reticle is visible in any of them and the X3 housings are externally identical (Alex, 2026-11-16)",
+    };
+    const byUrlAll = new Map();
+    for (const [slug, vs] of byProduct)
+      for (const v of vs) {
+        if (!byUrlAll.has(v.primary_image_url)) byUrlAll.set(v.primary_image_url, new Map());
+        const m = byUrlAll.get(v.primary_image_url);
+        m.set(slug, (m.get(slug) || []).concat(v.slug));
+      }
+    let cross = 0, crossAllowed = 0;
+    for (const [url, prods] of byUrlAll) {
+      if (prods.size < 2) continue;
+      const pairKey = [...prods.keys()].sort().join(' + ');
+      if (CROSS_PRODUCT_PHOTO_ALLOWED[pairKey]) {
+        crossAllowed++;
+        note(pairKey + ': allowed', CROSS_PRODUCT_PHOTO_ALLOWED[pairKey]);
+        continue;
+      }
+      cross++;
+      note([...prods.entries()].map(([p, vs]) => `${p} (${vs.join(', ')})`).join(' and ') + ' share one photo', url);
+    }
+    ok(cross === 0, 'no two different products share a primary_image_url',
+      cross + ' cross-product shared photo(s), ' + crossAllowed + ' allowlisted');
+
+    // And no live photo is a feed placeholder at all. The cross-product
+    // check only fires when a placeholder lands on TWO products; this
+    // catches the first one. Awin's noimage.gif is the known case, and the
+    // productserve host is out whole — it is Awin's own CDN of low-res feed
+    // previews, never the merchant's photo. refresh-affiliate-prices.mjs
+    // rejects the same URLs at import (feedImage()); this is the live half.
+    const placeholders = variants.filter((v) => v.products && !v.products.is_discontinued
+      && /noimage|\/\/images\d*\.productserve\.com\//i.test(v.primary_image_url || ''));
+    ok(placeholders.length === 0, 'no live variant photo is a feed placeholder (noimage / productserve)',
+      placeholders.length ? placeholders.map((v) => v.slug).join(', ') : 'none');
   }
 }
 

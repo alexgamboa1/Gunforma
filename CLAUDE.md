@@ -2420,6 +2420,15 @@ and nothing else. It will show as "Check price" until the first sync matches it.
 `scripts/refresh-affiliate-prices.mjs` runs nightly from
 `.github/workflows/refresh-affiliate-prices.yml` and updates `street_price`,
 `in_stock`, `last_checked` and four `op_*` audit columns on `affiliate_links`.
+It also **backfills `product_variants.primary_image_url` from the feed's
+image columns** — fill a null, never replace one, and only on an uncontested
+match — through `feedImage()`, which **rejects Awin's noimage/productserve
+placeholder URLs at the door**: the feed serves
+`images2.productserve.com/noimage.gif` for a SKU the merchant never
+photographed, and storing that as a photo is how two different products came
+to "share" one image (2026-11-16). `gtin-norm.test.mjs` pins the rejection in
+the workflow, and `check-routes.mjs` audits the live rows for both halves:
+no placeholder photo anywhere, and no photo shared across two products.
 
 **It is multi-merchant.** One combined Awin feed (`AWIN_FEED_URL_V2`) carries
 every joined merchant, and rows are routed by the feed's `merchant_id` to
