@@ -30,6 +30,7 @@
 // why this pair of functions doesn't need the browser-vs-ESM duplication
 // that js/category-map.js still requires.
 import { CATEGORY_META } from './_category-meta.mjs';
+import { compLabel } from './_comp-label.mjs';
 import { variantLabel } from './_variant-label.mjs';
 // Fit-guide links. An optic that fits a pistol we have a guide for should
 // say so: before this, the /fit/ cluster had no inbound link from anywhere
@@ -114,7 +115,10 @@ const SPEC_TABLES = {
     PORT_STYLE,
     ['integrated_comp', 'Integrated Compensator', YESNO],
     ['threaded_barrel_ok', 'Fits Threaded Barrel', YESNO],
-    ['required_spring_weight', 'Required Spring Weight'],
+    // required_spring_weight is no longer a spec row: the Recoil spring
+    // section states the requirement in words and lists the catalog's
+    // springs under it (Alex, 2026-11-17). The COLUMN stays — guard 6 in
+    // check-fitment-data still holds it 1:1 with (platform, slide length).
   ]],
   frame: ['frame_specs', [
     ['housing_classes(display_name,grip_length,magazine_families(display_name,capacity_note))', 'Housing Class',
@@ -487,7 +491,117 @@ async function fetchFitSection(category, productId, raw) {
     locked: !!(lock && lock.locked),
     lockBrands: lock ? lock.brands : [],
     threadedNotStated: category === 'slide' && raw.threaded_barrel_ok == null,
+    // The slide heading names the BARREL length it takes, which on the 8
+    // internal-comp slides differs from the slide's own length — and names
+    // no gun: "3.1in (P365, P365 X)" on a 3.7in XL slide would tell an XL
+    // owner the barrels are for another gun (Alex, 2026-11-17).
+    barrelLen: category === 'slide' && raw.barrel_length_in != null
+      ? String(parseFloat(raw.barrel_length_in)) : null,
   };
+}
+
+// ---- Compensation + recoil springs (slides only) ----------------------------
+//
+// The generated Compensation block (Alex, 2026-11-17): one rule,
+// _comp-label.mjs ↔ js/comp-label.js, never hand-written per slide. Its
+// inputs ride TWO tolerant side reads, never the main spec query — the
+// first names bore_profile and port_style_is_makers_name, which do not
+// exist until the fit-rules migration applies, and a named missing column
+// fails the whole query (the house rule the restricted-states read
+// documents). Until then the page simply renders no block.
+//
+// The springs read joins recoil_spring_specs on SLIDE length — the spring
+// follows the slide, not the barrel — and renders every catalog spring for
+// that length as a buyable row: the requirement is stated in words above
+// them, the springs are "Compatible springs", never "the required spring".
+// No brand is hard-coded anywhere: factory/OEM-first is derived from the
+// brand itself, so the SIG factory RSAs appear with zero code change when
+// they are added. Zero springs renders the requirement line alone.
+async function fetchCompSection(product, raw) {
+  if (product.category !== 'slide' || !raw) return { state: 'n/a', comp: [], springs: null };
+  const out = { state: 'none', comp: [], springs: null };
+
+  // (a) the comp facts the main spec query cannot carry yet
+  try {
+    const rows = await pgGet('slide_specs?product_id=eq.' + product.id + '&select=' + encodeURIComponent(
+      'comp_style,port_style,port_count,ported_barrel_ok,bore_profile,port_style_is_makers_name,' +
+      'port_styles(display_name,geometry),part_classes(display_name),' +
+      'locks:barrel_slide_requirements!barrel_slide_requirements_slide_product_id_fkey(' +
+        'products!barrel_slide_requirements_barrel_product_id_fkey(name,manufacturers!products_brand_id_fkey(name)))'
+    ) + '&limit=1');
+    const x = Array.isArray(rows) && rows.length ? rows[0] : null;
+    if (x) {
+      const lockedNames = (x.locks || [])
+        .map((l) => l.products ? displayProductName({ name: l.products.name, brand: (l.products.manufacturers || {}).name }) : null)
+        .filter(Boolean).sort();
+      out.comp = compLabel({
+        comp_style: x.comp_style,
+        port_style: x.port_style,
+        port_display_name: x.port_styles ? x.port_styles.display_name : null,
+        port_geometry: x.port_styles ? x.port_styles.geometry : null,
+        port_style_is_makers_name: x.port_style_is_makers_name,
+        port_count: x.port_count,
+        slide_length_in: raw.slide_length_in,
+        barrel_length_in: raw.barrel_length_in,
+        threaded_barrel_ok: raw.threaded_barrel_ok,
+        ported_barrel_ok: x.ported_barrel_ok,
+        barrel_included: raw.barrel_included,
+        bore_profile: x.bore_profile,
+        maker: (product.manufacturers || {}).name,
+        locked_barrel_names: lockedNames,
+      });
+      out.className = x.part_classes ? x.part_classes.display_name : null;
+      if (out.comp.length) out.state = 'rendered';
+    }
+  } catch (err) {
+    out.state = 'failed';
+    console.error('[product-page] comp-label lookup failed', err);
+  }
+
+  // (b) the springs for this slide length — independent of (a), so the
+  // block degrades to "requirement line + springs" or "comp only" alone
+  try {
+    const sl = raw.slide_length_in != null ? String(parseFloat(raw.slide_length_in)) : null;
+    if (sl) {
+      const rows = await pgGet('recoil_spring_specs?slide_length_in=eq.' + sl + '&select=' + encodeURIComponent(
+        'spring_weight,spring_type,captured,' +
+        'products(id,slug,name,is_discontinued,is_approved,' +
+          'manufacturers!products_brand_id_fkey(name),' +
+          'product_variants!product_variants_product_id_fkey(affiliate_links(street_price,in_stock,last_checked,op_last_matched_by)))'
+      ) + '&products.product_variants.retired_at=is.null&products.product_variants.affiliate_links.retired_at=is.null');
+      const items = [];
+      for (const r of (Array.isArray(rows) ? rows : [])) {
+        const p = r.products;
+        if (!p || p.is_approved !== true || p.is_discontinued) continue;
+        const brandName = (p.manufacturers || {}).name;
+        const listings = [];
+        for (const v of p.product_variants || []) {
+          for (const l of v.affiliate_links || []) {
+            listings.push({ price: l.street_price != null ? Number(l.street_price) : null, stale: isStalePrice(l), in_stock: l.in_stock });
+          }
+        }
+        const set = freshPriceSet(listings);
+        items.push({
+          href: '/parts/' + (CATEGORY_META.recoil_spring || [])[0] + '/' + p.slug,
+          name: displayProductName({ name: p.name, brand: brandName }),
+          // the "what it's for" line, from the spring's own data — never a
+          // per-product string in code
+          note: [r.spring_type, r.spring_weight, r.captured === true ? 'captured assembly' : null]
+            .filter(Boolean).join(' · '),
+          priceFrom: set.length ? Math.min(...set) : null,
+          // factory first when present, derived from the data: the maker of
+          // the pistol, not a slug list
+          oem: /^sig sauer$/i.test(brandName || ''),
+        });
+      }
+      items.sort((a, b) => (b.oem - a.oem) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      out.springs = { len: sl, items };
+    }
+  } catch (err) {
+    console.error('[product-page] springs lookup failed', err);
+    if (out.state === 'none') out.state = 'failed';
+  }
+  return out;
 }
 
 // ---- "Fits on": where a P365 slide ends on a grip ---------------------------
@@ -900,7 +1014,8 @@ function fitSectionHtml(fit) {
     const groups = BARREL_GROUPS
       .map((g) => ({ g, items: fit.items.filter((it) => g.types.includes(it.barrelType)) }))
       .filter((x) => x.items.length);
-    return '<div class="section-title">Barrels that fit this slide</div>' +
+    return '<div class="section-title">Barrels that fit this slide' +
+      (fit.barrelLen ? ' (' + esc(fit.barrelLen) + 'in)' : '') + '</div>' +
       groups.map((x) => '<div class="fit-group">' + esc(x.g.label) + '</div>' +
         (x.g.key === 'threaded' && fit.threadedNotStated
           ? '<div class="fitguide-note">' + NOT_STATED + ' for this slide.</div>' : '') +
@@ -1036,7 +1151,7 @@ function discontinuedHtml(disc) {
   return '';
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn, disc }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn, disc, compSec }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
   const discontinued = product.is_discontinued === true;
@@ -1296,6 +1411,8 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.chip { font-size: 11px; text-transform: capitalize; background: #eef2f6; color: #345; padding: 4px 10px; border-radius: 20px; }' +
 '.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 22px 0 10px; }' +
 '.spec-row { display: flex; justify-content: space-between; font-size: 13px; padding: 8px 0; border-bottom: 0.5px solid #ececec; }' +
+'.comp-block { font-size: 14px; line-height: 1.55; background: #f7f6f3; border-left: 3px solid #1a1a1a; padding: 12px 14px; border-radius: 4px; }' +
+'.spring-req { font-size: 13px; margin-bottom: 6px; }' +
 '.spec-label { color: #777; } .spec-value { font-weight: 600; }' +
 '.variant-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; border: 0.5px solid #e5e5e5; border-radius: 6px; background: #fff; margin-bottom: 8px; }' +
 '.variant-left { display: flex; align-items: center; gap: 10px; min-width: 0; }' +
@@ -1453,6 +1570,26 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     bestForHtml +
     (product.fitment_notes ? '<div class="desc"><strong>Fitment notes:</strong> ' + esc(product.fitment_notes) + '</div>' : '') +
     (product.build_warning ? '<div class="desc" style="color:#b23"><strong>Heads up:</strong> ' + esc(product.build_warning) + '</div>' : '') +
+    // The generated Compensation block, prominent and ABOVE the spec table
+    // — a buyer's sentence, not a spec row — then the recoil spring: the
+    // requirement in words, the catalog's compatible springs under it.
+    (compSec && compSec.comp && compSec.comp.length
+      ? '<div class="section-title">Compensation</div>' +
+        '<div class="comp-block">' + compSec.comp.map((s) => esc(s)).join(' ') + '</div>'
+      : '') +
+    (compSec && compSec.springs
+      ? '<div class="section-title">Recoil spring</div>' +
+        '<div class="spring-req">Requires the ' +
+          esc(compSec.className || (compSec.springs.len + 'in')) + ' recoil spring assembly.</div>' +
+        (compSec.springs.items.length
+          ? '<div class="fit-group">Compatible springs</div>' +
+            '<ul class="fit-list">' + compSec.springs.items.map((it) =>
+              '<li class="fit-row"><span><a href="' + esc(it.href) + '">' + esc(it.name) + '</a>' +
+                (it.note ? '<span class="fit-note">' + esc(it.note) + '</span>' : '') + '</span>' +
+              (it.priceFrom != null ? '<span class="fit-price">From $' + it.priceFrom.toFixed(2) + '</span>' : '') +
+              '</li>').join('') + '</ul>'
+          : '')
+      : '') +
     '<div class="section-title">Specs</div>' +
     commonSpecs + specRowsHtml +
     fitGuidesHtml +
@@ -1619,6 +1756,18 @@ export default async (req) => {
     fitsOn = { state: 'failed', grid: null };
   }
 
+  // Compensation block + recoil springs (slides only). Non-fatal, two
+  // tolerant reads — the first names columns the fit-rules migration adds,
+  // so until it applies the page renders no block. x-comp-label:
+  // n/a | none | rendered | failed; x-springs: n/a | listed:<n>.
+  let compSec = { state: 'n/a', comp: [], springs: null };
+  try {
+    compSec = await fetchCompSection(product, specRaw);
+  } catch (err) {
+    console.error('[product-page] comp section failed', err);
+    compSec = { state: 'failed', comp: [], springs: null };
+  }
+
   // A discontinued part's successor or similar parts. Non-fatal like the
   // reads above; x-discontinued says which: n/a | replaced:<slug> |
   // similar:<n> | failed.
@@ -1630,13 +1779,15 @@ export default async (req) => {
     disc = { state: 'failed', successor: null, similar: [] };
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid, disc });
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid, disc, compSec });
   return new Response(html, {
     status: 200,
     headers: {
       'Content-Type': 'text/html; charset=utf-8',
       'Cache-Control': 'public, max-age=300, s-maxage=1800',
       'x-fit-section': fitState,
+      'x-comp-label': compSec.state,
+      'x-springs': compSec.springs ? 'listed:' + compSec.springs.items.length : 'n/a',
       'x-fits-on': fitsOn.state,
       'x-discontinued': disc.state,
       // Durable, shared across every edge node — see _cache.mjs for the

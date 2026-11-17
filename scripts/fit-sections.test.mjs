@@ -64,7 +64,7 @@ const locks = (...brands) => brands.map((b) => ({ slide_specs: { products: { man
 
 // Run the handler. `fitAnswer` is what the view query returns (an array, or
 // a Response for a failure); `specRow` is the page's own spec row (null = none).
-async function render(category, { specRow, fitAnswer = [] } = {}) {
+async function render(category, { specRow, fitAnswer = [], compAnswer = null, springsAnswer = [] } = {}) {
   const seen = { fitUrls: [], specUrls: [] };
   const realFetch = globalThis.fetch;
   const realErr = console.error;
@@ -77,6 +77,14 @@ async function render(category, { specRow, fitAnswer = [] } = {}) {
       return fitAnswer instanceof Response ? fitAnswer : json(fitAnswer);
     }
     if (u.includes('/products?slug=eq.')) return json([product(category, 'test-' + category)]);
+    // The comp-block side read (it alone names bore_profile) and the
+    // springs read — both must be routed BEFORE the generic _specs? branch.
+    if (u.includes('/recoil_spring_specs?')) {
+      return springsAnswer instanceof Response ? springsAnswer : json(springsAnswer);
+    }
+    if (u.includes('/slide_specs?') && u.includes('bore_profile')) {
+      return compAnswer instanceof Response ? compAnswer : json(compAnswer ? [compAnswer] : []);
+    }
     if (u.includes('_specs?')) { seen.specUrls.push(decodeURIComponent(u)); return json(specRow ? [specRow] : []); }
     if (u.includes('/products?id=eq.')) return json([{ restricted_states: null }]);
     return json([]);
@@ -252,4 +260,96 @@ test('names are escaped', async () => {
   const r = await render('slide', { specRow: { threaded_barrel_ok: true }, fitAnswer: [{ barrel_type: 'ported', part: part('<script>x</script>', 'Acme') }] });
   assert.doesNotMatch(r.html, /<script>x<\/script>/);
   assert.match(r.html, /&lt;script&gt;x&lt;\/script&gt;/);
+});
+
+// ── the fit-rules follow-up (Alex, 2026-11-17) ──────────────────────────────
+
+test('slide heading names the barrel length it takes, never a gun', async () => {
+  // The Spectre shape: a 3.7in slide over a 3.1in barrel. "3.1in (P365,
+  // P365 X)" on an XL slide would tell an XL owner the barrels are for
+  // another gun, so the heading carries the length alone.
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: false, barrel_length_in: '3.1', slide_length_in: '3.7' },
+    fitAnswer: [{ barrel_type: 'standard', part: part('Flush S', 'Acme', { links: [fresh(100)] }) }],
+  });
+  assert.ok(r.html.includes('<div class="section-title">Barrels that fit this slide (3.1in)</div>'),
+    'heading carries the barrel length');
+  const heading = r.html.match(/Barrels that fit this slide[^<]*/)[0];
+  assert.ok(!/P365|XL|FUSE|XMacro|AXG/i.test(heading), 'no gun names in the heading');
+});
+
+test('the query still refuses threaded barrels itself — redundancy kept on purpose', async () => {
+  // The view now refuses them too (threaded-not-allowed), but the page
+  // keeps its own filter: it bridges the deploy-before-push gap and is the
+  // same defense-in-depth the RLS-redundant filters use.
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: false, barrel_length_in: '3.1', slide_length_in: '3.7' },
+  });
+  assert.ok(r.fitUrls[0].includes('fit_status=eq.fits'), 'only fits rows are asked for');
+  assert.ok(r.fitUrls[0].includes('barrel_type=not.in.(threaded,threaded-and-ported)'),
+    'the page-side thread filter survives');
+});
+
+test('comp block renders above the spec table, from the side read', async () => {
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: false, barrel_length_in: '3.1', slide_length_in: '3.7', barrel_included: false },
+    compAnswer: {
+      comp_style: 'short_barrel', port_style: null, port_count: null,
+      ported_barrel_ok: false, bore_profile: 'standard', port_style_is_makers_name: true,
+      port_styles: null, part_classes: { display_name: '3.7in (P365 X, XL, XMacro, AXG)' }, locks: [],
+    },
+  });
+  assert.equal(r.res.headers.get('x-comp-label'), 'rendered');
+  const comp = r.html.indexOf('class="comp-block"');
+  const specs = r.html.indexOf('<div class="section-title">Specs</div>');
+  assert.ok(comp !== -1 && specs !== -1 && comp < specs, 'comp block sits above the spec table');
+  assert.ok(r.html.includes('XL (3.7in) recoil spring'), 'the spring follows SLIDE length');
+  assert.ok(r.html.includes('Requires the 3.7in (P365 X, XL, XMacro, AXG) recoil spring assembly.'),
+    'the spring requirement line carries the class display name');
+});
+
+test('a slide length with no catalog springs renders the requirement line alone', async () => {
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: true, barrel_length_in: '3.7', slide_length_in: '3.7' },
+    springsAnswer: [],
+  });
+  assert.equal(r.res.status, 200);
+  assert.ok(r.html.includes('Requires the 3.7in recoil spring assembly.'), 'requirement stated in words');
+  assert.ok(!r.html.includes('Compatible springs'), 'no list heading over nothing');
+});
+
+test('springs render as buyable rows, factory brand first, lines from their own data', async () => {
+  const sig = {
+    spring_type: null, spring_weight: 'Factory RSA', captured: true,
+    products: { id: 's2', slug: 'sig-rsa-37', name: 'P365XL Recoil Spring Assembly', is_approved: true,
+      is_discontinued: false, manufacturers: { name: 'Sig Sauer' },
+      product_variants: [{ affiliate_links: [fresh(34.99)] }] },
+  };
+  const ecm = {
+    spring_type: 'Flat wire', spring_weight: '12 lb Yellow', captured: false,
+    products: { id: 's1', slug: 'ecm-kit-37', name: 'Recoil Spring Kit 3.7', is_approved: true,
+      is_discontinued: false, manufacturers: { name: 'ECM Precision' },
+      product_variants: [{ affiliate_links: [fresh(44.99)] }] },
+  };
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: true, barrel_length_in: '3.7', slide_length_in: '3.7' },
+    springsAnswer: [ecm, sig],
+  });
+  assert.equal(r.res.headers.get('x-springs'), 'listed:2');
+  const sec = r.html.slice(r.html.indexOf('Compatible springs'));
+  const order = names(sec.slice(0, sec.indexOf('section-title')));
+  assert.deepEqual(order.slice(0, 2), ['Sig Sauer P365XL Recoil Spring Assembly', 'ECM Precision Recoil Spring Kit 3.7'],
+    'factory brand sorts first, derived from the data');
+  assert.ok(r.html.includes('Flat wire · 12 lb Yellow'), 'the what-it-is line comes from the spring row');
+  assert.ok(r.html.includes('captured assembly'), 'captured springs say so');
+});
+
+test('a failed comp read never takes the page down and renders no block', async () => {
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: true, barrel_length_in: '3.7', slide_length_in: '3.7' },
+    compAnswer: new Response('boom', { status: 400 }),
+  });
+  assert.equal(r.res.status, 200);
+  assert.equal(r.res.headers.get('x-comp-label'), 'failed');
+  assert.ok(!r.html.includes('class="comp-block"'));
 });

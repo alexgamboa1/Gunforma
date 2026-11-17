@@ -102,6 +102,14 @@ jobs:
           PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/create-product-lock-source.sql
 
+      # The fit rule itself: v_barrel_slide_fit driven over created
+      # fixtures — the three new refusals, both fits-variant verdicts, and
+      # the precedence that keeps existing pairs' statuses byte-identical.
+      - name: v_barrel_slide_fit refuses what the slides' makers refuse
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/barrel-slide-fit.sql
+
       - name: Stop the local stack
         if: always()
         run: supabase stop --no-backup || true
