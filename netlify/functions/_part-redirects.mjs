@@ -19,4 +19,5 @@ export const PART_REDIRECTS = new Set([
   '/parts/safety-selectors/sig-sauer-manual-safety-parts-kit-black-p365',
   '/parts/frames/icarus-precision-311-fuse-sl',
   '/parts/slides/arc-division-reactor-365f-p365-xmacro',
+  '/parts/recoil-springs/sig-sauer-xmacro-p365xl',
 ]);

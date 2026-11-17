@@ -1034,6 +1034,10 @@ for (const [label, path, want] of [
     // target answers 404 until `supabase db push --linked` runs — a scheduled
     // red here in that window means the push is overdue, which is the point.
     ['/parts/slides/arc-division-reactor-365f-p365-xmacro', '/parts/slides/arc-division-reactor-365f-p365-fuse'],
+    // The SIG factory RSA, renamed the day it was added (2026-11-17) off a
+    // slug that named the guns instead of the part. Same deploy-before-push
+    // window as the ARC rename above.
+    ['/parts/recoil-springs/sig-sauer-xmacro-p365xl', '/parts/recoil-springs/sig-sauer-recoil-spring-assembly-p365xl'],
   ]) {
     const r = await get(from);
     const loc = (r.location || '').replace(/^https?:\/\/[^/]+/, '');
