@@ -39,6 +39,7 @@ import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
 import { makerLink, buyDisclosure, MAKER_REL } from './_maker-link.mjs';
 import { displayProductName } from './_display-name.mjs';
+import { compLabel } from './_comp-label.mjs';
 import { CATEGORY_META } from './_category-meta.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 // The Cloudflare Web Analytics tag, at the end of every document this
@@ -411,6 +412,30 @@ function renderHub({ hub, gun, cuts, vocab, guides, mags, opticCount, builds }) 
 
       '<h2>Specifications</h2>' +
       '<div class="spec-box">' + specRows + '</div>' +
+
+      // The generated Compensation block for factory comp models (Alex,
+      // 2026-11-17): the same sentences the product page serves, from
+      // _comp-label.mjs, never typed per model. A factory comp is the
+      // internal-comp mechanism — slide longer than its barrel — so it
+      // renders only when the gun's own lengths say so; the no-port,
+      // no-threaded facts are SIG's own guidance for these slides.
+      (gun.integrated_comp === true &&
+       parseFloat(gun.barrel_length_in) < parseFloat(gun.slide_length_in)
+        ? (() => {
+            const sentences = compLabel({
+              comp_style: 'short_barrel', port_style: null,
+              slide_length_in: gun.slide_length_in, barrel_length_in: gun.barrel_length_in,
+              threaded_barrel_ok: false, ported_barrel_ok: false,
+              barrel_included: false, bore_profile: 'standard',
+              maker: 'Sig Sauer', locked_barrel_names: [],
+            });
+            return sentences.length
+              ? '<h2>How the factory comp works</h2>' +
+                '<div class="spec-box" style="font-size:14px;line-height:1.55;padding:12px 14px;">' +
+                  sentences.map((s) => esc(s)).join(' ') + '</div>'
+              : '';
+          })()
+        : '') +
 
       '<h2>Which optic cut does it have?</h2>' +
       '<p class="desc">The cut is set per SKU, not per model, so the suffix on the ' +

@@ -100,6 +100,7 @@ check "product-page fit line"     scripts/build-fit-line.test.mjs
 check "armory share pages"        scripts/armory-share.test.mjs
 check "the ♥ is one module"       scripts/favorites.test.mjs
 check "sign-in ?next= is safe"     scripts/safe-next.test.mjs
+check "comp label copies agree"    scripts/comp-label.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
@@ -113,7 +114,7 @@ NOT_BUILD_CHECKS=(
   # It runs from .github/workflows/check-routes.yml — on a schedule against
   # production, and on demand against a deploy-preview URL before merging.
   scripts/check-routes.mjs
-  # The six slide/barrel data invariants are facts about production rows,
+  # The seven slide/barrel data invariants are facts about production rows,
   # and the build cannot see the database. Runs beside check-routes in the
   # same workflow; guards 1/2/4 are also CHECK constraints on slide_specs.
   scripts/check-fitment-data.mjs

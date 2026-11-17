@@ -20,6 +20,14 @@
 //   5. every barrel_slide_requirements row has a non-empty source
 //   6. (platform_id, slide_length_in) is 1:1 with slide_class, fit_tier
 //      and required_spring_weight
+//   7. no (barrel, slide) pair the view calls 'fits' violates the slide's
+//      own rules: a threaded barrel on threaded_barrel_ok FALSE, a ported
+//      barrel on ported_barrel_ok FALSE, or mismatched bore profiles
+//      (2026-11-17, the fit-rules view change — watched failing against
+//      the pre-fix view, which called 3 threaded barrels 'fits' on every
+//      thread-refusing slide and 4 standard barrels 'fits' on the bull
+//      set). The bore columns are read tolerantly so the run between the
+//      code deploy and the migration fails on the DATA, never on a 400.
 //
 // A NULL slide/barrel length is reported as its own failure here — the
 // CHECK constraints deliberately pass it (an unrecorded length is
@@ -110,10 +118,51 @@ for (const [key, g] of groups) {
   }
 }
 
-console.log('check-fitment-data: ' + slides.length + ' slides, ' + locks.length + ' barrel locks, ' + groups.size + ' platform+length groups');
+// Guard 7 — the view's own word, cross-checked against the slides' rules.
+// bore_profile is read tolerantly: before the fit-rules migration the
+// column does not exist, and this guard must then fail on the thread and
+// ported violations the old view ships, never on a 400.
+async function rowsTolerant(withBore, withoutBore) {
+  try { return { rows: await rows(withBore), bore: true }; }
+  catch { return { rows: await rows(withoutBore), bore: false }; }
+}
+const [fitsPairs, b7, s7] = await Promise.all([
+  rows('v_barrel_slide_fit?fit_status=eq.fits&select=barrel_product_id,slide_product_id&limit=10000'),
+  rowsTolerant('barrel_specs?select=product_id,barrel_type,bore_profile',
+               'barrel_specs?select=product_id,barrel_type'),
+  rowsTolerant('slide_specs?select=product_id,threaded_barrel_ok,ported_barrel_ok,bore_profile',
+               'slide_specs?select=product_id,threaded_barrel_ok,ported_barrel_ok'),
+]);
+if (!b7.bore || !s7.bore) {
+  console.log('check-fitment-data: bore_profile not readable yet — guard 7 treats every profile as standard');
+}
+const barrelBy = new Map(b7.rows.map((b) => [b.product_id, b]));
+const slideBy  = new Map(s7.rows.map((s) => [s.product_id, s]));
+const THREADED = new Set(['threaded', 'threaded-and-ported']);
+const PORTED   = new Set(['ported', 'threaded-and-ported']);
+let fits7 = 0;
+for (const p of fitsPairs) {
+  const b = barrelBy.get(p.barrel_product_id);
+  const s = slideBy.get(p.slide_product_id);
+  if (!b || !s) continue;
+  fits7++;
+  const pair = slug(p.barrel_product_id) + ' -> ' + slug(p.slide_product_id);
+  if (THREADED.has(b.barrel_type) && s.threaded_barrel_ok === false) {
+    fail(pair + ": 'fits' but the slide's maker says threaded barrels don't fit");
+  }
+  if (PORTED.has(b.barrel_type) && s.ported_barrel_ok === false) {
+    fail(pair + ": 'fits' but the slide's maker says ported barrels must not be used");
+  }
+  if ((b.bore_profile || 'standard') !== (s.bore_profile || 'standard')) {
+    fail(pair + ": 'fits' across mismatched bore profiles (" +
+      (b.bore_profile || 'standard') + ' barrel on ' + (s.bore_profile || 'standard') + ' slide)');
+  }
+}
+
+console.log('check-fitment-data: ' + slides.length + ' slides, ' + locks.length + ' barrel locks, ' + groups.size + ' platform+length groups, ' + fits7 + " 'fits' pairs checked");
 if (failures.length) {
   console.error('\ncheck-fitment-data: ' + failures.length + ' failure(s):');
   for (const f of failures) console.error('  - ' + f);
   process.exit(1);
 }
-console.log('check-fitment-data: all six invariants hold');
+console.log('check-fitment-data: all seven invariants hold');

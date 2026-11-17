@@ -344,6 +344,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 .fit-bar.warn { background: #fdf3e2; border-color: #f3d9a8; }
 .fit-bar.bad { background: #fdeae4; border-color: #f3bfae; }
 .fit-bar b { white-space: nowrap; }
+.fit-bar.comp-note { background: #f7f6f3; border-color: #ddd; margin-top: 8px; }
 .fit-bar ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; flex: 1; min-width: 0; }
 .fit-bar a { font-weight: 700; color: #2a7bbd; text-decoration: none; white-space: nowrap; }
 .sev { display: inline-block; font-size: 9.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 3px; margin-right: 4px; vertical-align: 1px; }
@@ -565,6 +566,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
 <script src="js/favorites.js"></script>
 <script src="js/frame-fit.js"></script>
 <script src="js/slide-fit.js"></script>
+<script src="js/comp-label.js"></script>
 <script src="js/armory-fit.js"></script>
 <script src="js/armory-share.js"></script>
 <script src="js/nav.js"></script>
@@ -664,6 +666,11 @@ var PRODUCTS = [], PRODUCTS_BY_ID = {};
 var SPEC = { slide: {}, barrel: {}, compensator: {}, frame: {} };
 var BARREL_LOCKS = {};              // barrel pid -> [{slide, note}]
 var MAGWELL_FITS = {};              // magwell pid -> [{frame, note}]
+// The Compensation block's extra facts (Alex, 2026-11-17): port style
+// names, the fit-rules columns and the slide size legend. Filled by
+// loadCompExtras(), every read tolerant — absent data just means the
+// block and the legend don't render.
+var COMP_EXTRAS = { styles: {}, slides: {}, classes: [] };
 var MAG_FITS = {};                  // magazine pid -> { housing_class: {fit, note} }
 var GUN_CUTS = {};                  // gun id -> [gun_optic_cuts rows]
 var OPTIC_CUT_FOOTPRINTS = {};      // optic_cut -> { footprint_id: 'direct'|'via-plate' }
@@ -947,6 +954,7 @@ async function loadAll() {
     (MAGWELL_FITS[row.magwell_product_id] = MAGWELL_FITS[row.magwell_product_id] || [])
       .push({ frame: row.frame_product_id, note: row.compatibility_note || '' });
   });
+  loadCompExtras();   // fire and forget: nothing waits on it
 
   await Promise.all([loadFitTiers(), loadFitData(), loadArmoryRef(), loadGuideThemes(), loadStartGuides(), AUTH_READY]);
   LOADED = true;
@@ -1876,6 +1884,36 @@ function fitIssues(ctx) {
   }
   return out;
 }
+// The Compensation block's extras, loaded apart from the fatal main load:
+// bore_profile and port_style_is_makers_name arrive with the fit-rules
+// migration, so the full select falls back to the columns that exist, and
+// any failure leaves the block unrendered rather than touching the build.
+function loadCompExtras() {
+  try {
+    sb.from('port_styles').select('port_style, display_name, geometry').then(function (r) {
+      (r.data || []).forEach(function (row) { COMP_EXTRAS.styles[row.port_style] = row; });
+      renderFitBar();
+    }, function () {});
+    var store = function (rows) {
+      (rows || []).forEach(function (row) { COMP_EXTRAS.slides[row.product_id] = row; });
+      renderFitBar();
+    };
+    sb.from('slide_specs')
+      .select('product_id, port_style, port_count, comp_style, ported_barrel_ok, barrel_included, bore_profile, port_style_is_makers_name')
+      .then(function (r) {
+        if (!r.error) return store(r.data);
+        sb.from('slide_specs')
+          .select('product_id, port_style, port_count, comp_style, ported_barrel_ok, barrel_included')
+          .then(function (r2) { if (!r2.error) store(r2.data); }, function () {});
+      }, function () {});
+    sb.from('part_classes').select('part_class, display_name').then(function (r) {
+      COMP_EXTRAS.classes = (r.data || [])
+        .filter(function (c) { return /^\d/.test(c.display_name || ''); })
+        .sort(function (a, b) { return a.display_name < b.display_name ? -1 : 1; });
+    }, function () {});
+  } catch (e) { /* the build never depends on these */ }
+}
+
 function renderFitBar() {
   var el = document.getElementById('fit-bar');
   if (!el) return;
@@ -1897,6 +1935,42 @@ function renderFitBar() {
           ? 'Every part checked against your grip and slide.'
           : 'Pick parts below — everything is checked against your gun as you go.') + '</span>') +
     '</div>';
+
+  // The generated Compensation block for the picked comp slide — the same
+  // sentences the product page serves (js/comp-label.js ↔ _comp-label.mjs).
+  // Renders only once loadCompExtras() has the facts; a plain slide says
+  // nothing here.
+  var sp = STATE.picks.slide && PRODUCTS_BY_ID[STATE.picks.slide.productId];
+  var base = sp && SPEC.slide[sp.id];
+  var ex = sp && COMP_EXTRAS.slides[sp.id];
+  if (sp && base && ex && window.CompLabel && ex.comp_style && ex.comp_style !== 'none') {
+    var lockedNames = [];
+    Object.keys(BARREL_LOCKS).forEach(function (bid) {
+      if (BARREL_LOCKS[bid].some(function (l) { return l.slide === sp.id; })) {
+        var bp = PRODUCTS_BY_ID[bid];
+        if (bp) lockedNames.push(window.displayProductName({ name: bp.name, brand: bp.brand }));
+      }
+    });
+    lockedNames.sort();
+    var st = ex.port_style ? COMP_EXTRAS.styles[ex.port_style] : null;
+    var sentences = window.CompLabel.compLabel({
+      comp_style: ex.comp_style, port_style: ex.port_style,
+      port_display_name: st ? st.display_name : null,
+      port_geometry: st ? st.geometry : null,
+      port_style_is_makers_name: ex.port_style_is_makers_name !== false,
+      port_count: ex.port_count,
+      slide_length_in: base.slide_length_in, barrel_length_in: base.barrel_length_in,
+      threaded_barrel_ok: base.threaded_barrel_ok,
+      ported_barrel_ok: ex.ported_barrel_ok,
+      barrel_included: ex.barrel_included === true,
+      bore_profile: ex.bore_profile || 'standard',
+      maker: sp.brand, locked_barrel_names: lockedNames,
+    });
+    if (sentences.length) {
+      el.innerHTML += '<div class="fit-bar comp-note" role="note"><b>How this comp works</b><span>' +
+        sentences.map(esc).join(' ') + '</span></div>';
+    }
+  }
 }
 
 function slotBanners(cat, picked) {
@@ -2252,10 +2326,18 @@ function renderCatPage(cat) {
     return partCardHtml(cat, x.p, meta);
   });
 
+  // The slide size legend, from part_classes' display names (Alex,
+  // 2026-11-17): slide and spring classes by slide length, never barrels.
+  // Additive beside the signed-off tier labels, which stay as they are.
+  var sizeLegend = (cat === 'slide' && COMP_EXTRAS.classes.length)
+    ? '<div class="ctx-line">Slide sizes: ' +
+        COMP_EXTRAS.classes.map(function (c) { return esc(c.display_name); }).join(' · ') + '</div>'
+    : '';
+
   el.innerHTML =
     '<nav class="crumbs"><a href="#start">Armory</a> › <a href="#build">Your build</a> › Choose ' + esc(nounOne(cat)) + '</nav>' +
     '<div class="sec-h2" style="font-size:20px;">Choose ' + esc(nounOne(cat)) + '</div>' +
-    ctxLine +
+    ctxLine + sizeLegend +
     '<div class="part-layout">' +
       '<aside class="facets" id="facets" aria-label="Filters">' + facetsHtml + '</aside>' +
       '<section style="min-width:0;">' +

@@ -362,16 +362,54 @@ mistake.
 
 ### Which barrels fit which slides, on both product pages
 
-`product-page.mjs` lists **"Barrels that fit this slide"** on a slide page
-(grouped Ported / Threaded / Flush — `barrel_type` `standard` reads
-"Flush") and **"Slides this barrel fits"** on a barrel page, from
-`v_barrel_slide_fit` where `fit_status = 'fits'`: matching barrel length,
-and for a barrel its maker locks to named slides
-(`barrel_slide_requirements`), one of those. `blocked`,
-`length-mismatch` and `unknown` pairs are never listed. A locked barrel
-says "Only these slides — the maker says this barrel should not be used in
-any other slide." The pages link both ways in served HTML, like builds and
-parts.
+`product-page.mjs` lists **"Barrels that fit this slide (3.1in)"** on a
+slide page — the heading carries the BARREL length the slide takes, which
+on the 8 internal-comp slides differs from the slide's own length, and
+never a gun name (Alex, 2026-11-17) — grouped Ported / Threaded / Flush
+(`barrel_type` `standard` reads "Flush"), and **"Slides this barrel
+fits"** on a barrel page, from `v_barrel_slide_fit` where
+`fit_status = 'fits'`.
+
+**Since 2026-11-17 the VIEW is the fit rule** (the follow-up to #251 —
+before it, the view judged length + barrel locks only, and the Bull
+Barrel Set's page served four standard barrels its larger bore cannot
+take). A pair is `fits` only when: barrel length matches the SLIDE'S
+BARREL length; a locked barrel's slide is one of its
+`barrel_slide_requirements`; `bore_profile` matches on both spec tables
+(`standard` | `bull` — Norsso bull-barrel slides take Norsso bull barrels
+only, mechanism-based, no locks needed); and the slide's maker does not
+refuse the type — `threaded-not-allowed` / `ported-not-allowed` when
+`threaded_barrel_ok` / `ported_barrel_ok` is FALSE. NULL stays allowed
+("not stated"), flagged in the `fits` verdict, never confirmed. **The
+asymmetry is deliberate — do not "fix" it**: a ported barrel in a slide
+without matching ports is dangerous; a plain barrel in a ported slide is
+harmless, so ported slides DO list standard barrels, worded "Fits — no
+comp effect". Existing statuses kept their exact precedence (`blocked`
+before `length-mismatch` before the new three), so no old pair changed
+status. The page KEEPS its own thread query filters as deliberate
+redundancy. `supabase/tests/barrel-slide-fit.sql` drives the view over
+created fixtures on every PR; guard 7 in `check-fitment-data.mjs` sweeps
+the live rows. A locked barrel still says "Only these slides — the maker
+says this barrel should not be used in any other slide." The pages link
+both ways in served HTML, like builds and parts.
+
+**The generated Compensation block** sits above the spec table on a slide
+page, in the hub of a factory-comp model, and in the Armory's fit bar —
+one rule, `js/comp-label.js` ↔ `_comp-label.mjs` (`comp-label.test.mjs`
+pins the pair and the approved wording), never a hand-written paragraph.
+It names the port as "{display_name} ({geometry})", says "Arc Division
+names no port design for it" where `slide_specs.port_style_is_makers_name`
+is false (the two Arc Reactor rows), and always states the recoil-spring
+trap: **the spring follows SLIDE length, not barrel length**. Under it,
+**Recoil spring**: the requirement in words (the `part_classes`
+display name — "3.7in (P365 X, XL, XMacro, AXG)" — slide and spring
+classes by slide length, never barrels), then the catalog's springs for
+that `slide_length_in` as buyable rows ("Compatible springs", never "the
+required spring"; factory-first derived from the brand, no slug list;
+zero springs renders the requirement line alone). The "Required Spring
+Weight" spec row is gone from slide pages; the COLUMN stays, guard 6
+unchanged. Both ride tolerant side reads (`x-comp-label`, `x-springs`),
+so the code deploys before the fit-rules migration.
 
 - **One query per page** (`fitQueryPath()`): the view, the other side's
   product embedded with its brand, live listings and approval. Every embed
@@ -1582,6 +1620,7 @@ Registered today:
 | `scripts/armory-fit.test.mjs` | `js/armory-fit.js` — the Armory build list's, part pages' and (PR 2) product page's shared fit verdicts — judging a pairing the data cannot back: a ported slide reading "Fits" over a stock barrel it never takes, a matched (locked) ported barrel not reading "Matched barrel", a magazine judged by the FUSE's `housing_class` ('xmacro') instead of the maker's own 'fuse' rows, an aftermarket grip's magazine fit guessed instead of "check with the grip maker", a magwell judged without the stock grip's OEM product, a recoil spring's length mismatch passed, an optic tagged on an aftermarket slide (no cut in the data), a comp thread-pitch mismatch passed, or the slide↔grip verdict drifting from `js/slide-fit.js` (it must delegate, never copy) |
 | `scripts/build-fit-line.test.mjs` | the product page's "Fits your build" line (`js/build-fit-line.js`) breaking its trust rules — reading anything when no build is in progress (every visitor on the two most crawled routes would pay those reads), treating an open saved build (`?edit=`'s identity draft) as the build in progress, judging without the product's own rows, rendering a verdict over a FAILED read instead of nothing, a FUSE model's magazine asked of the `xmacro` rows, or `product-page.mjs` losing the placeholder/`?add=` link/script order (or serving any of it on a discontinued page) |
 | `scripts/armory-share.test.mjs` | the /l/<share_id> page (an Armory build's share link) breaking its rules — serving without noindex (meta or header), a canonical that is not its own /l/ URL, a community /gg/ link not 301ing to /l/ once `gun_guides.share_id` exists, a pre-migration /gg/ hit 503ing over the missing column instead of serving as before, a Gunforma guide's /gg/ page gaining a share probe or redirect, a malformed /l/ slug reaching the database, zero rows not reading 404 or a failed read not reading 503, a byline invented for an account-less build, the owner banner or export served non-empty (one cacheable page for everyone), or js/armory-share.js's export drifting from the agreed Reddit format, linking affiliate URLs instead of /parts/ pages, or stating a stale or out-of-stock price, rows out of the Build tab's order (stock and picked parts interleave by `CAT_ORDER`, pinned to the page's `ARMORY_GROUPS`), Copy for Reddit not putting text/html (the real table, `exportHtml`) AND text/plain (the Markdown) on the clipboard through `copyExport` — or not falling back to the Markdown alone when rich copy is blocked — or either Reddit tab losing its "switch to Markdown mode" hint line; also the /l/ comments (PR 4) — the thread not server-rendered (count, OP tag on the list's owner alone, bodies as text never markup), action slots or the comment box served non-empty, the page 503ing (or showing a box) before the comments migration, a post or delete believed without a row back, a stranger's delete reported as done, a duplicate report read as an error, or the signed-out box not landing back on this /l/ page after sign-in |
+| `scripts/comp-label.test.mjs` | `js/comp-label.js` and `_comp-label.mjs` drifting apart — the generated Compensation block reading differently in the Armory's fit bar than on the product page — or the wording drifting from the approved table: the spring sentence following BARREL length instead of SLIDE length (the trap the block exists to defuse), "not ported" rendered for a comp slide whose maker ships a ported barrel (MCARBO), a maker's port name shown for a maker who names none (the Arc rows), or the bull-set sentence lost |
 | `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), a write to `part_favorites` from anything but the ♥, a heart missing from a picker card, a picked card or a saved part, a heart that changes the picks, the open picker, the stored draft or the build's identity, a heart that does not move the Saved parts count and grid (or a failed one that does not put them back in place), a signed-out heart that writes or does not link sign-in back to the Armory, the "Saved" picker filter listing an unsaved part or making a saved part that doesn't fit pickable, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; Gun Guides growing a Community tab or a `gun_guides` read back; and a plain Armory visit opening in edit mode or losing the build in progress — the identity-less build not carried over between visits or through the sign-in round trip (`BUILD_KEY`), an identity adopted from a stored blob (only `?edit=` adopts one), an old pre-rebuild draft blob restored, the `?edit=` draft leaking into a plain visit, or `?edit=` losing its guide or a reload's unsaved changes; and the Share / Save split — a signed-out Share redirecting instead of opening the panel (link, export tabs, "Don't lose it" box), its export not riding `ArmoryShare.exportText`, the anonymous save's token not kept or `?edit=` not written, a rate-limited Share showing the raw error instead of "Sharing is busy right now. Sign in to save your build.", Share before the migration sending an RPC that doesn't exist, a signed-out Save writing anything (even an anonymous row) instead of the sign-in modal that holds the picks and finishes the save after the round trip, a signed-in Save of a token-held anonymous build not claiming first (a direct UPDATE RLS matches to nothing), a signed-in Share leaving a link that isn't in My builds, or a Gunforma guide draft growing a Share button; and the token's boundary — the edit token reaching any URL, toast or panel (it lives in `TOKENS_KEY` localStorage only), or a `?edit=community:<id>` opened without the token (the address bar right after a Share, so the URL that gets pasted by mistake) doing anything but landing on the build's `/l/` page (pre-migration, today's toasts) — never adopting the identity, never a write |
 
 This table is the full registry, not a sample. It read "Registered today:"
@@ -2269,11 +2308,13 @@ unused class. Never conflate the three.
 **The guards.** Three are CHECK constraints on `slide_specs`
 (`*_slide_port_guards.sql`): slide longer than barrel ⇒ `short_barrel`;
 equal lengths + port ⇒ `ported_barrel`; port_count ⇔ port_style. A NULL
-length passes them (unjudged, never wrong). All six invariants — those
+length passes them (unjudged, never wrong). All seven invariants — those
 three plus: every ported slide has a barrel lock or `barrel_included`,
-every `barrel_slide_requirements` row has a `source`, and
+every `barrel_slide_requirements` row has a `source`,
 (platform, slide_length_in) is 1:1 with `slide_class` / `fit_tier` /
-`required_spring_weight` — run against the live database in
+`required_spring_weight`, and no `v_barrel_slide_fit` pair is `fits`
+against the slide's own thread/ported refusals or across mismatched bore
+profiles (guard 7, 2026-11-17) — run against the live database in
 `scripts/check-fitment-data.mjs` (check-routes.yml; under
 `NOT_BUILD_CHECKS` because the build cannot see the database), which also
 fails a NULL length so it cannot hide. And one rule-row wrinkle:
