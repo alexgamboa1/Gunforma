@@ -64,7 +64,9 @@ pin('internal comp + ported — Norsso N365DG XP', {
   locked_barrel_names: ['Norsso N365 3.1" C Port Barrel'],
 }, [
   'Compensator in the slide, plus C-Port (Two Openings) ports venting a matched ported barrel. Both work together.',
-  'Requires the Norsso N365 3.1" C Port Barrel — and the XL (3.7in) recoil spring.',
+  // "Designed for", never "Requires" (Alex, 2026-11-17): the same page
+  // lists the standard 3.1in barrels as fitting.
+  'Designed for the Norsso N365 3.1" C Port Barrel. Needs the XL (3.7in) recoil spring.',
 ]);
 
 pin('ported + matched — Norsso C-Port XL', {
@@ -115,14 +117,15 @@ pin('bull set — Norsso Spec Ops Bull Barrel Ported Set', {
   locked_barrel_names: ['Norsso N365XL 3.7" GEO Port Bull Barrel'],
 }, [
   'One port in the slide — GEO Port (Straight Port), Norsso’s name — fed by a ported barrel cut to match.',
-  'Designed for the Norsso N365XL 3.7" GEO Port Bull Barrel.',
-  'Barrel included.',
+  // The set's box carries a barrel the buyer picks (Alex, 2026-11-17);
+  // the option name is the slide's own port display name, never a slug.
+  'Barrel included — choose the GEO Port barrel option for the comp effect.',
   'Sold as a set — Norsso bull-barrel slides take Norsso bull barrels only.',
 ]);
 
-// MCARBO: internal comp whose maker SHIPS a ported barrel with it —
-// ported_barrel_ok TRUE, so "not ported" must NOT render; the included
-// barrel line must.
+// MCARBO: internal comp whose maker SHIPS the barrel in the box — no
+// "requires" for an included part (Alex, 2026-11-17); ported_barrel_ok
+// TRUE, so "not ported" must NOT render in the parenthetical.
 pin('internal comp + included barrel — MCARBO', {
   comp_style: 'short_barrel', port_style: null,
   slide_length_in: '3.7', barrel_length_in: '3.1',
@@ -130,8 +133,7 @@ pin('internal comp + included barrel — MCARBO', {
   barrel_included: true, bore_profile: 'standard', maker: 'MCARBO',
   locked_barrel_names: [],
 }, [
-  'The compensator is machined into the slide, ahead of a shorter barrel. Requires a 3.1in barrel — not threaded — and the XL (3.7in) recoil spring.',
-  'Barrel included.',
+  'The compensator is machined into the slide, ahead of a shorter barrel. Comes with its 3.1in barrel (not threaded). Needs the XL (3.7in) recoil spring.',
 ]);
 
 // The spring follows SLIDE length, not barrel length: a 3.7in slide over a
