@@ -692,6 +692,29 @@ export function resolveProposals(st, today) {
       }
     }
 
+    // ── A stored merchant id separates a bundle from its component ────
+    // (Alex, 2026-11-17.) OP gives a bundle the component's GTIN — the AMAG
+    // 3-packs beside the singles, the DeltaPoint Pro beside its TRYBE-slide
+    // kits, the Tyrant takedown lever beside the lever-and-catch pair — so
+    // the two rows share the stored MPN AND the stored GTIN, and neither
+    // rule above can choose. The merchant_product_id names the exact
+    // LISTING rather than the product, so when the link records one and
+    // exactly one surviving candidate matches it, that candidate is the
+    // answer. Same narrowness as the GTIN rule: no stored mid, no match,
+    // or several distinct matches → this does nothing and the conflict
+    // withholds exactly as before. Nothing is guessed, and the stored mid
+    // itself comes only from a previous uncontested fill or a deliberate
+    // hand fill (the 2026-11-17 migration seeds the six bundle conflicts).
+    const storedMid = strictNorm(target.op_merchant_product_id);
+    if (candidates.length > 1 && storedMid) {
+      const midMatch = candidates.filter(p => strictNorm(p.rawMid) === storedMid);
+      const midDistinct = [...new Set(midMatch.map(fingerprint))];
+      if (midDistinct.length === 1) {
+        st.resolvedByStoredMid++;
+        candidates = [midMatch.find(p => fingerprint(p) === midDistinct[0])];
+      }
+    }
+
     // ── Condition splits the survivors: the NEW row is the pick ───────
     // (Alex, 2026-11-16.) OP's open-box rows reuse the retail item's MPN —
     // and often its GTIN — so they confirm the stored identifier and slip
@@ -812,6 +835,7 @@ function reportPartner(st) {
   log(`  unmatched:                    ${unmatched.length}`);
   log(`  identifiers filled (were null): ${st.filled}`);
   log(`  resolved by stored identifier:${st.resolvedByStoredId}   (would have been conflicts)`);
+  log(`  resolved by stored mid:       ${st.resolvedByStoredMid}   (bundle beside its component)`);
   log(`  resolved by condition:        ${st.resolvedByCondition}   (retail row over non-retail twin)`);
   log(`  non-retail rows ignored:      ${st.demoRowsDropped}   (open box / demo)`);
   log(`  withheld for review:          ${withheld}  (drift ${st.driftReview.length}, conflicts ${st.conflicts.length})  ceiling ${st.withheldCeiling}`);
@@ -1047,6 +1071,7 @@ async function main() {
       withheldIds: new Set(),        // links found but deliberately not written
       withheldCeiling: cfg.withheldCeiling,
       resolvedByStoredGtin: 0,       // MPN ties broken by a matching stored op_gtin
+      resolvedByStoredMid: 0,        // bundle/component ties broken by a stored merchant id
       resolvedByCondition: 0,        // retail row picked over affirmatively non-retail twins
       conditionResolved: [],         // the evidence for each of those picks
       filled: 0,                     // identifiers written into a previously-null column
