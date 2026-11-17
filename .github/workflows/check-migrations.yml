@@ -20,6 +20,7 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/seed.sql'
       - 'supabase/config.toml'
+      - 'supabase/tests/**'
       - '.github/workflows/check-migrations.yml'
   push:
     branches: [main]
@@ -27,6 +28,7 @@ on:
       - 'supabase/migrations/**'
       - 'supabase/seed.sql'
       - 'supabase/config.toml'
+      - 'supabase/tests/**'
       - '.github/workflows/check-migrations.yml'
   workflow_dispatch:
 
@@ -88,6 +90,17 @@ jobs:
           [ "$buckets" = 3 ]             || { echo "::error::a storage bucket is missing"; fail=1; }
           [ "$mag_pos" = 1 ]             || { echo "::error::product_category enum order is wrong: 'magazine' must come right after 'magwell'"; fail=1; }
           exit $fail
+
+      # Drives the REAL create_product() against the database this job just
+      # replayed, under the real spec_field_rules: a barrel/slide lock must
+      # carry its provenance (source from the barrel's products.url,
+      # compatibility_note from its requires_slide_text) in both p_fits
+      # directions, with an explicit value still winning. The test file was
+      # watched failing against the pre-fix function before the fix landed.
+      - name: create_product() writes sourced barrel/slide locks
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/create-product-lock-source.sql
 
       - name: Stop the local stack
         if: always()
