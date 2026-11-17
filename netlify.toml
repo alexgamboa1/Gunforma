@@ -518,6 +518,14 @@
 # rewrite below — first match wins. The old rows stay in the database with
 # is_discontinued = true (never deleted); see CLAUDE.md "Discontinued parts".
 #
+# The SIG factory RSA was added 2026-11-17 under a slug naming the guns,
+# not the part; renamed the same day, before anything indexed it.
+[[redirects]]
+  from = "/parts/recoil-springs/sig-sauer-xmacro-p365xl"
+  to = "/parts/recoil-springs/sig-sauer-recoil-spring-assembly-p365xl"
+  status = 301
+  force = true
+
 # RAMM Tactical sells one P365 Leverage kit now, not comp and non-comp.
 [[redirects]]
   from = "/parts/triggers/ramm-tactical-leverage-c-p365"
