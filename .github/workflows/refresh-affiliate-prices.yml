@@ -61,11 +61,13 @@ jobs:
 
       - name: Unit tests
         working-directory: scripts
-        # ONE file, named explicitly — do NOT widen this back to a glob or a
-        # bare `node --test`. This step exists to run gtin-norm.test.mjs, the
-        # sync's own guard, which cannot run in the site build because its
-        # dependency (csv-parse, scripts/package.json) is only installed
-        # here. Every other scripts test already runs on every deploy via
+        # TWO files, named explicitly — do NOT widen this back to a glob or a
+        # bare `node --test`. This step exists to run the sync's own guards —
+        # gtin-norm.test.mjs and sync-gtin-tiebreak.test.mjs — which cannot
+        # run in the site build because their dependency (csv-parse,
+        # scripts/package.json) is only installed here. (#253 named only the
+        # first and silently left the resolver test running nowhere for a
+        # day.) Every other scripts test already runs on every deploy via
         # check-all.sh, so running them again here adds nothing and has now
         # killed the sync twice:
         #   - bare `node --test` used Node's own discovery, swept in
@@ -81,7 +83,7 @@ jobs:
         #     and the job red for a reason that had nothing to do with
         #     prices. check-routes' sync-freshness assertion now catches the
         #     symptom; this line is the cause.
-        run: node --test gtin-norm.test.mjs
+        run: node --test gtin-norm.test.mjs sync-gtin-tiebreak.test.mjs
 
       - name: Refresh affiliate prices
         working-directory: scripts

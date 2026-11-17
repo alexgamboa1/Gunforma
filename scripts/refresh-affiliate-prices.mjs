@@ -7,6 +7,19 @@
 // last, everything auditable), and updates street_price, in_stock,
 // last_checked, plus four op_* audit columns.
 //
+// v7 changes (condition rule + hyphen-insensitive MPN; Alex, 2026-11-16):
+//   • When several feed rows survive every other tie-break on one link, the
+//     NEW-condition row is the pick — and only when every other survivor is
+//     affirmatively non-retail (open box / dealer demo / used / refurb, by
+//     OP's own feed marks or an explicit condition column). Two distinct
+//     retail rows (a bundle beside the item, a 3-pack beside the single) are
+//     still a genuine conflict and stay withheld; zero retail rows stay
+//     withheld too — no price beats a demo price.
+//   • Stored-op_mpn comparisons are hyphen-insensitive (mpnNorm): OP strips
+//     the hyphens out of Holosun MPNs ("EPS-CORE-RD-3" ships as
+//     "EPSCORERD3"), which read as identifier drift every night. The STORED
+//     value is never rewritten — the comparison bends, not the record.
+//
 // v6 changes (identifier safety):
 //   • The sync may FILL an op_* identifier that is null. It must NEVER
 //     overwrite one that is already set. A stored identifier is what pins a
@@ -146,6 +159,18 @@ function fuzzyNorm(val) {
   return val == null ? null : String(val).toLowerCase().replace(/[^a-z0-9]/g, '') || null;
 }
 
+// MPN, for comparisons against a STORED op_mpn only: strictNorm, then drop
+// hyphens. OpticsPlanet removed the hyphens from Holosun's MPNs in late 2026
+// ("EPS-CORE-RD-3" began shipping as "EPSCORERD3"), and the strict comparison
+// then read every such link as identifier drift, nightly, forever. The stored
+// value is never rewritten to match the feed — the comparison bends, not the
+// record. Hyphens only: this is NOT fuzzyNorm, which strips all punctuation
+// and is quarantined to the flagged T6 tier.
+export function mpnNorm(val) {
+  const s = strictNorm(val);
+  return s == null ? null : (s.replace(/-/g, '') || null);
+}
+
 // GTIN: take the FIRST whitespace-separated token, then strip non-digits and
 // leading zeros.
 //
@@ -202,7 +227,26 @@ function isNonRetail(row) {
   return mpn.endsWith('DEMO')
       || name.startsWith('open box')
       || name.startsWith('dealer demo')
-      || name.startsWith('demo,');
+      || name.startsWith('demo,')
+      || name.startsWith('used,')
+      || name.startsWith('used ')
+      || name.startsWith('refurb')
+      || name.startsWith('blemished');
+}
+
+// What condition is this row selling? 'new', 'non_retail', or null when the
+// feed genuinely states nothing. An explicit condition column is read when
+// the feed has one, but OP's own marks (the name prefixes and the DEMO mpn
+// suffix above) outrank it toward non-retail — OP labels its open-box rows in
+// the NAME while reusing the retail item's identifiers, which is exactly why
+// those rows survive confirmsStored below. A row with no mark and no column
+// is OP's retail listing: their feed marks every non-retail row, so the
+// absence of a mark is itself the feed's statement of condition.
+function conditionOf(row) {
+  if (isNonRetail(row)) return 'non_retail';
+  const c = String(row.condition || row.product_condition || '').trim().toLowerCase();
+  if (c && c !== 'new') return 'non_retail';
+  return 'new';
 }
 
 // ─── URL canonicalization ───────────────────────────────────────────────────
@@ -323,8 +367,14 @@ async function loadExistingRows(partner, host) {
   const bySku = new Map();
   // Index 3: GTIN-normalized UPC → row
   const byUpc = new Map();
-  // Index 4: strict-normalized stored op_mpn → row (for T1)
+  // Index 4: hyphen-insensitively-normalized stored op_mpn → row (for T1).
+  // Two live links whose stored MPNs collapse to one key exist today
+  // (DFST-MRD3-E vs DFSTMRD3E — two different Vortex Defenders), and a Map
+  // would make T1 a silent coin toss between them, so a shared key is
+  // EXCLUDED from the index: both links fall back to the URL tiers, which is
+  // what the strict comparison gave at least one of them anyway.
   const byOpMpn = new Map();
+  const opMpnCollisions = new Set();
   // Index 5: GTIN-normalized stored op_gtin → row (for T2)
   const byOpGtin = new Map();
   // Index 6: link id → row, so proposal resolution can read the stored
@@ -355,13 +405,18 @@ async function loadExistingRows(partner, host) {
     }
 
     // Stored op_* fields from previous successful matches (T1, T2)
-    const opMpn = strictNorm(r.op_mpn);
-    if (opMpn) byOpMpn.set(opMpn, r);
+    const opMpn = mpnNorm(r.op_mpn);
+    if (opMpn) {
+      if (byOpMpn.has(opMpn)) opMpnCollisions.add(opMpn);
+      else byOpMpn.set(opMpn, r);
+    }
     const opGtin = gtinNorm(r.op_gtin);
     if (opGtin) byOpGtin.set(opGtin, r);
   }
+  for (const k of opMpnCollisions) byOpMpn.delete(k);
 
-  return { rows, retiredSkipped: retired.length, byId, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin };
+  return { rows, retiredSkipped: retired.length, byId, byUrl, byBaseUrl, bySku, byUpc, byOpMpn, byOpGtin,
+           opMpnCollisions: opMpnCollisions.size };
 }
 
 // ─── fetch + stream-parse feed ──────────────────────────────────────────────
@@ -399,6 +454,9 @@ async function* streamFeedRows() {
   let dumped = 0;
   for await (const row of parser) {
     if (dumped < DEBUG_SAMPLES) {
+      if (dumped === 0) {
+        console.log(c('cyan', `\n[feed columns] ${Object.keys(row).join(', ')}`));
+      }
       console.log(c('cyan', `\n[debug feed row ${dumped + 1}/${DEBUG_SAMPLES}]`));
       const keys = [
         'merchant_id', 'merchant_name',
@@ -440,6 +498,7 @@ function processFeedRow(st, row, today) {
 
   // Normalized for comparison
   const feedMpnStrict = strictNorm(rawMpn);
+  const feedMpnCmp    = mpnNorm(rawMpn);
   const feedGtinNorm  = gtinNorm(rawGtin);
   const feedMpnFuzzy  = fuzzyNorm(rawMpn);
   const feedMidStrict = strictNorm(rawMid);
@@ -447,9 +506,9 @@ function processFeedRow(st, row, today) {
   let target = null;
   let tier   = null;
 
-  // ── T1: stored op_mpn (exact re-match from prior run) ──────────────
-  if (!target && feedMpnStrict && st.byOpMpn.has(feedMpnStrict)) {
-    target = st.byOpMpn.get(feedMpnStrict);
+  // ── T1: stored op_mpn (hyphen-insensitive re-match from prior run) ──
+  if (!target && feedMpnCmp && st.byOpMpn.has(feedMpnCmp)) {
+    target = st.byOpMpn.get(feedMpnCmp);
     tier = 'stored_op_mpn';
   }
   // ── T2: stored op_gtin (exact re-match from prior run) ─────────────
@@ -516,7 +575,10 @@ function processFeedRow(st, row, today) {
         candidateIds: candidates.map(x => x.id),
       });
     } else if (st.unmatchedFeedUrls.length < 25) {
-      st.unmatchedFeedUrls.push({ url: canonicalDest, mpn: rawMpn, gtin: rawGtin, mid: rawMid });
+      st.unmatchedFeedUrls.push({
+        url: canonicalDest, mpn: rawMpn, gtin: rawGtin, mid: rawMid,
+        name: (row.product_name || '').slice(0, 90),
+      });
     }
     return;
   }
@@ -531,6 +593,7 @@ function processFeedRow(st, row, today) {
     tier, price, inStock,
     rawMpn, rawGtin, rawMid,
     isDemo: isNonRetail(row),
+    condition: conditionOf(row),
     feedName: (row.product_name || '').slice(0, 120),
     // merchant_image_url first, aw_image_url as the fallback — Awin populates
     // the second from the first but not always the other way round. One image
@@ -563,16 +626,18 @@ export function resolveProposals(st, today) {
     const fingerprint = p =>
       `${strictNorm(p.rawMpn) || ''}|${gtinNorm(p.rawGtin) || ''}|${strictNorm(p.rawMid) || ''}`;
 
-    // The link's own stored identifier, if it has one.
-    const storedMpn  = strictNorm(target.op_mpn);
+    // The link's own stored identifier, if it has one. MPNs compare
+    // hyphen-insensitively (mpnNorm) so an OP respelling of a stored MPN
+    // still counts as the same identifier.
+    const storedMpn  = mpnNorm(target.op_mpn);
     const storedGtin = gtinNorm(target.op_gtin);
 
     // A proposal "confirms the stored identifier" when it matched at T1/T2 —
     // i.e. the feed row's own mpn/gtin equals what this link already records.
     // That is a far stronger statement than sharing a landing page.
     const confirmsStored = p =>
-      (p.tier === 'stored_op_mpn'  && storedMpn  && strictNorm(p.rawMpn)  === storedMpn) ||
-      (p.tier === 'stored_op_gtin' && storedGtin && gtinNorm(p.rawGtin)   === storedGtin);
+      (p.tier === 'stored_op_mpn'  && storedMpn  && mpnNorm(p.rawMpn)  === storedMpn) ||
+      (p.tier === 'stored_op_gtin' && storedGtin && gtinNorm(p.rawGtin) === storedGtin);
 
     // ── Drop non-retail rows, unless this link IS the demo unit ───────
     // Without this, an open-box twin sharing the retail item's page makes the
@@ -627,6 +692,30 @@ export function resolveProposals(st, today) {
       }
     }
 
+    // ── Condition splits the survivors: the NEW row is the pick ───────
+    // (Alex, 2026-11-16.) OP's open-box rows reuse the retail item's MPN —
+    // and often its GTIN — so they confirm the stored identifier and slip
+    // past the demo-drop above, leaving a retail/open-box pair that nothing
+    // earlier can separate. When exactly one distinct fingerprint among the
+    // survivors is a retail (new-condition) row and every other survivor is
+    // affirmatively non-retail, the retail row is the pick. Two distinct
+    // retail fingerprints (a bundle beside the item, a 3-pack beside the
+    // single) are still a genuine conflict and stay withheld; zero retail
+    // rows stay withheld too — no price beats a demo price.
+    if (candidates.length > 1) {
+      const retail = candidates.filter(p => p.condition === 'new');
+      const retailDistinct = [...new Set(retail.map(fingerprint))];
+      if (retail.length && retail.length < candidates.length && retailDistinct.length === 1) {
+        st.resolvedByCondition++;
+        st.conditionResolved.push({
+          linkId,
+          picked:  retail.find(p => fingerprint(p) === retailDistinct[0]),
+          dropped: candidates.filter(p => p.condition !== 'new'),
+        });
+        candidates = [retail.find(p => fingerprint(p) === retailDistinct[0])];
+      }
+    }
+
     // ── Conflict: the surviving rows still disagree ───────────────────
     const distinct = [...new Set(candidates.map(fingerprint))];
     if (distinct.length > 1) {
@@ -634,7 +723,8 @@ export function resolveProposals(st, today) {
       st.conflicts.push({
         linkId, url: target.url,
         candidates: candidates.map(p => ({
-          mpn: p.rawMpn, gtin: p.rawGtin, mid: p.rawMid, price: p.price, name: p.feedName,
+          mpn: p.rawMpn, gtin: p.rawGtin, mid: p.rawMid, price: p.price,
+          stock: p.inStock, condition: p.condition, name: p.feedName,
         })),
       });
       continue;   // skipped, not written
@@ -656,7 +746,7 @@ export function resolveProposals(st, today) {
       if (norm(stored) === norm(incoming)) return;            // already agrees
       blocked = { field, stored, incoming };                  // CONTRADICTS
     };
-    consider('op_mpn',                 target.op_mpn,                 p.rawMpn,  strictNorm);
+    consider('op_mpn',                 target.op_mpn,                 p.rawMpn,  mpnNorm);
     consider('op_gtin',                target.op_gtin,                p.rawGtin, gtinNorm);
     consider('op_merchant_product_id', target.op_merchant_product_id, p.rawMid,  strictNorm);
 
@@ -668,6 +758,7 @@ export function resolveProposals(st, today) {
         linkId, url: target.url, tier: p.tier,
         field: blocked.field, stored: blocked.stored, incoming: blocked.incoming,
         feedName: p.feedName, feedPrice: p.price,
+        feedUrl: p.url, condition: p.condition,
       });
       continue;   // skipped, not written
     }
@@ -721,6 +812,7 @@ function reportPartner(st) {
   log(`  unmatched:                    ${unmatched.length}`);
   log(`  identifiers filled (were null): ${st.filled}`);
   log(`  resolved by stored identifier:${st.resolvedByStoredId}   (would have been conflicts)`);
+  log(`  resolved by condition:        ${st.resolvedByCondition}   (retail row over non-retail twin)`);
   log(`  non-retail rows ignored:      ${st.demoRowsDropped}   (open box / demo)`);
   log(`  withheld for review:          ${withheld}  (drift ${st.driftReview.length}, conflicts ${st.conflicts.length})  ceiling ${st.withheldCeiling}`);
 
@@ -751,11 +843,24 @@ function reportPartner(st) {
     }
   }
 
+  if (st.conditionResolved.length) {
+    log(c('green', `\n  Condition-resolved — retail row picked over non-retail twin(s) (${st.conditionResolved.length}):`));
+    for (const r of st.conditionResolved) {
+      const p = r.picked;
+      log(c('green', `    Link ${r.linkId.slice(0, 8)}…  PICKED  mpn=${p.rawMpn || '—'} gtin=${p.rawGtin || '—'} mid=${p.rawMid || '—'} $${p.price ?? '—'} stock=${p.inStock ?? '—'}`));
+      log(c('grey',  `      ${p.feedName}`));
+      for (const d of r.dropped) {
+        log(c('grey', `      dropped [${d.condition}]  mpn=${d.rawMpn || '—'} mid=${d.rawMid || '—'} $${d.price ?? '—'}  ${d.feedName}`));
+      }
+    }
+  }
+
   if (st.driftReview.length) {
     log(c('yellow', `\n  Drift review — stored identifier contradicted, NOT written (${st.driftReview.length}):`));
     for (const d of st.driftReview.slice(0, 20)) {
-      log(c('yellow', `    Link ${d.linkId.slice(0, 8)}…  ${d.field}: stored "${d.stored}" vs feed "${d.incoming}"  [${d.tier}]`));
+      log(c('yellow', `    Link ${d.linkId.slice(0, 8)}…  ${d.field}: stored "${d.stored}" vs feed "${d.incoming}"  [${d.tier}, ${d.condition || '—'}]`));
       log(c('grey',   `      feed: ${d.feedName}`));
+      log(c('grey',   `      feed url: ${d.feedUrl}`));
     }
     if (st.driftReview.length > 20) log(c('grey', `      …and ${st.driftReview.length - 20} more`));
   }
@@ -765,7 +870,7 @@ function reportPartner(st) {
     for (const cf of st.conflicts.slice(0, 10)) {
       log(c('red', `    Link ${cf.linkId.slice(0, 8)}…  ${cf.candidates.length} candidates`));
       for (const cand of cf.candidates) {
-        log(c('grey', `      mpn=${cand.mpn || '—'} gtin=${cand.gtin || '—'} $${cand.price ?? '—'}  ${cand.name}`));
+        log(c('grey', `      [${cand.condition || '—'}] mpn=${cand.mpn || '—'} gtin=${cand.gtin || '—'} mid=${cand.mid || '—'} $${cand.price ?? '—'} stock=${cand.stock ?? '—'}  ${cand.name}`));
       }
     }
   }
@@ -787,9 +892,10 @@ function reportPartner(st) {
       log(c('grey', `      ${r._canon || r.url}  (sku: ${r.product_variants?.sku || '—'})`));
     }
     if (st.unmatchedFeedUrls.length) {
-      log(c('grey', '    unmatched feed URLs (first 10):'));
-      for (const f of st.unmatchedFeedUrls.slice(0, 10)) {
-        log(c('grey', `      ${f.url}  (mpn: ${f.mpn || '—'}, gtin: ${f.gtin || '—'})`));
+      log(c('grey', `    unmatched feed rows (first ${Math.min(st.unmatchedFeedUrls.length, 25)}):`));
+      for (const f of st.unmatchedFeedUrls.slice(0, 25)) {
+        log(c('grey', `      ${f.url}  (mpn: ${f.mpn || '—'}, gtin: ${f.gtin || '—'}, mid: ${f.mid || '—'})`));
+        if (f.name) log(c('grey', `        ${f.name}`));
       }
     }
   }
@@ -923,6 +1029,9 @@ async function main() {
     log(`    with SKU:                   ${ix.bySku.size}`);
     log(`    with UPC (or numeric SKU):  ${ix.byUpc.size}`);
     log(`    with stored op_mpn/op_gtin: ${storedOp}  (T1/T2 exact re-match)`);
+    if (ix.opMpnCollisions) {
+      log(c('yellow', `    op_mpn keys excluded (hyphen-collision between two links): ${ix.opMpnCollisions}`));
+    }
     log(`    shared URLs (>1 row):       ${shared.length}   (rows: ${shared.reduce((n, [, l]) => n + l.length, 0)})`);
 
     states.set(mid, {
@@ -938,6 +1047,8 @@ async function main() {
       withheldIds: new Set(),        // links found but deliberately not written
       withheldCeiling: cfg.withheldCeiling,
       resolvedByStoredGtin: 0,       // MPN ties broken by a matching stored op_gtin
+      resolvedByCondition: 0,        // retail row picked over affirmatively non-retail twins
+      conditionResolved: [],         // the evidence for each of those picks
       filled: 0,                     // identifiers written into a previously-null column
       demoRowsDropped: 0,            // open-box / demo rows ignored beside a retail row
       resolvedByStoredId: 0,         // links saved from a conflict by their stored identifier
