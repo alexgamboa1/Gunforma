@@ -353,3 +353,22 @@ test('a failed comp read never takes the page down and renders no block', async 
   assert.equal(r.res.headers.get('x-comp-label'), 'failed');
   assert.ok(!r.html.includes('class="comp-block"'));
 });
+
+test('the comp block names the matched barrel through the spec-table chain', async () => {
+  // The lock FKs reference barrel_specs/slide_specs, not products — the
+  // first embed guessed products directly and failed PGRST200 on every
+  // slide page (x-comp-label: failed, production 2026-11-17).
+  const r = await render('slide', {
+    specRow: { threaded_barrel_ok: false, barrel_length_in: '3.7', slide_length_in: '3.7', barrel_included: false },
+    compAnswer: {
+      comp_style: 'ported_barrel', port_style: 'c-port', port_count: 2,
+      ported_barrel_ok: true, bore_profile: 'standard', port_style_is_makers_name: true,
+      port_styles: { display_name: 'C-Port', geometry: 'Two Openings' },
+      part_classes: { display_name: '3.7in (P365 X, XL, XMacro, AXG)' },
+      locks: [{ barrel_specs: { products: { name: 'Norsso N365XL 3.7" C Port Barrel', manufacturers: { name: 'Norsso' } } } }],
+    },
+  });
+  assert.equal(r.res.headers.get('x-comp-label'), 'rendered');
+  assert.ok(r.html.includes('Designed for the Norsso N365XL 3.7&quot; C Port Barrel.'),
+    'the matched barrel is named from the nested spec-table embed');
+});
