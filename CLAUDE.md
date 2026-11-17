@@ -2486,6 +2486,25 @@ alone, so without this guard a choke tube can capture a weapon-light link.
 To re-point a link deliberately, clear the stored identifier and let the next
 run refill it — do not teach the sync to overwrite.
 
+**A retail/open-box pair resolves to the retail row** (Alex, 2026-11-16).
+OP's open-box rows reuse the retail item's MPN *and* GTIN — only the
+merchant_product_id differs — so they confirm a stored identifier, survive
+the demo-drop, and used to withhold the link as a conflict every night (the
+Romeo2 and Osight SE, since 2026-09-21). When exactly one distinct
+fingerprint among the surviving candidates is a retail row and every other
+survivor is affirmatively non-retail (OP's name prefixes and DEMO mpn
+suffix — the feed has no condition column), the retail row is the pick.
+Two distinct retail rows (a bundle beside the item, a 3-pack beside the
+single — OP gives bundles the component's GTIN) are still a genuine
+conflict and stay withheld; zero retail rows stay withheld too — no price
+beats a demo price. **Stored-MPN comparisons are hyphen-insensitive**
+(`mpnNorm`): OP respelled Holosun's MPNs without hyphens, which read as
+drift nightly; the comparison bends, the stored value is never rewritten,
+and the T1 index refuses a key two links share once hyphens are ignored.
+`scripts/sync-gtin-tiebreak.test.mjs` pins all of it, and the workflow's
+test step names BOTH sync test files explicitly — #253 narrowed it to one
+and silently left the resolver test running nowhere.
+
 ### price_history
 
 `price_history` is written by a trigger on `affiliate_links`, not by application
