@@ -86,6 +86,11 @@
         (s.port_style_is_makers_name === false ? '' : ', ' + s.maker + '’s name') +
         ' — fed by a ported barrel cut to match.');
       if (locked && !s.barrel_included) out.push('Designed for the ' + locked + '.');
+    } else if (s.bore_profile === 'bull') {
+      // No comp, bull bore (Alex, 2026-11-17 — the Rail Set shape, whose
+      // openings are cosmetic per Norsso): "takes any barrel" would be
+      // false twice over, and the openings are never called ports.
+      out.push('Bull-barrel slide — no compensation. Takes Norsso N365XL bull barrels only; threaded and ported barrels don’t fit.');
     } else {
       var thr = s.threaded_barrel_ok === true ? 'OK'
         : s.threaded_barrel_ok === false ? 'not OK' : 'not stated by maker';
@@ -109,7 +114,10 @@
       }
     }
     if (s.bore_profile === 'bull') {
-      out.push('Sold as a set — Norsso bull-barrel slides take Norsso bull barrels only.');
+      // The no-comp bull sentence above already carries the bull rule.
+      if (s.comp_style === 'ported_barrel') {
+        out.push('Sold as a set — Norsso bull-barrel slides take Norsso bull barrels only.');
+      }
     } else if (s.comp_style === 'ported_barrel') {
       out.push('A standard ' + bl + 'in barrel fits but gives no comp effect.');
     }

@@ -1943,7 +1943,11 @@ function renderFitBar() {
   var sp = STATE.picks.slide && PRODUCTS_BY_ID[STATE.picks.slide.productId];
   var base = sp && SPEC.slide[sp.id];
   var ex = sp && COMP_EXTRAS.slides[sp.id];
-  if (sp && base && ex && window.CompLabel && ex.comp_style && ex.comp_style !== 'none') {
+  // Comp slides, and the no-comp BULL slide (its "takes bull barrels only"
+  // warning matters as much as any comp fact); a plain standard slide
+  // stays quiet here.
+  if (sp && base && ex && window.CompLabel && ex.comp_style &&
+      (ex.comp_style !== 'none' || ex.bore_profile === 'bull')) {
     var lockedNames = [];
     Object.keys(BARREL_LOCKS).forEach(function (bid) {
       if (BARREL_LOCKS[bid].some(function (l) { return l.slide === sp.id; })) {
