@@ -17,8 +17,8 @@
 --
 -- The fix: repoint url and affiliate_url to OpticsPlanet's own Defender
 -- CCW listing (their slug spells it "cww" — OP's typo, consistent across
--- their listing and six review URLs; confirmed live by the paced page
--- probe, JSON-LD sku DFCCW-MRD3-E), clear every sync-owned column — the
+-- their listing and six review URLs; the page answered HTTP 200 to the
+-- paced probe on 2026-11-17), clear every sync-owned column — the
 -- stored identifiers are the ST's, and the price/stock/last_checked are
 -- the ST's numbers wearing a fresh date, which is exactly what the stale
 -- guard's op_last_matched_by clause exists to catch. The row reads "Check
