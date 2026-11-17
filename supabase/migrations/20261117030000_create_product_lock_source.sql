@@ -477,3 +477,4 @@ begin
   end if;
   return v_result;
 end;
+$_$;
