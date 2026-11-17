@@ -526,13 +526,18 @@ async function fetchCompSection(product, raw) {
     const rows = await pgGet('slide_specs?product_id=eq.' + product.id + '&select=' + encodeURIComponent(
       'comp_style,port_style,port_count,ported_barrel_ok,bore_profile,port_style_is_makers_name,' +
       'port_styles(display_name,geometry),part_classes(display_name),' +
+      // The lock FKs reference the SPEC tables, not products (the same
+      // chain BARREL_LOCKS_EMBED walks), so the barrel's name comes
+      // through barrel_specs.
       'locks:barrel_slide_requirements!barrel_slide_requirements_slide_product_id_fkey(' +
-        'products!barrel_slide_requirements_barrel_product_id_fkey(name,manufacturers!products_brand_id_fkey(name)))'
+        'barrel_specs!barrel_slide_requirements_barrel_product_id_fkey(' +
+          'products!barrel_specs_product_id_fkey(name,manufacturers!products_brand_id_fkey(name))))'
     ) + '&limit=1');
     const x = Array.isArray(rows) && rows.length ? rows[0] : null;
     if (x) {
       const lockedNames = (x.locks || [])
-        .map((l) => l.products ? displayProductName({ name: l.products.name, brand: (l.products.manufacturers || {}).name }) : null)
+        .map((l) => ((l.barrel_specs || {}).products || null))
+        .map((p) => p ? displayProductName({ name: p.name, brand: (p.manufacturers || {}).name }) : null)
         .filter(Boolean).sort();
       out.comp = compLabel({
         comp_style: x.comp_style,
