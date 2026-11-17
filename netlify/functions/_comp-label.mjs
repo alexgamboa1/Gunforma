@@ -34,8 +34,18 @@ export function compLabel(s) {
 
   if (s.comp_style === 'short_barrel') {
     if (s.port_style) {
+      // "Designed for", never "Requires" (Alex, 2026-11-17): a ported
+      // slide is never described as hard-requiring its matched barrel —
+      // the same page lists the standard barrels as fitting.
       out.push('Compensator in the slide, plus ' + portPhrase + ' ports venting a matched ported barrel. Both work together.');
-      out.push('Requires the ' + (locked || 'matched ported barrel') + ' — and ' + spring + '.');
+      out.push('Designed for the ' + (locked || 'matched ported barrel') + '. Needs ' + spring + '.');
+    } else if (s.barrel_included) {
+      // No "requires" for a part that ships in the box (Alex,
+      // 2026-11-17 — the MCARBO shape). The parenthetical still states
+      // what the included barrel is not.
+      out.push('The compensator is machined into the slide, ahead of a shorter barrel. Comes with its ' +
+        bl + 'in barrel (' + (s.ported_barrel_ok === false ? 'not ported, not threaded' : 'not threaded') +
+        '). Needs ' + spring + '.');
     } else {
       const forbids = s.ported_barrel_ok === false
         ? ' — not ported, not threaded — '
@@ -47,14 +57,29 @@ export function compLabel(s) {
     out.push(countWords(s.port_count) + ' in the slide — ' + portPhrase +
       (s.port_style_is_makers_name === false ? '' : ', ' + s.maker + '’s name') +
       ' — fed by a ported barrel cut to match.');
-    if (locked) out.push('Designed for the ' + locked + '.');
+    if (locked && !s.barrel_included) out.push('Designed for the ' + locked + '.');
   } else {
     const thr = s.threaded_barrel_ok === true ? 'OK'
       : s.threaded_barrel_ok === false ? 'not OK' : 'not stated by maker';
     out.push('Standard slide. Takes any ' + bl + 'in barrel; threaded barrels ' + thr + '.');
   }
 
-  if (s.barrel_included) out.push('Barrel included.');
+  if (s.barrel_included) {
+    if (s.comp_style === 'ported_barrel' && locked) {
+      // The Norsso bull-set shape (Alex, 2026-11-17): the box carries a
+      // barrel the buyer picks, and only the matched port option feeds
+      // the slide's ports. The option is named by the slide's own
+      // port_styles.display_name — never a slug. Today this gate
+      // (ported slide + matched-barrel lock + barrel included) matches
+      // exactly that set: the Arc kits carry no locks.
+      out.push('Barrel included — choose the ' + (s.port_display_name || s.port_geometry || 'matched') +
+        ' barrel option for the comp effect.');
+    } else if (!(s.comp_style === 'short_barrel' && !s.port_style)) {
+      // folded into "Comes with its …in barrel" for the internal-comp
+      // package; a plain mention everywhere else
+      out.push('Barrel included.');
+    }
+  }
   if (s.bore_profile === 'bull') {
     out.push('Sold as a set — Norsso bull-barrel slides take Norsso bull barrels only.');
   } else if (s.comp_style === 'ported_barrel') {
