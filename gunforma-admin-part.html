@@ -229,7 +229,7 @@ const BOOL_FIELDS = {
   frame: ['has_rail', 'thumb_rest', 'has_beaver_tail', 'thumb_stippling', 'includes_hardware', 'undercut_trigger_guard'],
   light: ['has_laser', 'has_strobe', 'has_infrared', 'rechargeable', 'multiple_light_settings'],
   optic: ['auto_on_off', 'shake_awake', 'solar_power', 'enclosed_emitter', 'removable_battery', 'selectable_reticle'],
-  slide: ['lightening_cuts', 'barrel_included', 'integrated_comp', 'comes_with_sights', 'threaded_barrel_ok'],
+  slide: ['lightening_cuts', 'barrel_included', 'integrated_comp', 'comes_with_sights', 'threaded_barrel_ok', 'ported_barrel_ok'],
   barrel: ['is_lci'],
   magwell: ['is_combo', 'includes_hardware'],
   trigger: ['drop_in', 'adjustable'],
@@ -247,7 +247,7 @@ const BOOL_FIELDS = {
 // instead of missing: an honest "not stated" never holds up approval, and a
 // "No" is never typed to get past the form. Each is in BOOL_FIELDS as well.
 const NOT_STATED_FIELDS = {
-  slide: ['threaded_barrel_ok'],
+  slide: ['threaded_barrel_ok', 'ported_barrel_ok'],
 };
 function allowsNotStated(field) { return (NOT_STATED_FIELDS[S.category] || []).indexOf(field) !== -1; }
 // true = whole number
@@ -265,6 +265,7 @@ const NUMBER_FIELDS = {
 const LOOKUP_FIELDS = {
   'optic.footprint': 'footprints', 'frame.housing_class': 'housing', 'frame.grip_rail_type': 'grip_rail_types',
   'slide.port_style': 'port_styles', 'barrel.port_style': 'port_styles',
+  'slide.comp_style': 'comp_style',
   'barrel.caliber': 'calibers', 'compensator.caliber': 'calibers',
   'basepad.basepad_type': 'basepad_types', 'basepad.fits_mag_type': 'mag_types',
   'barrel.barrel_type': 'barrel_type',
@@ -280,6 +281,14 @@ const DERIVED_FIELDS = {
   'recoil_spring.guide_rod_material': 'material',
 };
 const BARREL_TYPES = ['standard', 'threaded', 'ported', 'threaded-and-ported'];   // enum barrel_type
+// comp_style is the enum public.comp_style. Classify by MECHANISM, never the
+// maker's marketing word (CLAUDE.md, slide porting vocabulary): cosmetic
+// openings are 'none' — the Norsso bull Rail Set is the worked example.
+const COMP_STYLE_CHOICES = [
+  ['none', 'None — no comp chamber, no gas ports'],
+  ['short_barrel', 'Comp chamber ahead of a shorter barrel'],
+  ['ported_barrel', 'Slide ports fed by a matching ported barrel'],
+];
 // sight_specs CHECKs (supabase/migrations_archive/add_categories.sql): value -> what the admin reads
 const SIGHT_CHOICES = {
   sight_position: [['front', 'Front'], ['rear', 'Rear'], ['set', 'Set (front and rear)']],
@@ -1008,6 +1017,7 @@ function lookupOptions(lookup) {
     });
   }
   if (lookup === 'barrel_type') return BARREL_TYPES.map(function (t) { return [t, t]; });
+  if (lookup === 'comp_style') return COMP_STYLE_CHOICES;
   if (SIGHT_CHOICES[lookup]) return SIGHT_CHOICES[lookup];
   if (MAG_CHOICES[lookup]) return MAG_CHOICES[lookup];
   if (lookup.indexOf('len:') === 0) return lengthsFor(lookup.slice(4)).map(function (n) { return [String(n), n + ' in']; });

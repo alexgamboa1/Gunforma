@@ -147,6 +147,33 @@ pin('internal comp + included barrel — MCARBO', {
   eq('spring never names the barrel length class', /P365 \(3\.1in\)/.test(spectre[0]), false);
 }
 
+// A bull-barrel slide with NO comp (Alex, 2026-11-17 — the upcoming Norsso
+// N365XL Bull Barrel Rail Set: its openings are cosmetic per Norsso, GEO
+// barrels are NOT compatible). "Standard slide. Takes any 3.7in barrel"
+// would be false twice over, and the cosmetic openings must never be
+// described as ports — the pinned array carries no port wording at all.
+pin('bull-barrel slide with no comp — the Rail Set shape', {
+  comp_style: 'none', port_style: null,
+  slide_length_in: '3.7', barrel_length_in: '3.7',
+  threaded_barrel_ok: false, ported_barrel_ok: false,
+  barrel_included: true, bore_profile: 'bull', maker: 'Norsso',
+  lightening_cuts: true,
+  locked_barrel_names: [],
+}, [
+  'Bull-barrel slide — no compensation. Takes Norsso N365XL bull barrels only; threaded and ported barrels don’t fit.',
+  'Barrel included.',
+]);
+
+pin('bull-barrel slide with no comp and no boxed barrel', {
+  comp_style: 'none', port_style: null,
+  slide_length_in: '3.7', barrel_length_in: '3.7',
+  threaded_barrel_ok: false, ported_barrel_ok: false,
+  barrel_included: false, bore_profile: 'bull', maker: 'Norsso',
+  locked_barrel_names: [],
+}, [
+  'Bull-barrel slide — no compensation. Takes Norsso N365XL bull barrels only; threaded and ported barrels don’t fit.',
+]);
+
 pin('threaded fit not stated by maker', {
   comp_style: 'none', slide_length_in: '3.1', barrel_length_in: '3.1',
   threaded_barrel_ok: null, maker: 'Grey Ghost Precision', locked_barrel_names: [],
