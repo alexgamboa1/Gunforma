@@ -2538,7 +2538,20 @@ suffix — the feed has no condition column), the retail row is the pick.
 Two distinct retail rows (a bundle beside the item, a 3-pack beside the
 single — OP gives bundles the component's GTIN) are still a genuine
 conflict and stay withheld; zero retail rows stay withheld too — no price
-beats a demo price. **Stored-MPN comparisons are hyphen-insensitive**
+beats a demo price. **A stored merchant id breaks the bundle tie** (Alex,
+2026-11-17): a bundle reuses the component's MPN and GTIN, so the
+merchant_product_id is the one identifier naming the exact LISTING — when
+the link stores one and exactly one surviving candidate matches it, that
+candidate is the pick, before the condition rule is consulted (the record
+beats inference; a stored mid naming the open-box row keeps it, the same
+policy as the demo-drop's confirmsStored exception). The six nightly
+bundle conflicts were pinned by `*_bundle_conflict_mids.sql` — and three
+of the six (both DeltaPoint Pros, the Tyrant takedown lever) were
+CORRECTIONS, not fills: the overwrite-era sync had pinned them to a
+bundle's mid and stored the bundle's price as the part's. That migration
+is the one sanctioned shape for re-pointing a link that conflicts —
+clear-and-let-refill cannot work there, since several candidates means
+no fill, forever. **Stored-MPN comparisons are hyphen-insensitive**
 (`mpnNorm`): OP respelled Holosun's MPNs without hyphens, which read as
 drift nightly; the comparison bends, the stored value is never rewritten,
 and the T1 index refuses a key two links share once hyphens are ignored.

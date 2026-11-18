@@ -61,7 +61,7 @@ function stateWith(target, proposals) {
     withheldIds: new Set(),
     conflicts: [], driftReview: [], tierCounts: {},
     demoRowsDropped: 0, resolvedByStoredId: 0, resolvedByStoredGtin: 0,
-    resolvedByCondition: 0, conditionResolved: [],
+    resolvedByStoredMid: 0, resolvedByCondition: 0, conditionResolved: [],
     filled: 0, overwrites: 0,
   };
 }
@@ -71,6 +71,7 @@ const outcome = (st) => ({
   price: st.updates.get(LINK)?.street_price,
   conflicts: st.conflicts.length,
   byGtin: st.resolvedByStoredGtin,
+  byMid: st.resolvedByStoredMid,
 });
 
 test('the stored GTIN picks the right row out of an MPN tie', () => {
@@ -102,8 +103,10 @@ test('order does not decide it — the Faxon row first changes nothing', () => {
 });
 
 test('no stored GTIN: still withheld, exactly as before', () => {
+  // mid null too since 2026-11-17: a stored mid is now a tiebreak of its
+  // own, and this test's subject is the tie NOTHING stored can break.
   const st = stateWith(
-    { op_mpn: 'TPP365BXBL', op_gtin: null, op_merchant_product_id: '5045176' },
+    { op_mpn: 'TPP365BXBL', op_gtin: null, op_merchant_product_id: null },
     [TRUE_PRECISION, FAXON_DUPLICATE],
   );
   resolveProposals(st, TODAY);
@@ -191,8 +194,12 @@ const ROMEO2_OPEN_BOX = {
   feedName: 'Open Box, Dealer Demo, SIG SAUER Romeo2 Reflex Red Dot Sights, Black, 6 MOA, SOR21600',
   url: 'https://www.opticsplanet.com/sig-sauer-romeo2-red-dot-sights-reflex.html',
 };
+// mid null since 2026-11-17 so the CONDITION rule stays the thing under
+// test here: with a stored mid the mid tiebreak resolves the pair first
+// (the precedence test below pins that), and this section would otherwise
+// never reach the rule it is named for.
 const ROMEO2_STORED = {
-  op_mpn: 'SOR21600', op_gtin: '00798681647705', op_merchant_product_id: '6351237',
+  op_mpn: 'SOR21600', op_gtin: '00798681647705', op_merchant_product_id: null,
   street_price: 589.99, in_stock: true,
 };
 
@@ -243,6 +250,88 @@ test('two distinct retail rows (the 3-pack beside the single) stay withheld', ()
   assert.equal(o.withheld, true, 'two different retail products were collapsed by condition');
   assert.equal(o.conflicts, 1, 'the conflict was not recorded for review');
   assert.equal(st.resolvedByCondition, 0);
+});
+
+// ─── the stored-mid tiebreak (Alex, 2026-11-17) ─────────────────────────────
+// OP gives a bundle the component's GTIN — the AMAG 3-packs, the DeltaPoint +
+// TRYBE slide kits, the Tyrant lever pair, all from the 2026-11-17 run — so a
+// single and its bundle share the MPN AND the GTIN, and neither stored rule
+// above can choose. The merchant_product_id names the exact LISTING rather
+// than the product, so a stored one is the tiebreak. Same narrowness as the
+// GTIN rule: no stored mid, no match, or several distinct matches → the
+// conflict withholds exactly as before. These are the AMAG 10's real rows.
+const AMAG10_SINGLE = {
+  tier: 'url_only', price: 30.95, inStock: true,
+  rawMpn: 'MAG1489SST', rawGtin: '00840815150404', rawMid: '6321968',
+  isDemo: false, condition: 'new',
+  feedName: 'Magpul Industries AMAG 10 SG9 SIG Sauer P365, 9mm Luger, 10 Round Pistol Magazine, Silver, MAG1489-SST',
+  url: 'https://www.opticsplanet.com/magpul-industries-amag-sig-sauer-p365-9mm-luger-10-round-pistol-magazine.html',
+};
+const AMAG10_THREE_PACK = {
+  ...AMAG10_SINGLE, rawMid: '6371727', price: 89.99,
+  feedName: 'Magpul Industries AMAG SIG Sauer P365 9mm Luger 10 Round Pistol Magazine, 3-Pack',
+};
+
+test('the stored mid separates the single from its 3-pack', () => {
+  const st = stateWith(
+    { op_mpn: null, op_gtin: null, op_merchant_product_id: '6321968' },
+    [AMAG10_SINGLE, AMAG10_THREE_PACK],
+  );
+  resolveProposals(st, TODAY);
+  const o = outcome(st);
+  assert.equal(o.withheld, false, 'still withheld — the stored mid did not break the tie');
+  assert.equal(o.wrote, true, 'nothing was written');
+  assert.equal(o.price, 30.95, 'picked the 3-pack price over the single the mid names');
+  assert.equal(o.byMid, 1, 'the resolution was not counted as a mid tiebreak');
+});
+
+test('order does not decide the mid pick either', () => {
+  const st = stateWith(
+    { op_mpn: null, op_gtin: null, op_merchant_product_id: '6321968' },
+    [AMAG10_THREE_PACK, AMAG10_SINGLE],
+  );
+  resolveProposals(st, TODAY);
+  assert.equal(outcome(st).price, 30.95, 'the answer changed with the input order');
+});
+
+test('stored mid matches NEITHER candidate: still withheld', () => {
+  // The guess-prevention half, as with the GTIN rule: a mid that matches
+  // nothing must leave the conflict exactly where it was.
+  const st = stateWith(
+    { op_mpn: null, op_gtin: null, op_merchant_product_id: '1111111' },
+    [AMAG10_SINGLE, AMAG10_THREE_PACK],
+  );
+  resolveProposals(st, TODAY);
+  const o = outcome(st);
+  assert.equal(o.withheld, true, 'a non-matching stored mid picked a row anyway');
+  assert.equal(o.byMid, 0, 'counted a tiebreak that should not have happened');
+});
+
+test('mid comparison is normalised: surrounding whitespace does not defeat it', () => {
+  const st = stateWith(
+    { op_mpn: null, op_gtin: null, op_merchant_product_id: ' 6321968 ' },
+    [AMAG10_SINGLE, AMAG10_THREE_PACK],
+  );
+  resolveProposals(st, TODAY);
+  assert.equal(outcome(st).price, 30.95, 'whitespace around the stored mid defeated the match');
+});
+
+test('a stored mid outranks the condition rule — the record beats inference', () => {
+  // The retail/open-box pair again, but with the retail row's mid stored.
+  // The stored record resolves it before the condition heuristic is ever
+  // consulted — same pick, different reason, and the reason must be the
+  // stored identifier: a record is evidence, a heuristic is a fallback.
+  const st = stateWith(
+    { op_mpn: 'SOR21600', op_gtin: '00798681647705', op_merchant_product_id: '6351237',
+      street_price: 589.99, in_stock: true },
+    [ROMEO2_OPEN_BOX, ROMEO2_RETAIL],
+  );
+  resolveProposals(st, TODAY);
+  const o = outcome(st);
+  assert.equal(o.wrote, true);
+  assert.equal(o.price, 614.49, 'picked the open-box price');
+  assert.equal(o.byMid, 1, 'the mid tiebreak did not claim the resolution');
+  assert.equal(st.resolvedByCondition, 0, 'the condition rule fired under a stored mid');
 });
 
 // ─── hyphen-insensitive stored-MPN comparison ───────────────────────────────
