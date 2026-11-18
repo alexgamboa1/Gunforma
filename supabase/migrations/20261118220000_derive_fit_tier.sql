@@ -18,10 +18,14 @@
 -- supabase/tests/barrel-slide-fit.sql asserts the derivation against the
 -- real create_product() on every PR.
 --
--- Fresh database: platform_part_lengths' three P365 slide rows are part
--- of the replayed schema (create_product() fixtures depend on them), so
--- the fill asserts exactly 3 rows everywhere; the backfill then touches
--- zero rows and says so.
+-- Fresh database: platform_part_lengths is SEED data (supabase/seed.sql),
+-- and the seed loads AFTER migrations — so at this migration's turn the
+-- table is empty on a replay from zero, the fill NOTICEs and skips, and
+-- the seed's own P365 slide rows carry the tiers (same file, same PR).
+-- The first version asserted 3 rows unconditionally and was watched
+-- failing in check-migrations ("touched 0 rows") for exactly this reason.
+-- A NON-empty table missing the three P365 slide rows is drift and still
+-- refuses. On production the fill touches exactly 3.
 
 -- ── 1. the mapping ─────────────────────────────────────────────────────────
 alter table public.platform_part_lengths
@@ -33,6 +37,12 @@ comment on column public.platform_part_lengths.fit_tier is
 do $$
 declare n integer;
 begin
+  select count(*) into n from public.platform_part_lengths;
+  if n = 0 then
+    raise notice 'platform_part_lengths is empty (fresh database) — the tiers ship with its seed rows in supabase/seed.sql';
+    return;
+  end if;
+
   update public.platform_part_lengths ppl
      set fit_tier = case ppl.length_in
                       when 3.1 then 'short'::public.fit_tier
@@ -43,7 +53,7 @@ begin
    where pl.id = ppl.platform_id and pl.slug = 'p365' and ppl.part_kind = 'slide';
   get diagnostics n = row_count;
   if n <> 3 then
-    raise exception 'expected exactly the 3 registered P365 slide lengths, touched % rows', n;
+    raise exception 'platform_part_lengths has rows, so this is drift: expected exactly the 3 registered P365 slide lengths, touched %', n;
   end if;
 end $$;
 

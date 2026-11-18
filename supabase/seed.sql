@@ -339,11 +339,15 @@ INSERT INTO "public"."partners" ("id", "slug", "name", "base_url", "commission_p
 -- Data for Name: platform_part_lengths; Type: TABLE DATA; Schema: public; Owner: postgres
 --
 
-INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'slide', 3.10, 'p365', NULL);
+-- fit_tier on the slide rows mirrors the derive-fit-tier migration's fill:
+-- the seed loads AFTER migrations, so on a replay from zero these rows are
+-- what set_part_class() derives slide_specs.fit_tier from. Barrel rows
+-- carry none (the tier is a slide fact).
+INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "fit_tier", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'slide', 3.10, 'p365', 'short', NULL);
 INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'barrel', 3.10, 'p365', NULL);
-INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'slide', 3.70, 'xl', NULL);
+INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "fit_tier", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'slide', 3.70, 'xl', 'xmacro', NULL);
 INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'barrel', 3.70, 'xl', NULL);
-INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'slide', 4.30, 'fuse', NULL);
+INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "fit_tier", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'slide', 4.30, 'fuse', 'fuse', NULL);
 INSERT INTO "public"."platform_part_lengths" ("platform_id", "part_kind", "length_in", "part_class", "notes") VALUES ('fa515351-0b60-410b-b5d0-fd78bb714102', 'barrel', 4.30, 'fuse', NULL);
 
 --
