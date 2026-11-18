@@ -2308,7 +2308,15 @@ unused class. Never conflate the three.
 **The guards.** Three are CHECK constraints on `slide_specs`
 (`*_slide_port_guards.sql`): slide longer than barrel ⇒ `short_barrel`;
 equal lengths + port ⇒ `ported_barrel`; port_count ⇔ port_style. A NULL
-length passes them (unjudged, never wrong). All seven invariants — those
+length passes them (unjudged, never wrong). **And `comp_style` is NOT NULL
+since `*_slide_comp_rules_rmrcc_cut.sql`** — every CHECK above also passed
+a NULL comp_style, and add-a-part could not set the column at all (no
+`spec_field_rules` row), so a page-added slide saved unguarded. The rule
+rows exist now: `comp_style` required (a strict three-value dropdown on the
+page, `COMP_STYLE_CHOICES`) and `ported_barrel_ok` optional with the
+not-stated convention (`NOT_STATED_FIELDS`, like `threaded_barrel_ok`).
+A slide sheet missing comp_style is refused in words by `create_product()`'s
+existing NOT-NULL-without-default sweep — no function change was needed. All seven invariants — those
 three plus: every ported slide has a barrel lock or `barrel_included`,
 every `barrel_slide_requirements` row has a `source`,
 (platform, slide_length_in) is 1:1 with `slide_class` / `fit_tier` /

@@ -1171,6 +1171,16 @@ for (const [label, path, want] of [
       variants: ['norsso-n365xl-bb-geo-port-bull-barrel-satin-stainless-steel', 'norsso-n365xl-bb-geo-port-bull-barrel-black', 'norsso-n365xl-bb-geo-port-bull-barrel-copper', 'norsso-n365xl-bb-geo-port-bull-barrel-gold'],
       reason: 'Norsso publishes one array photo showing all four finishes and no per-finish photos (Alex, 2026-11-16)',
     },
+    // Same ruling for the standard (non-ported) bull barrel: one Norsso
+    // array photo of all four finishes (…Bull_Barrel_Standard_Barrel_
+    // Array…png), no per-finish photos. The slugs mirror the geo-port
+    // set's four colours (Satin Stainless default, Black, Copper, Gold) —
+    // the product is being added beside this PR, and the entry fires only
+    // once it exists.
+    'norsso-n365xl-bb-standard-bull-barrel': {
+      variants: ['norsso-n365xl-bb-standard-bull-barrel-satin-stainless-steel', 'norsso-n365xl-bb-standard-bull-barrel-black', 'norsso-n365xl-bb-standard-bull-barrel-copper', 'norsso-n365xl-bb-standard-bull-barrel-gold'],
+      reason: 'Norsso publishes one array photo of all four finishes (Alex, 2026-11-18)',
+    },
     // Fdez's group photo of all four finishes (image 4496: copper, gold,
     // stainless, black). Black DLC, Copper (the default) and Stainless
     // share it; Gold keeps its own photo (4500). Alex's choice, 2026-10-22.
