@@ -100,6 +100,18 @@ for (const l of locks) {
 }
 
 // Guard 6
+// A NULL fit_tier is its own failure (2026-11-18): add-part saved four
+// Norsso bull sets with slide_class derived and fit_tier NULL — their
+// "Fits on" grids read "Fit not confirmed" — and the 1:1 sets below only
+// catch a NULL while a non-NULL sibling shares the length. A NULL length
+// already fails on its own above, so only measured slides are judged
+// here. When a platform without tiers (P320 keeps FrameFit) registers
+// slide lengths, scope this by platform_part_lengths.fit_tier.
+for (const s of slides) {
+  if (s.slide_length_in != null && s.fit_tier == null) {
+    fail('slide ' + slug(s.product_id) + ' (' + s.slide_length_in + 'in, class ' + s.slide_class + '): fit_tier is NULL — set_part_class() derives it from platform_part_lengths since the derive-fit-tier migration');
+  }
+}
 const groups = new Map();
 for (const s of slides) {
   const key = s.platform_id + '|' + s.slide_length_in;

@@ -5,12 +5,12 @@
 -- verdicts, and the precedence that keeps existing pairs' statuses
 -- byte-identical. Everything rolls back.
 --
--- Fixtures are created through the real create_product(), then the ported
+-- Fixtures are created through the real create_product() — every slide
+-- sends comp_style 'none', which the function demands since the
+-- slide-comp-rules migration made the column NOT NULL — then the ported
 -- facts (port_style + port_count + comp_style together, ported_barrel_ok,
--- bore_profile) land in one UPDATE per slide: comp_style and
--- ported_barrel_ok have no spec_field_rules row, so the function refuses
--- the keys, and the #251 CHECK constraints demand the port trio changes
--- as one.
+-- bore_profile) land in one UPDATE per slide, because the #251 CHECK
+-- constraints demand the port trio changes as one.
 --
 -- The shapes mirror the live cases the change was approved on:
 --   fv-comp-slide    the Spectre shape  (3.7 slide / 3.1 barrel, thr FALSE, prt FALSE)
@@ -23,26 +23,26 @@ begin;
 do $$
 begin
   -- ── slides, minimal through the function ──────────────────────────────
-  -- created with equal lengths, then turned into the Spectre shape in one
-  -- UPDATE: the #251 CHECK demands comp_style 'short_barrel' the moment the
-  -- slide outruns its barrel, and create_product() has no comp_style key
-  -- (no spec_field_rules row), so the function cannot write that row shape.
+  -- created with equal lengths and comp_style 'none', then turned into the
+  -- Spectre shape in one UPDATE: the #251 CHECK demands comp_style
+  -- 'short_barrel' the moment the slide outruns its barrel, so barrel
+  -- length and comp style must change together.
   perform public.create_product(
     '{"brand":"Fitview","name":"FV Comp Slide","category":"slide","platforms":["p365"],"url":"https://example.com/fv-comp-slide","slug":"fv-comp-slide"}'::jsonb,
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/1.jpg","is_default":true}]'::jsonb,
-    '{"slide_length_in":3.7,"barrel_length_in":3.7,"barrel_included":false,"comes_with_sights":false,"integrated_comp":true,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":false}'::jsonb);
+    '{"slide_length_in":3.7,"barrel_length_in":3.7,"comp_style":"none","barrel_included":false,"comes_with_sights":false,"integrated_comp":true,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":false}'::jsonb);
   perform public.create_product(
     '{"brand":"Fitview","name":"FV Open Slide","category":"slide","platforms":["p365"],"url":"https://example.com/fv-open-slide","slug":"fv-open-slide"}'::jsonb,
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/2.jpg","is_default":true}]'::jsonb,
-    '{"slide_length_in":3.1,"barrel_length_in":3.1,"barrel_included":false,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365 Recoil Spring Assembly"}'::jsonb);
+    '{"slide_length_in":3.1,"barrel_length_in":3.1,"comp_style":"none","barrel_included":false,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365 Recoil Spring Assembly"}'::jsonb);
   perform public.create_product(
     '{"brand":"Fitview","name":"FV Ported Slide","category":"slide","platforms":["p365"],"url":"https://example.com/fv-ported-slide","slug":"fv-ported-slide"}'::jsonb,
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/3.jpg","is_default":true}]'::jsonb,
-    '{"slide_length_in":3.7,"barrel_length_in":3.7,"barrel_included":true,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":false}'::jsonb);
+    '{"slide_length_in":3.7,"barrel_length_in":3.7,"comp_style":"none","barrel_included":true,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":false}'::jsonb);
   perform public.create_product(
     '{"brand":"Fitview","name":"FV Bull Slide","category":"slide","platforms":["p365"],"url":"https://example.com/fv-bull-slide","slug":"fv-bull-slide"}'::jsonb,
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/4.jpg","is_default":true}]'::jsonb,
-    '{"slide_length_in":3.7,"barrel_length_in":3.7,"barrel_included":true,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":false}'::jsonb);
+    '{"slide_length_in":3.7,"barrel_length_in":3.7,"comp_style":"none","barrel_included":true,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":false}'::jsonb);
 
   -- the ported facts, trio together so the #251 CHECKs judge a complete row
   update public.slide_specs s
@@ -79,6 +79,25 @@ begin
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/9.jpg","is_default":true}]'::jsonb,
     '{"barrel_length_in":3.7,"barrel_type":"ported","port_style":"c-port","caliber":"9mm","is_lci":false}'::jsonb,
     '{"slides":["fv-ported-slide"]}'::jsonb);
+end $$;
+
+-- fit_tier is derived by set_part_class() from platform_part_lengths
+-- (2026-11-18): a slide created through the function carries its tier from
+-- the moment it exists. NULL is exactly what the four Norsso bull sets
+-- shipped with, so this asserts against the real create_product().
+do $$
+declare bad text;
+begin
+  select string_agg(p.slug || '=' || coalesce(s.fit_tier::text, 'NULL'), ', ' order by p.slug) into bad
+    from public.slide_specs s
+    join public.products p on p.id = s.product_id
+   where p.slug in ('fv-comp-slide', 'fv-open-slide', 'fv-ported-slide', 'fv-bull-slide')
+     and s.fit_tier is distinct from
+         case s.slide_length_in when 3.1 then 'short'::public.fit_tier else 'xmacro'::public.fit_tier end;
+  if bad is not null then
+    raise exception 'fit_tier not derived on create: %', bad;
+  end if;
+  raise notice 'fit_tier derivation: all four fixture slides carry their tier';
 end $$;
 
 -- assertions: one row per (barrel, slide, expected status, expected
