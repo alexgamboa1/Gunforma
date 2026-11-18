@@ -25,7 +25,7 @@ begin
   perform public.create_product(
     '{"brand":"Locktest","name":"Lock Test Slide A","category":"slide","platforms":["p365"],"url":"https://example.com/slide-a","slug":"lock-test-slide-a"}'::jsonb,
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/a.jpg","is_default":true}]'::jsonb,
-    '{"slide_length_in":3.7,"barrel_length_in":3.7,"barrel_included":false,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":true}'::jsonb);
+    '{"slide_length_in":3.7,"barrel_length_in":3.7,"comp_style":"none","barrel_included":false,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":true}'::jsonb);
 
   -- ── direction 1: a new BARREL locks onto the slide (p_fits.slides),
   --    nothing typed → source and note default from the barrel's own row ──
@@ -55,7 +55,7 @@ begin
   perform public.create_product(
     '{"brand":"Locktest","name":"Lock Test Slide C","category":"slide","platforms":["p365"],"url":"https://example.com/slide-c","slug":"lock-test-slide-c"}'::jsonb,
     '[{"color":"Black","msrp":100,"image_url":"https://example.com/c.jpg","is_default":true}]'::jsonb,
-    '{"slide_length_in":3.7,"barrel_length_in":3.7,"barrel_included":false,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":true}'::jsonb,
+    '{"slide_length_in":3.7,"barrel_length_in":3.7,"comp_style":"none","barrel_included":false,"comes_with_sights":false,"integrated_comp":false,"lightening_cuts":false,"required_spring_weight":"P365XL/X-MACRO Recoil Spring Assembly","threaded_barrel_ok":true}'::jsonb,
     '{"barrels":["lock-test-barrel-b"]}'::jsonb);
 
   select r.source, r.compatibility_note into lock_row

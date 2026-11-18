@@ -2320,7 +2320,14 @@ existing NOT-NULL-without-default sweep — no function change was needed. All s
 three plus: every ported slide has a barrel lock or `barrel_included`,
 every `barrel_slide_requirements` row has a `source`,
 (platform, slide_length_in) is 1:1 with `slide_class` / `fit_tier` /
-`required_spring_weight`, and no `v_barrel_slide_fit` pair is `fits`
+`required_spring_weight` — **and `fit_tier` is never NULL on a measured
+slide** (guard 6, 2026-11-18): `set_part_class()` derives it from
+`platform_part_lengths.fit_tier` beside `part_class` since the
+derive-fit-tier migration, because add-part used to save slides with the
+class derived and the tier NULL, and their "Fits on" grids read "Fit not
+confirmed" (the four Norsso bull sets). A registered length whose row
+carries no tier derives NULL on purpose — P320 keeps FrameFit — and no
+`v_barrel_slide_fit` pair is `fits`
 against the slide's own thread/ported refusals or across mismatched bore
 profiles (guard 7, 2026-11-17) — run against the live database in
 `scripts/check-fitment-data.mjs` (check-routes.yml; under
