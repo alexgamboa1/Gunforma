@@ -37,6 +37,22 @@ function liftFn(src, name) {
   return src.slice(at + 1, i + 1);
 }
 
+// Lift a top-level `var NAME = {...};` / `[...];` declaration verbatim, so a
+// scope can run over the PAGE'S OWN schema arrays rather than a copy.
+function liftVar(src, name) {
+  const at = src.indexOf('\nvar ' + name + ' = ');
+  assert.ok(at !== -1, 'var ' + name + ' not found');
+  const open = src.slice(at).search(/[[{]/) + at;
+  const pair = { '{': '}', '[': ']' };
+  const close = pair[src[open]];
+  let depth = 0, i = open;
+  for (; i < src.length; i++) {
+    if (src[i] === src[open]) depth++;
+    else if (src[i] === close && --depth === 0) break;
+  }
+  return src.slice(at + 1, i + 1) + ';';
+}
+
 // ── stub DOM: just enough for attachFilterHandlers ─────────────────────────
 function checkbox(attrs) {
   const el = {
@@ -198,4 +214,165 @@ test('the generic handler names its three groups in the page source', () => {
   const src = read('gunforma-parts-catalog.html');
   assert.match(src, /var SET_KEY_BY_GROUP = \{ platform: 'platforms', category: 'categories', brand: 'brands' \};/);
   assert.match(src, /var setKey = SET_KEY_BY_GROUP\[el\.name\];\s*\n\s*if \(!setKey\) return;/);
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// The Material filter (2026-11-19). products.material_family is a
+// product-level fact — source 'product', a third readSpec source — shown
+// only where the scope holds two or more families, ordered by
+// materials.sort_order, never offering "Unspecified"; and grip modules
+// (frame) ask Material INSTEAD of Finish (AG: material and finish are
+// separate, and Finish = "Polymer" was standing in for material). These
+// tests run the PAGE'S OWN schema arrays (lifted, not copied), so a schema
+// edit that loses the material entry or the frame hideFor fails here.
+
+function freshPageScope() {
+  const src = read('gunforma-parts-catalog.html');
+  const scope = {
+    F: { platforms: new Set(), categories: new Set(), brands: new Set(),
+         priceMin: null, priceMax: null, search: '', favsOnly: false,
+         showDiscontinued: false, sort: 'newest', specs: {} },
+    PRODUCTS: [],
+    MATERIAL_SORT: { Aluminum: 10, 'Stainless Steel': 20, Steel: 30, Polymer: 40, Titanium: 50, Mixed: 90, Unspecified: 99 },
+    FILTER_SEARCH_STATE: {},
+    renderFilters() {},
+    applyFiltersAndRender() {},
+    matchesFitment() { return true; },
+    Favorites: { has() { return false; }, size() { return 0; } },
+    document: null,
+  };
+  const fns = ['attachFilterHandlers', 'matchesAllExcept', 'matchesAll',
+               'matchesSpecFilter', 'optionCount', 'readSpec', 'specStateKey',
+               'schemaForStateKey', 'specsSectionHtml', 'specLabel',
+               'schemaLabel', 'wrapOptionsListIfLong', 'productsForSpecScope',
+               'esc', 'escAttr'];
+  const vars = ['SPEC_ABBREV', 'SPEC_FILTERS_BY_CATEGORY', 'SPEC_UNIVERSAL_FILTERS'];
+  const body = vars.map((n) => liftVar(src, n)).join('\n') + '\n' +
+    fns.map((n) => liftFn(src, n)).join('\n') +
+    '\nreturn {' + fns.concat(vars).join(',') + '};';
+  const lifted = new Function('scope', 'with (scope) {' + body + '}')(scope);
+  return { scope, ...lifted };
+}
+
+function frame(id, family, color, finish, brand) {
+  return { id, category: 'frame', brand_id: brand || 'b1', brand: 'Icarus', name: id,
+    platform_ids: ['pf1'], price: 100, _search: id, discontinued: false,
+    material_family: family, material: family,
+    variants: [{ color, finish: finish || null }] };
+}
+function slide(id, finish) {
+  return { id, category: 'slide', brand_id: 'b2', brand: 'Norsso', name: id,
+    platform_ids: ['pf1'], price: 300, _search: id, discontinued: false,
+    material_family: 'Stainless Steel', material: 'Stainless Steel',
+    variants: [{ color: 'Black', finish }] };
+}
+const PAGE_PRODUCTS = [
+  frame('f1', 'Polymer', 'Black'),
+  frame('f2', 'Polymer', 'Coyote'),
+  frame('f3', 'Aluminum', 'Black', 'Anodized'),
+  frame('f4', 'Mixed', 'Gray', 'Anodized'),
+  frame('f5', 'Unspecified', 'Black'),
+  slide('s1', 'DLC'),
+  slide('s2', 'Cerakote'),
+];
+
+test('a product-level Material tick narrows the grid, leaves F.brands empty, grid == facet', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+  F.categories.add('frame');
+
+  const polymer = checkbox({ 'data-spec-composite': 'product:material_family',
+                             'data-spec-widget': 'str', 'data-spec-val': 'Polymer' });
+  const brandB1 = checkbox({ name: 'brand', value: 'b1' });
+  page.scope.document = makeDocument([brandB1, polymer]);
+  page.attachFilterHandlers();
+
+  polymer.fire(true);
+  assert.equal(F.brands.size, 0, 'a Material tick must never reach the brand set');
+  assert.ok(F.specs['product:material_family'] && F.specs['product:material_family'].values.has('Polymer'),
+    'the material schema resolves through schemaForStateKey (it must exist in the page arrays)');
+
+  const grid = page.scope.PRODUCTS.filter(page.matchesAll).length;
+  const facet = page.optionCount(function (r) {
+    return String(page.readSpec(r, 'product', 'material_family')) === 'Polymer';
+  }, '__spec__product:material_family');
+  assert.equal(grid, 2, 'the two Polymer frames');
+  assert.equal(grid, facet, 'grid count equals the facet count beside the ticked material');
+
+  polymer.fire(false);
+  assert.equal(F.specs['product:material_family'], undefined, 'untick drops the key');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 5,
+    'back to every frame — the Unspecified part reachable with nothing ticked');
+});
+
+test('Material combines with a variant-level Color filter', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+  F.categories.add('frame');
+
+  const polymer = checkbox({ 'data-spec-composite': 'product:material_family',
+                             'data-spec-widget': 'str', 'data-spec-val': 'Polymer' });
+  const black = checkbox({ 'data-spec-composite': 'variant:color',
+                           'data-spec-widget': 'str', 'data-spec-val': 'Black' });
+  page.scope.document = makeDocument([polymer, black]);
+  page.attachFilterHandlers();
+
+  polymer.fire(true);
+  black.fire(true);
+  const grid = page.scope.PRODUCTS.filter(page.matchesAll).length;
+  assert.equal(grid, 1, 'the one Black Polymer frame');
+  // The Black facet count, with the colour key's own constraint excluded,
+  // is what the sidebar prints beside Black — and must equal the grid.
+  const facet = page.optionCount(function (r) {
+    const actual = page.readSpec(r, 'variant', 'color');
+    return actual instanceof Set && actual.has('Black');
+  }, '__spec__variant:color');
+  assert.equal(grid, facet, 'grid count equals the Black facet count');
+});
+
+test('the Material block needs two families, hides Unspecified, and follows sort_order', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  F.categories.add('frame');
+  let html = page.specsSectionHtml();
+  assert.ok(html.includes('data-spec-block="product:material_family"'),
+    'frames (three families) render the Material block');
+  assert.ok(!html.includes('Unspecified'), 'Unspecified is never an option');
+  const iAl = html.indexOf('data-spec-val="Aluminum"');
+  const iPo = html.indexOf('data-spec-val="Polymer"');
+  const iMx = html.indexOf('data-spec-val="Mixed"');
+  assert.ok(iAl !== -1 && iPo !== -1 && iMx !== -1, 'all three families offered');
+  assert.ok(iAl < iPo && iPo < iMx,
+    'options follow materials.sort_order (Mixed last), not the alphabet (Mixed second)');
+
+  F.categories.clear(); F.categories.add('slide');
+  html = page.specsSectionHtml();
+  assert.ok(!html.includes('data-spec-block="product:material_family"'),
+    'one family in scope renders no Material block');
+});
+
+test('Finish hides on grip modules — and a hidden tick stops filtering', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  F.categories.add('slide');
+  let html = page.specsSectionHtml();
+  assert.ok(html.includes('data-spec-block="variant:finish"'),
+    'Finish still renders for slides');
+
+  F.categories.clear(); F.categories.add('frame');
+  F.specs['variant:finish'] = { schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'finish'),
+    type: 'strings', values: new Set(['Anodized']) };
+  html = page.specsSectionHtml();
+  assert.ok(!html.includes('data-spec-block="variant:finish"'),
+    'no Finish block when the one selected category is frame');
+  assert.equal(F.specs['variant:finish'], undefined,
+    'the hidden block takes its ticked state with it — no invisible constraint');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 5,
+    'every frame shown: the stale Anodized tick no longer filters');
 });
