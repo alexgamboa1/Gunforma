@@ -243,7 +243,8 @@ function freshPageScope() {
   };
   const fns = ['attachFilterHandlers', 'matchesAllExcept', 'matchesAll',
                'matchesSpecFilter', 'optionCount', 'readSpec', 'specStateKey',
-               'schemaForStateKey', 'specsSectionHtml', 'specLabel',
+               'schemaForStateKey', 'specBlockPlan', 'reconcileSpecState',
+               'specsSectionHtml', 'specLabel',
                'schemaLabel', 'wrapOptionsListIfLong', 'productsForSpecScope',
                'esc', 'escAttr'];
   const vars = ['SPEC_ABBREV', 'SPEC_FILTERS_BY_CATEGORY', 'SPEC_UNIVERSAL_FILTERS'];
@@ -260,11 +261,24 @@ function frame(id, family, color, finish, brand) {
     material_family: family, material: family,
     variants: [{ color, finish: finish || null }] };
 }
-function slide(id, finish) {
+function slide(id, finish, comped) {
   return { id, category: 'slide', brand_id: 'b2', brand: 'Norsso', name: id,
     platform_ids: ['pf1'], price: 300, _search: id, discontinued: false,
     material_family: 'Stainless Steel', material: 'Stainless Steel',
+    slide_specs: { integrated_comp: comped === true },
     variants: [{ color: 'Black', finish }] };
+}
+function barrel(id, color) {
+  return { id, category: 'barrel', brand_id: 'b3', brand: 'TP', name: id,
+    platform_ids: ['pf1'], price: 200, _search: id, discontinued: false,
+    material_family: 'Stainless Steel', material: 'Stainless Steel',
+    variants: [{ color, finish: 'DLC' }] };
+}
+function optic(id, color) {
+  return { id, category: 'optic', brand_id: 'b4', brand: 'Holosun', name: id,
+    platform_ids: ['pf1'], price: 250, _search: id, discontinued: false,
+    material_family: 'Aluminum', material: 'Aluminum',
+    variants: [{ color, finish: null }] };
 }
 const PAGE_PRODUCTS = [
   frame('f1', 'Polymer', 'Black'),
@@ -272,8 +286,13 @@ const PAGE_PRODUCTS = [
   frame('f3', 'Aluminum', 'Black', 'Anodized'),
   frame('f4', 'Mixed', 'Gray', 'Anodized'),
   frame('f5', 'Unspecified', 'Black'),
-  slide('s1', 'DLC'),
+  slide('s1', 'DLC', true),
   slide('s2', 'Cerakote'),
+  barrel('b-1', 'Black'),
+  barrel('b-2', 'Black'),
+  barrel('b-3', 'Gold'),
+  optic('o-1', 'Clear'),
+  optic('o-2', 'Black'),
 ];
 
 test('a product-level Material tick narrows the grid, leaves F.brands empty, grid == facet', () => {
@@ -355,12 +374,13 @@ test('the Material block needs two families, hides Unspecified, and follows sort
     'one family in scope renders no Material block');
 });
 
-test('Finish hides on grip modules — and a hidden tick stops filtering', () => {
+test('Finish hides on grip modules — and a hidden tick stops filtering (the general reconcile path)', () => {
   const page = freshPageScope();
   const F = page.scope.F;
   page.scope.PRODUCTS = PAGE_PRODUCTS;
 
   F.categories.add('slide');
+  page.reconcileSpecState(page.specBlockPlan());
   let html = page.specsSectionHtml();
   assert.ok(html.includes('data-spec-block="variant:finish"'),
     'Finish still renders for slides');
@@ -368,6 +388,9 @@ test('Finish hides on grip modules — and a hidden tick stops filtering', () =>
   F.categories.clear(); F.categories.add('frame');
   F.specs['variant:finish'] = { schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'finish'),
     type: 'strings', values: new Set(['Anodized']) };
+  // What renderFilters() does, in order: reconcile against the plan, then
+  // draw — the #270 one-off delete inside specsSectionHtml is gone.
+  page.reconcileSpecState(page.specBlockPlan());
   html = page.specsSectionHtml();
   assert.ok(!html.includes('data-spec-block="variant:finish"'),
     'no Finish block when the one selected category is frame');
@@ -375,4 +398,138 @@ test('Finish hides on grip modules — and a hidden tick stops filtering', () =>
     'the hidden block takes its ticked state with it — no invisible constraint');
   assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 5,
     'every frame shown: the stale Anodized tick no longer filters');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Stale spec state (2026-11-19, the fix after #270): a filter that is not
+// on screen never filters. renderFilters() reconciles F.specs against
+// specBlockPlan() — the one decision of which blocks draw with which
+// options, shared with specsSectionHtml() — BEFORE any sidebar HTML or
+// facet count is built. A key with no block is dropped; a strings key
+// keeps only the values the sidebar offers; a value offered in the new
+// view keeps filtering.
+
+// What every sidebar-changing path runs, in renderFilters()'s order.
+function switchView(page, cats) {
+  const F = page.scope.F;
+  F.categories.clear();
+  cats.forEach((c) => F.categories.add(c));
+  page.reconcileSpecState(page.specBlockPlan());
+  return page.specsSectionHtml();
+}
+
+test('a category-only boolean dropped on tab switch: the new category shows its full count', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  switchView(page, ['slide']);
+  F.specs['slide_specs:integrated_comp'] = {
+    schema: page.SPEC_FILTERS_BY_CATEGORY.slide.find((s) => s.key === 'integrated_comp'),
+    type: 'boolean', on: true };
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 1, 'the one comped slide');
+
+  switchView(page, ['barrel']);
+  assert.equal(F.specs['slide_specs:integrated_comp'], undefined,
+    'Barrels draws no Integrated Comp block, so its state is dropped');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 3,
+    'every barrel — the grid is never narrowed by a filter that is not on screen');
+});
+
+test('a Material tick dropped on switching to a one-family category', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  switchView(page, ['frame']);
+  F.specs['product:material_family'] = {
+    schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'material_family'),
+    type: 'strings', values: new Set(['Polymer']) };
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 2, 'the two Polymer frames');
+
+  const html = switchView(page, ['slide']);
+  assert.ok(!html.includes('data-spec-block="product:material_family"'),
+    'slides (one family, below minDistinct) draw no Material block');
+  assert.equal(F.specs['product:material_family'], undefined,
+    'its state goes with it');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 2, 'both slides shown');
+});
+
+test('a Color value not offered is dropped; one offered in both views is kept and still filters', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+  const colorSchema = page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'color');
+
+  // Clear is an optics-only colour: on Barrels there is nothing to untick.
+  switchView(page, ['optic']);
+  F.specs['variant:color'] = { schema: colorSchema, type: 'strings', values: new Set(['Clear']) };
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 1, 'the Clear optic');
+  let html = switchView(page, ['barrel']);
+  assert.ok(html.includes('data-spec-block="variant:color"'), 'Barrels does draw a Color block');
+  assert.ok(!html.includes('data-spec-val="Clear"'), '…without a Clear option');
+  assert.equal(F.specs['variant:color'], undefined, 'so the Clear tick is dropped');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 3, 'every barrel');
+
+  // Black is offered on both: the tick survives the switch and still filters.
+  switchView(page, ['slide']);
+  F.specs['variant:color'] = { schema: colorSchema, type: 'strings', values: new Set(['Black']) };
+  html = switchView(page, ['barrel']);
+  assert.ok(F.specs['variant:color'] && F.specs['variant:color'].values.has('Black'),
+    'Black is offered on Barrels, so the tick is KEPT');
+  assert.ok(html.includes('data-spec-val="Black" checked'), 'and drawn ticked');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 2, 'the two Black barrels');
+});
+
+test('switching to All keeps offered universal values and drops category-only state', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  switchView(page, ['slide']);
+  F.specs['slide_specs:integrated_comp'] = {
+    schema: page.SPEC_FILTERS_BY_CATEGORY.slide.find((s) => s.key === 'integrated_comp'),
+    type: 'boolean', on: true };
+  F.specs['variant:color'] = {
+    schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'color'),
+    type: 'strings', values: new Set(['Black']) };
+
+  switchView(page, []);   // the All tab
+  assert.equal(F.specs['slide_specs:integrated_comp'], undefined,
+    'the slide-only boolean has no block on All');
+  assert.ok(F.specs['variant:color'] && F.specs['variant:color'].values.has('Black'),
+    'Black is offered on All, so the Color tick is kept');
+  const black = page.scope.PRODUCTS.filter((r) => {
+    const c = page.readSpec(r, 'variant', 'color');
+    return c instanceof Set && c.has('Black');
+  }).length;
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, black,
+    'All shows exactly the Black parts, not 16 slides');
+});
+
+test('ticking a brand drops nothing: the plan is category + platform scoped only', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  switchView(page, ['barrel']);
+  F.specs['variant:color'] = {
+    schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'color'),
+    type: 'strings', values: new Set(['Black']) };
+  // A brand that matches NO barrel still must not shake the Color tick
+  // loose — productsForSpecScope() ignores brands, price, search and the
+  // other spec filters, so the plan's option lists do not shrink.
+  F.brands.add('b-nobody');
+  page.reconcileSpecState(page.specBlockPlan());
+  assert.ok(F.specs['variant:color'] && F.specs['variant:color'].values.has('Black'),
+    'the Color state survives a brand tick');
+});
+
+test('renderFilters reconciles before it builds the sidebar', () => {
+  // The wiring the cases above rely on: the reconcile step runs first in
+  // renderFilters(), before specsSectionHtml() computes any facet count.
+  const src = read('gunforma-parts-catalog.html');
+  assert.match(src, /function renderFilters\(\) \{[\s\S]{0,800}?reconcileSpecState\(specBlockPlan\(\)\);[\s\S]{0,400}?specsSectionHtml\(\)/);
+  assert.ok(!/hideFor[\s\S]{0,200}?delete F\.specs/.test(liftFn(src, 'specsSectionHtml')),
+    'the #270 one-off delete is gone from specsSectionHtml — the general step owns it');
 });

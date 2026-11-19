@@ -806,7 +806,9 @@ var F = {
   //   { type: 'strings',  values: Set<string> }
   //   { type: 'boolean',  on: bool }         // only meaningful when true
   //   { type: 'numeric',  min, max }
-  // Only kept for keys the user actually toggled — cleared on category change.
+  // Only kept for keys the user actually toggled — and reconciled against
+  // what the sidebar draws on every renderFilters() (reconcileSpecState):
+  // a key whose block is not on screen never filters.
   specs: {},
 };
 
@@ -1170,6 +1172,12 @@ function partCatLabel(p) {
 
 function renderFilters() {
   var s = document.getElementById('sidebar');
+  // A filter that is not on screen never filters: before any sidebar HTML
+  // or facet count is built, drop the spec state the view about to be
+  // drawn gives the shopper no checkbox to undo. Running here covers every
+  // path that changes what the sidebar offers — category tab, platform,
+  // sub-model, the suppressed Compensators tab, a restore.
+  reconcileSpecState(specBlockPlan());
   var specsHtml = specsSectionHtml();
   s.innerHTML =
     filterGroupHtml('platform',  'Platform',  platformOptions()) +
@@ -1714,28 +1722,27 @@ function matchesSpecFilter(product, state) {
   return true;
 }
 
-// Builds one filter subgroup per schema entry that has data in the pool.
-// Empty return = no Specifications section rendered at all.
-function specsSectionHtml() {
+// The one decision of which spec blocks the sidebar draws for the current
+// view, and with which options — shared by reconcileSpecState() (which
+// drops filter state the shopper could no longer see or undo) and
+// specsSectionHtml() (which draws the blocks), so the two cannot drift.
+// Returns [{ schema, stateKey, summary }] for exactly the blocks that
+// render, in render order; summary is the value shape across the scope
+// pool (values Set for strings, boolTrue, min/max).
+function specBlockPlan() {
   var cat = F.categories.size === 1 ? Array.from(F.categories)[0] : null;
   var schemas = [];
   if (cat && SPEC_FILTERS_BY_CATEGORY[cat]) schemas = schemas.concat(SPEC_FILTERS_BY_CATEGORY[cat]);
   schemas = schemas.concat(SPEC_UNIVERSAL_FILTERS);
-  if (!schemas.length) return '';
+  if (!schemas.length) return [];
   var pool = productsForSpecScope();
-  if (!pool.length) return '';
+  if (!pool.length) return [];
 
-  var blocks = [];
+  var plan = [];
   schemas.forEach(function (schema) {
-    var stateKey = specStateKey(schema);
-    // A block hidden for this category (Finish on grip modules) must not go
-    // on filtering invisibly: its ticked state has no checkbox left to
-    // untick, so it is dropped with the block.
-    if (schema.hideFor && cat && schema.hideFor.indexOf(cat) !== -1) {
-      delete F.specs[stateKey];
-      return;
-    }
-    var state = F.specs[stateKey];
+    // A block hidden for this category never draws (Finish on grip
+    // modules); reconcileSpecState drops any state it left behind.
+    if (schema.hideFor && cat && schema.hideFor.indexOf(cat) !== -1) return;
     // Discover this key's value shape across the pool.
     var summary = { hasAny: false, values: new Set(), boolTrue: 0, min: Infinity, max: -Infinity };
     pool.forEach(function (r) {
@@ -1759,6 +1766,48 @@ function specsSectionHtml() {
     // all (every value omitted), or fewer distinct values than the schema
     // asks for (minDistinct — a scope where every part is one material).
     if (schema.type === 'strings' && summary.values.size < (schema.minDistinct || 1)) return;
+    plan.push({ schema: schema, stateKey: specStateKey(schema), summary: summary });
+  });
+  return plan;
+}
+
+// A filter that is not on screen never filters. F.specs may only hold state
+// the shopper can see and undo, so after anything that changes what the
+// sidebar offers (category tab, platform, sub-model, a restore) this runs
+// BEFORE the sidebar HTML and its facet counts are built — a count computed
+// against state about to be dropped would be wrong for the sidebar it
+// prints into:
+// - a key whose block is not in the plan (wrong category, hideFor, below
+//   minDistinct, no data in scope) is dropped whole;
+// - a strings key keeps only the ticked values among the drawn options —
+//   Color = FDE survives a tab switch wherever FDE is offered — and is
+//   dropped when none are left;
+// - boolean and numeric state rides with its block.
+function reconcileSpecState(plan) {
+  var byKey = {};
+  plan.forEach(function (b) { byKey[b.stateKey] = b; });
+  Object.keys(F.specs || {}).forEach(function (stateKey) {
+    var block = byKey[stateKey];
+    if (!block) { delete F.specs[stateKey]; return; }
+    var state = F.specs[stateKey];
+    if (state && state.type === 'strings' && state.values instanceof Set) {
+      var offered = new Set();
+      block.summary.values.forEach(function (v) { offered.add(String(v)); });
+      Array.from(state.values).forEach(function (v) {
+        if (!offered.has(String(v))) state.values.delete(v);
+      });
+      if (!state.values.size) delete F.specs[stateKey];
+    }
+  });
+}
+
+// Builds one filter subgroup per block in specBlockPlan().
+// Empty return = no Specifications section rendered at all.
+function specsSectionHtml() {
+  var blocks = [];
+  specBlockPlan().forEach(function (b) {
+    var schema = b.schema, stateKey = b.stateKey, summary = b.summary;
+    var state = F.specs[stateKey];
 
     var body;
     if (schema.type === 'boolean') {
