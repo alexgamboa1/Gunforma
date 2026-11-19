@@ -1794,10 +1794,16 @@ function attachFilterHandlers() {
     });
   });
 
+  // Only the three named groups belong to this handler. The sidebar also
+  // holds the spec checkboxes (data-spec-composite, no name attribute);
+  // without this guard they fell through to 'brands' and added the checkbox
+  // default value "on" to F.brands, which matches no brand and empties the
+  // grid. Their own handler is the [data-spec-composite] block below.
+  var SET_KEY_BY_GROUP = { platform: 'platforms', category: 'categories', brand: 'brands' };
   document.querySelectorAll('#sidebar input[type="checkbox"]').forEach(function (el) {
+    var setKey = SET_KEY_BY_GROUP[el.name];
+    if (!setKey) return;
     el.addEventListener('change', function () {
-      var group = el.name;    // 'platform' | 'category' | 'brand'
-      var setKey = group === 'platform' ? 'platforms' : (group === 'category' ? 'categories' : 'brands');
       if (el.checked) F[setKey].add(el.value);
       else            F[setKey].delete(el.value);
       // Re-render the sidebar so counts on the other filters update to

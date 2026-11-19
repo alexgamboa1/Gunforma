@@ -101,6 +101,7 @@ check "armory share pages"        scripts/armory-share.test.mjs
 check "the ♥ is one module"       scripts/favorites.test.mjs
 check "sign-in ?next= is safe"     scripts/safe-next.test.mjs
 check "comp label copies agree"    scripts/comp-label.test.mjs
+check "catalog spec filter wiring" scripts/spec-filter.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
