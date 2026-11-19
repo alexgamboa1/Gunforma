@@ -1174,12 +1174,21 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
   const anyInStock = rows.some((r) => r.in_stock === true);
 
   const heroImage = (() => {
+    // The DEFAULT variant's photo first — the same one the parts catalog
+    // card shows — never whichever variant PostgREST happened to return
+    // first (embedded rows arrive in arbitrary order). Another variant's
+    // image is only the fallback for a default with none.
+    const firstImage = (v) => {
+      if (!v) return null;
+      if (v.primary_image_url) return v.primary_image_url;
+      const imgs = (v.variant_images || []).slice().sort((a, b) => a.position - b.position);
+      return imgs.length ? imgs[0].url : null;
+    };
+    const fromDefault = firstImage(variants.find((v) => v.is_default));
+    if (fromDefault) return fromDefault;
     const withImg = variants.find((v) => v.primary_image_url) ||
       variants.find((v) => (v.variant_images || []).length);
-    if (!withImg) return null;
-    if (withImg.primary_image_url) return withImg.primary_image_url;
-    const imgs = (withImg.variant_images || []).slice().sort((a, b) => a.position - b.position);
-    return imgs.length ? imgs[0].url : null;
+    return firstImage(withImg);
   })();
   // A part with no photo of any variant — or a dead image URL — shows the
   // default variant's colour swatch (_variant-swatch.mjs), never an empty
