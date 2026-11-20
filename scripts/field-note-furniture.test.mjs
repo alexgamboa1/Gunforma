@@ -191,8 +191,17 @@ test('the fixture: byline order, Person, Breadcrumb, one ItemList for the three 
   stubFetch(catalog);
   const { html: h, headers } = await run(FIXTURE);
   const byline = h.match(/<div class="byline">(.*?)<\/div>/)[1];
-  assert.equal(byline, 'By <strong>Gunforma</strong> &middot; <span class="byline-cred">Renderer fixture — not reviewed prose</span> &middot; Last reviewed November 2026 &middot; Published Oct 20, 2026',
-    'author · credential · Last reviewed, then the kept published date');
+  assert.equal(byline, 'By <strong>Gunforma</strong> &middot; <span class="byline-cred">Renderer fixture — not reviewed prose</span> &middot; Last reviewed November 2026',
+    'author · credential · Last reviewed — one date (Alex, 2026-11-20)');
+  assert.ok(!h.includes('<div class="author">'), 'no author box repeating the byline at the bottom');
+  assert.equal(graphOf(h).find((n) => n['@type'] === 'Article').datePublished, '2026-10-20', 'the published date stays in the JSON-LD');
+  assert.ok(h.includes('<meta property="article:published_time" content="2026-10-20"/>'), 'and in the article meta');
+  // one Related section: the tag-matched note, then the Keep going line
+  assert.equal((h.match(/class="section-title">Related/g) || []).length, 1, 'never two Related headings');
+  const rel = h.slice(h.indexOf('id="related-field-notes"'), h.indexOf('</div></div>', h.indexOf('id="related-field-notes"')));
+  assert.ok(rel.indexOf('class="fn-related-list"') < rel.indexOf('class="fn-keep-going"'), 'notes first, then Keep going under them');
+  assert.ok(rel.includes('<span class="fn-keep-going-label">Keep going:</span> <a href="/p365/">What fits your P365 &rarr;</a> <a href="/gunforma-armory.html">Build yours in the Armory &rarr;</a> <a href="/gunforma-builds.html">Real builds &rarr;</a>'),
+    'the fixture is linked from no hub, so its model hub is the /p365/ index');
   assert.ok(h.indexOf('<h1>') < h.indexOf('<div class="byline">') && h.indexOf('<div class="byline">') < h.indexOf('<p class="fn-method">'));
   const g = graphOf(h);
   const art = g.find((n) => n['@type'] === 'Article');
@@ -215,8 +224,13 @@ test('the live guide: no author → no name, Organization; a draft is never rela
   stubFetch(catalog);
   const { html: h, headers } = await run(LIVE);
   const byline = h.match(/<div class="byline">(.*?)<\/div>/)[1];
-  assert.equal(byline, 'Last reviewed October 2026 &middot; Published Oct 26, 2026', 'no placeholder name, no credential');
+  assert.equal(byline, 'Last reviewed October 2026', 'no placeholder name, no credential, one date');
   assert.ok(!h.includes('class="author"'), 'and no author box');
+  // no related notes → no Related heading, but the Keep going line stays,
+  // leading with the note's own model hub (the XMacro hub links into it)
+  assert.equal((h.match(/class="section-title">Related/g) || []).length, 0);
+  assert.ok(h.includes('<div class="fn-related-notes"><div class="fn-keep-going"><span class="fn-keep-going-label">Keep going:</span> <a href="/p365/p365-xmacro">Everything for the Sig Sauer P365 XMacro &rarr;</a>'),
+    'the model hub is the first live hub that links into this note');
   assert.deepEqual(graphOf(h).find((n) => n['@type'] === 'Article').author, { '@type': 'Organization', name: 'Gunforma' });
   // the only note it shares tags with is the renderer-check DRAFT
   assert.equal(headers.get('x-field-note-related'), '0');
@@ -229,7 +243,8 @@ test('the live guide: no author → no name, Organization; a draft is never rela
 test('a page under the TOC threshold renders no rail, no collapsed copy, no script', () => {
   // Asserted through the audit: a page with two H2s and a TOC is a failure,
   // and the same page with none passes.
-  const base = (toc) => '<h1>T</h1><h2 id="a">A</h2><h2 id="b">B</h2>' + toc +
+  const base = (toc) => '<h1>T</h1><div class="byline">Last reviewed May 2026</div><h2 id="a">A</h2><h2 id="b">B</h2>' + toc +
+    '<div class="fn-keep-going"></div>' +
     '<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article"},{"@type":"BreadcrumbList","itemListElement":[{"name":"Home"},{"name":"Field Notes"},{"name":"T"}]}]}</script>';
   assert.deepEqual(auditFieldNotePage(base(''), 'x'), []);
   assert.ok(auditFieldNotePage(base('<nav aria-label="On this page"></nav>'), 'x').some((p) => p.includes('fewer than 3')));

@@ -36,6 +36,19 @@ export function auditFieldNotePage(html, slug) {
   const h1s = (html.match(/<h1[\s>]/g) || []).length;
   if (h1s !== 1) bad('expected exactly one <h1>, found ' + h1s);
 
+  // Alex's rulings on #276 (2026-11-20): the byline shows ONE date, there is
+  // ONE Related heading, and no author box repeats the byline at the bottom.
+  const byline = (html.match(/<div class="byline">(.*?)<\/div>/) || [])[1];
+  if (byline == null) bad('no byline row');
+  else {
+    if (!/Last reviewed [A-Z][a-z]+ \d{4}/.test(byline)) bad('the byline has no "Last reviewed <Month YYYY>"');
+    if (/Published|\b[A-Z][a-z]{2} \d{1,2}, \d{4}\b/.test(byline)) bad('the byline shows a second date — "Last reviewed" is its one date');
+  }
+  const relatedHeads = (html.match(/class="section-title">Related/g) || []).length;
+  if (relatedHeads > 1) bad(relatedHeads + ' Related headings — the page has one Related section');
+  if ((html.match(/class="fn-keep-going"/g) || []).length !== 1) bad('expected exactly one "Keep going" line');
+  if (/<div class="author">/.test(html)) bad('the bottom author box is back — the byline carries the name and credential');
+
   // the table of contents against the H2s
   const h2ids = [...html.matchAll(/<h2 id="([^"]+)"/g)].map((m) => m[1]);
   const navs = (html.match(/<nav[^>]*aria-label="On this page"/g) || []).length;
