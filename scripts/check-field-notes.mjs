@@ -35,7 +35,7 @@
 //   - an image under /field-notes/ — the forced rewrite swallows that
 //     prefix, so the image 404s; article images live under /assets/
 //   - a title, description or author that is missing or out of bounds, a
-//     type outside the three the index page knows, a bad slug, a malformed
+//     type outside FIELD_NOTE_TYPES (field-notes-voice.mjs), a bad slug, a malformed
 //     or inverted date pair
 // No network: this is tree-dependent, not time-dependent. The live half —
 // that every slug in a block exists in the catalog — is check-routes.mjs,
@@ -49,6 +49,7 @@ const { FIELD_NOTES, FIELD_NOTES_DIR, fieldNoteFile } = await import(join(ROOT, 
 const { parseFrontMatter, renderMarkdown, isDirectiveLine, parseDirective, BODY_DIRECTIVE_KINDS, collectDirectiveBody, BUILD_ROLES } = await import(join(ROOT, 'netlify/functions/_markdown.mjs'));
 const { GUN_META } = await import(join(ROOT, 'netlify/functions/_guide-meta.mjs'));
 const { GUIDE_SPECS, colMeta, BUILD_ROLE_META } = await import(join(ROOT, 'netlify/functions/_guide-blocks.mjs'));
+const { lintVoice, lintSections, FIELD_NOTE_TYPES } = await import(join(ROOT, 'scripts/field-notes-voice.mjs'));
 
 // The OFFLINE half of "every slug in a block resolves to a live product":
 // the catalog as read with the public key, captured by display-name.test.mjs
@@ -94,7 +95,11 @@ const PROS_CONS_GRANDFATHERED = new Set(['best-p365-xmacro-grip-modules']);
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TYPED_PRICE = /\$\s*\d/;
-const TYPES = ['review', 'comparison', 'guide'];
+// The article types (field-notes/VOICE.md; scripts/field-notes-voice.mjs):
+// each is checked for the sections its job needs (WARN, lintSections).
+// The renderer's eyebrow reads "Comparison" for comparison and "Guide"
+// for every other type, so a type changes no rendered output.
+const TYPES = FIELD_NOTE_TYPES;
 // H2s that name nothing: a table-of-contents entry a reader cannot act on.
 const VAGUE_H2 = ['overview', 'introduction', 'details', 'conclusion'];
 // Same hosts scripts/check-buy-links.mjs refuses inside an href. Kept short
@@ -130,7 +135,12 @@ for (const a of FIELD_NOTES) {
 }
 
 // ── files ↔ registry ─────────────────────────────────────────────────────
-const files = (await readdir(join(ROOT, FIELD_NOTES_DIR))).filter((f) => f.endsWith('.md')).sort();
+// Documents that live beside the articles and are not articles: the voice
+// rules every note is written to. Named, not pattern-matched — any other
+// stray .md is still a file nothing serves. (Never a page either way: a
+// non-slug name like VOICE is a 404 under the forced /field-notes/* rule.)
+const DOC_FILES = new Set(['VOICE.md']);
+const files = (await readdir(join(ROOT, FIELD_NOTES_DIR))).filter((f) => f.endsWith('.md') && !DOC_FILES.has(f)).sort();
 for (const f of files) {
   const slug = f.replace(/\.md$/, '');
   if (!seen.has(slug)) fail(FIELD_NOTES_DIR + '/' + f + ': no registry row — a file is not a page until _field-notes-meta.mjs declares it');
@@ -153,7 +163,7 @@ for (const a of FIELD_NOTES) {
   // author is optional (no byline is rendered without one — never a
   // placeholder), but a credential with no author under it renders nothing.
   if (meta.author_credential && !meta.author) fail(id + ': author_credential without an author');
-  if (!TYPES.includes(meta.type)) fail(id + ': type must be one of ' + TYPES.join('/') + ', is "' + (meta.type || '') + '"');
+  if (!TYPES.includes(meta.type)) fail(id + ': front-matter type is required, one of ' + TYPES.join(' | ') + ', is "' + (meta.type || '') + '"');
   if (!meta.category) fail(id + ': front matter has no category');
   if (!a.draft && meta.category) liveCategories.add(meta.category);
   for (const k of ['published', 'updated', 'date', 'slug']) if (k in meta) fail(id + ': "' + k + '" belongs in _field-notes-meta.mjs, not the front matter');
@@ -227,6 +237,28 @@ for (const a of FIELD_NOTES) {
   // would reach the page as text in the heading.
   for (const [n, line] of lines.entries()) {
     if (/^#{1,6}\s/.test(line) && /\{toc=/.test(line) && !/\{toc="[^"]*"\}\s*$/.test(line)) fail(whereAt(n) + ': malformed {toc="…"} label — it must close the heading line exactly as {toc="Short label"}');
+  }
+
+  // ── the voice lint (field-notes/VOICE.md) ──────────────────────────────
+  // Gunforma does not review or test products, so review language is a
+  // credibility risk and fails the build: implied testing, verdicts, feel
+  // words, hype, Pros/Cons headings, a "Best" label, an unattributed quote.
+  // Unbacked quality words, vague counts and a ::rank card's prose that
+  // never names its product are printed as warnings. Every word list lives
+  // in VOICE_RULES (scripts/field-notes-voice.mjs).
+  const nameCheck = (slug, para) => {
+    const p = CATALOG.find((x) => x.slug === slug);
+    if (!p) return true;   // a missing slug is already a failure above
+    const low = para.toLowerCase();
+    return [p.brand, p.name].filter(Boolean).some((s) => low.includes(String(s).toLowerCase()));
+  };
+  for (const hit of lintVoice(lines, { nameCheck })) {
+    const what = hit.where + (hit.phrase ? ' "' + hit.phrase + '"' : '') + ' (' + hit.group + ') — ' + hit.why;
+    if (hit.level === 'fail') fail(whereAt(hit.line) + ': ' + what);
+    else console.log('warn  ' + whereAt(hit.line) + ': ' + what);
+  }
+  for (const msg of lintSections({ type: meta.type, title: meta.title, blocks: r.blocks, headings: r.headings })) {
+    console.log('warn  ' + id + ' [' + (meta.type || 'no type') + ']: missing — ' + msg);
   }
 
   // ── the guide blocks, structurally ─────────────────────────────────────

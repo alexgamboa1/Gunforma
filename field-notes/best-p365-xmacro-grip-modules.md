@@ -1,7 +1,7 @@
 ---
 title: Best P365 XMacro Grip Modules (2026): Every Option, Fit-Checked
 description: Every aftermarket XMacro-size grip module in the Gunforma catalog, ranked from maker specs, verified magazine fit and real owner builds — with live prices on every card.
-type: guide
+type: roundup
 category: Grip Modules
 cover: https://www.icarusprecision.com/media/catalog/product/cache/dd4850ad4231b6306bceadf38a0bbeed/3/6/365-x-macro-non-blk-1.png
 ---
@@ -9,7 +9,7 @@ cover: https://www.icarusprecision.com/media/catalog/product/cache/dd4850ad4231b
 The grip module is the biggest ergonomic decision a [P365 XMacro](/p365/p365-xmacro) owner gets to make. On this platform the serialized part is the fire control unit; the module around it is an unserialized housing, so the texture, the weight, the magwell and the rail are all in play without touching the slide or barrel. The XMacro's housing class is also the busiest in the family: the XMacro Comp, the AXG Legion and both XF DH3 models wear the same size, the FUSE ships on it from the factory, and the 17- and 21-round magazine family feeds all of them. This page ranks every aftermarket XMacro-size [grip module](/parts/frames) in the Gunforma catalog — seventeen at this review — on the catalog's own spec sheets, the makers' stated fitment and the [owner builds](/gunforma-builds.html) posted here; Sig's own factory modules appear as the baseline and in the fit tables, not in the ranking. The short answer: the Icarus Precision MACRO A.C.E. is the strongest overall pick, and Tyrant CNC's module leads the polymer field.
 
 ::picks
-icarus-precision-ace-xmacro | Best overall
+icarus-precision-ace-xmacro | 7075 aluminum, integrated magwell, thumb rest
 tyrant-cnc-p365-xmacro-gm | Best polymer pick
 wilson-combat-wcp365-xmacro | Lightest with a flared magwell
 ::
@@ -26,14 +26,14 @@ The table lists the full field in rank order. A dash is a value the maker doesn'
 
 ## The ranking
 
-::rank icarus-precision-ace-xmacro best="Best overall" rank=1
+::rank icarus-precision-ace-xmacro best="7075 aluminum, integrated magwell, thumb rest" rank=1
 + 7075 billet aluminum with an integrated magwell
 + Icarus states fit for P365 XL (3.7") and XMACRO (3.1") slides
 + Takes the MACRO 17/21-round magazines, per Icarus
 - More than twice the factory module's weight (5.22 oz vs 2.50 oz)
 ::
 
-The most precisely specified module in the field: Icarus names the slide lengths and the magazine family outright, where most makers stop at "replaces the OEM module". It is also the only 7075-alloy module in the catalog — the rest of the metal field is 6061 or unspecified aluminum — and it has already turned up in a posted [owner build](/b/p365-complete-build-2e980fc8-3a9f-42c9-af15-efcf99584536). If you want metal with the magwell machined in rather than bolted on, this is the one the data backs.
+The most precisely specified module in the field: Icarus names the slide lengths and the magazine family outright, where most makers stop at "replaces the OEM module". It is machined from 7075 aluminum, per Icarus Precision. It has already turned up in a posted [owner build](/b/p365-complete-build-2e980fc8-3a9f-42c9-af15-efcf99584536). If you want metal with the magwell machined in rather than bolted on, this is the one the data backs.
 
 ::rank tyrant-cnc-p365-xmacro-gm best="Best polymer pick" rank=2
 + Flared magwell on a 2.97 oz polymer frame — close to factory weight

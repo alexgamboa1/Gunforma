@@ -15,6 +15,41 @@ The original six — `::price`, `::fit`, `::picks`, `::rank`, `::compare`,
 `::faq` — are documented in CLAUDE.md ("Field Notes articles"). This file
 covers the v2 additions (2026-11-19).
 
+## The voice, and the article type (2026-11-20)
+
+**Read [`field-notes/VOICE.md`](../field-notes/VOICE.md) before writing a
+word** — gunforma is a reference desk, not a reviewer. The voice is a build
+guard (`scripts/field-notes-voice.mjs`, run by `check-field-notes.mjs`), so
+review language does not ship:
+
+- **Fails the build:** implied testing ("we tested", "at the range",
+  "after 500 rounds"), verdicts ("best overall", "top pick", "worth it",
+  "we recommend"…), feel words ("crisp", "snappy", "feels"…), hype
+  ("badass"), a heading "Pros" or "Cons", a `::picks` or `::rank` label
+  that is exactly "Best" or starts "Best overall", and a blockquote with
+  no attribution linking the public build it was copied from (a `/b/…`
+  link on the quote's last line or the line after).
+- **Printed as a warning:** unbacked quality words ("reliable",
+  "smooth", "premium", "reduces recoil"…), "downside"/"drawback", vague
+  counts ("many", "most", "several", "a lot of"), and a `::rank` card
+  whose following paragraph never names its product.
+- **Scanned:** prose, headings, `::picks` labels, `::rank best=` labels,
+  `~`/`=` lines, `::build` names and `::faq` answers. **Not scanned:**
+  blockquotes (an owner's verbatim words), code, link URLs. Every phrase
+  lives in `VOICE_RULES`; a new one is a line there, not here.
+
+**`type` is required** in the front matter, one of `fit | trap |
+comparison | roundup | explainer | builds | new-part`. Each type is
+checked (as warnings) for the sections its job needs — every type: one
+`::faq` of 5–8 entries and a title that does not open with What / Which
+/ Will / Does / Can / How; roundup: `::picks`, `::compare`, 3+ `::rank`,
+an `::unlocks`, a `::build` and an H2 with " vs "; comparison: " vs " in
+the title, `::compare`, 2+ `::unlocks`; fit: an H2 question with "fit",
+an H2 "How fit was checked", a `::fit`; trap: an H2 with "need", a
+`::build`; explainer: the first H2 opens "What is" / "What are"; builds:
+an H2 with "builders" or "builds". The eyebrow reads "Comparison" for
+comparison and "Guide" for every other type.
+
 ## `::rank` — changes/same, not pros/cons
 
 A rank card's body lines are:

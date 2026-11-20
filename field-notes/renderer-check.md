@@ -3,7 +3,7 @@ title: Does the Holosun 507K X2 fit a P365 XL? A renderer check, not an article
 description: The Field Notes renderer's own fixture. Every Markdown construct it supports and both live-data blocks, on real catalog parts, so the plumbing can be walked on a preview.
 author: Gunforma
 author_credential: Renderer fixture — not reviewed prose
-type: guide
+type: fit
 category: Optics
 ---
 
@@ -48,7 +48,7 @@ The top-picks box. Each row jumps to its ranked card below, and the price is
 the hero listing's fresh price or nothing at all.
 
 ::picks
-holosun-507k-x2 | Best overall
+holosun-507k-x2 | Holosun K footprint
 holosun-507c-x2 | Best enclosed budget
 sig-sauer-p365-17rd-mag | Best factory magazine
 ::
@@ -56,7 +56,7 @@ sig-sauer-p365-17rd-mag | Best factory magazine
 The ranked cards the box jumps to. Pros and cons are authored lines, each
 derivable from a spec column, a fitment row, or the maker's own wording.
 
-::rank holosun-507k-x2 best="Best overall" rank=1 code="GUNFORMA10"
+::rank holosun-507k-x2 best="Holosun K footprint" rank=1 code="GUNFORMA10"
 + Holosun K footprint — the cut most current P365 slides carry
 + Multi-reticle: dot, circle, or both
 - Side-loading battery tray costs a few ounces of window
@@ -134,7 +134,7 @@ Inline: **bold**, *italic*, _also italic_, `code`, a [site link](/p365/) and an
 1. An ordered list
 2. Second item
 
-> A blockquote, for the builder quote that every article is required to carry.
+> Now when it comes to the fit and feel in your hand, well that is next level. — [HairTriggerFlicker](/b/mag-mo-grips-p365xmacro-with-tyrant-cncgrip-module-14ee1ae6-f134-48fc-99ad-ad434e63f8a2), from their posted build
 
 | Column | Value | Right-aligned |
 |---|---|---:|
