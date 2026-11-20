@@ -24,6 +24,11 @@
 //     declare, a compare of fewer than 2 parts, or one mixing categories
 //   - a typed dollar figure in a directive's args or body — the ban covers
 //     a best="…" label, a pros/cons line and an FAQ answer exactly as prose
+//   - a `+ pro` / `- con` line in a ::rank card outside the draft fixture —
+//     Field Notes use `~` (changes from factory) and `=` (stays the same)
+//   - an ::unlocks, ::colors or ::build slug that is not a live catalog
+//     product, an ::unlocks or ::build slug in the wrong category for its
+//     role, or a ::build with an unknown or repeated role (it fails parsing)
 //   - a malformed registry changelog entry (not "YYYY-MM-DD: what changed")
 //   - a prose link straight to a retailer — a buy link goes through the
 //     ::price block and /go/, or it earns nothing and logs nothing
@@ -41,9 +46,9 @@ import { dirname, join } from 'node:path';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { FIELD_NOTES, FIELD_NOTES_DIR, fieldNoteFile } = await import(join(ROOT, 'netlify/functions/_field-notes-meta.mjs'));
-const { parseFrontMatter, renderMarkdown, isDirectiveLine, parseDirective, BODY_DIRECTIVE_KINDS, collectDirectiveBody } = await import(join(ROOT, 'netlify/functions/_markdown.mjs'));
+const { parseFrontMatter, renderMarkdown, isDirectiveLine, parseDirective, BODY_DIRECTIVE_KINDS, collectDirectiveBody, BUILD_ROLES } = await import(join(ROOT, 'netlify/functions/_markdown.mjs'));
 const { GUN_META } = await import(join(ROOT, 'netlify/functions/_guide-meta.mjs'));
-const { GUIDE_SPECS, colMeta } = await import(join(ROOT, 'netlify/functions/_guide-blocks.mjs'));
+const { GUIDE_SPECS, colMeta, BUILD_ROLE_META } = await import(join(ROOT, 'netlify/functions/_guide-blocks.mjs'));
 
 // The OFFLINE half of "every slug in a block resolves to a live product":
 // the catalog as read with the public key, captured by display-name.test.mjs
@@ -72,6 +77,19 @@ const CATALOG_FACTORY = new Map(CATALOG.map((p) => [p.slug,
 let failures = 0;
 const fail = (msg) => { console.error('FAIL  ' + msg); failures++; };
 const pass = (msg) => console.log('ok    ' + msg);
+
+// The parser's role list and the page's role meta are two files; a role in
+// one and not the other would parse and then render as its raw key (or
+// resolve against no category), so they are held in step here.
+{
+  const metaKeys = Object.keys(BUILD_ROLE_META).sort().join(',');
+  const roleKeys = BUILD_ROLES.slice().sort().join(',');
+  if (metaKeys !== roleKeys) fail('_markdown.mjs BUILD_ROLES and _guide-blocks.mjs BUILD_ROLE_META disagree: [' + roleKeys + '] vs [' + metaKeys + ']');
+}
+
+// The live articles written under the pros/cons shape before the
+// changes/same rule landed (2026-11-19). See the rank check below.
+const PROS_CONS_GRANDFATHERED = new Set(['best-p365-xmacro-grip-modules']);
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -211,6 +229,38 @@ for (const a of FIELD_NOTES) {
       mustBeAftermarket(b.slug, '::rank');
       const cat = CATALOG_CATEGORY.get(b.slug);
       if (cat && !GUIDE_SPECS[cat]) fail(id + ': ::rank ' + b.slug + ' is a ' + cat + ', a category _guide-blocks.mjs declares no spec columns for — add its entry there');
+      // The baseline is the factory part a changes/same card compares
+      // against — it must resolve, and the aftermarket rule deliberately
+      // does NOT apply to it (naming the factory part is its point).
+      if (b.baseline) mustResolve(b.baseline, '::rank baseline');
+      // Pros/cons are the retired shape: they still parse so the renderer
+      // fixture keeps the old path covered, but a real article may not use
+      // them. The fixture is a draft (a 404 on the apex), which is the line.
+      // ONE live article predates the rule (2026-11-19) and this PR may not
+      // edit prose, so it is grandfathered BY SLUG until Alex converts its
+      // lines — remove its entry here in the commit that does. No new slug
+      // may be added without the same conversation.
+      const grandfathered = PROS_CONS_GRANDFATHERED.has(a.slug);
+      if (!a.draft && !grandfathered && (b.pros.length || b.cons.length)) {
+        fail(id + ": ::rank " + b.slug + " uses +/- lines — Field Notes don't use pros/cons — use ~ (changes from factory) and = (stays the same).");
+      }
+    }
+    if (b.kind === 'unlocks') {
+      mustResolve(b.slug, '::unlocks');
+      const cat = CATALOG_CATEGORY.get(b.slug);
+      if (cat && cat !== b.part) fail(id + ': ::unlocks ' + b.part + '= names ' + b.slug + ', which is a ' + cat + ', not a ' + b.part);
+    }
+    if (b.kind === 'colors') {
+      mustResolve(b.baseline, '::colors baseline');
+      for (const s of b.slugs) mustResolve(s, '::colors');
+    }
+    if (b.kind === 'build') {
+      for (const p of b.parts) {
+        mustResolve(p.slug, '::build ' + p.role + '=');
+        const want = (BUILD_ROLE_META[p.role] || {}).category;
+        const cat = CATALOG_CATEGORY.get(p.slug);
+        if (cat && want && cat !== want) fail(id + ': ::build ' + p.role + '= names ' + p.slug + ', which is a ' + cat + ', not a ' + want);
+      }
     }
     if (b.kind === 'compare') {
       if (!GUIDE_SPECS[b.category]) fail(id + ': ::compare names category "' + b.category + '", which _guide-blocks.mjs does not declare (valid: ' + Object.keys(GUIDE_SPECS).join(', ') + ')');

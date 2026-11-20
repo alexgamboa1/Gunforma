@@ -47,7 +47,8 @@ import { GUN_META, APPLIES_TO_LABEL, HUB_MAGAZINE_COPY, guidePath, isLiveGuidePa
 import { ANALYTICS_SNIPPET } from './_analytics.mjs';
 import { pgRows as pgGet, unavailable } from './_pg.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
-import { GUIDE_SPECS, PRODUCT_COLS, colMeta, withGoParams, AFFILIATE_DISCLOSURE_HTML } from './_guide-blocks.mjs';
+import { GUIDE_SPECS, PRODUCT_COLS, colMeta, withGoParams, AFFILIATE_DISCLOSURE_HTML, BUILD_ROLE_META, METHOD_LINE_HTML } from './_guide-blocks.mjs';
+import { swatchFor } from './_variant-swatch.mjs';
 
 const SITE = 'https://gunforma.com';
 const APEX_HOST = 'gunforma.com';
@@ -119,7 +120,7 @@ async function fetchProducts(slugs) {
   const cols =
     'id,slug,name,category,url,is_discontinued,restricted_states,material,weight_oz,' +
     'manufacturers!products_brand_id_fkey(name,website_url),' +
-    'product_variants!product_variants_product_id_fkey(id,msrp,is_default,primary_image_url,' +
+    'product_variants!product_variants_product_id_fkey(id,msrp,is_default,primary_image_url,color,finish_family,manual_safety_variant,' +
       'affiliate_links(id,url,affiliate_url,street_price,in_stock,last_checked,op_last_matched_by,partners(name)))';
   const rows = await pgGet('products?slug=in.(' + slugs.map(encodeURIComponent).join(',') + ')' +
     '&select=' + encodeURIComponent(cols) +
@@ -150,8 +151,15 @@ function shapeProduct(p) {
   const photoV = variants.find((v) => v.is_default && v.primary_image_url) || variants.find((v) => v.primary_image_url);
   const meta = CATEGORY_META[p.category];
   const brand = p.manufacturers ? p.manufacturers.name : null;
+  // Distinct live variant colours, in the order the variants arrived; a
+  // ::colors table re-orders them by colors.sort_order. Blank is not a
+  // colour.
+  const variantColors = [...new Set(variants.map((v) => (v.color || '').trim()).filter(Boolean))];
   return {
     id: p.id, slug: p.slug, name: p.name, category: p.category, brand,
+    variantColors,
+    cerakote: variants.some((v) => v.finish_family === 'Cerakote'),
+    manualSafety: variants.some((v) => v.manual_safety_variant === true),
     // What the page prints (_display-name.mjs): the brand is part of the
     // name, so no row carries a separate brand line under it.
     displayName: displayProductName({ brand, name: p.name }),
@@ -351,6 +359,23 @@ function rankBlockHtml(b, products, ctx) {
     ? '<div class="rank-pc"><div class="rank-pc-head">' + head + '</div><ul>' + items.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul></div>'
     : '');
   const n = ctx.buildCounts.get(o.id) || 0;
+  // The changes/same card (Field Notes v2): `~` lines are what the part
+  // changes from the factory part, `=` lines what stays the same, with the
+  // optional baseline product named under the headings. `+`/`-` pros and
+  // cons still render for the old fixtures.
+  const baseline = b.baseline ? ctx.products.get(b.baseline) : null;
+  const baselineLine = b.baseline
+    ? (baseline
+        ? '<div class="rank-baseline">Compared with <a href="' + esc(baseline.href) + '">' + esc(baseline.displayName) + '</a></div>'
+        : missingLine('Baseline part', b.baseline))
+    : '';
+  // Colours and the manual-safety option, from the live variant rows —
+  // never typed. No colours renders no row.
+  const colors = orderColors(o.variantColors, ctx.colorsOrder);
+  const colorsRow = colors.length
+    ? '<div class="rank-colors">' + colors.map((c) => swatchChipHtml(c, o.brand)).join(' ') + '</div>'
+    : '';
+  const safetyRow = o.manualSafety ? '<div class="rank-safety">Manual-safety option available</div>' : '';
   return open +
     '<div class="rank-head"><span class="rank-no">' + b.rank + '</span>' +
       '<span class="rank-best">' + esc(b.best) + '</span></div>' +
@@ -363,7 +388,12 @@ function rankBlockHtml(b, products, ctx) {
         (specList ? '<div class="rank-specs">' + specList + '</div>' : '') +
       '</div>' +
     '</div>' +
-    '<div class="rank-pcs">' + list(b.pros, 'Pros') + list(b.cons, 'Cons') + '</div>' +
+    '<div class="rank-pcs">' +
+      list(b.changes, 'What it changes from the factory part') + list(b.same, 'What stays the same') +
+      list(b.pros, 'Pros') + list(b.cons, 'Cons') +
+    '</div>' +
+    baselineLine +
+    colorsRow + safetyRow +
     (n >= 1 ? '<a class="rank-builds" href="' + esc(o.href) + '">Used in ' + n + ' Gunforma build' + (n === 1 ? '' : 's') + ' &rarr;</a>' : '') +
   '</div>';
 }
@@ -403,6 +433,283 @@ function compareBlockHtml(b, products, ctx) {
 function faqBlockHtml(b) {
   return '<div class="fn-block fn-faq">' + b.qas.map((qa) =>
     '<details><summary>' + esc(qa.q) + '</summary><p>' + esc(qa.a) + '</p></details>').join('') + '</div>';
+}
+
+// ── the v2 blocks: unlocks, colors, build ────────────────────────────────
+// Everything here is counted or judged from the fit views and the variant
+// rows at request time — never typed. A zero-row line is omitted (never
+// "0 …"), except where the zero is itself the answer (the magwell gap).
+
+// A colour as a named chip: the one swatch rule (_variant-swatch.mjs ↔
+// js/variant-swatch.js) plus the name. The colors table carries no hex, so
+// an unknown name draws swatchFor()'s neutral chip beside its name — the
+// "neutral dot + name" shape, from the shared rule rather than a new one.
+function swatchChipHtml(color, brand) {
+  const s = swatchFor(color, brand);
+  return '<span class="fn-swatch"><i class="fn-swatch-dot" style="' + esc(s.css) + '"></i>' + esc(color) + '</span>';
+}
+
+// colors.sort_order, read once per page that needs it (a ::colors table, or
+// a ::rank card's swatch row). A colour the table does not know sorts last,
+// by name — never dropped.
+async function fetchColorsOrder() {
+  const rows = await pgGet('colors?select=' + encodeURIComponent('color,sort_order'));
+  return new Map(rows.filter((r) => r && r.color).map((r) => [String(r.color).toLowerCase(), r.sort_order != null ? Number(r.sort_order) : null]));
+}
+
+function orderColors(colors, colorsOrder) {
+  const key = (c) => {
+    const o = colorsOrder ? colorsOrder.get(c.toLowerCase()) : null;
+    return o != null ? o : Infinity;
+  };
+  return colors.slice().sort((a, b) => (key(a) - key(b)) || (a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0));
+}
+
+// The ids in a fit-view count that are listed parts: approved and not
+// discontinued, the same bar every buying list on the site holds
+// (CLAUDE.md, "Listed parts are approved and not discontinued"). A count
+// that included unlisted parts would promise more than the linked page
+// shows.
+async function fetchLiveIds(ids) {
+  const list = [...new Set(ids)].filter(Boolean);
+  if (!list.length) return new Set();
+  const rows = await pgGet('products?id=in.(' + list.map(encodeURIComponent).join(',') + ')' +
+    '&select=' + encodeURIComponent('id,is_approved,is_discontinued'));
+  return new Set(rows.filter((p) => p && p.is_approved === true && p.is_discontinued !== true).map((p) => p.id));
+}
+
+// ::unlocks — what this part opens up, counted from the fit views.
+async function resolveUnlocks(block, products) {
+  const o = products.get(block.slug) || null;
+  if (!o) return { block, o: null };
+  const u = { block, o };
+  if (block.part === 'frame') {
+    const lightRows = await pgGet('v_frame_light_fit?frame_product_id=eq.' + encodeURIComponent(o.id) +
+      '&select=' + encodeURIComponent('light_product_id,confidence,fitment_type'));
+    const slideRows = await pgGet('v_slide_frame_fit?frame_product_id=eq.' + encodeURIComponent(o.id) +
+      '&fits=is.true&select=' + encodeURIComponent('slide_product_id'));
+    const specRows = await pgGet('frame_specs?product_id=eq.' + encodeURIComponent(o.id) +
+      '&select=' + encodeURIComponent('housing_class,magwell_type,housing_classes(magazine_family,magazine_families(display_name))') + '&limit=1');
+    const spec = specRows[0] || null;
+    const magRows = spec && spec.housing_class
+      ? await pgGet('magazine_housing_fit?housing_class=eq.' + encodeURIComponent(spec.housing_class) +
+          '&fit=neq.not_compatible&select=' + encodeURIComponent('magazine_product_id'))
+      : [];
+    const magwellRows = await pgGet('magwell_frame_requirements?frame_product_id=eq.' + encodeURIComponent(o.id) +
+      '&select=' + encodeURIComponent('magwell_product_id'));
+    const live = await fetchLiveIds([
+      ...lightRows.map((r) => r.light_product_id),
+      ...slideRows.map((r) => r.slide_product_id),
+      ...magRows.map((r) => r.magazine_product_id),
+    ]);
+    // One light per product: verified wins over likely, and a light with no
+    // direct row needs the maker's key or adapter.
+    const lights = new Map();
+    for (const r of lightRows) {
+      if (!live.has(r.light_product_id)) continue;
+      const cur = lights.get(r.light_product_id) || { verified: false, direct: false };
+      if (r.confidence === 'verified') cur.verified = true;
+      if (r.fitment_type === 'direct') cur.direct = true;
+      lights.set(r.light_product_id, cur);
+    }
+    u.lights = {
+      total: lights.size,
+      verified: [...lights.values()].filter((l) => l.verified).length,
+      likely: [...lights.values()].filter((l) => !l.verified).length,
+      adapter: [...lights.values()].filter((l) => !l.direct).length,
+    };
+    u.slides = new Set(slideRows.map((r) => r.slide_product_id).filter((id) => live.has(id))).size;
+    const fam = spec && spec.housing_classes ? spec.housing_classes : null;
+    u.magazineFamily = fam && fam.magazine_families ? fam.magazine_families.display_name : (fam ? fam.magazine_family : null);
+    u.magazines = new Set(magRows.map((r) => r.magazine_product_id).filter((id) => live.has(id))).size;
+    u.magwells = new Set(magwellRows.map((r) => r.magwell_product_id)).size;
+    u.magwellType = spec ? spec.magwell_type : null;
+    u.colors = o.variantColors.length;
+  } else {
+    const opticRows = await pgGet('v_optic_slide_variant_fit?slide_product_id=eq.' + encodeURIComponent(o.id) +
+      '&select=' + encodeURIComponent('optic_product_id,uses_optic_adapter'));
+    const barrelRows = await pgGet('v_barrel_slide_fit?slide_product_id=eq.' + encodeURIComponent(o.id) +
+      '&fit_status=eq.fits&select=' + encodeURIComponent('barrel_product_id'));
+    const frameRows = await pgGet('v_slide_frame_fit?slide_product_id=eq.' + encodeURIComponent(o.id) +
+      '&fits=is.true&select=' + encodeURIComponent('frame_product_id'));
+    const specRows = await pgGet('slide_specs?product_id=eq.' + encodeURIComponent(o.id) +
+      '&select=' + encodeURIComponent('part_classes(display_name)') + '&limit=1');
+    const live = await fetchLiveIds([
+      ...opticRows.map((r) => r.optic_product_id),
+      ...barrelRows.map((r) => r.barrel_product_id),
+      ...frameRows.map((r) => r.frame_product_id),
+    ]);
+    const optics = new Map();
+    for (const r of opticRows) {
+      if (!live.has(r.optic_product_id)) continue;
+      const cur = optics.get(r.optic_product_id) || { direct: false };
+      if (r.uses_optic_adapter !== true) cur.direct = true;
+      optics.set(r.optic_product_id, cur);
+    }
+    u.optics = {
+      total: optics.size,
+      direct: [...optics.values()].filter((x) => x.direct).length,
+      plate: [...optics.values()].filter((x) => !x.direct).length,
+    };
+    u.barrels = new Set(barrelRows.map((r) => r.barrel_product_id).filter((id) => live.has(id))).size;
+    u.frames = new Set(frameRows.map((r) => r.frame_product_id).filter((id) => live.has(id))).size;
+    u.springClass = specRows[0] && specRows[0].part_classes ? specRows[0].part_classes.display_name : null;
+  }
+  return u;
+}
+
+function unlocksBlockHtml(u) {
+  if (!u.o) return '<div class="fn-block fn-unlocks">' + missingLine('Part', u.block.slug) + '</div>';
+  const o = u.o;
+  const lines = [];
+  const line = (label, text) => lines.push('<li><span class="fn-unlocks-label">' + label + '</span> ' +
+    '<a href="' + esc(o.href) + '">' + text + '</a></li>');
+  const plural = (n, word) => n + ' ' + word + (n === 1 ? '' : 's');
+  // "1 slide fits" / "2 slides fit" — a count line reads as a sentence.
+  const counted = (n, word, verb) => plural(n, word) + ' ' + verb + (n === 1 ? 's' : '');
+  if (u.block.part === 'frame') {
+    if (u.lights.total > 0) {
+      let t = counted(u.lights.total, 'light', 'fit') + ' — ' + u.lights.verified + ' verified · ' + u.lights.likely + ' likely';
+      if (u.lights.adapter > 0) t += ' · ' + u.lights.adapter + ' need' + (u.lights.adapter === 1 ? 's' : '') + ' an adapter or key';
+      line('Lights', esc(t));
+    }
+    if (u.slides > 0) line('Slides', esc(counted(u.slides, 'slide', 'fit')));
+    if (u.magazineFamily && u.magazines > 0) {
+      line('Magazines', esc(u.magazineFamily + ' — ' + counted(u.magazines, 'magazine', 'fit') + ' at the family level'));
+    }
+    if (u.magwells > 0) line('Add-on magwells', esc(plural(u.magwells, 'add-on magwell') + ' on record'));
+    else if (/^none$/i.test(u.magwellType || '')) {
+      // The one zero a reader should see: no integrated magwell AND no
+      // add-on magwell on record is a real gap, not an omitted line.
+      lines.push('<li><span class="fn-unlocks-label">Add-on magwells</span> No add-on magwell on record for this module</li>');
+    }
+    if (u.colors > 0) line('Colours', esc(plural(u.colors, 'colour')));
+  } else {
+    if (u.optics.total > 0) line('Optics', esc(counted(u.optics.total, 'optic', 'mount') + ' — ' + u.optics.direct + ' direct mount · ' + u.optics.plate + ' with a plate'));
+    if (u.barrels > 0) line('Barrels', esc(counted(u.barrels, 'barrel', 'fit')));
+    if (u.frames > 0) line('Grip modules', esc(counted(u.frames, 'grip module', 'fit')));
+    if (u.springClass) lines.push('<li><span class="fn-unlocks-label">Recoil spring</span> ' + esc(u.springClass) + '</li>');
+  }
+  return '<div class="fn-block fn-unlocks">' +
+    '<div class="fn-unlocks-head">What the <a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a> opens up</div>' +
+    (lines.length ? '<ul class="fn-unlocks-list">' + lines.join('') + '</ul>' : '') +
+    '<div class="disclosure">Counts from the gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>' +
+  '</div>';
+}
+
+// ::colors — the colour table. One row per product, the baseline (factory)
+// row first; colour names in colors.sort_order; never typed.
+function colorsBlockHtml(block, products, ctx) {
+  const order = [block.baseline, ...block.slugs];
+  const missing = order.filter((s) => !products.has(s));
+  const rows = order.map((s, i) => {
+    const o = products.get(s);
+    if (!o) return '';
+    const colors = orderColors(o.variantColors, ctx.colorsOrder);
+    return '<tr><td><a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' + (i === 0 ? ' <span class="fn-factory">(factory)</span>' : '') + '</td>' +
+      '<td>' + (colors.length ? colors.map((c) => swatchChipHtml(c, o.brand)).join(' ') : '&mdash;') + '</td>' +
+      '<td>' + colors.length + '</td>' +
+      '<td>' + (o.cerakote ? 'Cerakote' : '&mdash;') + '</td></tr>';
+  }).join('');
+  return '<div class="fn-block fn-colors">' +
+    (rows ? '<div class="table-wrap"><table><thead><tr><th>Part</th><th>Colours</th><th>Count</th><th>Finish</th></tr></thead><tbody>' + rows + '</tbody></table></div>' : '') +
+    missing.map((s) => missingLine('Part', s)).join('') +
+  '</div>';
+}
+
+// ::build — an example configuration, proven against the fit views on
+// every request. A pair with a fit source MUST fit; a pair without one
+// (trigger × slide) is allowed and says nothing. A build that no longer
+// passes renders a visible refusal, never a priced parts list — the data
+// changed, and the page must not go on recommending the combination.
+async function resolveBuild(block, products) {
+  const byRole = {};
+  for (const p of block.parts) byRole[p.role] = products.get(p.slug) || null;
+  const pairs = [];
+  const pair = async (roleA, roleB, label, read) => {
+    const a = byRole[roleA], b = byRole[roleB];
+    if (!a || !b) return;
+    const r = await read(a, b);
+    pairs.push({ label, a, b, ok: r.ok, notes: r.notes || [], roleB });
+  };
+  await pair('slide', 'frame', 'slide × grip module', async (s, f) => {
+    const rows = await pgGet('v_slide_frame_fit?slide_product_id=eq.' + encodeURIComponent(s.id) +
+      '&frame_product_id=eq.' + encodeURIComponent(f.id) + '&select=' + encodeURIComponent('fits,verdict'));
+    return { ok: rows.some((r) => r.fits === true) };
+  });
+  await pair('optic', 'slide', 'optic × slide', async (o, s) => {
+    const rows = await pgGet('v_optic_slide_variant_fit?optic_product_id=eq.' + encodeURIComponent(o.id) +
+      '&slide_product_id=eq.' + encodeURIComponent(s.id) + '&select=' + encodeURIComponent('slide_variant_id,uses_optic_adapter'));
+    return { ok: rows.length > 0 };
+  });
+  await pair('light', 'frame', 'light × grip module', async (l, f) => {
+    const rows = await pgGet('v_frame_light_fit?light_product_id=eq.' + encodeURIComponent(l.id) +
+      '&frame_product_id=eq.' + encodeURIComponent(f.id) + '&select=' + encodeURIComponent('fitment_type,confidence'));
+    if (!rows.length) return { ok: false };
+    const notes = [];
+    // The best way this light mounts: a direct or adapter-included row wins
+    // over adapter-separate; the note renders only when none better exists.
+    if (rows.every((r) => r.fitment_type === 'adapter-separate')) notes.push('needs a key/adapter, sold separately');
+    if (!rows.some((r) => r.confidence === 'verified')) notes.push('fit likely, not verified');
+    return { ok: true, notes };
+  });
+  await pair('barrel', 'slide', 'barrel × slide', async (b, s) => {
+    const rows = await pgGet('v_barrel_slide_fit?barrel_product_id=eq.' + encodeURIComponent(b.id) +
+      '&slide_product_id=eq.' + encodeURIComponent(s.id) + '&select=' + encodeURIComponent('fit_status'));
+    return { ok: rows.some((r) => r.fit_status === 'fits') };
+  });
+  await pair('comp', 'barrel', 'compensator × barrel', async (c, b) => {
+    const rows = await pgGet('v_comp_barrel_fit?comp_product_id=eq.' + encodeURIComponent(c.id) +
+      '&barrel_product_id=eq.' + encodeURIComponent(b.id) + '&select=' + encodeURIComponent('fit_status'));
+    return { ok: rows.some((r) => r.fit_status === 'fits') };
+  });
+  await pair('magwell', 'frame', 'magwell × grip module', async (m, f) => {
+    const rows = await pgGet('magwell_frame_requirements?magwell_product_id=eq.' + encodeURIComponent(m.id) +
+      '&frame_product_id=eq.' + encodeURIComponent(f.id) + '&select=' + encodeURIComponent('source'));
+    return { ok: rows.length > 0 };
+  });
+  return { block, byRole, pairs, failures: pairs.filter((p) => !p.ok) };
+}
+
+function buildBlockHtml(b, ctx) {
+  const head = '<div class="fn-build-head">' + esc(b.block.name) + '</div>';
+  if (b.failures.length) {
+    return '<div class="fn-block fn-build fn-build-failed">' + head +
+      '<p class="fn-missing">This example build does not pass the catalog’s fit data: ' +
+      b.failures.map((f) => esc(f.a.displayName) + ' × ' + esc(f.b.displayName) + ' (' + esc(f.label) + ')').join('; ') +
+      '. Not rendered.</p></div>';
+  }
+  // light × grip module is the only pair that carries notes today
+  // (adapter-separate, likely); they render on the light's row.
+  const lightNotes = b.pairs.filter((p) => p.label === 'light × grip module').flatMap((p) => p.notes);
+  let total = 0, priced = 0, unpriced = 0;
+  const rows = b.block.parts.map(({ role, slug }) => {
+    const o = b.byRole[role];
+    // The role's label is its category's singular name (_category-meta.mjs)
+    // — "Grip Module", "Weapon Light" — never a second copy of the names.
+    const meta = CATEGORY_META[(BUILD_ROLE_META[role] || {}).category];
+    const label = meta ? meta[2] : role;
+    if (!o) return '<tr><td>' + esc(label) + '</td><td colspan="2">' + missingLine('Part', slug) + '</td></tr>';
+    let priceCell;
+    if (isFresh(o)) {
+      total += o.hero.price; priced++;
+      priceCell = '$' + o.hero.price.toFixed(2) + (o.hero.partnerName ? ' at ' + esc(o.hero.partnerName) : '');
+    } else { unpriced++; priceCell = 'Check price'; }
+    const notes = role === 'light' ? lightNotes : [];
+    return '<tr><td>' + esc(label) + '</td>' +
+      '<td><a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' +
+      (notes.length ? '<span class="fn-build-note">' + notes.map(esc).join(' · ') + '</span>' : '') + '</td>' +
+      '<td class="t-price">' + priceCell + '</td></tr>';
+  }).join('');
+  const totalLine = priced > 0
+    ? '<div class="fn-build-total">$' + total.toFixed(2) + ' at today’s prices' +
+      (unpriced > 0 ? ' + ' + unpriced + ' part' + (unpriced === 1 ? '' : 's') + ' without a live price' : '') + '</div>'
+    : '';
+  return '<div class="fn-block fn-build">' + head +
+    '<div class="table-wrap"><table><thead><tr><th>Role</th><th>Part</th><th>Price today</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    totalLine +
+    '<a class="buy-btn fn-build-start" href="/gunforma-armory.html">Start this build in the Armory</a>' +
+  '</div>';
 }
 
 // ── guns and the fit chain ───────────────────────────────────────────────
@@ -544,20 +851,27 @@ async function resolveBlocks(blocks, articleSlug) {
     if (b.kind === 'price') b.slugs.forEach((s) => productSlugs.add(s));
     if (b.kind === 'fit') { productSlugs.add(b.slug); gunSlugs.add(b.gun); }
     if (b.kind === 'picks') b.picks.forEach((p) => productSlugs.add(p.slug));
-    if (b.kind === 'rank') productSlugs.add(b.slug);
+    if (b.kind === 'rank') { productSlugs.add(b.slug); if (b.baseline) productSlugs.add(b.baseline); }
     if (b.kind === 'compare') b.slugs.forEach((s) => productSlugs.add(s));
+    if (b.kind === 'unlocks') productSlugs.add(b.slug);
+    if (b.kind === 'colors') { productSlugs.add(b.baseline); b.slugs.forEach((s) => productSlugs.add(s)); }
+    if (b.kind === 'build') b.parts.forEach((p) => productSlugs.add(p.slug));
   }
   const products = new Map((await fetchProducts([...productSlugs])).map((p) => [p.slug, p]));
   const guns = new Map((await fetchGuns([...gunSlugs])).map((g) => [g.slug, g]));
   const caches = { optic: new Map(), cuts: new Map() };
   const ctx = {
     slug: articleSlug,
+    products,
     specs: await fetchSpecRows(blocks, products),
     buildCounts: blocks.some((b) => b.kind === 'rank') ? await fetchBuildCounts() : new Map(),
+    // colors.sort_order, for a ::colors table and a ::rank card's swatch
+    // row. Only read when a block needs it.
+    colorsOrder: blocks.some((b) => b.kind === 'colors' || b.kind === 'rank') ? await fetchColorsOrder() : null,
   };
   const rendered = [];
   const faqQas = [];
-  let fitsOk = 0, fitsAsked = 0;
+  let fitsOk = 0, fitsAsked = 0, buildPairs = 0, buildPairsOk = 0;
   for (const b of blocks) {
     if (b.kind === 'price') rendered.push(priceBlockHtml(b, products, ctx));
     else if (b.kind === 'fit') {
@@ -570,6 +884,14 @@ async function resolveBlocks(blocks, articleSlug) {
     else if (b.kind === 'rank') rendered.push(rankBlockHtml(b, products, ctx));
     else if (b.kind === 'compare') rendered.push(compareBlockHtml(b, products, ctx));
     else if (b.kind === 'faq') { faqQas.push(...b.qas); rendered.push(faqBlockHtml(b)); }
+    else if (b.kind === 'unlocks') rendered.push(unlocksBlockHtml(await resolveUnlocks(b, products)));
+    else if (b.kind === 'colors') rendered.push(colorsBlockHtml(b, products, ctx));
+    else if (b.kind === 'build') {
+      const r = await resolveBuild(b, products);
+      buildPairs += r.pairs.length;
+      buildPairsOk += r.pairs.length - r.failures.length;
+      rendered.push(buildBlockHtml(r, ctx));
+    }
     else rendered.push('');
   }
   const kindCount = (k) => blocks.filter((b) => b.kind === k).length;
@@ -577,12 +899,16 @@ async function resolveBlocks(blocks, articleSlug) {
     rendered,
     productsAsked: productSlugs.size, productsFound: products.size,
     fitsAsked, fitsOk,
+    buildPairs, buildPairsOk,
     priceBlocks: kindCount('price'),
     fitBlocks: fitsAsked,
     picksBlocks: kindCount('picks'),
     rankBlocks: kindCount('rank'),
     compareBlocks: kindCount('compare'),
     faqBlocks: kindCount('faq'),
+    unlocksBlocks: kindCount('unlocks'),
+    colorsBlocks: kindCount('colors'),
+    buildBlocks: kindCount('build'),
     faqQas,
     // The automatic affiliate disclosure near the top: any block whose buy
     // buttons can earn a commission puts it on the page.
@@ -753,6 +1079,23 @@ function renderPage({ article, meta, bodyHtml, data }) {
 '.rank-pc ul { margin: 0 0 0 18px; } .rank-pc li { font-size: 13px; line-height: 1.55; margin-bottom: 3px; }' +
 '.rank-builds { display: inline-block; margin-top: 10px; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
 '.fn-compare table { min-width: 480px; }' +
+'.fn-method { font-size: 12.5px; color: #555; border-left: 3px solid #d9d6cc; background: #fafaf8; padding: 8px 12px; border-radius: 0 6px 6px 0; margin: 0 0 14px; } .fn-method a { color: #1d6fb8; text-decoration: none; }' +
+'.fn-unlocks { border: 0.5px solid #dfe5ea; background: #f8fafb; border-radius: 10px; padding: 12px 14px; }' +
+'.fn-unlocks-head { font-size: 14px; font-weight: 700; margin-bottom: 6px; } .fn-unlocks-head a { color: #1a1a1a; text-decoration: none; } .fn-unlocks-head a:hover { color: #4a9edd; }' +
+'.fn-unlocks-list { margin: 0 0 8px 20px; } .fn-unlocks-list li { font-size: 13.5px; line-height: 1.7; } .fn-unlocks-list a { color: #1d6fb8; text-decoration: none; }' +
+'.fn-unlocks-label { font-weight: 700; color: #1a1a1a; }' +
+'.fn-swatch { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: #333; border: 0.5px solid #e5e5e5; border-radius: 12px; padding: 2px 8px 2px 4px; background: #fff; white-space: nowrap; margin: 2px 0; }' +
+'.fn-swatch-dot { width: 13px; height: 13px; border-radius: 50%; display: inline-block; border: 0.5px solid rgba(0,0,0,0.12); }' +
+'.fn-factory { font-size: 11px; color: #667; font-weight: 400; }' +
+'.rank-baseline { font-size: 12.5px; color: #555; margin-top: 8px; } .rank-baseline a { color: #1d6fb8; text-decoration: none; }' +
+'.rank-colors { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }' +
+'.rank-safety { font-size: 12.5px; color: #1d6b43; font-weight: 600; margin-top: 6px; }' +
+'.fn-build { border: 0.5px solid #dfe5ea; background: #f8fafb; border-radius: 10px; padding: 12px 14px; }' +
+'.fn-build-head { font-size: 14px; font-weight: 700; margin-bottom: 6px; }' +
+'.fn-build .table-wrap { background: #fff; }' +
+'.fn-build-note { display: block; font-size: 11.5px; color: #7a6a2f; font-weight: 400; }' +
+'.fn-build-total { font-size: 14px; font-weight: 700; margin: 8px 0; }' +
+'.fn-build-start { display: inline-block; margin-top: 2px; }' +
 '.fn-faq details { border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; margin: 8px 0; padding: 0 14px; }' +
 '.fn-faq summary { font-size: 14px; font-weight: 700; padding: 10px 0; cursor: pointer; }' +
 '.fn-faq details p { margin: 0 0 12px; }' +
@@ -770,6 +1113,10 @@ function renderPage({ article, meta, bodyHtml, data }) {
   '<h1>' + inline(title) + '</h1>' +
   '<div class="byline">' + (author ? 'By <strong>' + esc(author) + '</strong> &middot; ' : '') + esc(fmtDate(article.published)) +
     (article.updated ? ' &middot; Last reviewed ' + esc(fmtMonth(article.updated)) : '') + '</div>' +
+  // The method line, on every field note, directly under the byline and
+  // above the disclosure — one implementation (_guide-blocks.mjs), never
+  // per-article text.
+  METHOD_LINE_HTML +
   (data.hasAffiliate ? AFFILIATE_DISCLOSURE_HTML : '') +
   html +
   changelogHtml(article.changelog) +
@@ -824,9 +1171,15 @@ export default async (req) => {
       'x-field-note-source': 'file',
       'x-field-note-blocks': 'price=' + data.priceBlocks + ' fit=' + data.fitBlocks +
         ' picks=' + data.picksBlocks + ' rank=' + data.rankBlocks +
-        ' compare=' + data.compareBlocks + ' faq=' + data.faqBlocks,
+        ' compare=' + data.compareBlocks + ' faq=' + data.faqBlocks +
+        ' unlocks=' + data.unlocksBlocks + ' colors=' + data.colorsBlocks +
+        ' build=' + data.buildBlocks,
       'x-field-note-products': data.productsFound + '/' + data.productsAsked,
       'x-field-note-fits': data.fitsOk + '/' + data.fitsAsked,
+      // Pairs a ::build block checked against the fit views, ok/asked — a
+      // shortfall means a build block rendered its refusal, which
+      // check-routes can read off the wire.
+      ...(data.buildBlocks ? { 'x-field-note-build': data.buildPairsOk + '/' + data.buildPairs } : {}),
     },
   });
 };

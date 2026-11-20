@@ -51,6 +51,7 @@ Facts about how the site works:
 ## Articles
 
 - [Field Notes](https://gunforma.com/field-notes.html)
+- [How gunforma checks parts](https://gunforma.com/how-gunforma-checks-parts.html): where the specs come from, how fit is decided, and what verified and likely mean.
 
 ## Index
 

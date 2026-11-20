@@ -18,9 +18,10 @@
 //   ![alt](src)    an image; alone on a line it becomes a <figure>
 //   **b** *i* `c`  bold, italic, code spans
 //   [t](url)       links — http(s), site-relative, #anchor, mailto only
-//   ::kind args    a BLOCK DIRECTIVE, resolved by the caller. price, fit and
-//                  compare are one line; picks, rank and faq carry a body of
-//                  lines closed by a lone `::` (BODY_DIRECTIVE_KINDS)
+//   ::kind args    a BLOCK DIRECTIVE, resolved by the caller. price, fit,
+//                  compare, unlocks and colors are one line; picks, rank,
+//                  faq and build carry a body of lines closed by a lone
+//                  `::` (BODY_DIRECTIVE_KINDS)
 //
 // EVERYTHING IS ESCAPED. Raw HTML in the source is text, not markup: an
 // article is reviewed prose, but a renderer that passes `<script>` through
@@ -69,14 +70,33 @@ export function parseFrontMatter(src) {
 // `::fit magazine=<slug> gun=<gun-slug>`   does this magazine fit this gun
 // `::compare <category> [gun=<slug>] cols=<col,…> slugs=<slug,…>`
 //                                          the spec-comparison table
+// `::unlocks frame=<slug>` / `::unlocks slide=<slug>`
+//                                          what this part opens up, counted
+//                                          from the fit views at request time
+// `::colors slugs=<slug,…> baseline=<slug>`
+//                                          colour table across products, the
+//                                          baseline (factory) row first
 // Block-bodied (BODY_DIRECTIVE_KINDS), body lines until a lone `::`:
 // `::picks`                                `<slug> | <best-for label>` per line
-// `::rank <slug> best="…" rank=N [code="…"]`
-//                                          `+ pro` / `- con` per line
+// `::rank <slug> best="…" rank=N [code="…"] [baseline=<slug>]`
+//                                          `~ changes from factory` / `= stays
+//                                          the same` per line (`+`/`-` pros and
+//                                          cons still parse for old fixtures;
+//                                          the build guard refuses them in a
+//                                          non-fixture article)
 // `::faq`                                  `Q: …` / `A: …` pairs, alternating
+// `::build name="…"`                       `<role>=<slug>` per line, one per
+//                                          role, roles from BUILD_ROLES
 // Null for anything else, and the caller decides what a bad line means
 // (the build guard refuses it; at request time it renders as nothing).
-export const BODY_DIRECTIVE_KINDS = ['picks', 'rank', 'faq'];
+export const BODY_DIRECTIVE_KINDS = ['picks', 'rank', 'faq', 'build'];
+
+// The roles a ::build line may name, one each. The parser owns the list
+// (it is parsing vocabulary, like the directive kinds); what each role is
+// called on the page and which catalog category it must resolve to live in
+// _guide-blocks.mjs (BUILD_ROLE_META), and check-field-notes.mjs holds the
+// two in step.
+export const BUILD_ROLES = ['frame', 'slide', 'barrel', 'optic', 'light', 'magwell', 'comp', 'trigger', 'magazine'];
 
 // Gathers a block directive's body: lines from `from` until a line that is
 // exactly `::`. `closed: false` means EOF arrived first — the renderer
@@ -156,23 +176,67 @@ export function parseDirective(line, bodyLines) {
     return { kind, picks };
   }
   if (kind === 'rank') {
-    // ::rank <slug> best="…" rank=N [code="…"]; body is `+ pro` / `- con`.
+    // ::rank <slug> best="…" rank=N [code="…"] [baseline=<slug>]; the body
+    // is `~ what changes from the factory part` / `= what stays the same`
+    // (and the retired `+ pro` / `- con`, still parsed so old fixtures
+    // render — the build guard refuses them outside a fixture).
     const first = rest.match(/^([a-z0-9-]+)\s+(.*)$/);
     if (!first || !SLUG_RE.test(first[1])) return null;
     const args = parseArgs(first[2]);
     if (!args) return null;
-    for (const k of Object.keys(args)) if (!['best', 'rank', 'code'].includes(k)) return null;
+    for (const k of Object.keys(args)) if (!['best', 'rank', 'code', 'baseline'].includes(k)) return null;
     const rank = Number(args.rank);
     if (!args.best || !Number.isInteger(rank) || rank < 1 || rank > 9) return null;
     if (args.code != null && !/^[A-Za-z0-9-]{2,32}$/.test(args.code)) return null;
-    const pros = [], cons = [];
+    if (args.baseline != null && !SLUG_RE.test(args.baseline)) return null;
+    const pros = [], cons = [], changes = [], same = [];
+    const by = { '+': pros, '-': cons, '~': changes, '=': same };
     for (const raw of bodyLines || []) {
       if (/^\s*$/.test(raw)) continue;
-      const pm = raw.match(/^\s*([+-])\s+(.+?)\s*$/);
+      const pm = raw.match(/^\s*([+\-~=])\s+(.+?)\s*$/);
       if (!pm) return null;
-      (pm[1] === '+' ? pros : cons).push(pm[2]);
+      by[pm[1]].push(pm[2]);
     }
-    return { kind, slug: first[1], best: args.best, rank, code: args.code || null, pros, cons };
+    return { kind, slug: first[1], best: args.best, rank, code: args.code || null,
+             baseline: args.baseline || null, pros, cons, changes, same };
+  }
+  if (kind === 'unlocks') {
+    // ::unlocks frame=<slug> | ::unlocks slide=<slug> — exactly one key.
+    const kv = rest.match(/^(frame|slide)=([a-z0-9-]+)$/);
+    if (!kv || !SLUG_RE.test(kv[2])) return null;
+    return { kind, part: kv[1], slug: kv[2] };
+  }
+  if (kind === 'colors') {
+    // ::colors slugs=<slug,…> baseline=<slug> — the baseline (factory) row
+    // renders first; it is not repeated if also listed under slugs.
+    const args = parseArgs(rest);
+    if (!args) return null;
+    for (const k of Object.keys(args)) if (!['slugs', 'baseline'].includes(k)) return null;
+    if (!args.baseline || !SLUG_RE.test(args.baseline)) return null;
+    const slugs = (args.slugs || '').split(',').map((s) => s.trim()).filter(Boolean);
+    if (!slugs.length || !slugs.every((s) => SLUG_RE.test(s))) return null;
+    const deduped = [...new Set(slugs)].filter((s) => s !== args.baseline);
+    if (!deduped.length) return null;
+    return { kind, baseline: args.baseline, slugs: deduped };
+  }
+  if (kind === 'build') {
+    // ::build name="…" with one <role>=<slug> body line per role.
+    const args = parseArgs(rest);
+    if (!args) return null;
+    for (const k of Object.keys(args)) if (k !== 'name') return null;
+    if (!args.name || !args.name.trim()) return null;
+    const parts = [];
+    const seenRoles = new Set();
+    for (const raw of bodyLines || []) {
+      if (/^\s*$/.test(raw)) continue;
+      const pm = raw.match(/^\s*([a-z]+)\s*=\s*([a-z0-9-]+)\s*$/);
+      if (!pm || !BUILD_ROLES.includes(pm[1]) || !SLUG_RE.test(pm[2])) return null;
+      if (seenRoles.has(pm[1])) return null;   // one part per role
+      seenRoles.add(pm[1]);
+      parts.push({ role: pm[1], slug: pm[2] });
+    }
+    if (!parts.length) return null;
+    return { kind, name: args.name.trim(), parts };
   }
   if (kind === 'faq') {
     // Q:/A: pairs, strictly alternating, one line each — answers are one or

@@ -44,8 +44,9 @@ export const FIELD_NOTES = [
   // handler over it, and the preview walk-through is done against it. Keep
   // it: it is what proves the plumbing before any article exists, and it
   // is a 404 on gunforma.com.
-  { slug: 'renderer-check', published: '2026-10-20', updated: '2026-10-25', draft: true,
+  { slug: 'renderer-check', published: '2026-10-20', updated: '2026-11-19', draft: true,
     changelog: [
+      '2026-11-19: Added the v2 blocks — unlocks, colors, build — and the changes/same rank card.',
       '2026-10-25: Added the four guide blocks — picks, rank, compare, faq — and this changelog.',
       '2026-10-20: First version of the fixture.',
     ] },

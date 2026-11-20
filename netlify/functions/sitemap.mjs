@@ -109,6 +109,10 @@ const STATIC_PATHS = [
   '/gunforma-gun-guides.html',
   '/parts',
   '/field-notes.html',
+  // The methods page every field note's method line links (2026-11-19).
+  // Unlike the legal pages it IS what the articles stand on, so it is
+  // submitted.
+  '/how-gunforma-checks-parts.html',
 ];
 
 // The children, in the order the index lists them. The key is the path
