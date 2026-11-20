@@ -71,6 +71,8 @@ export const FIELD_NOTES = [
       '2026-11-20: Pick labels rewritten to measurable facts.',
       '2026-10-26: First published.',
     ] },
+  { slug: 'admin-editor-test-draft', published: '2026-11-20', updated: '2026-11-20', draft: true,
+    tags: ['grip-modules'] },
 ];
 
 export const FIELD_NOTES_INDEX_PATH = '/field-notes.html';
