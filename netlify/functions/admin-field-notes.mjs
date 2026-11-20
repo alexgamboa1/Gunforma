@@ -43,7 +43,10 @@ export const FIXTURE_SLUG = 'renderer-check';
 // Branches this function may create or move. Never main, never anything
 // else; the prefixes also find "the open admin PR for this slug".
 const BRANCH_RE = /^admin-(edit|publish|new)\/[a-z0-9-]+-\d{8}-\d{4}$/;
-const NETLIFY_CONTEXT = 'deploy/netlify';
+// The commit status Netlify posts for a deploy preview. Read off a real PR
+// (#281, 2026-11-20): `netlify/<site name>/deploy-preview`, target_url the
+// preview. `deploy/netlify` is the older app's context, accepted too.
+const isNetlifyPreview = (ctx) => ctx === 'deploy/netlify' || /^netlify\/[^/]+\/deploy-preview$/.test(String(ctx || ''));
 
 const json = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
@@ -112,7 +115,7 @@ async function adminPrs() {
 async function previewFor(sha) {
   try {
     const st = await gh('/commits/' + sha + '/status');
-    const s = (st.statuses || []).find((x) => x.context === NETLIFY_CONTEXT);
+    const s = (st.statuses || []).find((x) => isNetlifyPreview(x.context));
     return s ? { state: s.state, url: s.state === 'success' ? s.target_url : null } : { state: 'pending', url: null };
   } catch { return { state: 'unknown', url: null }; }
 }

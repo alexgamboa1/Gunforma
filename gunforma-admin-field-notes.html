@@ -241,7 +241,8 @@ async function doPublish() {
   if (!r.error) pollPreview(r.pr.number, c.slug);
 }
 
-// The Netlify preview, from the deploy/netlify commit status on the PR.
+// The Netlify preview, from the deploy-preview commit status Netlify posts
+// on the PR (the function reads it).
 function pollPreview(n, slug) {
   if (S.polls[n]) return;
   let tries = 0;
@@ -365,9 +366,13 @@ function openNewDraft() {
 function newControls() {
   const e = S.ed;
   const slug = rowSlug(e.src);
-  const blocked = !S.tokenSet || !slug || hasFails() || e.saving;
-  const why = !S.tokenSet ? 'GitHub token not set' : !slug ? 'No ```registry-row``` block with a slug yet' : hasFails() ? 'Fix every FAIL first' : '';
-  return '<div class="toolbar"><button class="btn primary" ' + (blocked ? 'disabled ' : '') + 'onclick="doNewDraft()">' + (e.saving ? 'Opening…' : 'Open draft PR' + (slug ? ' for ' + esc(slug) : '')) + '</button>' +
+  // Once its PR is open the draft is done here: a second click would only
+  // be refused (an admin PR for the slug is already open), so the button
+  // goes off instead of inviting it.
+  const opened = !!(e.result && !e.result.error);
+  const blocked = !S.tokenSet || !slug || hasFails() || e.saving || opened;
+  const why = opened ? 'Opened — further changes go through Edit once it is merged' : !S.tokenSet ? 'GitHub token not set' : !slug ? 'No ```registry-row``` block with a slug yet' : hasFails() ? 'Fix every FAIL first' : '';
+  return '<div class="toolbar"><button class="btn primary" ' + (blocked ? 'disabled ' : '') + 'onclick="doNewDraft()">' + (e.saving ? 'Opening…' : opened ? 'Draft PR opened' : 'Open draft PR' + (slug ? ' for ' + esc(slug) : '')) + '</button>' +
     '<span class="muted">' + esc(why) + '</span><span style="flex:1"></span><button class="btn" onclick="loadList()">Back to the list</button></div>' +
     (e.result ? '<div class="banner ' + (e.result.error ? 'bad' : 'ok') + '">' + e.result.html + '</div>' : '');
 }

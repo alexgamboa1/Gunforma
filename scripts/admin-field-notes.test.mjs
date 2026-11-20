@@ -92,7 +92,7 @@ function mockWorld({ prs = [] } = {}) {
     if (method === 'POST' && path === '/git/commits') { const s = id(); commits.set(s, { tree: body.tree, parents: body.parents, message: body.message }); return res(201, { sha: s }); }
     if (method === 'PATCH' && (m = path.match(/^\/git\/refs\/heads\/(.+)$/))) { refs.set(m[1], body.sha); return res(200, {}); }
     if (method === 'POST' && path === '/pulls') { const p = { number: 950 + pulls.length, html_url: 'https://github.com/x/pull/' + (950 + pulls.length), head: { ref: body.head, sha: refs.get(body.head) }, base: { ref: body.base }, title: body.title, body: body.body, state: 'open' }; pulls.push(p); return res(201, p); }
-    if (method === 'GET' && (m = path.match(/^\/commits\/(.+)\/status$/))) return res(200, { statuses: [{ context: 'deploy/netlify', state: 'success', target_url: 'https://deploy-preview-950--velvety-stardust-4de48f.netlify.app' }] });
+    if (method === 'GET' && (m = path.match(/^\/commits\/(.+)\/status$/))) return res(200, { statuses: [{ context: 'netlify/velvety-stardust-4de48f/deploy-preview', state: 'success', target_url: 'https://deploy-preview-950--velvety-stardust-4de48f.netlify.app' }] });
     throw new Error('unmocked GitHub call ' + method + ' ' + path);
   };
   return { calls, refs, pulls, commits, trees, treeAt, main };
@@ -199,6 +199,11 @@ test('save: a fresh admin-edit branch, one commit of note + registry, a PR to ma
   assert.equal(row.changelog[0], TODAY + ': Tightened the answer block.');
   assert.equal(row.updated, '2026-10-26', 'not a full review: the date stays');
   assert.equal(w.treeAt('main').get(A.REGISTRY_PATH), REGISTRY, 'main untouched');
+  // the preview URL comes from Netlify's real status context,
+  // netlify/<site>/deploy-preview (read off PR #281) — not deploy/netlify
+  const st = await call('ADMIN', 'GET', { action: 'status', pr: r.body.pr.number });
+  assert.equal(st.status, 200);
+  assert.equal(st.body.preview.url, 'https://deploy-preview-950--velvety-stardust-4de48f.netlify.app', 'the preview URL is found');
 });
 
 test('save with "This is a full review" bumps updated; a second save adds to the open PR', async () => {
