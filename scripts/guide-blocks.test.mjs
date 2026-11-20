@@ -272,7 +272,7 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
   // the rank cards: number, badge, photo only where one exists, chip,
   // extra retailer links, declared spec columns, pros/cons
   assert.ok(h.includes('<span class="rank-no">1</span>'));
-  assert.ok(h.includes('<span class="rank-best">Best overall</span>'));
+  assert.ok(h.includes('<span class="rank-best">Holosun K footprint</span>'));
   assert.ok(h.includes('class="rank-photo" src="https://img/507k.jpg"'));
   assert.equal((h.match(/class="rank-photo"/g) || []).length, 1, 'no placeholder image area on the photo-less cards');
   assert.equal((h.match(/class="rank-photo-frame"/g) || []).length, 1, 'the showcase frame exists only around a photo — never as an empty placeholder');

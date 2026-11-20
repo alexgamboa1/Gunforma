@@ -1,7 +1,7 @@
 ---
 title: Best P365 XMacro Grip Modules (2026): Every Option, Fit-Checked
 description: Every aftermarket XMacro-size grip module in the Gunforma catalog, ranked from maker specs, verified magazine fit and real owner builds — with live prices on every card.
-type: guide
+type: roundup
 category: Grip Modules
 cover: https://www.icarusprecision.com/media/catalog/product/cache/dd4850ad4231b6306bceadf38a0bbeed/3/6/365-x-macro-non-blk-1.png
 ---
