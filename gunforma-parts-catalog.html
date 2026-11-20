@@ -773,6 +773,10 @@ var SPEC_FILTERS_BY_CATEGORY = {
 // options render in the lookup table's order, alphabetical when the read
 // failed. Keyed by material_family.
 var MATERIAL_SORT = {};
+// finish_families.sort_order, loaded the same non-fatal way: the Finish
+// options render Cerakote … Uncoated, alphabetical when the read failed.
+// Keyed by finish_family.
+var FINISH_FAMILY_SORT = {};
 var SPEC_UNIVERSAL_FILTERS = [
   // Material is a PRODUCT fact (products.material_family), not a variant
   // axis — a grip module is polymer in every colour — so its source is
@@ -788,7 +792,11 @@ var SPEC_UNIVERSAL_FILTERS = [
   // Material and finish are separate facts (AG, 2026-11-19), and on grip
   // modules Finish was standing in for material ("Polymer", now cleared
   // from the data) — so the frame view asks Material and drops Finish.
-  { source: 'variant', key: 'finish', type: 'strings', hideFor: ['frame'] },
+  // It filters by FAMILY (product_variants.finish_family, derived from the
+  // finishes lookup): "Satin DLC Black" is DLC, "High Polished Gold (TiN)"
+  // is TiN. The maker's wording stays what every label and spec row shows.
+  { source: 'variant', key: 'finish_family', type: 'strings', label: 'Finish', hideFor: ['frame'],
+    rank: function (v) { return FINISH_FAMILY_SORT[v] != null ? FINISH_FAMILY_SORT[v] : null; } },
 ];
 
 // Filter state — everything the sidebar controls.
@@ -850,7 +858,7 @@ async function loadEverything() {
       'brands:manufacturers(id, name),' +
       'product_platforms(platform_id),' +
       'product_variants!product_variants_product_id_fkey(' +
-        'id, msrp, is_default, variant_label, reticle, reticle_color, color, finish, optic_cut, bundle, clamp, ' +
+        'id, msrp, is_default, variant_label, reticle, reticle_color, color, finish, finish_family, optic_cut, bundle, clamp, ' +
         'manual_safety_variant, sku, primary_image_url' +
       '),' +
       'slide_specs!slide_specs_product_id_fkey(*),' +
@@ -881,9 +889,12 @@ async function loadEverything() {
   // The materials lookup orders the Material filter's options. Non-fatal:
   // a failed read leaves MATERIAL_SORT empty and the options alphabetical.
   var materialsQ = sb.from('materials').select('material_family, sort_order');
+  // The finish_families lookup orders the Finish filter's options, the same
+  // non-fatal way: a failed read leaves FINISH_FAMILY_SORT empty.
+  var finishFamiliesQ = sb.from('finish_families').select('finish_family, sort_order');
 
-  var results = await Promise.all([productsQ, platformsQ, bsrQ, mfrQ, gunsQ, materialsQ]);
-  var prodRes = results[0], platRes = results[1], bsrRes = results[2], mfrRes = results[3], gunsRes = results[4], matRes = results[5];
+  var results = await Promise.all([productsQ, platformsQ, bsrQ, mfrQ, gunsQ, materialsQ, finishFamiliesQ]);
+  var prodRes = results[0], platRes = results[1], bsrRes = results[2], mfrRes = results[3], gunsRes = results[4], matRes = results[5], ffRes = results[6];
   if (prodRes.error) { console.error(prodRes.error); return showFatal(prodRes.error.message); }
   if (platRes.error) { console.error(platRes.error); return showFatal(platRes.error.message); }
   // BSR/MFR/guns are non-fatal — the catalog still works with empty
@@ -895,6 +906,11 @@ async function loadEverything() {
   MATERIAL_SORT = {};
   (matRes.data || []).forEach(function (m) {
     if (m.material_family != null) MATERIAL_SORT[m.material_family] = m.sort_order;
+  });
+  if (ffRes.error)   { console.warn('[catalog] finish_families load failed', ffRes.error); }
+  FINISH_FAMILY_SORT = {};
+  (ffRes.data || []).forEach(function (f) {
+    if (f.finish_family != null) FINISH_FAMILY_SORT[f.finish_family] = f.sort_order;
   });
 
   (platRes.data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
