@@ -120,6 +120,11 @@ NOT_BUILD_CHECKS=(
   # and the build cannot see the database. Runs beside check-routes in the
   # same workflow; guards 1/2/4 are also CHECK constraints on slide_specs.
   scripts/check-fitment-data.mjs
+  # The finish-family invariants (every finish listed in finishes, every
+  # family in finish_families, the derived product_variants.finish_family
+  # current) are facts about production rows — same reason, same workflow.
+  # The database enforces the first two at write time (FK + trigger).
+  scripts/check-finish-data.mjs
   # Imports refresh-affiliate-prices.mjs, which needs csv-parse from
   # scripts/package.json. Nothing installs that during the site build, so it
   # would fail for the wrong reason. It runs in

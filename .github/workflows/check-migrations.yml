@@ -110,6 +110,16 @@ jobs:
           PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/barrel-slide-fit.sql
 
+      # Finish families: the vocabulary seeded (11 families, 33 finishes),
+      # a listed finish deriving its family through the real create_product(),
+      # a NULL finish saving with a NULL family, an unlisted finish refused in
+      # words, a direct write re-derived, a family move re-deriving its
+      # variants, and anon read-only on both tables.
+      - name: finish_family derives from finishes, and an unlisted finish is refused
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/finish-families.sql
+
       - name: Stop the local stack
         if: always()
         run: supabase stop --no-backup || true

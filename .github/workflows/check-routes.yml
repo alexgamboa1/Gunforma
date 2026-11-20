@@ -92,3 +92,11 @@ jobs:
       - name: Check fitment data invariants
         if: always()
         run: node scripts/check-fitment-data.mjs
+
+      # Every finish listed in finishes, every family in finish_families,
+      # product_variants.finish_family current with its finish. Data facts,
+      # so the origin input does not apply. Passes with a notice until
+      # 20261120001514_finish_families.sql is applied.
+      - name: Check finish-family data invariants
+        if: always()
+        run: node scripts/check-finish-data.mjs
