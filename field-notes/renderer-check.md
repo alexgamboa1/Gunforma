@@ -91,7 +91,7 @@ Q: Where do the prices on this page come from?
 A: From retailer feeds, nightly; a price no feed has verified in the last seven days is never stated.
 ::
 
-## The v2 blocks: unlocks, colours, an example build
+## The v2 blocks: unlocks, colours, an example build {toc="The v2 blocks"}
 
 What a grip module opens up, counted from the fit views on every request —
 this module also has the live magwell gap (its `magwell_type` is None and

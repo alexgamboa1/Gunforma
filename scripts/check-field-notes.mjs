@@ -95,6 +95,8 @@ const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const TYPED_PRICE = /\$\s*\d/;
 const TYPES = ['review', 'comparison', 'guide'];
+// H2s that name nothing: a table-of-contents entry a reader cannot act on.
+const VAGUE_H2 = ['overview', 'introduction', 'details', 'conclusion'];
 // Same hosts scripts/check-buy-links.mjs refuses inside an href. Kept short
 // and in step by hand: that file runs on import, so it cannot export them.
 const RETAILER_HOSTS = ['opticsplanet.com', 'awin1.com', 'olight.com', 'olightstore.com', 'truepistol.com', 'brownells.com', 'primaryarms.com'];
@@ -117,7 +119,14 @@ for (const a of FIELD_NOTES) {
       } else if (TYPED_PRICE.test(e)) fail(id + ': typed dollar figure in a changelog entry');
     }
   }
-  for (const k of Object.keys(a)) if (!['slug', 'published', 'updated', 'draft', 'changelog'].includes(k)) fail(id + ': unknown registry key "' + k + '"');
+  if (a.tags != null) {
+    if (!Array.isArray(a.tags) || !a.tags.length) fail(id + ': tags must be a non-empty array of slugs (omit the key for none)');
+    else {
+      for (const t of a.tags) if (typeof t !== 'string' || !SLUG_RE.test(t)) fail(id + ': tag is not a lowercase slug: ' + JSON.stringify(t));
+      if (new Set(a.tags).size !== a.tags.length) fail(id + ': a tag is listed twice');
+    }
+  }
+  for (const k of Object.keys(a)) if (!['slug', 'published', 'updated', 'draft', 'changelog', 'tags'].includes(k)) fail(id + ': unknown registry key "' + k + '"');
 }
 
 // ── files ↔ registry ─────────────────────────────────────────────────────
@@ -199,6 +208,26 @@ for (const a of FIELD_NOTES) {
 
   let r;
   try { r = renderMarkdown(body); } catch (e) { fail(id + ': renderMarkdown threw: ' + (e && e.message)); continue; }
+
+  // ── the heading lint ───────────────────────────────────────────────────
+  // The page's one <h1> is the front-matter title, rendered by field-note.mjs;
+  // a `# ` heading in the body is a second one. The table of contents lists
+  // every H2, so an H2 that names nothing ("Overview") is a TOC entry that
+  // tells a reader nothing — name the section for what it answers. An H3
+  // outside a ::rank card (the cards carry no headings of their own) is
+  // allowed but flagged: the TOC skips H3s, so its content is reachable
+  // only by scrolling.
+  for (const h of r.headings) {
+    if (h.level === 1) fail(id + ': a "# " heading in the body — the title is the page’s one H1; use "##"');
+    if (h.level === 2 && VAGUE_H2.includes(h.text.trim().toLowerCase())) fail(id + ': H2 "' + h.text.trim() + '" names nothing — the table of contents lists it; say what the section answers');
+    if (h.level === 3) console.log('warn  ' + id + ': H3 "' + h.text.trim() + '" — the table of contents skips H3s (fine for a sub-point; promote it if readers will jump to it)');
+    if (h.toc != null && (h.toc.length > 40 || TYPED_PRICE.test(h.toc))) fail(id + ': {toc="' + h.toc + '"} must be a short label (≤ 40 chars, no $ figure)');
+  }
+  // A {toc=…} the renderer could not split (a stray quote, single quotes)
+  // would reach the page as text in the heading.
+  for (const [n, line] of lines.entries()) {
+    if (/^#{1,6}\s/.test(line) && /\{toc=/.test(line) && !/\{toc="[^"]*"\}\s*$/.test(line)) fail(whereAt(n) + ': malformed {toc="…"} label — it must close the heading line exactly as {toc="Short label"}');
+  }
 
   // ── the guide blocks, structurally ─────────────────────────────────────
   // A slug that does not resolve to a live product is a BUILD failure, not

@@ -315,8 +315,9 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
   const scripts = [...h.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)];
   assert.equal(scripts.length, 1, 'one structured-data script');
   const ld = JSON.parse(scripts[0][1].replaceAll('\\u003c', '<'));
-  assert.deepEqual(ld.map((x) => x['@type']), ['Article', 'BreadcrumbList', 'FAQPage']);
-  const faq = ld[2];
+  assert.equal(ld['@context'], 'https://schema.org', 'one @graph under one @context');
+  assert.deepEqual(ld['@graph'].map((x) => x['@type']), ['Article', 'BreadcrumbList', 'ItemList', 'FAQPage']);
+  const faq = ld['@graph'].find((x) => x['@type'] === 'FAQPage');
   assert.equal(faq.mainEntity.length, 2);
   assert.equal(faq.mainEntity[0]['@type'], 'Question');
   assert.equal(faq.mainEntity[0].acceptedAnswer['@type'], 'Answer');
