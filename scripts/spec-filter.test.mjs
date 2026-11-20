@@ -234,6 +234,9 @@ function freshPageScope() {
          showDiscontinued: false, sort: 'newest', specs: {} },
     PRODUCTS: [],
     MATERIAL_SORT: { Aluminum: 10, 'Stainless Steel': 20, Steel: 30, Polymer: 40, Titanium: 50, Mixed: 90, Unspecified: 99 },
+    // finish_families.sort_order as seeded by 20261120001514_finish_families.sql.
+    FINISH_FAMILY_SORT: { Cerakote: 10, DLC: 20, Nitride: 30, PVD: 40, TiN: 50, TiCN: 60, TiAlN: 70,
+                          Anodized: 80, 'Black Oxide': 85, Plated: 88, Uncoated: 90 },
     FILTER_SEARCH_STATE: {},
     renderFilters() {},
     applyFiltersAndRender() {},
@@ -255,30 +258,39 @@ function freshPageScope() {
   return { scope, ...lifted };
 }
 
+// The maker's wording → its family, as finishes files them: what
+// product_variants.finish_family carries beside each finish.
+const FAMILY_OF = {
+  Anodized: 'Anodized', DLC: 'DLC', 'Satin DLC Black': 'DLC', Cerakote: 'Cerakote',
+  TiN: 'TiN', 'High Polished Gold (TiN)': 'TiN', 'Polished Stainless': 'Uncoated',
+};
+function v(color, finish) {
+  return { color, finish: finish || null, finish_family: finish ? FAMILY_OF[finish] : null };
+}
 function frame(id, family, color, finish, brand) {
   return { id, category: 'frame', brand_id: brand || 'b1', brand: 'Icarus', name: id,
     platform_ids: ['pf1'], price: 100, _search: id, discontinued: false,
     material_family: family, material: family,
-    variants: [{ color, finish: finish || null }] };
+    variants: [v(color, finish)] };
 }
 function slide(id, finish, comped) {
   return { id, category: 'slide', brand_id: 'b2', brand: 'Norsso', name: id,
     platform_ids: ['pf1'], price: 300, _search: id, discontinued: false,
     material_family: 'Stainless Steel', material: 'Stainless Steel',
     slide_specs: { integrated_comp: comped === true },
-    variants: [{ color: 'Black', finish }] };
+    variants: [v('Black', finish)] };
 }
-function barrel(id, color) {
+function barrel(id, color, finish) {
   return { id, category: 'barrel', brand_id: 'b3', brand: 'TP', name: id,
     platform_ids: ['pf1'], price: 200, _search: id, discontinued: false,
     material_family: 'Stainless Steel', material: 'Stainless Steel',
-    variants: [{ color, finish: 'DLC' }] };
+    variants: [v(color, finish)] };
 }
 function optic(id, color) {
   return { id, category: 'optic', brand_id: 'b4', brand: 'Holosun', name: id,
     platform_ids: ['pf1'], price: 250, _search: id, discontinued: false,
     material_family: 'Aluminum', material: 'Aluminum',
-    variants: [{ color, finish: null }] };
+    variants: [v(color, null)] };
 }
 const PAGE_PRODUCTS = [
   frame('f1', 'Polymer', 'Black'),
@@ -288,9 +300,10 @@ const PAGE_PRODUCTS = [
   frame('f5', 'Unspecified', 'Black'),
   slide('s1', 'DLC', true),
   slide('s2', 'Cerakote'),
-  barrel('b-1', 'Black'),
-  barrel('b-2', 'Black'),
-  barrel('b-3', 'Gold'),
+  slide('s3', 'Satin DLC Black'),
+  barrel('b-1', 'Black', 'TiN'),
+  barrel('b-2', 'Black', 'DLC'),
+  barrel('b-3', 'Gold', 'High Polished Gold (TiN)'),
   optic('o-1', 'Clear'),
   optic('o-2', 'Black'),
 ];
@@ -382,19 +395,19 @@ test('Finish hides on grip modules — and a hidden tick stops filtering (the ge
   F.categories.add('slide');
   page.reconcileSpecState(page.specBlockPlan());
   let html = page.specsSectionHtml();
-  assert.ok(html.includes('data-spec-block="variant:finish"'),
+  assert.ok(html.includes('data-spec-block="variant:finish_family"'),
     'Finish still renders for slides');
 
   F.categories.clear(); F.categories.add('frame');
-  F.specs['variant:finish'] = { schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'finish'),
+  F.specs['variant:finish_family'] = { schema: page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'finish_family'),
     type: 'strings', values: new Set(['Anodized']) };
   // What renderFilters() does, in order: reconcile against the plan, then
   // draw — the #270 one-off delete inside specsSectionHtml is gone.
   page.reconcileSpecState(page.specBlockPlan());
   html = page.specsSectionHtml();
-  assert.ok(!html.includes('data-spec-block="variant:finish"'),
+  assert.ok(!html.includes('data-spec-block="variant:finish_family"'),
     'no Finish block when the one selected category is frame');
-  assert.equal(F.specs['variant:finish'], undefined,
+  assert.equal(F.specs['variant:finish_family'], undefined,
     'the hidden block takes its ticked state with it — no invisible constraint');
   assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 5,
     'every frame shown: the stale Anodized tick no longer filters');
@@ -452,7 +465,7 @@ test('a Material tick dropped on switching to a one-family category', () => {
     'slides (one family, below minDistinct) draw no Material block');
   assert.equal(F.specs['product:material_family'], undefined,
     'its state goes with it');
-  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 2, 'both slides shown');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 3, 'every slide shown');
 });
 
 test('a Color value not offered is dropped; one offered in both views is kept and still filters', () => {
@@ -532,4 +545,113 @@ test('renderFilters reconciles before it builds the sidebar', () => {
   assert.match(src, /function renderFilters\(\) \{[\s\S]{0,800}?reconcileSpecState\(specBlockPlan\(\)\);[\s\S]{0,400}?specsSectionHtml\(\)/);
   assert.ok(!/hideFor[\s\S]{0,200}?delete F\.specs/.test(liftFn(src, 'specsSectionHtml')),
     'the #270 one-off delete is gone from specsSectionHtml — the general step owns it');
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// Finish by family (2026-11-20, after 20261120001514_finish_families.sql).
+// The Finish filter reads product_variants.finish_family, not the maker's
+// wording: one coating was several near-duplicate options (Slides: 10 for
+// 55 parts), and a DLC tick missed the slides filed as "Satin DLC Black".
+// The block is still titled "Finish", still hidden on grip modules, and
+// still reconciles through specBlockPlan()/reconcileSpecState().
+
+const familySchema = (page) => page.SPEC_UNIVERSAL_FILTERS.find((s) => s.key === 'finish_family');
+
+test('a family tick matches every variant whose finish maps to it, grid == facet', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+  switchView(page, ['slide']);
+
+  const dlc = checkbox({ 'data-spec-composite': 'variant:finish_family',
+                         'data-spec-widget': 'str', 'data-spec-val': 'DLC' });
+  page.scope.document = makeDocument([dlc]);
+  page.attachFilterHandlers();
+  dlc.fire(true);
+  assert.equal(F.brands.size, 0, 'a Finish tick never reaches the brand set');
+  assert.ok(F.specs['variant:finish_family'] && F.specs['variant:finish_family'].values.has('DLC'),
+    'the family schema resolves through schemaForStateKey');
+
+  const shown = page.scope.PRODUCTS.filter(page.matchesAll).map((r) => r.id).sort();
+  assert.deepEqual(shown, ['s1', 's3'],
+    'plain "DLC" AND "Satin DLC Black" — not just the exact spelling; not the Cerakote slide');
+  assert.equal(shown.length, facetCount(page, familySchema(page), 'DLC'),
+    'grid count equals the facet count beside DLC');
+
+  // Barrels: TiN takes the Fdez gold ("High Polished Gold (TiN)") with it.
+  F.specs = {};
+  switchView(page, ['barrel']);
+  F.specs['variant:finish_family'] = { schema: familySchema(page), type: 'strings', values: new Set(['TiN']) };
+  assert.deepEqual(page.scope.PRODUCTS.filter(page.matchesAll).map((r) => r.id).sort(), ['b-1', 'b-3']);
+});
+
+test('the Finish options are families, titled "Finish", in finish_families order', () => {
+  const page = freshPageScope();
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  let html = switchView(page, ['slide']);
+  assert.ok(html.includes('data-spec-block="variant:finish_family"'), 'the family block renders for slides');
+  assert.ok(!html.includes('data-spec-block="variant:finish"'), 'no raw-wording block beside it');
+  assert.match(html, /data-spec-block="variant:finish_family"><div class="filter-title">Finish<\/div>/,
+    'the sidebar title still reads "Finish"');
+  assert.ok(!html.includes('Satin DLC Black'), 'a maker wording is never an option');
+  const offered = [...html.matchAll(/data-spec-composite="variant:finish_family"[^>]*data-spec-val="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(offered, ['Cerakote', 'DLC'], 'two families for three slide wordings');
+
+  // On All, rank beats the alphabet: Cerakote … TiN, then Anodized, then
+  // Uncoated (alphabetical would put Anodized first).
+  page.scope.PRODUCTS = PAGE_PRODUCTS.concat([barrel('b-4', 'Silver', 'Polished Stainless')]);
+  html = switchView(page, []);
+  const all = [...html.matchAll(/data-spec-composite="variant:finish_family"[^>]*data-spec-val="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(all, ['Cerakote', 'DLC', 'TiN', 'Anodized', 'Uncoated'], 'finish_families.sort_order');
+
+  // A failed finish_families read leaves the map empty: alphabetical.
+  page.scope.FINISH_FAMILY_SORT = {};
+  html = switchView(page, []);
+  const alpha = [...html.matchAll(/data-spec-composite="variant:finish_family"[^>]*data-spec-val="([^"]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(alpha, ['Anodized', 'Cerakote', 'DLC', 'TiN', 'Uncoated'], 'alphabetical without the lookup');
+});
+
+test('a family tick survives a switch where it is offered and is dropped where it is not', () => {
+  const page = freshPageScope();
+  const F = page.scope.F;
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+
+  switchView(page, ['slide']);
+  F.specs['variant:finish_family'] = { schema: familySchema(page), type: 'strings', values: new Set(['DLC']) };
+  let html = switchView(page, ['barrel']);
+  assert.ok(F.specs['variant:finish_family'] && F.specs['variant:finish_family'].values.has('DLC'),
+    'DLC is offered on Barrels, so the tick is KEPT');
+  assert.ok(/data-spec-val="DLC" checked/.test(html), 'and drawn ticked');
+  assert.deepEqual(page.scope.PRODUCTS.filter(page.matchesAll).map((r) => r.id), ['b-2'], 'and still filters');
+
+  switchView(page, ['slide']);
+  F.specs['variant:finish_family'] = { schema: familySchema(page), type: 'strings', values: new Set(['Cerakote']) };
+  html = switchView(page, ['barrel']);
+  assert.ok(!html.includes('data-spec-val="Cerakote"'), 'no barrel is Cerakote');
+  assert.equal(F.specs['variant:finish_family'], undefined, 'so the Cerakote tick is dropped');
+  assert.equal(page.scope.PRODUCTS.filter(page.matchesAll).length, 3, 'every barrel');
+});
+
+test('grip modules still render no Finish block, under either key', () => {
+  const page = freshPageScope();
+  page.scope.PRODUCTS = PAGE_PRODUCTS;
+  const html = switchView(page, ['frame']);
+  assert.ok(!/data-spec-block="variant:finish/.test(html), 'no Finish block on grip modules');
+  assert.ok(!/<div class="filter-title">Finish<\/div>/.test(html), 'no block titled Finish either');
+  assert.deepEqual(familySchema(page).hideFor, ['frame'], 'the #270 hideFor rides on the family schema');
+});
+
+test('the catalog reads finish_family and orders it by finish_families', () => {
+  const src = read('gunforma-parts-catalog.html');
+  const at = src.indexOf('\nasync function loadEverything(');
+  assert.ok(at !== -1, 'loadEverything not found');
+  const load = src.slice(at, src.indexOf('\n}\n', at));
+  assert.match(load, /product_variants!product_variants_product_id_fkey\([^)]*\bfinish_family\b/,
+    'finish_family is in the variant select');
+  assert.match(load, /sb\.from\('finish_families'\)\.select\('finish_family, sort_order'\)/,
+    'the lookup is read beside the catalog');
+  assert.match(load, /FINISH_FAMILY_SORT\[f\.finish_family\] = f\.sort_order/, 'and fills the rank map');
+  assert.ok(!/\{\s*source:\s*'variant',\s*key:\s*'finish',/.test(liftVar(src, 'SPEC_UNIVERSAL_FILTERS')),
+    'no schema entry filters on the raw finish wording');
 });
