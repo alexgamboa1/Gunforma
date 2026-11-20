@@ -153,9 +153,11 @@ notes" close the list when the page has them. So:
   will want to jump there.
 
 **The byline row** is author · `author_credential` · "Last reviewed
-<Month YYYY>" (the registry's `updated`), then the published date, then
-the method line, then the affiliate disclosure when a block sells. No
-`author` means no name at all — never a placeholder.
+<Month YYYY>" (the registry's `updated`) — one visible date; the
+published date is in the structured data only — then the method line,
+then the affiliate disclosure when a block sells. No `author` means no
+name at all — never a placeholder. The byline is the page's only author
+credit; there is no author box at the bottom.
 
 **Structured data** is one `@graph`, built by the renderer: Article (its
 author a `Person` with the credential as description when `author` is
@@ -168,9 +170,15 @@ never a Review or an AggregateRating — we don't range-test parts.
 **Related field notes** come from the registry's optional `tags` (an
 array of lowercase slugs on the article's row in `_field-notes-meta.mjs`,
 not the front matter): up to four other live notes sharing a tag, most
-shared first, then most recently reviewed. Untagged means no section.
-A draft is never listed. Tag a note by what a reader of it would want
-next — its category and the gun it is about are the usual pair.
+shared first, then most recently reviewed. A draft is never listed. Tag
+a note by what a reader of it would want next — its category and the
+gun it is about are the usual pair. Under the notes, one **"Keep going"**
+line links the note's model hub (the first live hub whose
+`FIELD_NOTE_LINKS` entry points at the note, else the `/p365/` index),
+the Armory, the builds, and All Field Notes last (besides the breadcrumb,
+an article's only path to the index). With no related notes there is no "Related
+field notes" heading — the Keep going line stands alone. The page never
+has two Related headings.
 
 ## The method line
 

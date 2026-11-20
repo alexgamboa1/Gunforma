@@ -36,7 +36,7 @@
 // page exists, this deploy just cannot find it.
 
 import { readFile } from 'node:fs/promises';
-import { FIELD_NOTES_INDEX_PATH, fieldNote, fieldNotePath, fieldNoteFile, relatedNotes } from './_field-notes-meta.mjs';
+import { FIELD_NOTES_INDEX_PATH, fieldNote, fieldNotePath, fieldNoteFile, relatedNotes, gunsForFieldNote } from './_field-notes-meta.mjs';
 import { parseFrontMatter, renderMarkdown, inline, textOf } from './_markdown.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
@@ -1058,15 +1058,34 @@ const TOC_SCRIPT =
   'heads.forEach(function(h){io.observe(h);});if(foot)io.observe(foot);paint();' +
 '})();</script>';
 
-// "Related field notes": up to four other live articles sharing a tag
-// (relatedNotes() in _field-notes-meta.mjs). None renders no section.
-function relatedNotesHtml(related) {
-  if (!related.length) return '';
+// The page's ONE "Related" section (Alex, 2026-11-20 — never two Related
+// headings): "Related field notes", up to four other live articles sharing
+// a tag (relatedNotes() in _field-notes-meta.mjs), then a single "Keep
+// going" line — the note's model hub, the Armory, the builds, and All Field
+// Notes LAST (Alex, 2026-11-20: besides the breadcrumb it is an article's
+// only path to the index, and the index is what links every note; "Parts
+// by category" stays out). The hub is
+// the first gun whose hub links into this note (gunsForFieldNote()), only
+// while that hub is live; otherwise the /p365/ index. With no related
+// notes there is no heading and no TOC entry: the Keep going line stands
+// alone, since a "Related field notes" heading over no notes says nothing.
+function keepGoingHtml(slug) {
+  const gun = gunsForFieldNote(slug).find((g) => isLiveGunHub(g));
+  const hub = gun
+    ? '<a href="' + esc(hubPath(gun)) + '">Everything for the Sig Sauer ' + esc(GUN_META[gun] || gun) + ' &rarr;</a>'
+    : '<a href="/p365/">What fits your P365 &rarr;</a>';
+  return '<div class="fn-keep-going"><span class="fn-keep-going-label">Keep going:</span> ' +
+    hub + ' <a href="/gunforma-armory.html">Build yours in the Armory &rarr;</a> <a href="/gunforma-builds.html">Real builds &rarr;</a>' +
+    ' <a href="' + FIELD_NOTES_INDEX_PATH + '">All Field Notes &rarr;</a></div>';
+}
+
+function relatedSectionHtml(related, slug) {
+  if (!related.length) return '<div class="fn-related-notes">' + keepGoingHtml(slug) + '</div>';
   return '<div class="fn-related-notes fn-toc-target" id="related-field-notes"><div class="section-title">Related field notes</div>' +
     '<ul class="fn-related-list">' + related.map((r) =>
       '<li><a href="' + esc(r.href) + '">' + tocLabelHtml(r.title) + '</a>' +
       (r.description ? '<span class="fn-related-desc">' + esc(r.description) + '</span>' : '') + '</li>').join('') +
-    '</ul></div>';
+    '</ul>' + keepGoingHtml(slug) + '</div>';
 }
 
 function renderPage({ article, meta, bodyHtml, data, headings = [], related = [] }) {
@@ -1136,15 +1155,16 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
   const jsonLd = { '@context': 'https://schema.org', '@graph': graph };
 
   // The byline row, under the H1: author · credential · Last reviewed
-  // <Month YYYY>, then the first-published date (kept from the old byline —
-  // a visible element is not removed without Alex's say, CLAUDE.md
-  // "Verifying changes"). No author means none of the author half — never a
-  // placeholder name.
+  // <Month YYYY>. ONE visible date (Alex, 2026-11-20): the published date
+  // lives in the JSON-LD's datePublished and the article:published_time
+  // meta, not in the byline. No author means none of the author half —
+  // never a placeholder name. The byline is also the page's only author
+  // credit: the author box that used to repeat it at the bottom is gone
+  // (same ruling).
   const bylineParts = [
     author ? 'By <strong>' + esc(author) + '</strong>' : null,
     author && meta.author_credential ? '<span class="byline-cred">' + esc(meta.author_credential) + '</span>' : null,
     'Last reviewed ' + esc(fmtMonth(reviewed)),
-    'Published ' + esc(fmtDate(article.published)),
   ].filter(Boolean);
 
   return '<!DOCTYPE html><html lang="en"><head>' +
@@ -1259,8 +1279,9 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
 '.fn-faq summary { font-size: 14px; font-weight: 700; padding: 10px 0; cursor: pointer; }' +
 '.fn-faq details p { margin: 0 0 12px; }' +
 '.changelog ul { margin: 0 0 12px 22px; } .changelog li { font-size: 13px; }' +
-'.author { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; color: #666; border-top: 0.5px solid #e5e5e5; margin-top: 30px; padding-top: 14px; }' +
-'.related a { display: inline-block; margin-right: 14px; font-size: 13px; color: #4a9edd; text-decoration: none; }' +
+'.fn-keep-going { font-size: 13px; color: #555; margin: 14px 0 0; padding-top: 12px; border-top: 0.5px solid #e5e5e5; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }' +
+'.fn-keep-going-label { font-weight: 700; color: #1a1a1a; }' +
+'.fn-keep-going a { color: #1d6fb8; text-decoration: none; } .fn-keep-going a:hover { text-decoration: underline; }' +
 '.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 26px 0 10px; }' +
 // ── the table of contents and the two-column layout ──
 // <1024px: one column, the collapsed <details> under the method line, no
@@ -1312,18 +1333,7 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
   (data.hasAffiliate ? AFFILIATE_DISCLOSURE_HTML : '') +
   html +
   changelog +
-  relatedNotesHtml(related) +
-  '<div class="related"><div class="section-title">Related</div>' +
-    '<a href="' + FIELD_NOTES_INDEX_PATH + '">All Field Notes &rarr;</a>' +
-    '<a href="/p365/">What fits your P365 &rarr;</a>' +
-    '<a href="/parts">Parts by category &rarr;</a>' +
-    '<a href="/gunforma-builds.html">Real builds &rarr;</a>' +
-  '</div>' +
-  (author
-    ? '<div class="author"><strong>' + esc(author) + '</strong>' +
-      (meta.author_credential ? '<span>' + esc(meta.author_credential) + '</span>' : '') +
-      '<span>Last reviewed ' + esc(fmtMonth(reviewed)) + '</span></div>'
-    : '') +
+  relatedSectionHtml(related, slug) +
   '</div>' +   // .fn-main
 '</div></div>' +   // .fn-grid, .page
   footerHtml() +
