@@ -47,6 +47,7 @@ const EXCLUDED_PAGES = [
 ];
 const EXCLUDED_FUNCTIONS = {
   'netlify/edge-functions/go.js': 'its only HTML is the 404 for a retired retailer link on the click-tracking path; not worth a cross-directory import into an edge function',
+  'netlify/functions/admin-field-notes.mjs': 'admin tool: returns the renderer\'s page as JSON for an admin\'s live preview with the tag removed — an admin typing is not a visitor (gunforma-admin-* pages are excluded on the same ground)',
 };
 
 let failures = 0;

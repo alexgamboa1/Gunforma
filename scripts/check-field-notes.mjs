@@ -49,7 +49,11 @@ const { FIELD_NOTES, FIELD_NOTES_DIR, fieldNoteFile } = await import(join(ROOT, 
 const { parseFrontMatter, renderMarkdown, isDirectiveLine, parseDirective, BODY_DIRECTIVE_KINDS, collectDirectiveBody, BUILD_ROLES } = await import(join(ROOT, 'netlify/functions/_markdown.mjs'));
 const { GUN_META } = await import(join(ROOT, 'netlify/functions/_guide-meta.mjs'));
 const { GUIDE_SPECS, colMeta, BUILD_ROLE_META } = await import(join(ROOT, 'netlify/functions/_guide-blocks.mjs'));
-const { lintVoice, lintSections, FIELD_NOTE_TYPES } = await import(join(ROOT, 'scripts/field-notes-voice.mjs'));
+// The per-article text checks — front matter, $ ban, links, directive
+// syntax, headings, ::picks, the voice and the type's sections — are ONE
+// module shared with the admin editor; TYPED_PRICE also covers the
+// registry changelog below.
+const { lintNote, TYPED_PRICE } = await import(join(ROOT, 'scripts/field-notes-lint.mjs'));
 
 // The OFFLINE half of "every slug in a block resolves to a live product":
 // the catalog as read with the public key, captured by display-name.test.mjs
@@ -94,17 +98,6 @@ const PROS_CONS_GRANDFATHERED = new Set(['best-p365-xmacro-grip-modules']);
 
 const SLUG_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const TYPED_PRICE = /\$\s*\d/;
-// The article types (field-notes/VOICE.md; scripts/field-notes-voice.mjs):
-// each is checked for the sections its job needs (WARN, lintSections).
-// The renderer's eyebrow reads "Comparison" for comparison and "Guide"
-// for every other type, so a type changes no rendered output.
-const TYPES = FIELD_NOTE_TYPES;
-// H2s that name nothing: a table-of-contents entry a reader cannot act on.
-const VAGUE_H2 = ['overview', 'introduction', 'details', 'conclusion'];
-// Same hosts scripts/check-buy-links.mjs refuses inside an href. Kept short
-// and in step by hand: that file runs on import, so it cannot export them.
-const RETAILER_HOSTS = ['opticsplanet.com', 'awin1.com', 'olight.com', 'olightstore.com', 'truepistol.com', 'brownells.com', 'primaryarms.com'];
 
 // ── registry ─────────────────────────────────────────────────────────────
 const seen = new Set();
@@ -156,110 +149,25 @@ for (const a of FIELD_NOTES) {
   const { meta, body } = parseFrontMatter(src);
   const before = failures;
 
-  if (!meta.title) fail(id + ': front matter has no title');
-  else if (meta.title.length > 90) fail(id + ': title over 90 chars (' + meta.title.length + ')');
-  if (!meta.description) fail(id + ': front matter has no description');
-  else if (meta.description.length < 50 || meta.description.length > 200) fail(id + ': description must be 50–200 chars, is ' + meta.description.length);
-  // author is optional (no byline is rendered without one — never a
-  // placeholder), but a credential with no author under it renders nothing.
-  if (meta.author_credential && !meta.author) fail(id + ': author_credential without an author');
-  if (!TYPES.includes(meta.type)) fail(id + ': front-matter type is required, one of ' + TYPES.join(' | ') + ', is "' + (meta.type || '') + '"');
-  if (!meta.category) fail(id + ': front matter has no category');
-  if (!a.draft && meta.category) liveCategories.add(meta.category);
-  for (const k of ['published', 'updated', 'date', 'slug']) if (k in meta) fail(id + ': "' + k + '" belongs in _field-notes-meta.mjs, not the front matter');
-  if (meta.cover && !/^(https?:\/\/|\/assets\/)/.test(meta.cover)) fail(id + ': cover must be an https URL or a path under /assets/');
-
-  if (TYPED_PRICE.test(meta.title || '') || TYPED_PRICE.test(meta.description || '')) fail(id + ': typed dollar figure in the title or description');
-
-  const lines = body.split('\n');
-  const fmLines = src.slice(0, src.length - body.length).split('\n').length - 1;   // lines the front matter took
-  const whereAt = (n) => id + ':' + (n + 1 + fmLines);
-  const scanProse = (line, where) => {
-    if (TYPED_PRICE.test(line)) fail(where + ': typed dollar figure — prices render live through ::price, never typed');
-    for (const m of line.matchAll(/\]\(([^)\s]+)\)/g)) {
-      const url = m[1];
-      const host = (url.match(/^https?:\/\/([^/]+)/i) || [])[1];
-      if (host && RETAILER_HOSTS.some((h) => host === h || host.endsWith('.' + h))) fail(where + ': prose link to a retailer (' + host + ') — use a ::price block');
-      if (/^\/field-notes\//.test(url) && !/^\/field-notes\/[a-z0-9-]+$/.test(url)) fail(where + ': a file under /field-notes/ is unreachable (the rewrite is forced) — put images under /assets/');
-    }
-  };
-  let inFence = false;
-  let n = 0;
-  while (n < lines.length) {
-    const line = lines[n];
-    const where = whereAt(n);
-    if (/^```/.test(line)) { inFence = !inFence; n++; continue; }
-    if (inFence) { n++; continue; }
-    if (isDirectiveLine(line)) {
-      const kind = (line.match(/^::([a-z]+)/) || [])[1];
-      // The $-figure ban covers a directive's ARGS too (a best="…" label,
-      // a coupon code) — the forEach this replaced skipped directive lines.
-      if (TYPED_PRICE.test(line)) fail(where + ': typed dollar figure in a directive\'s arguments');
-      let dirBody;
-      if (BODY_DIRECTIVE_KINDS.includes(kind)) {
-        const c = collectDirectiveBody(lines, n + 1);
-        if (!c.closed) fail(where + ': ::' + kind + ' block is not closed with a lone "::"');
-        dirBody = c.body;
-        // …and every BODY line: a pros/cons line, a picks label, an FAQ
-        // answer. Same prose rules, same reasons.
-        dirBody.forEach((bl, k) => scanProse(bl, whereAt(n + 1 + k)));
-        n = c.next;
-      } else n++;
-      const d = parseDirective(line, dirBody);
-      if (!d) { fail(where + ': directive does not parse: ' + line.trim()); continue; }
-      if (d.kind === 'fit' && !GUN_META[d.gun]) fail(where + ': fit directive names a gun the registry does not know: ' + d.gun);
-      if (d.kind === 'compare' && d.gun && !GUN_META[d.gun]) fail(where + ': compare directive names a gun the registry does not know: ' + d.gun);
-      continue;
-    }
-    scanProse(line, where);
-    n++;
-  }
-  if (inFence) fail(id + ': unclosed code fence');
-
-  let r;
-  try { r = renderMarkdown(body); } catch (e) { fail(id + ': renderMarkdown threw: ' + (e && e.message)); continue; }
-
-  // ── the heading lint ───────────────────────────────────────────────────
-  // The page's one <h1> is the front-matter title, rendered by field-note.mjs;
-  // a `# ` heading in the body is a second one. The table of contents lists
-  // every H2, so an H2 that names nothing ("Overview") is a TOC entry that
-  // tells a reader nothing — name the section for what it answers. An H3
-  // outside a ::rank card (the cards carry no headings of their own) is
-  // allowed but flagged: the TOC skips H3s, so its content is reachable
-  // only by scrolling.
-  for (const h of r.headings) {
-    if (h.level === 1) fail(id + ': a "# " heading in the body — the title is the page’s one H1; use "##"');
-    if (h.level === 2 && VAGUE_H2.includes(h.text.trim().toLowerCase())) fail(id + ': H2 "' + h.text.trim() + '" names nothing — the table of contents lists it; say what the section answers');
-    if (h.level === 3) console.log('warn  ' + id + ': H3 "' + h.text.trim() + '" — the table of contents skips H3s (fine for a sub-point; promote it if readers will jump to it)');
-    if (h.toc != null && (h.toc.length > 40 || TYPED_PRICE.test(h.toc))) fail(id + ': {toc="' + h.toc + '"} must be a short label (≤ 40 chars, no $ figure)');
-  }
-  // A {toc=…} the renderer could not split (a stray quote, single quotes)
-  // would reach the page as text in the heading.
-  for (const [n, line] of lines.entries()) {
-    if (/^#{1,6}\s/.test(line) && /\{toc=/.test(line) && !/\{toc="[^"]*"\}\s*$/.test(line)) fail(whereAt(n) + ': malformed {toc="…"} label — it must close the heading line exactly as {toc="Short label"}');
-  }
-
-  // ── the voice lint (field-notes/VOICE.md) ──────────────────────────────
-  // Gunforma does not review or test products, so review language is a
-  // credibility risk and fails the build: implied testing, verdicts, feel
-  // words, hype, Pros/Cons headings, a "Best" label, an unattributed quote.
-  // Unbacked quality words, vague counts and a ::rank card's prose that
-  // never names its product are printed as warnings. Every word list lives
-  // in VOICE_RULES (scripts/field-notes-voice.mjs).
+  // The per-article checks that need only the article text live in ONE
+  // module, shared with the admin editor (scripts/field-notes-lint.mjs):
+  // front matter, the typed-$ ban, retailer and unreachable links, directive
+  // syntax, the heading lint, the ::picks rules, the voice lint (FAILs) and
+  // the type's sections (WARNs). The checks below it need the catalog.
   const nameCheck = (slug, para) => {
     const p = CATALOG.find((x) => x.slug === slug);
-    if (!p) return true;   // a missing slug is already a failure above
+    if (!p) return true;   // a missing slug is already a failure below
     const low = para.toLowerCase();
     return [p.brand, p.name].filter(Boolean).some((s) => low.includes(String(s).toLowerCase()));
   };
-  for (const hit of lintVoice(lines, { nameCheck })) {
-    const what = hit.where + (hit.phrase ? ' "' + hit.phrase + '"' : '') + ' (' + hit.group + ') — ' + hit.why;
-    if (hit.level === 'fail') fail(whereAt(hit.line) + ': ' + what);
-    else console.log('warn  ' + whereAt(hit.line) + ': ' + what);
+  const linted = lintNote(src, { nameCheck });
+  for (const is of linted.issues) {
+    const where = id + (is.line ? ':' + is.line : '');
+    if (is.level === 'fail') fail(where + ': ' + is.msg);
+    else console.log('warn  ' + where + ': ' + is.msg);
   }
-  for (const msg of lintSections({ type: meta.type, title: meta.title, blocks: r.blocks, headings: r.headings })) {
-    console.log('warn  ' + id + ' [' + (meta.type || 'no type') + ']: missing — ' + msg);
-  }
+  if (!a.draft && meta.category) liveCategories.add(meta.category);
+  const r = { blocks: linted.blocks, headings: linted.headings };
 
   // ── the guide blocks, structurally ─────────────────────────────────────
   // A slug that does not resolve to a live product is a BUILD failure, not
@@ -275,14 +183,11 @@ for (const a of FIELD_NOTES) {
   const mustBeAftermarket = (slug, what) => {
     if (CATALOG_FACTORY.get(slug)) fail(id + ': ' + what + ' names a factory part (' + slug + ') — Gunforma guides rank aftermarket parts only; an OEM part may appear in ::fit blocks and as baseline prose');
   };
-  const rankSlugs = new Set(r.blocks.filter((b) => b.kind === 'rank').map((b) => b.slug));
   for (const b of r.blocks) {
     if (b.kind === 'picks') {
-      if (b.picks.length < 3 || b.picks.length > 7) fail(id + ': ::picks has ' + b.picks.length + ' pick(s) — it takes 3–7');
       for (const p of b.picks) {
         mustResolve(p.slug, '::picks');
         mustBeAftermarket(p.slug, '::picks');
-        if (!rankSlugs.has(p.slug)) fail(id + ': ::picks names ' + p.slug + ' with no ::rank card for it on the page — the jump link would land nowhere');
       }
     }
     if (b.kind === 'rank') {

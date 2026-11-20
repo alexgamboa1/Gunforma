@@ -58,6 +58,13 @@
 [functions."build-og"]
   included_files = ["gunforma-build-detail.html"]
 
+# admin-field-notes renders an admin's unsaved text through field-note.mjs's
+# renderNote(), whose "Related field notes" footer reads each related note's
+# title from its file — so the files ship with this function too. The text
+# being edited comes from the GitHub API, never from this bundle.
+[functions."admin-field-notes"]
+  included_files = ["field-notes/*.md"]
+
 # product-page judges slide-on-grip fit for its "Fits on" grid with the
 # browser's own rule, js/slide-fit.js — read from disk and evaluated by
 # _slide-fit.mjs, never copied. Without this the grid is skipped and the page

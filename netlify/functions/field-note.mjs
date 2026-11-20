@@ -1088,7 +1088,11 @@ function relatedSectionHtml(related, slug) {
     '</ul>' + keepGoingHtml(slug) + '</div>';
 }
 
-function renderPage({ article, meta, bodyHtml, data, headings = [], related = [] }) {
+function renderPage({ article, meta, bodyHtml, data, headings = [], related = [], mode }) {
+  // 'admin-preview': the admin editor's live preview of UNSAVED text —
+  // always noindex, a "Preview" strip instead of the draft strip (and no
+  // analytics tag — renderNote() removes it from the finished page).
+  const preview = mode === 'admin-preview';
   const slug = article.slug;
   const canonical = SITE + fieldNotePath(slug);
   const title = meta.title || slug;
@@ -1171,7 +1175,7 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
   headTags({ title: title + ' | Field Notes | Gunforma', description, canonical, jsonLd, ogImage }) +
   '<meta property="article:published_time" content="' + esc(article.published) + '"/>' +
   '<meta property="article:modified_time" content="' + esc(article.updated || article.published) + '"/>' +
-  (article.draft ? '<meta name="robots" content="noindex"/>' : '') +
+  (article.draft || preview ? '<meta name="robots" content="noindex"/>' : '') +
 '<style>' +
   chromeCss() +
   layoutCss() +
@@ -1321,7 +1325,8 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
 '<div class="page article' + (toc.length ? ' fn-has-toc' : '') + '"><div class="fn-grid">' +
   (toc.length ? tocRailHtml(toc, slug) : '') +
   '<div class="fn-main">' +
-  (article.draft ? '<div class="draft-strip"><strong>Draft.</strong> Served on previews only; this address is a 404 on gunforma.com.</div>' : '') +
+  (preview ? '<div class="draft-strip"><strong>Preview.</strong> Unsaved text, rendered with live catalog data. Saving opens a pull request.</div>'
+    : article.draft ? '<div class="draft-strip"><strong>Draft.</strong> Served on previews only; this address is a 404 on gunforma.com.</div>' : '') +
   '<div class="eyebrow">Field Notes &middot; ' + esc(typeLabel) + (meta.category ? ' &middot; ' + esc(meta.category) : '') + '</div>' +
   '<h1>' + inline(title) + '</h1>' +
   '<div class="byline">' + bylineParts.join(' &middot; ') + '</div>' +
@@ -1341,6 +1346,26 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
   navScript() + ANALYTICS_SNIPPET + '</body></html>';
 }
 
+// The whole page for one article: Markdown → blocks resolved against the
+// live catalog → related notes → the page. The public handler below and
+// the admin editor's live preview (admin-field-notes.mjs, with mode
+// 'admin-preview' and the editor's unsaved text) both call this, so the
+// preview IS the renderer, blocks and live data included. Throws when a
+// catalog read fails (the public handler answers that 503).
+export async function renderNote(article, src, { mode } = {}) {
+  const { meta, body } = parseFrontMatter(src);
+  const { html: bodyHtml, blocks, headings, blockSections } = renderMarkdown(body);
+  const data = await resolveBlocks(blocks, article.slug, blockSections);
+  const related = await loadRelated(article.slug);
+  let page = renderPage({ article, meta, bodyHtml, data, headings, related, mode });
+  // The preview carries no analytics tag: an admin typing is not a visitor
+  // (the admin pages carry none either). Removed from the finished page so
+  // the public page's source keeps the snippet immediately before the
+  // closing body tag, which scripts/check-analytics-snippet.mjs reads.
+  if (mode === 'admin-preview') page = page.replace(ANALYTICS_SNIPPET, '');
+  return { page, meta, data, headings, related };
+}
+
 export default async (req) => {
   const slug = extractSlug(req);
   if (!slug) return notFound();
@@ -1351,19 +1376,15 @@ export default async (req) => {
 
   const src = await loadSource(slug);
   if (src == null) return notBundled(slug);
-  const { meta, body } = parseFrontMatter(src);
-  const { html: bodyHtml, blocks, headings, blockSections } = renderMarkdown(body);
 
-  let data;
+  let rendered;
   try {
-    data = await resolveBlocks(blocks, slug, blockSections);
+    rendered = await renderNote(article, src);
   } catch (err) {
     console.error('[field-note] lookup failed', err);
     return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
   }
-  const related = await loadRelated(slug);
-
-  const page = renderPage({ article, meta, bodyHtml, data, headings, related });
+  const { page, data, headings, related } = rendered;
   return new Response(page, {
     status: 200,
     headers: {
