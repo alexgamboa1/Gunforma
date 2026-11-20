@@ -134,6 +134,13 @@ const FIELD_NOTE_LINKS = {
   ],
 };
 
+// The other direction of the same map: the guns whose hub links INTO this
+// article, in declaration order. The first is the article's "model hub" —
+// the one field-note.mjs's "Keep going" line links back up to.
+export function gunsForFieldNote(slug) {
+  return Object.keys(FIELD_NOTE_LINKS).filter((gun) => FIELD_NOTE_LINKS[gun].some((l) => l.slug === slug));
+}
+
 export function fieldNoteLinksForGun(gunSlug) {
   const live = new Set(liveFieldNotes().map((a) => a.slug));
   return (FIELD_NOTE_LINKS[gunSlug] || [])
