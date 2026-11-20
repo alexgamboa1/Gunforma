@@ -87,6 +87,7 @@ check "field note guide blocks"    scripts/guide-blocks.test.mjs
 check "field note v2 blocks"       scripts/field-notes-v2.test.mjs
 check "field note page furniture"  scripts/field-note-furniture.test.mjs
 check "field note voice lint"      scripts/field-notes-voice.test.mjs
+check "admin field-notes editor"   scripts/admin-field-notes.test.mjs
 check "go section tracking"        scripts/go-redirect.test.mjs
 check "barrel/slide fit sections"  scripts/fit-sections.test.mjs
 check "fits on grids"              scripts/fits-on.test.mjs

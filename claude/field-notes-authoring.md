@@ -15,6 +15,21 @@ The original six — `::price`, `::fit`, `::picks`, `::rank`, `::compare`,
 `::faq` — are documented in CLAUDE.md ("Field Notes articles"). This file
 covers the v2 additions (2026-11-19).
 
+## Editing from the admin page (2026-11-20)
+
+`/gunforma-admin-field-notes.html` (admins only) is the editor: every note
+from `main` with its type, status and last-reviewed date; a textarea
+beside the real renderer's live preview; the lint below run on every
+pause in typing (FAILs red with line numbers, WARNs amber; Save is off
+while a FAIL stands). **Every action opens a pull request** — Save
+(`Field note edit: <slug> — <what changed>`; the required "What changed"
+line is also the changelog entry; tick "This is a full review" only when
+the whole note was re-reviewed, since that moves "Last reviewed"),
+Publish / Unpublish (flips `draft`, adds or removes the index card), and
+New draft (paste the gunforma-field-note skill's output, `registry-row`
+block and all). A second save while that note's edit PR is open adds a
+commit to it. Nothing goes live until the PR is merged.
+
 ## The voice, and the article type (2026-11-20)
 
 **Read [`field-notes/VOICE.md`](../field-notes/VOICE.md) before writing a

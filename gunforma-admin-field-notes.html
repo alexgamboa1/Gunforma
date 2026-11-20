@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>Admin — Field notes — Gunforma</title>
+<meta name="description" content="Admin editor for Field Notes articles: every save opens a pull request." />
+<meta name="robots" content="noindex, nofollow" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; min-height: 100vh; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.92em; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 200; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav { padding: 0 16px; } .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
+.nav-admin-tag { font-size: 9px; color: #f9b860; background: rgba(249,184,96,0.12); border: 0.5px solid #6b4a1e; padding: 3px 8px; border-radius: 3px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-left: 12px; }
+.nav-right-link { font-size: 11px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-right-link.here { color: #f9b860; }
+.nav-right { display: flex; align-items: center; gap: 18px; min-width: 0; overflow-x: auto; scrollbar-width: none; margin-left: 12px; }
+.nav-right .nav-right-link { margin-left: 0; white-space: nowrap; }
+@media (max-width: 600px) { .nav-right { gap: 11px; } .nav-right .nav-right-link { font-size: 10px; letter-spacing: 0.03em; } }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 760px; line-height: 1.6; }
+.gate { padding: 60px 36px; font-size: 14px; color: #666; }
+.gate strong { color: #1a1a1a; font-size: 18px; display: block; margin-bottom: 6px; }
+.wrap { padding: 22px 36px 80px; display: flex; flex-direction: column; gap: 18px; }
+@media (max-width: 700px) { .page-header, .wrap { padding-left: 16px; padding-right: 16px; } }
+
+.banner { border-radius: 6px; padding: 11px 13px; font-size: 12px; line-height: 1.6; background: #eef6fd; border: 0.5px solid #b9d7f0; color: #24557d; }
+.banner.warn { background: #fff7ea; border-color: #f2cf95; color: #7a4d09; }
+.banner.bad { background: #fdecea; border-color: #f3b9b4; color: #8a2a2a; }
+.banner.ok { background: #ecf7ef; border-color: #b6dcc0; color: #1d6b43; }
+.banner a { color: inherit; font-weight: 700; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { font: inherit; font-size: 12px; padding: 5px 12px; border: 0.5px solid #ccc; border-radius: 14px; background: #fff; cursor: pointer; }
+.chip.on { background: #0e0f11; color: #fff; border-color: #0e0f11; }
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: #888; font-weight: 700; padding: 6px 8px; border-bottom: 0.5px solid #e5e5e5; }
+td { padding: 9px 8px; border-bottom: 0.5px solid #f0f0f0; vertical-align: top; line-height: 1.5; }
+td .slug { color: #888; font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+tr.unregistered td { background: #fdecea; }
+.pill { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 8px; border-radius: 10px; }
+.pill.pub { background: #e3f3e8; color: #1d6b43; } .pill.draft { background: #fff5e6; color: #b45309; }
+.pill.fixture { background: #eee; color: #555; } .pill.red { background: #fdecea; color: #b42318; }
+.btn { font: inherit; font-size: 12px; font-weight: 700; padding: 6px 11px; border-radius: 5px; border: 0.5px solid #ccc; background: #fff; color: #1a1a1a; cursor: pointer; text-decoration: none; display: inline-block; white-space: nowrap; }
+.btn.primary { background: #4a9edd; color: #fff; border-color: #4a9edd; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.confirm { margin-top: 8px; padding: 10px 12px; border: 0.5px solid #f2cf95; background: #fff7ea; border-radius: 6px; font-size: 12px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 1000px) { .editor { grid-template-columns: 1fr; } }
+.ed-left { display: flex; flex-direction: column; gap: 10px; }
+textarea.src { width: 100%; height: 62vh; min-height: 360px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.55; padding: 12px; border: 0.5px solid #ccc; border-radius: 6px; resize: vertical; tab-size: 2; }
+iframe.pv { width: 100%; height: calc(62vh + 120px); min-height: 480px; border: 0.5px solid #ccc; border-radius: 6px; background: #fafaf8; }
+.issues { border: 0.5px solid #e5e5e5; border-radius: 6px; max-height: 200px; overflow: auto; font-size: 12px; }
+.issue { padding: 6px 10px; border-bottom: 0.5px solid #f0f0f0; line-height: 1.45; }
+.issue.fail { color: #8a2a2a; background: #fdf3f2; } .issue.warn { color: #7a4d09; background: #fffaf0; }
+.issue b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 700; margin-right: 6px; }
+.issues-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.field input[type=text] { font: inherit; font-size: 13px; padding: 7px 9px; border: 0.5px solid #ccc; border-radius: 5px; }
+.check { font-size: 12px; display: flex; gap: 6px; align-items: center; }
+.muted { font-size: 11px; color: #888; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div style="display:flex;align-items:center;">
+    <a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
+    <span class="nav-admin-tag">Admin</span>
+  </div>
+  <div class="nav-right">
+    <a href="gunforma-admin-queue.html" class="nav-right-link">Review queue</a>
+    <a href="gunforma-admin-post.html" class="nav-right-link">Post a build</a>
+    <a href="gunforma-admin-part.html" class="nav-right-link">Add a part</a>
+    <a href="gunforma-admin-data.html" class="nav-right-link">Needs data</a>
+    <a href="gunforma-admin-field-notes.html" class="nav-right-link here">Field notes</a>
+    <a href="/" class="nav-right-link">← Site</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <div class="page-eyebrow">Admin — Field notes</div>
+  <div class="page-title">Field notes</div>
+  <p class="page-sub">Articles are Markdown files in the repo. <strong>Every save, publish and new draft opens a pull request</strong> — check-all runs on it, Netlify builds its preview, and it goes live only when it is merged. Nothing here writes to the site directly.</p>
+</div>
+
+<!-- Nothing below renders until requireAdmin() passes. -->
+<div id="gate" class="gate">Checking your session…</div>
+<div id="app" class="wrap" style="display:none"></div>
+
+<script src="js/supabase-client.js"></script>
+<script>
+var sb = window.sb;
+
+// Session watchdog — copied from gunforma-admin-post.html.
+sb.auth.onAuthStateChange(function (event, session) {
+  if (event === 'SIGNED_OUT' || (event === 'TOKEN_REFRESHED' && !session)) {
+    window.location.href = 'gunforma-signin.html';
+  }
+});
+
+function esc(s) { return (s == null ? '' : String(s)).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;'); }
+function $(id) { return document.getElementById(id); }
+
+// ============================================================
+// AUTH GATE — the same requireAdmin() as gunforma-admin-data.html (copied
+// from gunforma-admin-post.html): nothing renders until it passes, and a
+// signed-in non-admin is told "Admins only". The function behind this page
+// (netlify/functions/admin-field-notes.mjs) checks the same get_my_profile()
+// role again on every request, so the page gate is a courtesy, not the lock.
+// ============================================================
+async function requireAdmin() {
+  const { data } = await sb.auth.getSession();
+  const session = data && data.session;
+  if (!session) { window.location.href = 'gunforma-signin.html'; return false; }
+  const { data: profile } = await sb.rpc('get_my_profile').maybeSingle();
+  if (!profile || profile.role !== 'admin') {
+    $('gate').innerHTML = '<strong>Admins only</strong>This page edits Field Notes articles. Your account is not an admin.';
+    return false;
+  }
+  return true;
+}
+
+// ============================================================
+// API — every call carries the session JWT; the function re-checks it.
+// ============================================================
+const FN = '/.netlify/functions/admin-field-notes';
+async function api(method, params, body) {
+  const { data } = await sb.auth.getSession();
+  const jwt = data && data.session && data.session.access_token;
+  const qs = params ? '?' + new URLSearchParams(params).toString() : '';
+  const res = await fetch(FN + qs, {
+    method,
+    headers: Object.assign({ Authorization: 'Bearer ' + jwt }, body ? { 'Content-Type': 'application/json' } : {}),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const out = await res.json().catch(function () { return { error: 'the function did not answer JSON (' + res.status + ')' }; });
+  out._status = res.status;
+  return out;
+}
+
+// ============================================================
+// STATE
+// ============================================================
+const S = { view: 'list', filter: 'all', notes: [], tokenSet: true, confirm: null, ed: null, polls: {} };
+const LIVE = 'https://gunforma.com/field-notes/';
+const CONFIRM_TEXT = 'This opens a pull request; the change goes live when you merge it.';
+const fmtDay = function (iso) { return iso ? new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' }) : '—'; };
+
+function app(html) { $('app').innerHTML = html; }
+function readOnlyBanner() {
+  return S.tokenSet ? '' : '<div class="banner warn"><strong>GitHub token not set — see setup.</strong> The page is read-only: the list and the preview work, but saving, publishing and new drafts are off until <code>GITHUB_FIELD_NOTES_TOKEN</code> is set in Netlify (setup steps are in the pull request that added this page).</div>';
+}
+
+// ============================================================
+// LIST
+// ============================================================
+async function loadList() {
+  app('<div class="muted">Reading the registry and files from main…</div>');
+  const r = await api('GET', { action: 'list' });
+  if (r.error) { app('<div class="banner bad">' + esc(r.error) + '</div>'); return; }
+  S.notes = r.notes; S.tokenSet = r.tokenSet;
+  renderList();
+}
+
+function statusPill(n) {
+  if (!n.inRegistry) return '<span class="pill red">Not in registry</span>';
+  if (n.fixture) return '<span class="pill fixture">Fixture</span>';
+  return n.draft ? '<span class="pill draft">Draft</span>' : '<span class="pill pub">Published</span>';
+}
+
+function rowActions(n) {
+  const a = [];
+  const can = n.inRegistry && !n.fixture;
+  if (can) a.push('<button class="btn" onclick="openEditor(\'' + n.slug + '\')">Edit</button>');
+  if (n.inRegistry && !n.draft) a.push('<a class="btn" href="' + LIVE + n.slug + '" target="_blank" rel="noopener">View live</a>');
+  if (n.pr && n.pr.preview && n.pr.preview.url) a.push('<a class="btn" href="' + esc(n.pr.preview.url) + '/field-notes/' + n.slug + '" target="_blank" rel="noopener">View preview</a>');
+  if (can) a.push('<button class="btn" ' + (S.tokenSet ? '' : 'disabled ') + 'onclick="askPublish(\'' + n.slug + '\', ' + (n.draft ? 'true' : 'false') + ')">' + (n.draft ? 'Publish' : 'Unpublish') + '</button>');
+  return '<div class="actions">' + a.join('') + '</div>' + confirmHtml(n.slug);
+}
+
+function confirmHtml(slug) {
+  const c = S.confirm;
+  if (!c || c.slug !== slug) return '';
+  if (c.result) return '<div class="banner ' + (c.result.error ? 'bad' : 'ok') + '" style="margin-top:8px">' + c.result.html + '</div>';
+  return '<div class="confirm"><span>' + esc(CONFIRM_TEXT) + '</span>' +
+    '<button class="btn primary" ' + (c.busy ? 'disabled' : '') + ' onclick="doPublish()">' + (c.busy ? 'Opening…' : (c.publish ? 'Open publish PR' : 'Open unpublish PR')) + '</button>' +
+    '<button class="btn" onclick="S.confirm=null;rerender()">Cancel</button></div>';
+}
+
+function renderList() {
+  S.view = 'list';
+  const f = S.filter;
+  const shown = S.notes.filter(function (n) { return f === 'all' || (f === 'drafts' ? n.draft : !n.draft); });
+  const chip = function (k, label) { return '<button class="chip' + (f === k ? ' on' : '') + '" onclick="S.filter=\'' + k + '\';renderList()">' + label + '</button>'; };
+  app(readOnlyBanner() +
+    '<div class="toolbar">' + chip('all', 'All') + chip('drafts', 'Drafts') + chip('published', 'Published') +
+      '<span style="flex:1"></span><button class="btn primary" ' + (S.tokenSet ? '' : 'disabled ') + 'onclick="openNewDraft()">New draft</button></div>' +
+    '<table><thead><tr><th>Title</th><th>Type</th><th>Status</th><th>Last reviewed</th><th>Changelog</th><th>Open PR</th><th></th></tr></thead><tbody>' +
+    shown.map(function (n) {
+      return '<tr' + (n.inRegistry ? '' : ' class="unregistered"') + '><td>' + esc(n.title || '(no title)') + '<div class="slug">' + esc(n.slug) + '</div>' +
+          (n.inRegistry ? '' : '<div class="muted" style="color:#b42318">field-notes/' + esc(n.slug) + '.md has no registry row — it is not a page.</div>') + '</td>' +
+        '<td>' + esc(n.type || '—') + '</td><td>' + statusPill(n) + '</td>' +
+        '<td>' + esc(fmtDay(n.reviewed)) + '</td><td>' + (n.changelog || 0) + '</td>' +
+        '<td>' + (n.pr ? '<a href="' + esc(n.pr.url) + '" target="_blank" rel="noopener">#' + n.pr.number + '</a> <span class="muted">' + esc(n.pr.kind) + '</span>' : '—') + '</td>' +
+        '<td>' + rowActions(n) + '</td></tr>';
+    }).join('') + '</tbody></table>' +
+    (shown.length ? '' : '<div class="muted">Nothing here.</div>'));
+}
+
+function rerender() { if (S.view === 'list') renderList(); else if (S.view === 'edit') renderEditorChrome(); }
+
+// ============================================================
+// PUBLISH / UNPUBLISH — always a PR; confirmed in the page (no browser dialog)
+// ============================================================
+function askPublish(slug, publish) { S.confirm = { slug: slug, publish: publish }; rerender(); }
+async function doPublish() {
+  const c = S.confirm; c.busy = true; rerender();
+  const r = await api('POST', null, { action: 'publish', slug: c.slug, publish: c.publish });
+  c.busy = false;
+  c.result = r.error ? { error: true, html: esc(r.error) }
+    : { html: (c.publish ? 'Publish' : 'Unpublish') + ' PR opened: <a href="' + esc(r.pr.url) + '" target="_blank" rel="noopener">#' + r.pr.number + '</a>. It goes live when you merge it. <span id="pv-' + r.pr.number + '">Waiting for the Netlify preview…</span>' };
+  rerender();
+  if (!r.error) pollPreview(r.pr.number, c.slug);
+}
+
+// The Netlify preview, from the deploy/netlify commit status on the PR.
+function pollPreview(n, slug) {
+  if (S.polls[n]) return;
+  let tries = 0;
+  S.polls[n] = setInterval(async function () {
+    tries++;
+    const r = await api('GET', { action: 'status', pr: n });
+    const el = $('pv-' + n);
+    if (r.preview && r.preview.url) {
+      clearInterval(S.polls[n]);
+      const html = 'Preview ready: <a href="' + esc(r.preview.url) + '/field-notes/' + slug + '" target="_blank" rel="noopener">' + esc(r.preview.url.replace(/^https?:\/\//, '')) + '</a>';
+      if (el) el.innerHTML = html;
+      if (S.confirm && S.confirm.result) S.confirm.result.html = S.confirm.result.html.replace('Waiting for the Netlify preview…', html);
+    } else if (r.preview && r.preview.state === 'failure' || r.preview && r.preview.state === 'error') {
+      clearInterval(S.polls[n]);
+      if (el) el.innerHTML = 'The Netlify build failed — open the PR for its check-all log.';
+    } else if (tries > 80) { clearInterval(S.polls[n]); if (el) el.textContent = 'No preview after 20 minutes — check the PR.'; }
+  }, 15000);
+}
+
+// ============================================================
+// EDIT — the real renderer on the right, the shared lint underneath
+// ============================================================
+async function openEditor(slug) {
+  S.view = 'edit'; S.confirm = null;
+  app('<div class="muted">Opening ' + esc(slug) + '…</div>');
+  const r = await api('GET', { action: 'file', slug: slug });
+  if (r.error) { app('<div class="banner bad">' + esc(r.error) + '</div><button class="btn" onclick="loadList()">Back</button>'); return; }
+  S.ed = { slug: slug, src: r.src, row: r.row, ref: r.ref, pr: r.pr, issues: [], what: '', full: false, saving: false, result: null, seq: 0 };
+  renderEditorChrome();
+  refreshPreview();
+}
+
+function hasFails() { return S.ed && S.ed.issues.some(function (i) { return i.level === 'fail'; }); }
+
+function issuesHtml(issues) {
+  const f = issues.filter(function (i) { return i.level === 'fail'; }), w = issues.filter(function (i) { return i.level === 'warn'; });
+  return '<div class="issues-head">' + f.length + ' fail · ' + w.length + ' warn</div>' +
+    '<div class="issues">' + (issues.length ? f.concat(w).map(function (i) {
+      return '<div class="issue ' + i.level + '"><b>' + (i.line ? 'line ' + i.line : 'note') + '</b>' + esc(i.msg) + '</div>';
+    }).join('') : '<div class="issue">No issues.</div>') + '</div>';
+}
+
+function editorControls() {
+  const e = S.ed;
+  const blocked = !S.tokenSet || hasFails() || !e.what.trim() || e.saving;
+  const why = !S.tokenSet ? 'GitHub token not set' : hasFails() ? 'Fix every FAIL first' : !e.what.trim() ? '"What changed" is required' : '';
+  const isDraft = e.row && e.row.draft;
+  return '<div class="field"><label for="what"><strong>What changed</strong> — one line; it becomes the changelog entry and the PR title</label>' +
+      '<input type="text" id="what" maxlength="140" value="' + esc(e.what) + '" oninput="S.ed.what=this.value;updateSave()"/></div>' +
+    '<label class="check"><input type="checkbox" id="full" ' + (e.full ? 'checked ' : '') + 'onchange="S.ed.full=this.checked"/> This is a full review <span class="muted">(ticked: "Last reviewed" becomes today; unticked: the dates stay)</span></label>' +
+    '<div class="toolbar"><button class="btn primary" id="save" ' + (blocked ? 'disabled ' : '') + 'onclick="doSave()">' + (e.saving ? 'Saving…' : (e.pr ? 'Save to PR #' + e.pr.number : 'Save as pull request')) + '</button>' +
+      '<span class="muted" id="why">' + esc(why) + '</span><span style="flex:1"></span>' +
+      '<button class="btn" ' + (S.tokenSet ? '' : 'disabled ') + 'onclick="askPublish(\'' + e.slug + '\', ' + (isDraft ? 'true' : 'false') + ')">' + (isDraft ? 'Publish' : 'Unpublish') + '</button>' +
+      '<button class="btn" onclick="loadList()">Back to the list</button></div>' +
+    confirmHtml(e.slug) +
+    (e.result ? '<div class="banner ' + (e.result.error ? 'bad' : 'ok') + '">' + e.result.html + '</div>' : '');
+}
+
+function renderEditorChrome() {
+  const e = S.ed;
+  app(readOnlyBanner() +
+    '<div class="toolbar"><strong>' + esc(e.slug) + '</strong>' + (e.row && e.row.draft ? '<span class="pill draft">Draft</span>' : '<span class="pill pub">Published</span>') +
+      (e.pr ? '<span class="banner" style="padding:4px 10px">Continuing the open edit PR <a href="' + esc(e.pr.url) + '" target="_blank" rel="noopener">#' + e.pr.number + '</a> — this is its text, and saving adds a commit to it.</span>' : '<span class="muted">from main</span>') + '</div>' +
+    '<div class="editor"><div class="ed-left">' +
+      '<textarea class="src" id="src" spellcheck="true" oninput="S.ed.src=this.value;schedulePreview()">' + esc(e.src) + '</textarea>' +
+      '<div id="issues">' + issuesHtml(e.issues) + '</div>' +
+      '<div id="controls">' + editorControls() + '</div>' +
+    '</div><iframe class="pv" id="pv" title="Live preview" sandbox=""></iframe></div>');
+}
+
+function updateSave() { $('controls').innerHTML = editorControls(); const w = $('what'); if (w) { w.focus(); w.setSelectionRange(w.value.length, w.value.length); } }
+
+let previewTimer = null;
+function schedulePreview() { clearTimeout(previewTimer); previewTimer = setTimeout(refreshPreview, 700); }
+async function refreshPreview() {
+  const e = S.ed; if (!e) return;
+  const seq = ++e.seq;
+  const src = S.view === 'new' ? stripRow(e.src) : e.src;
+  const r = await api('POST', null, { action: 'preview', slug: e.slug, src: src, row: e.row });
+  if (seq !== e.seq) return;   // a newer keystroke batch is already on its way
+  e.issues = r.issues || [{ level: 'fail', line: null, msg: r.error || 'preview failed' }];
+  $('issues').innerHTML = issuesHtml(e.issues);
+  if (S.view === 'new') $('controls').innerHTML = newControls(); else updateSaveQuiet();
+  if (r.html) $('pv').srcdoc = r.html;
+}
+function updateSaveQuiet() { const a = document.activeElement && document.activeElement.id; $('controls').innerHTML = editorControls(); if (a === 'what') updateSave(); }
+
+async function doSave() {
+  const e = S.ed; e.saving = true; e.result = null; updateSave();
+  const r = await api('POST', null, { action: 'save', slug: e.slug, src: e.src, whatChanged: e.what, fullReview: e.full });
+  e.saving = false;
+  if (r.error) {
+    e.result = { error: true, html: esc(r.error) };
+    if (r.issues) { e.issues = r.issues; $('issues').innerHTML = issuesHtml(e.issues); }
+  } else {
+    e.pr = r.pr; e.what = ''; e.full = false;
+    e.result = { html: (r.addedToExisting ? 'Saved as a new commit on ' : 'Pull request opened: ') +
+      '<a href="' + esc(r.pr.url) + '" target="_blank" rel="noopener">#' + r.pr.number + '</a>. It goes live when you merge it. <span id="pv-' + r.pr.number + '">Waiting for the Netlify preview…</span>' };
+    pollPreview(r.pr.number, e.slug);
+  }
+  $('controls').innerHTML = editorControls();
+}
+
+// ============================================================
+// NEW DRAFT — paste the gunforma-field-note skill's output
+// ============================================================
+function stripRow(text) { return String(text || '').replace(/\n```registry-row[^\n]*\n[\s\S]*?\n```\s*$/, '\n'); }
+function rowSlug(text) { const m = String(text || '').match(/```registry-row[\s\S]*?\bslug\s*:\s*['"]?([a-z0-9-]+)/); return m ? m[1] : null; }
+
+function openNewDraft() {
+  S.view = 'new'; S.confirm = null;
+  S.ed = { slug: 'new-draft', src: '', row: null, issues: [], saving: false, result: null, seq: 0 };
+  app(readOnlyBanner() +
+    '<div class="banner">Paste a full draft as the <strong>gunforma-field-note</strong> skill writes it: front matter, body, and the fenced <code>```registry-row```</code> block at the end. The row is added to the registry with <code>draft: true</code>; a new draft never publishes.</div>' +
+    '<div class="editor"><div class="ed-left">' +
+      '<textarea class="src" id="src" placeholder="---&#10;title: …&#10;type: …&#10;---&#10;&#10;…&#10;&#10;```registry-row&#10;{ slug: \'…\', published: \'YYYY-MM-DD\', updated: \'YYYY-MM-DD\', draft: true, tags: [\'…\'] }&#10;```" oninput="S.ed.src=this.value;S.ed.slug=rowSlug(this.value)||\'new-draft\';schedulePreview()"></textarea>' +
+      '<div id="issues">' + issuesHtml([]) + '</div><div id="controls">' + newControls() + '</div>' +
+    '</div><iframe class="pv" id="pv" title="Live preview" sandbox=""></iframe></div>');
+}
+
+function newControls() {
+  const e = S.ed;
+  const slug = rowSlug(e.src);
+  const blocked = !S.tokenSet || !slug || hasFails() || e.saving;
+  const why = !S.tokenSet ? 'GitHub token not set' : !slug ? 'No ```registry-row``` block with a slug yet' : hasFails() ? 'Fix every FAIL first' : '';
+  return '<div class="toolbar"><button class="btn primary" ' + (blocked ? 'disabled ' : '') + 'onclick="doNewDraft()">' + (e.saving ? 'Opening…' : 'Open draft PR' + (slug ? ' for ' + esc(slug) : '')) + '</button>' +
+    '<span class="muted">' + esc(why) + '</span><span style="flex:1"></span><button class="btn" onclick="loadList()">Back to the list</button></div>' +
+    (e.result ? '<div class="banner ' + (e.result.error ? 'bad' : 'ok') + '">' + e.result.html + '</div>' : '');
+}
+
+async function doNewDraft() {
+  const e = S.ed; e.saving = true; e.result = null; $('controls').innerHTML = newControls();
+  const r = await api('POST', null, { action: 'new', text: e.src });
+  e.saving = false;
+  if (r.error) {
+    e.result = { error: true, html: esc(r.error) };
+    if (r.issues) { e.issues = r.issues; $('issues').innerHTML = issuesHtml(e.issues); }
+  } else {
+    e.result = { html: 'Draft PR opened: <a href="' + esc(r.pr.url) + '" target="_blank" rel="noopener">#' + r.pr.number + '</a> (<code>field-notes/' + esc(r.slug) + '.md</code> + its registry row, <code>draft: true</code>). <span id="pv-' + r.pr.number + '">Waiting for the Netlify preview…</span>' };
+    pollPreview(r.pr.number, r.slug);
+  }
+  $('controls').innerHTML = newControls();
+}
+
+(async function init() {
+  const ok = await requireAdmin();
+  if (!ok) return;
+  $('gate').style.display = 'none';
+  $('app').style.display = '';
+  loadList();
+})();
+</script>
+</body>
+</html>
