@@ -68,6 +68,7 @@ export const FIELD_NOTES = [
   { slug: 'best-p365-xmacro-grip-modules', published: '2026-10-26', updated: '2026-10-26',
     tags: ['grip-modules', 'p365-xmacro'],
     changelog: [
+      '2026-11-20: Pick labels rewritten to measurable facts.',
       '2026-10-26: First published.',
     ] },
 ];
