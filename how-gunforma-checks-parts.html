@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/png" href="/assets/gunforma-mark.png" />
+<link rel="icon" type="image/png" href="/favicon-96x96.png?v=12026" sizes="96x96" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg?v=12026" />
+<link rel="shortcut icon" href="/favicon.ico?v=12026" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png?v=12026" />
+<link rel="manifest" href="/site.webmanifest?v=12026" />
+<title>How gunforma checks parts — Gunforma</title>
+<link rel="canonical" href="https://gunforma.com/how-gunforma-checks-parts.html" />
+<meta name="description" content="Gunforma is a fitment catalog: where the specs come from, how fit is decided, what verified and likely mean, and where the prices come from." />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff; color: #1a1a1a; }
+
+.nav { display: flex; align-items: center; justify-content: space-between; padding: 0 28px; height: 52px; border-bottom: 0.5px solid #2a2b2e; background: #0e0f11; position: sticky; top: 0; z-index: 100; }
+.nav-logo { display: flex; align-items: center; text-decoration: none; }
+.nav-logo img { height: 22px; width: auto; display: block; }
+.nav-logo img.nav-logo-mark { display: none; }
+@media (max-width: 600px) { .nav-logo img.nav-logo-full { display: none; } .nav-logo img.nav-logo-mark { display: block; } }
+.nav-links { display: flex; gap: 28px; }
+.nav-link { font-size: 12px; color: #ffffff; letter-spacing: 0.06em; text-transform: uppercase; text-decoration: none; }
+.nav-link.active, .nav-link:hover { color: #ffffff; }
+.nav-link.active { border-bottom: 2px solid #4a9edd; padding-bottom: 2px; }
+.nav-right { display: flex; align-items: center; gap: 14px; }
+.nav-btn { font-size: 11px; padding: 6px 14px; border: 0.5px solid #4a9edd; color: #4a9edd; border-radius: 4px; text-decoration: none; font-weight: 600; letter-spacing: 0.02em; }
+.nav-btn.cta { background: #4a9edd; color: #0e0f11; border-color: #4a9edd; }
+.nav-btn:hover { filter: brightness(1.1); }
+
+.page-header { padding: 28px 36px 20px; border-bottom: 0.5px solid #e5e5e5; background: #fafaf8; }
+.page-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.page-title { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin-bottom: 6px; }
+.page-sub { font-size: 13px; color: #666; max-width: 640px; line-height: 1.6; }
+
+.wrap { max-width: 720px; margin: 0 auto; padding: 32px 28px 80px; }
+
+.doc-section {
+  border: 0.5px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 24px 28px;
+  background: #fff;
+  margin-bottom: 20px;
+  scroll-margin-top: 64px;  /* anchor jumps sit below the sticky nav */
+}
+.doc-section h2 { font-size: 16px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.005em; }
+.doc-section .section-eyebrow { font-size: 10px; color: #4a9edd; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
+.doc-section p { font-size: 13px; line-height: 1.7; color: #333; margin-top: 12px; }
+.doc-section ul { margin: 12px 0 4px 20px; }
+.doc-section li { font-size: 13px; line-height: 1.7; color: #333; margin-bottom: 6px; }
+.doc-section strong { color: #1a1a1a; }
+.doc-section a.contact-mail { color: #2a7bbd; font-weight: 600; text-decoration: none; }
+.doc-section a.contact-mail:hover { text-decoration: underline; }
+
+@media (max-width: 640px) {
+  .page-header { padding: 22px 18px 16px; }
+  .wrap { padding: 22px 16px 60px; }
+  .doc-section { padding: 20px 18px; }
+}
+.nav-toggle { display: block; background: none; border: 0; padding: 8px; margin: 0 -8px 0 0; cursor: pointer; }
+.nav-toggle span { display: block; width: 20px; height: 2px; background: #e8e6e1; border-radius: 2px; }
+.nav-toggle span + span { margin-top: 4px; }
+.nav-profile { display: none; align-items: center; justify-content: center; width: 34px; height: 34px; border: 0.5px solid #2a2b2e; border-radius: 50%; color: #ffffff; text-decoration: none; }
+.nav-profile svg { width: 19px; height: 19px; }
+.nav-menu { display: none; }
+.nav-menu .nav-sub { border-top: 2px solid #4a9edd; border-bottom: 2px solid #4a9edd; }
+.nav-menu .nav-sub summary { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; cursor: pointer; list-style: none; border-bottom: 0.5px solid #1a1b1e; }
+.nav-menu .nav-sub summary::-webkit-details-marker { display: none; }
+.nav-menu .nav-sub summary::after { content: " ▾"; color: #6a6b6e; }
+.nav-menu .nav-sub[open] summary::after { content: " ▴"; }
+.nav-menu .nav-sub a { display: block; padding-left: 44px; }
+@media (min-width: 821px) {
+  .nav-menu { position: absolute; top: 52px; right: 28px; min-width: 190px; background: #0e0f11; border: 0.5px solid #2a2b2e; border-top: 0; border-radius: 0 0 6px 6px; flex-direction: column; padding: 6px 0; z-index: 99; box-shadow: 0 10px 24px rgba(0,0,0,0.35); }
+  .nav-menu.open { display: flex; }
+  .nav-menu a { padding: 11px 18px; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; white-space: nowrap; }
+  .nav-menu a:hover { background: #17181b; color: #4a9edd; }
+  .nav-menu .nav-sub summary { padding: 11px 18px; font-size: 12px; }
+  .nav-menu .nav-sub a { padding-left: 34px; }
+}
+@media (max-width: 820px) {
+  .nav-links { display: none; }
+  .nav-signin-inline { display: none; }
+  .nav-profile { display: flex; }
+  .nav-menu { position: absolute; top: 52px; left: 0; right: 0; background: #0e0f11; border-bottom: 0.5px solid #2a2b2e; flex-direction: column; padding: 8px 0; z-index: 99; }
+  .nav-menu.open { display: flex; }
+  .nav-menu a { padding: 13px 28px; font-size: 13px; letter-spacing: 0.06em; text-transform: uppercase; color: #ffffff; text-decoration: none; border-bottom: 0.5px solid #1a1b1e; }
+  .nav-menu a.signout { color: #ffffff; }
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <a class="nav-logo" href="/"><img class="nav-logo-full" src="assets/gunforma-logo.png" alt="Gunforma"><img class="nav-logo-mark" src="assets/gunforma-mark.png" alt="Gunforma"></a>
+  <div class="nav-links">
+    <a class="nav-link" href="gunforma-builds.html">Builds</a>
+    <a class="nav-link" href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a class="nav-link" href="gunforma-armory.html">Armory</a>
+    <a class="nav-link" href="gunforma-gun-guides.html">Guides</a>
+  </div>
+  <div class="nav-right">
+    <a class="nav-btn nav-signin-inline" href="gunforma-signin.html" id="nav-signin">Sign in</a>
+    <a class="nav-btn cta" href="gunforma-post-build.html">+ Post your build</a>
+    <a class="nav-profile" href="gunforma-signin.html" aria-label="Account"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6" stroke-linecap="round"/></svg></a>
+    <button class="nav-toggle" type="button" aria-label="Menu" aria-expanded="false" aria-controls="nav-menu"><span></span><span></span><span></span></button>
+  </div>
+  <div class="nav-menu" id="nav-menu">
+    <a href="gunforma-builds.html">Builds</a>
+    <a href="gunforma-parts-catalog.html">Parts Catalog</a>
+    <a href="gunforma-armory.html">Armory</a>
+    <a href="gunforma-gun-guides.html">Guides</a>
+    <details class="nav-sub">
+      <summary>Your P365</summary>
+      <a href="/p365/p365">P365</a>
+      <a href="/p365/p365-x">P365 X</a>
+      <a href="/p365/p365-xl">P365 XL</a>
+      <a href="/p365/p365-xmacro">P365 XMacro</a>
+      <a href="/p365/p365-axg">P365 AXG Legion</a>
+      <a href="/p365/p365-xf-dh3">P365 XF DH3</a>
+      <a href="/p365/p365-xf-dh3-axg">P365 XF DH3 AXG</a>
+      <a href="/p365/p365-fuse">P365 FUSE</a>
+      <a href="/p365/p365-fuse-comp">P365 FUSE Comp</a>
+      <a href="/p365/">All P365 models →</a>
+    </details>
+    <a class="anon" href="gunforma-signin.html">Sign in</a>
+    <a class="anon" href="gunforma-signup.html">Create account</a>
+  </div>
+</nav>
+
+<div class="page-header">
+  <p class="page-eyebrow">Methods</p>
+  <h1 class="page-title">How gunforma checks parts</h1>
+  <p class="page-sub">Gunforma is a fitment catalog. We don't review or range-test parts. We record what each part is, what it fits, and what it costs today.</p>
+</div>
+
+<div class="wrap">
+
+  <section id="specs" class="doc-section">
+    <div class="section-eyebrow">Sources</div>
+    <h2>Where the specs come from</h2>
+    <p>Specs are taken from the maker's own product page. Where a retailer's description disagrees with the maker, the maker wins. Where nobody publishes a value, we leave it blank instead of guessing.</p>
+  </section>
+
+  <section id="fit" class="doc-section">
+    <div class="section-eyebrow">Fitment</div>
+    <h2>How fit is decided</h2>
+    <p>Fit comes from the parts themselves: a slide's length against a grip module's, an optic's footprint against a slide's cut, a light's rail against a grip module's rail. When a maker says a part fits or doesn't, that statement is recorded.</p>
+  </section>
+
+  <section id="verified" class="doc-section">
+    <div class="section-eyebrow">Confidence</div>
+    <h2>Verified and likely</h2>
+    <p>"Verified" means a person mounted that part on that part, or an owner reported it in a gunforma build. "Likely" means the specs say it should fit and no one has confirmed it yet. Every fit table shows which is which.</p>
+  </section>
+
+  <section id="prices" class="doc-section">
+    <div class="section-eyebrow">Prices</div>
+    <h2>Prices</h2>
+    <p>Prices come from partner retailers and refresh automatically. A price we can't confirm is not shown. Some links earn gunforma a commission; that never changes what fits.</p>
+  </section>
+
+  <section id="corrections" class="doc-section">
+    <div class="section-eyebrow">Corrections</div>
+    <h2>Corrections</h2>
+    <p>When a fact on gunforma turns out to be wrong, we fix it at the source, and articles that used it say so in their update log. Found something wrong? Reach us at <a class="contact-mail" href="mailto:contact@gunforma.com">contact@gunforma.com</a>.</p>
+  </section>
+
+</div>
+
+<div class="footer-bar"><span class="footer-txt">© 2026 Gunforma · All rights reserved</span><span class="footer-txt"><a href="gunforma-legal.html#legal">Legal</a> · <a href="gunforma-legal.html#affiliate">Affiliate disclosure</a> · <a href="gunforma-legal.html#guidelines">Community guidelines</a> · <a href="gunforma-legal.html#contact">Contact</a></span></div>
+
+<script src="js/supabase-client.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/footer.js"></script>
+
+<!-- Cloudflare Web Analytics --><script type='module' src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "81a104a53b724fdf87d30d3b963a1161"}'></script><!-- End Cloudflare Web Analytics -->
+</body>
+</html>

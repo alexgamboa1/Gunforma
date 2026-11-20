@@ -465,6 +465,12 @@
   status = 301
   force = true
 
+[[redirects]]
+  from = "/how-gunforma-checks-parts"
+  to = "/how-gunforma-checks-parts.html"
+  status = 301
+  force = true
+
 # Was a 200 rewrite (a second live address for field-notes.html, whose
 # canonical says .html). Both slash forms, so neither leaves a 200 behind.
 [[redirects]]

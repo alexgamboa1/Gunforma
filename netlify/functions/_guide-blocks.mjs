@@ -152,6 +152,31 @@ export function withGoParams(goUrl, slug, loc) {
     's=' + encodeURIComponent(slug) + '&loc=' + encodeURIComponent(loc);
 }
 
+// Which catalog category each ::build role's slug must resolve to. Keys
+// are _markdown.mjs's BUILD_ROLES, held in step by check-field-notes.mjs.
+// No labels here: a role renders under its category's singular name from
+// _category-meta.mjs (one name per category, never a second copy).
+export const BUILD_ROLE_META = {
+  frame:    { category: 'frame' },
+  slide:    { category: 'slide' },
+  barrel:   { category: 'barrel' },
+  optic:    { category: 'optic' },
+  light:    { category: 'light' },
+  magwell:  { category: 'magwell' },
+  comp:     { category: 'compensator' },
+  trigger:  { category: 'trigger' },
+  magazine: { category: 'magazine' },
+};
+
+// The method line every field note renders directly under the byline and
+// above the affiliate disclosure — one implementation in the renderer,
+// never per-article text. It links the standing methods page.
+export const METHOD_PAGE_PATH = '/how-gunforma-checks-parts.html';
+export const METHOD_LINE_HTML =
+  '<p class="fn-method">Every part in the gunforma catalog is checked against the maker’s published specs and fit data before it is listed. ' +
+  'We don’t range-test parts; where a fit was confirmed by hand or by an owner’s build, the page says so. ' +
+  '<a href="' + METHOD_PAGE_PATH + '">How gunforma checks parts &rarr;</a></p>';
+
 // The standard affiliate disclosure for any field note that renders a
 // ::price, ::picks or ::rank block — one implementation, never per-article
 // text. The anchor is the existing disclosure section on gunforma-legal.html.

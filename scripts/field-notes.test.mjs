@@ -133,6 +133,39 @@ const PRODUCTS = {
     manufacturers: { name: 'Sig Sauer', website_url: 'https://www.sigsauer.com' },
     product_variants: [{ id: 'V3', msrp: 59.99, is_default: true, primary_image_url: null,
       affiliate_links: [{ id: 'L3', url: 'https://www.opticsplanet.com/m', affiliate_url: null, street_price: 54.99, in_stock: true, last_checked: '2026-01-01', op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } }] }] },
+  // The v2 blocks' parts: grip modules (and the factory one), a slide, an
+  // optic and a light — what ::unlocks, ::colors and the ::build in the
+  // fixture resolve against.
+  'tyrant-cnc-p365-xmacro-gm': { id: 'P4', slug: 'tyrant-cnc-p365-xmacro-gm', name: 'Tyrant CNC P365 XMacro Grip Module', category: 'frame', url: 'https://tyrantcnc.com/gm', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Tyrant CNC', website_url: 'https://tyrantcnc.com' },
+    product_variants: [
+      { id: 'V4a', msrp: 99.99, is_default: true, primary_image_url: null, color: 'Black', affiliate_links: [] },
+      { id: 'V4b', msrp: 99.99, is_default: false, primary_image_url: null, color: 'FDE', affiliate_links: [] }] },
+  'killer-innovations-velo-v1-p365-xl': { id: 'P5', slug: 'killer-innovations-velo-v1-p365-xl', name: 'Killer Innovations Velocity V1 P365 XL Slide', category: 'slide', url: 'https://killerinnovations.com/velo', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Killer Innovations', website_url: 'https://killerinnovations.com' },
+    product_variants: [{ id: 'V5', msrp: 429.99, is_default: true, primary_image_url: null, color: 'Black',
+      affiliate_links: [{ id: 'L5', url: 'https://www.opticsplanet.com/v', affiliate_url: null, street_price: 399.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } }] }] },
+  'icarus-precision-air-xmacro': { id: 'P6', slug: 'icarus-precision-air-xmacro', name: 'Icarus Precision A.I.R. XMacro', category: 'frame', url: 'https://icarusprecision.com/air', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Icarus Precision', website_url: 'https://icarusprecision.com' },
+    product_variants: [{ id: 'V6', msrp: 249.99, is_default: true, primary_image_url: null, color: 'FDE/Gold',
+      affiliate_links: [{ id: 'L6', url: 'https://www.opticsplanet.com/a', affiliate_url: null, street_price: 229.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } }] }] },
+  'wilson-combat-wcp365-xmacro': { id: 'P7', slug: 'wilson-combat-wcp365-xmacro', name: 'Wilson Combat WCP365 XMacro', category: 'frame', url: 'https://wilsoncombat.com/wcp', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Wilson Combat', website_url: 'https://wilsoncombat.com' },
+    product_variants: [
+      { id: 'V7a', msrp: 79.95, is_default: true, primary_image_url: null, color: 'Black', finish_family: 'Cerakote', affiliate_links: [] },
+      { id: 'V7b', msrp: 79.95, is_default: false, primary_image_url: null, color: 'Green', affiliate_links: [] }] },
+  'sig-sauer-p365-xmacro-gm-oem': { id: 'P8', slug: 'sig-sauer-p365-xmacro-gm-oem', name: 'P365 XMacro Grip Module', category: 'frame', url: 'https://sigsauer.com/gm', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Sig Sauer', website_url: 'https://www.sigsauer.com' },
+    product_variants: [
+      { id: 'V8a', msrp: 49.99, is_default: true, primary_image_url: null, color: 'Black', affiliate_links: [] },
+      { id: 'V8b', msrp: 49.99, is_default: false, primary_image_url: null, color: 'Coyote', affiliate_links: [] }] },
+  'holosun-507-promax': { id: 'P9', slug: 'holosun-507-promax', name: 'Holosun 507 ProMax', category: 'optic', url: 'https://holosun.com/promax', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Holosun', website_url: 'https://holosun.com' },
+    product_variants: [{ id: 'V9', msrp: 399.99, is_default: true, primary_image_url: null, color: 'Black', affiliate_links: [] }] },
+  'streamlight-tlr-7-hl-x-sub-usb': { id: 'P10', slug: 'streamlight-tlr-7-hl-x-sub-usb', name: 'TLR-7 HL-X sub USB', category: 'light', url: 'https://streamlight.com/tlr7', is_discontinued: false, restricted_states: null,
+    manufacturers: { name: 'Streamlight', website_url: 'https://www.streamlight.com' },
+    product_variants: [{ id: 'V10', msrp: 229.99, is_default: true, primary_image_url: null, color: 'Black',
+      affiliate_links: [{ id: 'L10', url: 'https://www.opticsplanet.com/t', affiliate_url: null, street_price: 139.99, in_stock: true, last_checked: today, op_last_matched_by: 'T1', partners: { name: 'OpticsPlanet (Awin)' } }] }] },
 };
 const GUNS = {
   'p365-xl': { id: 'G1', slug: 'p365-xl', name: 'P365 XL', housing_class: 'p365xl' },
@@ -141,6 +174,8 @@ const GUNS = {
 };
 const inList = (path, key) => { const m = path.match(new RegExp(key + '=in\\.\\(([^)]*)\\)')); return m ? m[1].split(',') : []; };
 function catalog(n, path) {
+  // The ::unlocks approval read: every id it asks about is live here.
+  if (path.startsWith('products?id=in.')) return json(inList(path, 'id').map((id) => ({ id, is_approved: true, is_discontinued: false })));
   if (path.startsWith('products?')) return json(inList(path, 'slug').map((s) => PRODUCTS[s]).filter(Boolean));
   if (path.startsWith('guns?')) return json(inList(path, 'slug').map((s) => GUNS[s]).filter(Boolean));
   // The guide blocks' reads: spec rows per table (in.(…) with product_id in
@@ -167,9 +202,32 @@ function catalog(n, path) {
   if (path.startsWith('optic_cut_footprints?')) return json([
     { optic_cut: 'rmsc', fit: 'direct', footprint_id: FP.RMSC }, { optic_cut: 'rmsc', fit: 'direct', footprint_id: FP.K },
     { optic_cut: 'sig-loc-compact', fit: 'direct', footprint_id: FP.SLC }]);
+  // the magazine COUNT read (::unlocks) before the per-magazine claim reads
+  if (path.startsWith('magazine_housing_fit?') && path.includes('fit=neq.not_compatible')) return json([{ magazine_product_id: 'P3' }]);
   if (path.startsWith('magazine_housing_fit?housing_class=eq.xmacro')) return json([{ fit: 'flush', note: 'The XMacro’s own magazine.' }]);
   if (path.startsWith('magazine_housing_fit?housing_class=eq.p365&')) return json([{ fit: 'not_compatible', note: null }]);
   if (path.startsWith('magazine_specs?')) return json([{ capacity: 17 }]);
+  // ── the v2 blocks: colour order, the fit views, the pair reads ─────────
+  if (path.startsWith('colors?')) return json([
+    { color: 'Black', sort_order: 1 }, { color: 'FDE', sort_order: 5 }, { color: 'FDE/Gold', sort_order: 6 },
+    { color: 'Green', sort_order: 8 }, { color: 'Coyote', sort_order: 9 }]);
+  // ::build pair reads (both ids named) before the one-sided ::unlocks reads
+  if (path.startsWith('v_slide_frame_fit?') && path.includes('slide_product_id=eq.P5') && path.includes('frame_product_id=eq.P6')) return json([{ fits: true, verdict: 'Flush fit.' }]);
+  if (path.startsWith('v_optic_slide_variant_fit?') && path.includes('optic_product_id=eq.P9')) return json([{ slide_variant_id: 'SV1', uses_optic_adapter: false }]);
+  if (path.startsWith('v_frame_light_fit?') && path.includes('light_product_id=eq.P10')) return json([{ fitment_type: 'adapter-included', confidence: 'verified' }]);
+  if (path.startsWith('v_slide_frame_fit?frame_product_id=eq.P4')) return json([{ slide_product_id: 'P5' }]);
+  if (path.startsWith('v_slide_frame_fit?slide_product_id=eq.P5')) return json([{ frame_product_id: 'P4' }, { frame_product_id: 'P6' }]);
+  if (path.startsWith('v_frame_light_fit?frame_product_id=eq.P4')) return json([
+    { light_product_id: 'P10', confidence: 'verified', fitment_type: 'direct' },
+    { light_product_id: 'P10', confidence: 'likely', fitment_type: 'adapter-included' },
+    { light_product_id: 'LX2', confidence: 'likely', fitment_type: 'adapter-separate' }]);
+  if (path.startsWith('frame_specs?product_id=eq.P4')) return json([{ housing_class: 'xmacro', magwell_type: 'None',
+    housing_classes: { magazine_family: 'macro-17', magazine_families: { display_name: 'P365 MACRO (17-round)' } } }]);
+  if (path.startsWith('magwell_frame_requirements?frame_product_id=eq.P4')) return json([]);
+  if (path.startsWith('v_optic_slide_variant_fit?slide_product_id=eq.P5')) return json([
+    { optic_product_id: 'P9', uses_optic_adapter: false }, { optic_product_id: 'P1', uses_optic_adapter: true }]);
+  if (path.startsWith('v_barrel_slide_fit?slide_product_id=eq.P5')) return json([{ barrel_product_id: 'PB1' }]);
+  if (path.startsWith('slide_specs?product_id=eq.P5')) return json([{ part_classes: { display_name: '3.7in (P365 X, XL, XMacro, AXG)' } }]);
   throw new Error('unexpected query in test: ' + path);
 }
 
@@ -201,9 +259,10 @@ test('the fixture renders off the apex: verdicts, prices, chrome, meta', async (
   assert.equal(r.headers.get('x-field-note'), FIXTURE.slug);
   assert.equal(r.headers.get('x-field-note-draft'), '1');
   assert.equal(r.headers.get('x-field-note-source'), 'file');
-  assert.equal(r.headers.get('x-field-note-blocks'), 'price=1 fit=5 picks=1 rank=3 compare=1 faq=1');
-  assert.equal(r.headers.get('x-field-note-products'), '3/3');
+  assert.equal(r.headers.get('x-field-note-blocks'), 'price=1 fit=5 picks=1 rank=3 compare=1 faq=1 unlocks=2 colors=1 build=1');
+  assert.equal(r.headers.get('x-field-note-products'), '10/10');
   assert.equal(r.headers.get('x-field-note-fits'), '5/5');
+  assert.equal(r.headers.get('x-field-note-build'), '3/3', 'every ::build pair with a fit source passes');
   assert.equal(r.headers.get('cache-control'), 'no-store', 'a draft is never cached');
   // chrome and meta
   assert.equal(count(h, ANALYTICS_SNIPPET), 1, 'analytics tag exactly once');
@@ -259,7 +318,7 @@ test('zero rows is an answer: 200, the part named as missing, headers count it',
   const seen = stubFetch(() => json([]));
   const r = await run(PREVIEW + fieldNotePath(FIXTURE.slug));
   assert.equal(r.status, 200);
-  assert.equal(r.headers.get('x-field-note-products'), '0/3');
+  assert.equal(r.headers.get('x-field-note-products'), '0/10');
   assert.equal(r.headers.get('x-field-note-fits'), '0/5');
   assert.ok(r.html.includes('<code>holosun-507k-x2</code> is not in the catalog'));
   assert.ok(seen.calls >= 1);

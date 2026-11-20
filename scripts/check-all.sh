@@ -84,6 +84,7 @@ check "click bot classifier"       scripts/go-bot.test.mjs
 check "field notes registry+files" scripts/check-field-notes.mjs
 check "field note renderer"        scripts/field-notes.test.mjs
 check "field note guide blocks"    scripts/guide-blocks.test.mjs
+check "field note v2 blocks"       scripts/field-notes-v2.test.mjs
 check "go section tracking"        scripts/go-redirect.test.mjs
 check "barrel/slide fit sections"  scripts/fit-sections.test.mjs
 check "fits on grids"              scripts/fits-on.test.mjs

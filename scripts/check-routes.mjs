@@ -923,6 +923,7 @@ for (const [label, path, want] of [
     ['/privacy-policy',         '/privacy-policy.html'],
     ['/terms-of-service',       '/terms-of-service.html'],
     ['/builder-agreement',      '/builder-agreement.html'],
+    ['/how-gunforma-checks-parts', '/how-gunforma-checks-parts.html'],
     ['/field-notes',            '/field-notes.html'],
     ['/field-notes/',           '/field-notes.html'],
     ['/builds',                 '/gunforma-builds.html'],
@@ -934,7 +935,7 @@ for (const [label, path, want] of [
     ok(r.status === 301, `${from}: 301`, r.status);
     ok(loc === to, `  -> ${to}`, r.location);
   }
-  for (const p of ['/gunforma-builds.html', '/gunforma-parts-catalog.html', '/gunforma-legal.html', '/field-notes.html']) {
+  for (const p of ['/gunforma-builds.html', '/gunforma-parts-catalog.html', '/gunforma-legal.html', '/field-notes.html', '/how-gunforma-checks-parts.html']) {
     const r = await get(p);
     ok(r.status === 200 && r.canon[0] === 'https://gunforma.com' + p, `${p}: 200 and canonical to itself`, r.status + ' ' + (r.canon[0] || 'none'));
   }
