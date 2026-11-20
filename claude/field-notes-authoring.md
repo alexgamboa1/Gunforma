@@ -175,7 +175,8 @@ a note by what a reader of it would want next — its category and the
 gun it is about are the usual pair. Under the notes, one **"Keep going"**
 line links the note's model hub (the first live hub whose
 `FIELD_NOTE_LINKS` entry points at the note, else the `/p365/` index),
-the Armory and the builds. With no related notes there is no "Related
+the Armory, the builds, and All Field Notes last (besides the breadcrumb,
+an article's only path to the index). With no related notes there is no "Related
 field notes" heading — the Keep going line stands alone. The page never
 has two Related headings.
 

@@ -200,7 +200,7 @@ test('the fixture: byline order, Person, Breadcrumb, one ItemList for the three 
   assert.equal((h.match(/class="section-title">Related/g) || []).length, 1, 'never two Related headings');
   const rel = h.slice(h.indexOf('id="related-field-notes"'), h.indexOf('</div></div>', h.indexOf('id="related-field-notes"')));
   assert.ok(rel.indexOf('class="fn-related-list"') < rel.indexOf('class="fn-keep-going"'), 'notes first, then Keep going under them');
-  assert.ok(rel.includes('<span class="fn-keep-going-label">Keep going:</span> <a href="/p365/">What fits your P365 &rarr;</a> <a href="/gunforma-armory.html">Build yours in the Armory &rarr;</a> <a href="/gunforma-builds.html">Real builds &rarr;</a>'),
+  assert.ok(rel.includes('<span class="fn-keep-going-label">Keep going:</span> <a href="/p365/">What fits your P365 &rarr;</a> <a href="/gunforma-armory.html">Build yours in the Armory &rarr;</a> <a href="/gunforma-builds.html">Real builds &rarr;</a> <a href="/field-notes.html">All Field Notes &rarr;</a>'),
     'the fixture is linked from no hub, so its model hub is the /p365/ index');
   assert.ok(h.indexOf('<h1>') < h.indexOf('<div class="byline">') && h.indexOf('<div class="byline">') < h.indexOf('<p class="fn-method">'));
   const g = graphOf(h);
@@ -231,6 +231,9 @@ test('the live guide: no author → no name, Organization; a draft is never rela
   assert.equal((h.match(/class="section-title">Related/g) || []).length, 0);
   assert.ok(h.includes('<div class="fn-related-notes"><div class="fn-keep-going"><span class="fn-keep-going-label">Keep going:</span> <a href="/p365/p365-xmacro">Everything for the Sig Sauer P365 XMacro &rarr;</a>'),
     'the model hub is the first live hub that links into this note');
+  assert.ok(h.includes('<a href="/gunforma-builds.html">Real builds &rarr;</a> <a href="/field-notes.html">All Field Notes &rarr;</a></div>'),
+    'All Field Notes closes the Keep going line (Alex, 2026-11-20) — the index is what links every note');
+  assert.ok(!h.includes('Parts by category'), '"Parts by category" stays out');
   assert.deepEqual(graphOf(h).find((n) => n['@type'] === 'Article').author, { '@type': 'Organization', name: 'Gunforma' });
   // the only note it shares tags with is the renderer-check DRAFT
   assert.equal(headers.get('x-field-note-related'), '0');
@@ -244,7 +247,7 @@ test('a page under the TOC threshold renders no rail, no collapsed copy, no scri
   // Asserted through the audit: a page with two H2s and a TOC is a failure,
   // and the same page with none passes.
   const base = (toc) => '<h1>T</h1><div class="byline">Last reviewed May 2026</div><h2 id="a">A</h2><h2 id="b">B</h2>' + toc +
-    '<div class="fn-keep-going"></div>' +
+    '<div class="fn-keep-going"><a href="/field-notes.html">All Field Notes &rarr;</a></div>' +
     '<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Article"},{"@type":"BreadcrumbList","itemListElement":[{"name":"Home"},{"name":"Field Notes"},{"name":"T"}]}]}</script>';
   assert.deepEqual(auditFieldNotePage(base(''), 'x'), []);
   assert.ok(auditFieldNotePage(base('<nav aria-label="On this page"></nav>'), 'x').some((p) => p.includes('fewer than 3')));

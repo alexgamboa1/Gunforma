@@ -1061,7 +1061,10 @@ const TOC_SCRIPT =
 // The page's ONE "Related" section (Alex, 2026-11-20 — never two Related
 // headings): "Related field notes", up to four other live articles sharing
 // a tag (relatedNotes() in _field-notes-meta.mjs), then a single "Keep
-// going" line — the note's model hub, the Armory, the builds. The hub is
+// going" line — the note's model hub, the Armory, the builds, and All Field
+// Notes LAST (Alex, 2026-11-20: besides the breadcrumb it is an article's
+// only path to the index, and the index is what links every note; "Parts
+// by category" stays out). The hub is
 // the first gun whose hub links into this note (gunsForFieldNote()), only
 // while that hub is live; otherwise the /p365/ index. With no related
 // notes there is no heading and no TOC entry: the Keep going line stands
@@ -1072,7 +1075,8 @@ function keepGoingHtml(slug) {
     ? '<a href="' + esc(hubPath(gun)) + '">Everything for the Sig Sauer ' + esc(GUN_META[gun] || gun) + ' &rarr;</a>'
     : '<a href="/p365/">What fits your P365 &rarr;</a>';
   return '<div class="fn-keep-going"><span class="fn-keep-going-label">Keep going:</span> ' +
-    hub + ' <a href="/gunforma-armory.html">Build yours in the Armory &rarr;</a> <a href="/gunforma-builds.html">Real builds &rarr;</a></div>';
+    hub + ' <a href="/gunforma-armory.html">Build yours in the Armory &rarr;</a> <a href="/gunforma-builds.html">Real builds &rarr;</a>' +
+    ' <a href="' + FIELD_NOTES_INDEX_PATH + '">All Field Notes &rarr;</a></div>';
 }
 
 function relatedSectionHtml(related, slug) {

@@ -1245,7 +1245,8 @@ for (const [label, path, want] of [
     // which is how Awin's noimage.gif placeholder sat on a Timber Creek
     // mag release AND a Zaffiri barrel from the bulk load until 2026-11-16,
     // each the only variant of its product on that URL. The first sweep
-    // found eleven shares; Alex ruled seven pairs stay (the photo
+    // found eleven shares; Alex ruled seven pairs stay — an eighth, the
+    // ECM R11 Fuse / Fuse Comp, on 2026-11-20 — (the photo
     // genuinely shows both products) and the rest get their own photos
     // (the 2026-11-16 feed_placeholder_photos migration) or none.
     // Keyed by the sorted product slugs, not the URL — the mischief pairs
@@ -1265,6 +1266,10 @@ for (const [label, path, want] of [
         "one Commander G2 photo for the sibling slides — the XXL's own photo stays an open outreach item (Alex, 2026-11-16)",
       'ecm-precision-r11-edge-fuse + ecm-precision-r11-edge-fuse-comp':
         'ECM sells the R11 Edge as ONE page (r11-edge-macro, size options Macro / Fuse / Fuse for comp) with exactly one photo; no per-size photo exists (Alex, 2026-11-16)',
+      // The R11 (not Edge) pair: ecm-precision-r11-fuse-black-ns and
+      // ecm-precision-r11-fuse-comp-black-ns share the R11 Fuse photo.
+      'ecm-precision-r11-fuse + ecm-precision-r11-fuse-comp':
+        'intentional — on 2026-11-19 Alex set the R11 Fuse Comp black option (ecm-precision-r11-fuse-comp-black-ns) to the R11 Fuse photo (ecm-precision-r11-fuse-black-ns) because ECM publishes no separate one (Alex, 2026-11-20)',
       'holosun-407c-x3 + holosun-507c-x3':
         "no 507C-X3 photo exists anywhere — Holosun's own 507C-X3 page and OpticsPlanet's 507C-X3 gallery both use the 407C-X3 image set; no reticle is visible in any of them and the X3 housings are externally identical (Alex, 2026-11-16)",
     };

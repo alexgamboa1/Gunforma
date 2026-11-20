@@ -46,7 +46,11 @@ export function auditFieldNotePage(html, slug) {
   }
   const relatedHeads = (html.match(/class="section-title">Related/g) || []).length;
   if (relatedHeads > 1) bad(relatedHeads + ' Related headings — the page has one Related section');
-  if ((html.match(/class="fn-keep-going"/g) || []).length !== 1) bad('expected exactly one "Keep going" line');
+  const keepGoing = html.match(/<div class="fn-keep-going">(.*?)<\/div>/g) || [];
+  if (keepGoing.length !== 1) bad('expected exactly one "Keep going" line');
+  // All Field Notes closes it (Alex, 2026-11-20): an article's one path to
+  // the index besides the breadcrumb, and the index links every note.
+  else if (!/<a href="\/field-notes\.html">All Field Notes &rarr;<\/a><\/div>$/.test(keepGoing[0])) bad('the Keep going line does not end with "All Field Notes"');
   if (/<div class="author">/.test(html)) bad('the bottom author box is back — the byline carries the name and credential');
 
   // the table of contents against the H2s
