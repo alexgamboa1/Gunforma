@@ -36,6 +36,15 @@
 // Dollar figures are banned here as everywhere; the guard checks each
 // entry's shape.
 //
+// `tags` is optional: an array of lowercase slugs ("grip-modules",
+// "p365-xmacro"). It drives ONE thing — the "Related field notes" footer
+// (relatedNotes() below): other live articles sharing a tag, most shared
+// first. It lives here rather than in the front matter for the same reason
+// the dates do: the renderer ranks every other article without opening
+// their files, and opens only the four it links (for title and
+// description). An untagged article has no related notes, which renders as
+// no section — never a list of everything.
+//
 // URL shape: /field-notes/<slug>. The index stays /field-notes.html.
 
 export const FIELD_NOTES = [
@@ -44,15 +53,20 @@ export const FIELD_NOTES = [
   // handler over it, and the preview walk-through is done against it. Keep
   // it: it is what proves the plumbing before any article exists, and it
   // is a 404 on gunforma.com.
-  { slug: 'renderer-check', published: '2026-10-20', updated: '2026-11-19', draft: true,
+  { slug: 'renderer-check', published: '2026-10-20', updated: '2026-11-20', draft: true,
+    tags: ['grip-modules', 'optics', 'p365-xmacro'],
     changelog: [
+      '2026-11-20: Added the page furniture — table of contents, byline row, ItemList schema, related notes.',
       '2026-11-19: Added the v2 blocks — unlocks, colors, build — and the changes/same rank card.',
       '2026-10-25: Added the four guide blocks — picks, rank, compare, faq — and this changelog.',
       '2026-10-20: First version of the fixture.',
     ] },
   // The first real article: the XMacro grip-module buyer's guide. Published
   // 2026-10-26 on Alex's explicit "publish".
+  // tags: its own front-matter category (Grip Modules) and the gun it is
+  // linked from in FIELD_NOTE_LINKS below — nothing new about the article.
   { slug: 'best-p365-xmacro-grip-modules', published: '2026-10-26', updated: '2026-10-26',
+    tags: ['grip-modules', 'p365-xmacro'],
     changelog: [
       '2026-10-26: First published.',
     ] },
@@ -71,6 +85,29 @@ export function fieldNote(slug) {
 // The articles a crawler may be told about.
 export function liveFieldNotes() {
   return FIELD_NOTES.filter((a) => !a.draft);
+}
+
+// The "Related field notes" footer: up to `limit` OTHER live articles that
+// share at least one tag with `slug`, most shared tags first, then the
+// newest reviewed (updated, else published), then slug for a stable order.
+// A draft is never returned — not on the apex (it would be a dead link)
+// and not on a preview either (a preview walk-through must show what
+// production will). Pure over `notes`, so the test can hand it a registry.
+export const RELATED_LIMIT = 4;
+export function relatedNotes(slug, notes = FIELD_NOTES, limit = RELATED_LIMIT) {
+  const self = notes.find((a) => a.slug === slug);
+  const mine = new Set((self && self.tags) || []);
+  if (!mine.size) return [];
+  const reviewed = (a) => a.updated || a.published || '';
+  return notes
+    .filter((a) => a.slug !== slug && !a.draft)
+    .map((a) => ({ a, shared: (a.tags || []).filter((t) => mine.has(t)).length }))
+    .filter((x) => x.shared > 0)
+    .sort((x, y) => (y.shared - x.shared)
+      || (reviewed(y.a) < reviewed(x.a) ? -1 : reviewed(y.a) > reviewed(x.a) ? 1 : 0)
+      || (x.a.slug < y.a.slug ? -1 : 1))
+    .slice(0, limit)
+    .map((x) => x.a);
 }
 
 // Where the file for a slug lives, relative to the repo root. Netlify

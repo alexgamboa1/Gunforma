@@ -36,7 +36,7 @@
 // page exists, this deploy just cannot find it.
 
 import { readFile } from 'node:fs/promises';
-import { FIELD_NOTES_INDEX_PATH, fieldNote, fieldNotePath, fieldNoteFile } from './_field-notes-meta.mjs';
+import { FIELD_NOTES_INDEX_PATH, fieldNote, fieldNotePath, fieldNoteFile, relatedNotes } from './_field-notes-meta.mjs';
 import { parseFrontMatter, renderMarkdown, inline, textOf } from './_markdown.mjs';
 import { navHtml, footerHtml, navScript, chromeCss, layoutCss, headTags, esc } from './_page-chrome.mjs';
 import { isStalePrice, compareListingRows, displayPartnerName } from './_listing-rules.mjs';
@@ -843,8 +843,51 @@ function fitBlockHtml(f) {
   return '<div class="fn-block fn-fit">' + head + body + (links.length ? '<div class="fn-fit-links">' + links.join('') + '</div>' : '') + '</div>';
 }
 
+// ── ranked groups, for the ItemList schema ───────────────────────────────
+// A ::rank card whose rank is 1 starts a new group when the current one
+// already has cards — "rank restarts at 1" is the author's way of saying
+// "a second list". Each group is named by the H2 its first card sits under
+// (else the article title) and lists its cards in rank order. A card whose
+// product did not resolve has no /parts/ page to point at and is left out
+// of the schema (the page shows its visible missing line; the build guard
+// is what keeps one from shipping).
+export function rankGroups(blocks, blockSections, products) {
+  const groups = [];
+  blocks.forEach((b, k) => {
+    if (b.kind !== 'rank') return;
+    const cur = groups[groups.length - 1];
+    if (!cur || (b.rank === 1 && cur.cards.length)) groups.push({ section: blockSections[k] || null, cards: [] });
+    groups[groups.length - 1].cards.push(b);
+  });
+  return groups.map((g) => ({
+    section: g.section,
+    cards: g.cards.length,
+    items: g.cards.slice().sort((x, y) => x.rank - y.rank)
+      .map((b) => ({ rank: b.rank, o: products.get(b.slug) || null }))
+      .filter((it) => it.o && it.o.href !== '/parts'),
+  }));
+}
+
+// ── related field notes: the four (at most) the registry ranks first ─────
+// Title and description come from each related article's own front matter,
+// read from the bundle the way the article itself is. A file that does not
+// read is skipped — the related footer is navigation, not the page, and a
+// packaging gap there must not take the article down (check-field-notes
+// is what holds every declared file present).
+async function loadRelated(slug) {
+  const out = [];
+  for (const a of relatedNotes(slug)) {
+    const src = await loadSource(a.slug);
+    if (src == null) continue;
+    const { meta } = parseFrontMatter(src);
+    if (!meta.title) continue;
+    out.push({ slug: a.slug, href: fieldNotePath(a.slug), title: meta.title, description: meta.description || '' });
+  }
+  return out;
+}
+
 // ── all the blocks of one article, resolved ──────────────────────────────
-async function resolveBlocks(blocks, articleSlug) {
+async function resolveBlocks(blocks, articleSlug, blockSections = []) {
   const productSlugs = new Set();
   const gunSlugs = new Set();
   for (const b of blocks) {
@@ -897,6 +940,7 @@ async function resolveBlocks(blocks, articleSlug) {
   const kindCount = (k) => blocks.filter((b) => b.kind === k).length;
   return {
     rendered,
+    rankGroups: rankGroups(blocks, blockSections, products),
     productsAsked: productSlugs.size, productsFound: products.size,
     fitsAsked, fitsOk,
     buildPairs, buildPairsOk,
@@ -939,10 +983,93 @@ function changelogHtml(entries) {
     const m = String(e).match(/^(\d{4}-\d{2}-\d{2}):\s*(.+)$/);
     return m ? '<li><strong>' + esc(fmtDate(m[1])) + '</strong> &mdash; ' + esc(m[2]) + '</li>' : '';
   }).join('');
-  return items ? '<div class="changelog"><div class="section-title">Latest updates</div><ul>' + items + '</ul></div>' : '';
+  return items ? '<div class="changelog fn-toc-target" id="latest-updates"><div class="section-title">Latest updates</div><ul>' + items + '</ul></div>' : '';
 }
 
-function renderPage({ article, meta, bodyHtml, data }) {
+// ── the table of contents ────────────────────────────────────────────────
+// One entry per H2, in document order, by the id the Markdown renderer
+// already gave it; H3s are never listed. "Latest updates" and "Related
+// field notes" — the renderer's own sections — close the list when the
+// page has them. Fewer than TOC_MIN_H2 H2s means no table of contents at
+// all, and no two-column layout: a short note is better read straight.
+export const TOC_MIN_H2 = 3;
+
+// The visible label: the heading's {toc="…"} short label, else its text,
+// as plain text — inline Markdown rendered and its tags dropped, because a
+// heading's link or code span inside a TOC link would nest an <a> in an
+// <a>. inline() has already escaped it, so it is inserted as is.
+const tocLabelHtml = (s) => inline(s).replace(/<[^>]*>/g, '');
+
+export function tocEntries(headings, { hasChangelog, hasRelated }) {
+  const h2 = headings.filter((h) => h.level === 2);
+  if (h2.length < TOC_MIN_H2) return [];
+  return [
+    ...h2.map((h) => ({ id: h.id, labelHtml: tocLabelHtml(h.toc || h.text) })),
+    ...(hasChangelog ? [{ id: 'latest-updates', labelHtml: 'Latest updates' }] : []),
+    ...(hasRelated ? [{ id: 'related-field-notes', labelHtml: 'Related field notes' }] : []),
+  ];
+}
+
+// Hrefs are page-absolute, never a bare "#id": the chrome's <base href="/"/>
+// resolves a bare fragment against the homepage (found on deploy preview
+// 204, the ::picks jump links). Same path as the page, so it is still an
+// in-page jump with JS off.
+function tocListHtml(entries, slug) {
+  return '<ol class="fn-toc-list">' + entries.map((e) =>
+    '<li><a href="' + esc(fieldNotePath(slug) + '#' + e.id) + '">' + e.labelHtml + '</a></li>').join('') + '</ol>';
+}
+
+// Two renderings of one list, and exactly one landmark: the ≥1024px rail
+// is the <nav aria-label="On this page">; the <1024px copy is a collapsed
+// <details> with no landmark role. CSS shows one at a time (display:none
+// takes the other out of the accessibility tree too), so a screen reader
+// meets one table of contents, never two.
+function tocRailHtml(entries, slug) {
+  return '<aside class="fn-toc-rail"><nav class="fn-toc" id="on-this-page" aria-label="On this page">' +
+    '<div class="fn-toc-head">On this page</div>' + tocListHtml(entries, slug) + '</nav></aside>';
+}
+function tocMobileHtml(entries, slug) {
+  return '<details class="fn-toc-mobile"><summary>Jump to section</summary>' + tocListHtml(entries, slug) + '</details>';
+}
+
+// Progressive enhancement only: with JS off the links above already jump.
+// An IntersectionObserver (no scroll listener) repaints which link carries
+// aria-current="true": the last target whose top has passed the line under
+// the sticky nav, or — once the footer is in view — the last target on
+// screen, so a short final section can still be current. It animates
+// nothing; smooth scrolling is CSS, and only under
+// prefers-reduced-motion: no-preference.
+const TOC_SCRIPT =
+'<script>(function(){' +
+  'if(!("IntersectionObserver" in window))return;' +
+  'var links=[].slice.call(document.querySelectorAll(".fn-toc-list a"));' +
+  'var idOf=function(a){return decodeURIComponent((a.getAttribute("href")||"").split("#")[1]||"");};' +
+  'var seen={},heads=[];links.forEach(function(a){var id=idOf(a);if(id&&!seen[id]){seen[id]=1;var el=document.getElementById(id);if(el)heads.push(el);}});' +
+  'if(!heads.length)return;' +
+  'var foot=document.querySelector(".footer-bar"),footIn=false,cur;' +
+  'function paint(entries){' +
+    '(entries||[]).forEach(function(e){if(e.target===foot)footIn=e.isIntersecting;});' +
+    'var pick=null;for(var i=0;i<heads.length;i++){if(heads[i].getBoundingClientRect().top<=96)pick=heads[i];else break;}' +
+    'var last=heads[heads.length-1];if(footIn&&last.getBoundingClientRect().top<window.innerHeight)pick=last;' +
+    'var id=pick?pick.id:null;if(id===cur)return;cur=id;' +
+    'links.forEach(function(a){if(id&&idOf(a)===id)a.setAttribute("aria-current","true");else a.removeAttribute("aria-current");});' +
+  '}' +
+  'var io=new IntersectionObserver(paint,{rootMargin:"-96px 0px 0px 0px",threshold:[0,1]});' +
+  'heads.forEach(function(h){io.observe(h);});if(foot)io.observe(foot);paint();' +
+'})();</script>';
+
+// "Related field notes": up to four other live articles sharing a tag
+// (relatedNotes() in _field-notes-meta.mjs). None renders no section.
+function relatedNotesHtml(related) {
+  if (!related.length) return '';
+  return '<div class="fn-related-notes fn-toc-target" id="related-field-notes"><div class="section-title">Related field notes</div>' +
+    '<ul class="fn-related-list">' + related.map((r) =>
+      '<li><a href="' + esc(r.href) + '">' + tocLabelHtml(r.title) + '</a>' +
+      (r.description ? '<span class="fn-related-desc">' + esc(r.description) + '</span>' : '') + '</li>').join('') +
+    '</ul></div>';
+}
+
+function renderPage({ article, meta, bodyHtml, data, headings = [], related = [] }) {
   const slug = article.slug;
   const canonical = SITE + fieldNotePath(slug);
   const title = meta.title || slug;
@@ -957,36 +1084,68 @@ function renderPage({ article, meta, bodyHtml, data }) {
   // Each placeholder becomes its resolved block, in order.
   const html = bodyHtml.replace(/<!--fn-block-(\d+)-->/g, (_, n) => data.rendered[Number(n)] || '');
 
-  const jsonLd = [
+  const changelog = changelogHtml(article.changelog);
+  const toc = tocEntries(headings, { hasChangelog: !!changelog, hasRelated: related.length > 0 });
+  const reviewed = article.updated || article.published;
+
+  // The page's structured data: ONE @graph, renderer-owned, in the page's
+  // one script. Article (a Person when the front matter names an author,
+  // else the Organization — never an invented name), the BreadcrumbList,
+  // one ItemList per ranked group, and FAQPage when the note has ::faq.
+  // Deliberately no Review and no AggregateRating: Gunforma does not
+  // range-test parts (the method line says so on the same page), and a
+  // review or a star rating would claim it does.
+  const graph = [
     {
-      '@context': 'https://schema.org', '@type': 'Article',
+      '@type': 'Article', '@id': canonical + '#article',
       headline: title, description,
-      author: author ? { '@type': 'Person', name: author } : { '@type': 'Organization', name: 'Gunforma' },
+      author: author
+        ? { '@type': 'Person', name: author, ...(meta.author_credential ? { description: meta.author_credential } : {}) }
+        : { '@type': 'Organization', name: 'Gunforma' },
       publisher: { '@type': 'Organization', name: 'Gunforma', logo: { '@type': 'ImageObject', url: SITE + '/assets/gunforma-logo.png' } },
-      datePublished: article.published, dateModified: article.updated || article.published,
+      datePublished: article.published, dateModified: reviewed,
       mainEntityOfPage: canonical, image: ogImage,
     },
     {
-      '@context': 'https://schema.org', '@type': 'BreadcrumbList',
+      '@type': 'BreadcrumbList', '@id': canonical + '#breadcrumb',
       itemListElement: [
-        { '@type': 'ListItem', position: 1, name: 'Gunforma', item: SITE + '/' },
+        { '@type': 'ListItem', position: 1, name: 'Home', item: SITE + '/' },
         { '@type': 'ListItem', position: 2, name: 'Field Notes', item: SITE + FIELD_NOTES_INDEX_PATH },
         { '@type': 'ListItem', position: 3, name: title, item: canonical },
       ],
     },
+    ...data.rankGroups.filter((g) => g.items.length).map((g) => ({
+      '@type': 'ItemList',
+      name: g.section || title,
+      itemListOrder: 'https://schema.org/ItemListOrderAscending',
+      numberOfItems: g.items.length,
+      itemListElement: g.items.map((it) => ({
+        '@type': 'ListItem', position: it.rank, name: it.o.displayName, url: SITE + it.o.href,
+      })),
+    })),
   ];
-  // The ::faq blocks' questions, as FAQPage inside the page's one
-  // structured-data script — an array of top-level entities is valid
-  // JSON-LD, the same shape the Article and BreadcrumbList already share.
   if (data.faqQas.length) {
-    jsonLd.push({
-      '@context': 'https://schema.org', '@type': 'FAQPage',
+    graph.push({
+      '@type': 'FAQPage',
       mainEntity: data.faqQas.map((qa) => ({
         '@type': 'Question', name: qa.q,
         acceptedAnswer: { '@type': 'Answer', text: qa.a },
       })),
     });
   }
+  const jsonLd = { '@context': 'https://schema.org', '@graph': graph };
+
+  // The byline row, under the H1: author · credential · Last reviewed
+  // <Month YYYY>, then the first-published date (kept from the old byline —
+  // a visible element is not removed without Alex's say, CLAUDE.md
+  // "Verifying changes"). No author means none of the author half — never a
+  // placeholder name.
+  const bylineParts = [
+    author ? 'By <strong>' + esc(author) + '</strong>' : null,
+    author && meta.author_credential ? '<span class="byline-cred">' + esc(meta.author_credential) + '</span>' : null,
+    'Last reviewed ' + esc(fmtMonth(reviewed)),
+    'Published ' + esc(fmtDate(article.published)),
+  ].filter(Boolean);
 
   return '<!DOCTYPE html><html lang="en"><head>' +
   headTags({ title: title + ' | Field Notes | Gunforma', description, canonical, jsonLd, ogImage }) +
@@ -1103,23 +1262,57 @@ function renderPage({ article, meta, bodyHtml, data }) {
 '.author { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 12.5px; color: #666; border-top: 0.5px solid #e5e5e5; margin-top: 30px; padding-top: 14px; }' +
 '.related a { display: inline-block; margin-right: 14px; font-size: 13px; color: #4a9edd; text-decoration: none; }' +
 '.section-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #555; margin: 26px 0 10px; }' +
+// ── the table of contents and the two-column layout ──
+// <1024px: one column, the collapsed <details> under the method line, no
+// sticky bar. ≥1024px: the rail (220px) beside the article column, whose
+// width (812px) is exactly the old single column's content width — the
+// line length does not change. The rail sticks under the 52px nav.
+'.fn-toc-rail { display: none; }' +
+'.fn-toc-mobile { margin: 0 0 16px; border: 0.5px solid #e5e5e5; border-radius: 8px; background: #fff; padding: 0 14px; }' +
+'.fn-toc-mobile summary { font-size: 13px; font-weight: 700; padding: 10px 0; cursor: pointer; }' +
+'.article .fn-toc-list { margin: 0 0 10px 20px; } .fn-toc-list li { font-size: 13.5px; line-height: 1.5; margin: 6px 0; }' +
+'.fn-toc-list a { color: #1d6fb8; text-decoration: none; } .fn-toc-list a:hover { text-decoration: underline; }' +
+'.fn-toc-list a[aria-current="true"] { color: #1a1a1a; font-weight: 700; }' +
+'.fn-toc-head { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin-bottom: 8px; }' +
+'@media (min-width: 1024px) {' +
+'  .page.fn-has-toc { max-width: 1120px; }' +
+'  .fn-has-toc .fn-grid { display: grid; grid-template-columns: 220px minmax(0, 812px); column-gap: 40px; }' +
+'  .fn-toc-rail { display: block; }' +
+'  .fn-toc-rail .fn-toc { position: sticky; top: 72px; max-height: calc(100vh - 92px); overflow-y: auto; padding-top: 16px; }' +
+'  .fn-toc-rail .fn-toc-list { list-style: none; margin: 0; border-left: 2px solid #e5e5e5; }' +
+'  .fn-toc-rail .fn-toc-list li { margin: 0; font-size: 13px; }' +
+'  .fn-toc-rail .fn-toc-list a { display: block; padding: 5px 0 5px 12px; margin-left: -2px; border-left: 2px solid transparent; color: #555; }' +
+'  .fn-toc-rail .fn-toc-list a[aria-current="true"] { border-left-color: #4a9edd; color: #1a1a1a; }' +
+'  .fn-toc-mobile { display: none; }' +
+'  .fn-toc-on .breadcrumb { max-width: 1120px; padding-left: 284px; }' +
+'}' +
+// A jumped-to heading lands below the sticky 52px nav, not under it.
+'.article h2, .fn-toc-target { scroll-margin-top: 72px; }' +
+'@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }' +
+'.byline-cred { color: #555; }' +
+'.article .fn-related-list { list-style: none; margin: 0; } .fn-related-list li { margin: 0 0 12px; }' +
+'.fn-related-list a { font-size: 14px; font-weight: 700; color: #1a1a1a; text-decoration: none; } .fn-related-list a:hover { color: #4a9edd; }' +
+'.fn-related-desc { display: block; font-size: 13px; color: #666; line-height: 1.5; margin-top: 2px; }' +
 '</style>' +
-'</head><body>' +
+'</head><body' + (toc.length ? ' class="fn-toc-on"' : '') + '>' +
   navHtml({}) +
 '<div class="breadcrumb"><a href="/">Home</a> / <a href="' + FIELD_NOTES_INDEX_PATH + '">Field Notes</a> / ' + esc(title) + '</div>' +
-'<div class="page article">' +
+'<div class="page article' + (toc.length ? ' fn-has-toc' : '') + '"><div class="fn-grid">' +
+  (toc.length ? tocRailHtml(toc, slug) : '') +
+  '<div class="fn-main">' +
   (article.draft ? '<div class="draft-strip"><strong>Draft.</strong> Served on previews only; this address is a 404 on gunforma.com.</div>' : '') +
   '<div class="eyebrow">Field Notes &middot; ' + esc(typeLabel) + (meta.category ? ' &middot; ' + esc(meta.category) : '') + '</div>' +
   '<h1>' + inline(title) + '</h1>' +
-  '<div class="byline">' + (author ? 'By <strong>' + esc(author) + '</strong> &middot; ' : '') + esc(fmtDate(article.published)) +
-    (article.updated ? ' &middot; Last reviewed ' + esc(fmtMonth(article.updated)) : '') + '</div>' +
+  '<div class="byline">' + bylineParts.join(' &middot; ') + '</div>' +
   // The method line, on every field note, directly under the byline and
   // above the disclosure — one implementation (_guide-blocks.mjs), never
   // per-article text.
   METHOD_LINE_HTML +
+  (toc.length ? tocMobileHtml(toc, slug) : '') +
   (data.hasAffiliate ? AFFILIATE_DISCLOSURE_HTML : '') +
   html +
-  changelogHtml(article.changelog) +
+  changelog +
+  relatedNotesHtml(related) +
   '<div class="related"><div class="section-title">Related</div>' +
     '<a href="' + FIELD_NOTES_INDEX_PATH + '">All Field Notes &rarr;</a>' +
     '<a href="/p365/">What fits your P365 &rarr;</a>' +
@@ -1129,10 +1322,12 @@ function renderPage({ article, meta, bodyHtml, data }) {
   (author
     ? '<div class="author"><strong>' + esc(author) + '</strong>' +
       (meta.author_credential ? '<span>' + esc(meta.author_credential) + '</span>' : '') +
-      '<span>Last reviewed ' + esc(fmtMonth(article.updated || article.published)) + '</span></div>'
+      '<span>Last reviewed ' + esc(fmtMonth(reviewed)) + '</span></div>'
     : '') +
-'</div>' +
+  '</div>' +   // .fn-main
+'</div></div>' +   // .fn-grid, .page
   footerHtml() +
+  (toc.length ? TOC_SCRIPT : '') +
   navScript() + ANALYTICS_SNIPPET + '</body></html>';
 }
 
@@ -1147,17 +1342,18 @@ export default async (req) => {
   const src = await loadSource(slug);
   if (src == null) return notBundled(slug);
   const { meta, body } = parseFrontMatter(src);
-  const { html: bodyHtml, blocks } = renderMarkdown(body);
+  const { html: bodyHtml, blocks, headings, blockSections } = renderMarkdown(body);
 
   let data;
   try {
-    data = await resolveBlocks(blocks, slug);
+    data = await resolveBlocks(blocks, slug, blockSections);
   } catch (err) {
     console.error('[field-note] lookup failed', err);
     return unavailable();   // 503 + Retry-After, never a 404 — see _pg.mjs
   }
+  const related = await loadRelated(slug);
 
-  const page = renderPage({ article, meta, bodyHtml, data });
+  const page = renderPage({ article, meta, bodyHtml, data, headings, related });
   return new Response(page, {
     status: 200,
     headers: {
@@ -1175,6 +1371,12 @@ export default async (req) => {
         ' unlocks=' + data.unlocksBlocks + ' colors=' + data.colorsBlocks +
         ' build=' + data.buildBlocks,
       'x-field-note-products': data.productsFound + '/' + data.productsAsked,
+      // The page furniture, countable from outside: TOC entries (0 = no
+      // table of contents), ItemList groups:items, related notes linked.
+      'x-field-note-toc': String(tocEntries(headings, { hasChangelog: !!changelogHtml(article.changelog), hasRelated: related.length > 0 }).length),
+      'x-field-note-itemlists': data.rankGroups.filter((g) => g.items.length).length + ':' +
+        data.rankGroups.reduce((n, g) => n + g.items.length, 0),
+      'x-field-note-related': String(related.length),
       'x-field-note-fits': data.fitsOk + '/' + data.fitsAsked,
       // Pairs a ::build block checked against the fit views, ok/asked — a
       // shortfall means a build block rendered its refusal, which

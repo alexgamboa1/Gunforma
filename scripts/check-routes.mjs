@@ -35,6 +35,8 @@
 // printed on every run so the next person reasoning about a rewrite reads a
 // measurement instead of guessing — which is the mistake this file exists to
 // stop repeating.
+import { auditFieldNotePage } from './field-note-page-audit.mjs';
+
 const origin = (process.argv[2] || process.env.DEPLOY_URL || '').replace(/\/$/, '');
 if (!origin) {
   console.error('usage: node scripts/check-routes.mjs <origin>');
@@ -70,6 +72,9 @@ async function get(path, headers) {
     fnSource: res.headers.get('x-field-note-source'),
     fnProducts: res.headers.get('x-field-note-products'),
     fnFits: res.headers.get('x-field-note-fits'),
+    fnToc: res.headers.get('x-field-note-toc'),
+    fnItemLists: res.headers.get('x-field-note-itemlists'),
+    fnRelated: res.headers.get('x-field-note-related'),
     fitSection: res.headers.get('x-fit-section'),
     fitsOn: res.headers.get('x-fits-on'),
     discontinued: res.headers.get('x-discontinued'),
@@ -901,6 +906,22 @@ for (const [label, path, want] of [
     ok(same(r.fnFits), `${path}: every fit block resolved its part and pistol`, `x-field-note-fits=${r.fnFits}`);
     if (a.draft) ok(NOINDEX.test(r.body) && r.cacheControl === 'no-store', `${path}: draft is noindex and no-store`, r.cacheControl);
     else ok(!NOINDEX.test(r.body) && /s-maxage/.test(r.cacheControl || ''), `${path}: live article is indexable and cached`, r.cacheControl);
+    // The page furniture, held on the served HTML by the same audit the
+    // build's test runs on stubbed pages: unique ids, every TOC href
+    // resolving, one h1, the ItemList matching the ::rank cards, no draft
+    // in Related field notes, no Review/AggregateRating.
+    const problems = auditFieldNotePage(r.body, a.slug);
+    ok(problems.length === 0, `${path}: page furniture holds (TOC, ids, h1, ItemList, related)`, problems.join('; '));
+    note(`${path}: furniture`, `toc=${r.fnToc} itemlists=${r.fnItemLists} related=${r.fnRelated}`);
+    // …and every ItemList url answers 200 on this origin — the schema
+    // must never point a crawler at a part page that is not there.
+    const ld = (r.body.match(/<script type="application\/ld\+json">(.*?)<\/script>/s) || [])[1];
+    let urls = [];
+    try { urls = (JSON.parse(String(ld).replaceAll('\\u003c', '<'))['@graph'] || []).filter((n) => n['@type'] === 'ItemList').flatMap((l) => l.itemListElement.map((i) => i.url)); } catch { /* the audit above already failed it */ }
+    for (const u of urls) {
+      const pr = await get(u.replace('https://gunforma.com', ''));
+      ok(pr.status === 200, `  ItemList url ${u.replace('https://gunforma.com', '')}: 200`, pr.status);
+    }
   }
 }
 

@@ -126,6 +126,52 @@ live regression is readable off the wire. The offline guard cannot see
 fit data; it checks slugs, roles and categories, and
 `scripts/field-notes-v2.test.mjs` pins the refusal against a stub.
 
+## Page furniture you get for free (2026-11-20)
+
+Nothing below needs per-article work; it is how the renderer lays out
+every note, so write the headings and the registry row well and the rest
+follows.
+
+**Headings drive the table of contents.** Every `##` gets a stable id
+(the heading slugged; a repeat gets `-2`, `-3`) and, on a note with three
+or more H2s, an entry in the table of contents — a sticky "On this page"
+rail at ≥1024px, a collapsed "Jump to section" under the method line
+below that. H3s are never listed. "Latest updates" and "Related field
+notes" close the list when the page has them. So:
+
+- **No `# ` headings in the body** — the title is the page's one H1. The
+  build fails.
+- **Name each H2 for what it answers.** "Overview", "Introduction",
+  "Details" and "Conclusion" fail the build: as TOC entries they tell a
+  reader nothing.
+- **A long H2 may carry a short TOC label:**
+  `## Which magazines seat flush in each module {toc="Magazine fit"}`.
+  The heading and its id keep the full text; the label (≤ 40 characters,
+  no `$`) is only the TOC entry. The suffix must close the line exactly.
+- **An H3 outside a ::rank card prints a warning**, not a failure: fine
+  for a sub-point, but the TOC skips it — promote it to `##` if readers
+  will want to jump there.
+
+**The byline row** is author · `author_credential` · "Last reviewed
+<Month YYYY>" (the registry's `updated`), then the published date, then
+the method line, then the affiliate disclosure when a block sells. No
+`author` means no name at all — never a placeholder.
+
+**Structured data** is one `@graph`, built by the renderer: Article (its
+author a `Person` with the credential as description when `author` is
+set, else the Organization), a BreadcrumbList Home → Field Notes →
+title, one `ItemList` per ranked group, and FAQPage from `::faq`. A
+ranked group is a run of `::rank` cards; **restarting at `rank=1` starts
+a new group**, named by the `##` its first card sits under. There is
+never a Review or an AggregateRating — we don't range-test parts.
+
+**Related field notes** come from the registry's optional `tags` (an
+array of lowercase slugs on the article's row in `_field-notes-meta.mjs`,
+not the front matter): up to four other live notes sharing a tag, most
+shared first, then most recently reviewed. Untagged means no section.
+A draft is never listed. Tag a note by what a reader of it would want
+next — its category and the gun it is about are the usual pair.
+
 ## The method line
 
 Every field note renders ONE line directly under the byline and above the

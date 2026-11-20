@@ -299,16 +299,38 @@ export function headingId(text) {
     .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'section';
 }
 
+// Ids the page renderer gives its own sections (field-note.mjs): the
+// changelog, the related-notes footer, the table of contents. A heading
+// that slugs to one of them is numbered past it ("Latest updates" in the
+// prose becomes latest-updates-2), so the page never carries two elements
+// with one id and a table-of-contents link always lands where it says.
+export const RESERVED_IDS = ['latest-updates', 'related-field-notes', 'on-this-page'];
+
+// `## Long heading {toc="Short label"}` — an optional short label for the
+// table of contents. The suffix is stripped before the heading is rendered
+// or slugged, so the id and the visible text are the long heading's.
+const TOC_LABEL = /\s*\{toc="([^"]*)"\}\s*$/;
+export function splitTocLabel(text) {
+  const m = String(text).match(TOC_LABEL);
+  return m ? { text: String(text).slice(0, m.index), toc: m[1].trim() || null } : { text: String(text), toc: null };
+}
+
 // ── blocks ───────────────────────────────────────────────────────────────
-// Returns { html, blocks, headings }: the HTML with one `<!--fn-block-N-->`
-// placeholder per directive, the parsed directives in order (index N), and
-// the h2/h3 headings (for a table of contents or a test).
+// Returns { html, blocks, headings, blockSections }: the HTML with one
+// `<!--fn-block-N-->` placeholder per directive, the parsed directives in
+// order (index N), the h1–h3 headings (for the table of contents, the
+// heading lint, a test), and for each block the text of the H2 it sits
+// under (null before the first) — what names a ranked group's ItemList.
 export function renderMarkdown(body) {
   const lines = String(body || '').replace(/\r\n?/g, '\n').split('\n');
   const out = [];
   const blocks = [];
+  const blockSections = [];
   const headings = [];
-  const ids = new Map();   // dedupe heading ids: second "Verdict" is verdict-2
+  // dedupe heading ids: second "Verdict" is verdict-2. The renderer's own
+  // section ids are taken before the first heading is read.
+  const ids = new Map(RESERVED_IDS.map((r) => [r, 1]));
+  let lastH2 = null;
   let i = 0;
 
   const uniqueId = (base) => {
@@ -334,7 +356,7 @@ export function renderMarkdown(body) {
         body = c.body; i = c.next;
       } else i++;
       const d = parseDirective(line, body);
-      if (d) { blocks.push(d); out.push('<!--fn-block-' + (blocks.length - 1) + '-->'); }
+      if (d) { blocks.push(d); blockSections.push(lastH2); out.push('<!--fn-block-' + (blocks.length - 1) + '-->'); }
       else out.push('<!-- unparseable directive dropped -->');
       continue;
     }
@@ -354,9 +376,11 @@ export function renderMarkdown(body) {
     const h = line.match(/^(#{1,6})\s+(.*?)\s*#*\s*$/);
     if (h) {
       const level = h[1].length;
-      const html = inline(h[2]);
-      const id = uniqueId(headingId(h[2]));
-      if (level === 2 || level === 3) headings.push({ level, id, text: h[2] });
+      const { text, toc } = splitTocLabel(h[2]);
+      const html = inline(text);
+      const id = uniqueId(headingId(text));
+      if (level <= 3) headings.push({ level, id, text, toc });
+      if (level === 2) lastH2 = text;
       out.push('<h' + level + ' id="' + id + '">' + html + '</h' + level + '>');
       i++; continue;
     }
@@ -438,7 +462,7 @@ export function renderMarkdown(body) {
     out.push('<p>' + inline(buf.join(' ')) + '</p>');
   }
 
-  return { html: out.join('\n'), blocks, headings };
+  return { html: out.join('\n'), blocks, headings, blockSections };
 }
 
 // Plain text of the rendered HTML — what a meta description or a test
