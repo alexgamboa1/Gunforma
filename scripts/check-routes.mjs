@@ -1166,6 +1166,13 @@ for (const [label, path, want] of [
       variants: ['fdez-werx-p365-xl-ported-barrel-copper-high-polished-copper', 'fdez-werx-p365-xl-ported-barrel-gold-high-polished-gold-tin'],
       reason: 'four-finish group shot kept on Gold and Copper (default), which Fdez never photographs alone (Alex, 2026-10-22)',
     },
+    // Fdez's four-finish group shot of the FUSE flush barrel, on all four
+    // variants: it shows every colour, so none is misleading (Alex,
+    // 2026-11-21).
+    'fdez-werx-p365-fuse-flush-barrel': {
+      variants: ['fdez-werx-p365-fuse-flush-barrel-copper-high-polished-copper-rose', 'fdez-werx-p365-fuse-flush-barrel-black-high-polished-black-dlc', 'fdez-werx-p365-fuse-flush-barrel-gold-high-polished-gold', 'fdez-werx-p365-fuse-flush-barrel-stainless-steel-high-polished-stainless'],
+      reason: 'Fdez four-finish group shot, shows every colour (Alex, 2026-11-21)',
+    },
     // OpticsPlanet's five-plate composite stays on Black (the default);
     // Purple has its own photo and Blue, Gold and Red show the swatch.
     // One variant cannot share with itself, so this entry never excuses a
