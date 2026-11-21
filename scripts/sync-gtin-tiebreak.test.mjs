@@ -388,3 +388,55 @@ test('hyphen-insensitive confirmsStored still separates a shared-URL row', () =>
   assert.equal(o.price, 219.99, 'the shared-URL noise row won');
   assert.equal(st.resolvedByStoredId, 1, 'the stored-identifier rule did not claim the resolution');
 });
+
+// ─── variant photos: the feed does not supply them (Alex, 2026-11-21) ──────
+// Variant photos are hand-selected to show what is in each variant. The
+// null-fill exists but is OFF unless FILL_VARIANT_IMAGES=1. These drive the
+// real resolver on a clean, uncontested match against a variant with no photo
+// — the one case the fill ever acted on.
+const NULL_PHOTO_TARGET = {
+  op_mpn: 'TPP365BXBL', op_gtin: null, op_merchant_product_id: null,
+  product_variants: { id: 'variant-without-photo', primary_image_url: null },
+};
+const WITH_FEED_PHOTO = { ...TRUE_PRECISION, rawImage: 'https://merchant.example/photo.jpg' };
+
+test('a null-photo variant is NOT filled from the feed by default', () => {
+  assert.notEqual(process.env.FILL_VARIANT_IMAGES, '1', 'run this test without FILL_VARIANT_IMAGES set');
+  const st = stateWith(NULL_PHOTO_TARGET, [WITH_FEED_PHOTO]);
+  resolveProposals(st, TODAY);
+  assert.equal(st.updates.has(LINK), true, 'the price write must be unaffected by the image gate');
+  assert.equal(st.updates.get(LINK).street_price, 144.99);
+  assert.equal(st.imageFills.size, 0, 'a feed photo was queued with the fill off');
+});
+
+test('a null-photo variant IS filled when the fill is switched on', () => {
+  const st = stateWith(NULL_PHOTO_TARGET, [WITH_FEED_PHOTO]);
+  resolveProposals(st, TODAY, { fillImages: true });
+  assert.equal(st.imageFills.get('variant-without-photo'), 'https://merchant.example/photo.jpg');
+});
+
+test('FILL_VARIANT_IMAGES=1 in the environment switches the fill on; anything else does not', async () => {
+  const prior = process.env.FILL_VARIANT_IMAGES;
+  try {
+    for (const [value, expectFill] of [['1', true], ['true', false], ['0', false]]) {
+      process.env.FILL_VARIANT_IMAGES = value;
+      // A fresh module instance reads the env at load, as the nightly run does.
+      const mod = await import(`./refresh-affiliate-prices.mjs?fill=${value}`);
+      const st = stateWith(NULL_PHOTO_TARGET, [WITH_FEED_PHOTO]);
+      mod.resolveProposals(st, TODAY);
+      assert.equal(st.imageFills.size, expectFill ? 1 : 0, `FILL_VARIANT_IMAGES=${value}`);
+    }
+  } finally {
+    if (prior === undefined) delete process.env.FILL_VARIANT_IMAGES;
+    else process.env.FILL_VARIANT_IMAGES = prior;
+  }
+});
+
+test('a variant that already has a photo is never filled, even with the fill on', () => {
+  const st = stateWith(
+    { ...NULL_PHOTO_TARGET, product_variants: { id: 'variant-with-photo', primary_image_url: 'https://hand.picked/x.jpg' } },
+    [WITH_FEED_PHOTO],
+  );
+  resolveProposals(st, TODAY, { fillImages: true });
+  assert.equal(st.imageFills.size, 0);
+});
