@@ -141,8 +141,13 @@ function renderPage(allProducts) {
     .map(([category, [segment, label]]) => ({ category, segment, label, items: byCategory.get(category) || [] }))
     .filter((c) => c.items.length);
 
+  // "/parts#<segment>", never a bare "#<segment>": the head carries
+  // <base href="/"/> (the nav's relative links depend on it), and a bare
+  // fragment resolves against the base — "#barrels" becomes "/#barrels",
+  // the homepage. scripts/parts-index-anchors.test.mjs and check-routes.mjs
+  // refuse a bare "#" href on this page.
   const jumpNavHtml = categoryEntries
-    .map((c) => '<a class="jump-link" href="#' + esc(c.segment) + '">' + esc(c.label) + ' (' + c.items.length + ')</a>')
+    .map((c) => '<a class="jump-link" href="/parts#' + esc(c.segment) + '">' + esc(c.label) + ' (' + c.items.length + ')</a>')
     .join('');
 
   const sectionsHtml = categoryEntries.map((c) => {
