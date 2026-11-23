@@ -1,5 +1,5 @@
 {
- "captured": "2026-10-20",
+ "captured": "2026-11-23",
  "source": "products?select=slug,category,name,manufacturers!products_brand_id_fkey(name)&is_discontinued=eq.false (public key)",
  "products": [
   {
@@ -37,6 +37,18 @@
    "category": "sight",
    "brand": "Angry Bear Arms",
    "name": "Angry Bear Arms Fiber Optic Pistol Sights for Sig P365"
+  },
+  {
+   "slug": "arc-division-reactor-365f-p365-fuse",
+   "category": "slide",
+   "brand": "Arc Division",
+   "name": "Reactor 365F 4.3\" Slide & Barrel Kit"
+  },
+  {
+   "slug": "arc-division-reactor-365x-p365-xmacro",
+   "category": "slide",
+   "brand": "Arc Division",
+   "name": "Reactor 365X 3.7\" Slide & Barrel Kit"
   },
   {
    "slug": "armory-craft-adjustable-skeleton-flat-trigger-p365",
@@ -83,8 +95,8 @@
   {
    "slug": "dmp-springs-soft-rsa-p365",
    "category": "recoil_spring",
-   "brand": "DMP Springs",
-   "name": "DMP Soft RSA"
+   "brand": "DPM Systems",
+   "name": "Soft RSA"
   },
   {
    "slug": "ecm-precision-carry-basepad-p365xmacro",
@@ -189,6 +201,96 @@
    "name": "Faxon Exos P365 Compensator"
   },
   {
+   "slug": "fdez-werx-365rs-p365-fuse",
+   "category": "slide",
+   "brand": "Fdez Werx",
+   "name": "365RS P365 Fuse 4.3\" Slide"
+  },
+  {
+   "slug": "fdez-werx-365rs-p365-xl",
+   "category": "slide",
+   "brand": "Fdez Werx",
+   "name": "365RS Comp'd P365 XL 3.7\" Slide"
+  },
+  {
+   "slug": "fdez-werx-accs-p365-fuse",
+   "category": "slide",
+   "brand": "Fdez Werx",
+   "name": "P365 FUSE ACCS 4.3\" Slide"
+  },
+  {
+   "slug": "fdez-werx-accs-p365-xl",
+   "category": "slide",
+   "brand": "Fdez Werx",
+   "name": "Comp'd P365 XL ACCS Slide"
+  },
+  {
+   "slug": "fdez-werx-manual-thumb-safety-lever-kit-p365",
+   "category": "safety_selector",
+   "brand": "Fdez Werx",
+   "name": "P365 Manual Thumb Safety Lever Kit"
+  },
+  {
+   "slug": "fdez-werx-p365-flush-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 Non-LCI Flush & Crown 3.1\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-p365-fuse-chunk-port-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 Fuse Non-LCI Chunk Port 4.3\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-p365-fuse-flush-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 FUSE Non-LCI Flush & Crown 4.3\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-p365-fuse-ported-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 Fuse Non-LCI Ported 4.3\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-p365-fuse-slide",
+   "category": "slide",
+   "brand": "Fdez Werx",
+   "name": "P365 FUSE 4.3\" Slide"
+  },
+  {
+   "slug": "fdez-werx-p365-fuse-threaded-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 FUSE Threaded Barrel with Thread Protector 4.3\""
+  },
+  {
+   "slug": "fdez-werx-p365-xl-flush-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 XL Non-LCI Flush & Crown 3.7\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-p365-xl-ported-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 XL 3.0 / ACCS Non-LCI Ported 3.7\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-p365-xl3-v-ported-barrel",
+   "category": "barrel",
+   "brand": "Fdez Werx",
+   "name": "P365 XL 3.0 Non-LCI V-Ported 3.7\" Barrel"
+  },
+  {
+   "slug": "fdez-werx-xl3-p365-xl",
+   "category": "slide",
+   "brand": "Fdez Werx",
+   "name": "Comp'd P365 Macro / XL 3.0 Slide"
+  },
+  {
    "slug": "grayguns-p365-gm",
    "category": "frame",
    "brand": "Grayguns",
@@ -234,7 +336,7 @@
    "slug": "herrington-arms-magwell-p365xmacro",
    "category": "magwell",
    "brand": "Herrington Arms",
-   "name": "Herrington Arms HA Magwell for P365 X Macro"
+   "name": "Magwell for P365 X Macro"
   },
   {
    "slug": "herrington-arms-zero-p365",
@@ -379,12 +481,6 @@
    "category": "frame",
    "brand": "Icarus Precision",
    "name": "Icarus Precision 311 Series 311 FUSE"
-  },
-  {
-   "slug": "icarus-precision-311-fuse-sl",
-   "category": "frame",
-   "brand": "Icarus Precision",
-   "name": "Icarus Precision 311 Series 311 FUSE SL"
   },
   {
    "slug": "icarus-precision-311-sl",
@@ -570,7 +666,7 @@
    "slug": "mischief-machine-com-g2-fuse",
    "category": "frame",
    "brand": "Mischief Machine",
-   "name": "Mischief Machine Commander G2 XMacro/Fuse Plus"
+   "name": "Mischief Machine Commander G2 Fuse Plus"
   },
   {
    "slug": "mischief-machine-com-g2-xl",
@@ -589,6 +685,18 @@
    "category": "frame",
    "brand": "Mischief Machine",
    "name": "Mischief Machine Commander G2 XXL"
+  },
+  {
+   "slug": "ndz-performance-fuse-mag-plate-lz-p365xmacro",
+   "category": "basepad",
+   "brand": "NDZ Performance",
+   "name": "NDZ for Sig Sauer P365 X Macro Fuse Brass Extended Magazine Plate (*LZ)"
+  },
+  {
+   "slug": "ndz-performance-mag-plate-fuse-lz-p365xmacro",
+   "category": "basepad",
+   "brand": "NDZ Performance",
+   "name": "NDZ Magazine Plate for Sig Sauer P365 X Macro, Fuse (*LZ)"
   },
   {
    "slug": "night-fision-ors-night-sights-240-p365",
@@ -639,6 +747,18 @@
    "name": "Norsso N365-FUSE 4.3\" 9mm E Port Barrel"
   },
   {
+   "slug": "norsso-n365xl-bb-geo-port-bull-barrel",
+   "category": "barrel",
+   "brand": "Norsso",
+   "name": "Norsso N365XL 3.7\" GEO Port Bull Barrel"
+  },
+  {
+   "slug": "norsso-n365xl-bb-standard-bull-barrel",
+   "category": "barrel",
+   "brand": "Norsso",
+   "name": "Norsso N365XL 3.7\" Standard Bull Barrel"
+  },
+  {
    "slug": "norsso-n365xl-cport",
    "category": "barrel",
    "brand": "Norsso",
@@ -681,10 +801,28 @@
    "name": "Norsso P365-FUSE Piranha C"
   },
   {
+   "slug": "norsso-rail-bull-barrel-ported-set-p365-xl",
+   "category": "slide",
+   "brand": "Norsso",
+   "name": "Norsso N365XL Bull Barrel Rail Ported Set"
+  },
+  {
+   "slug": "norsso-rail-bull-barrel-set-p365-xl",
+   "category": "slide",
+   "brand": "Norsso",
+   "name": "Norsso N365XL Bull Barrel Rail Set"
+  },
+  {
    "slug": "norsso-rail-cport-p365-xl",
    "category": "slide",
    "brand": "Norsso",
    "name": "Norsso P365XL Rail C"
+  },
+  {
+   "slug": "norsso-rail-edc-bull-barrel-ported-set-p365-xl",
+   "category": "slide",
+   "brand": "Norsso",
+   "name": "Norsso N365XL Bull Barrel Rail EDC Ported Set"
   },
   {
    "slug": "norsso-rail-edc-cport-p365",
@@ -781,6 +919,12 @@
    "category": "slide",
    "brand": "Norsso",
    "name": "Norsso P365XL Reptile EDC"
+  },
+  {
+   "slug": "norsso-reptile-kp-bull-barrel-set-p365-xl",
+   "category": "slide",
+   "brand": "Norsso",
+   "name": "Norsso N365XL Bull Barrel Reptile KP Set"
   },
   {
    "slug": "norsso-reptile-kp-p365-fuse",
@@ -1041,6 +1185,18 @@
    "name": "Sharps Bros P365 X-Macro M05 G3"
   },
   {
+   "slug": "sig-sauer-9mm-recoil-spring-assembly-p365",
+   "category": "recoil_spring",
+   "brand": "Sig Sauer",
+   "name": "P365 9mm Recoil Spring Assembly"
+  },
+  {
+   "slug": "sig-sauer-9mm-recoil-spring-assembly-p365fuse",
+   "category": "recoil_spring",
+   "brand": "Sig Sauer",
+   "name": "P365-FUSE 9mm Recoil Spring Assembly"
+  },
+  {
    "slug": "sig-sauer-curved-p365",
    "category": "trigger",
    "brand": "Sig Sauer",
@@ -1081,12 +1237,6 @@
    "category": "safety_selector",
    "brand": "Sig Sauer",
    "name": "SIG SAUER P365X Manual Safety Controls Parts Kit"
-  },
-  {
-   "slug": "sig-sauer-manual-safety-parts-kit-black-p365",
-   "category": "safety_selector",
-   "brand": "Sig Sauer",
-   "name": "P365 MANUAL SAFETY PARTS KIT - BLACK"
   },
   {
    "slug": "sig-sauer-p365-10rd-finger-ext-mag",
@@ -1155,6 +1305,12 @@
    "name": "Sig Sauer P365 XL OEM"
   },
   {
+   "slug": "sig-sauer-p365-xl-spectre-comp-slide",
+   "category": "slide",
+   "brand": "Sig Sauer",
+   "name": "P365-XL Spectre 3.1\" Integrated Compensator Slide Assembly"
+  },
+  {
    "slug": "sig-sauer-p365-xmacro-10rd-mag",
    "category": "magazine",
    "brand": "Sig Sauer",
@@ -1165,6 +1321,12 @@
    "category": "frame",
    "brand": "Sig Sauer",
    "name": "Sig Sauer P365 X-Macro OEM"
+  },
+  {
+   "slug": "sig-sauer-recoil-spring-assembly-p365xl",
+   "category": "recoil_spring",
+   "brand": "Sig Sauer",
+   "name": "P365-XL / P365-XMACRO Recoil Spring Assembly"
   },
   {
    "slug": "sig-sauer-romeo-m17",
