@@ -1167,13 +1167,18 @@ for (const [label, path, want] of [
 {
   console.log('\n── variant photos: one colour, one photo');
   const SHARED_PHOTO_ALLOWED = {
-    // Fdez's group shot of all four finishes (image 4458). Gold and Copper
-    // (the default) keep it: Fdez photographs neither on its own, and the
-    // shot shows every finish, so neither is misleading. Black DLC and
-    // Stainless have their own photos. Alex's ruling, 2026-10-22.
+    // One photo on all four finishes of the XL ported barrel: Black DLC,
+    // Copper (the default), Gold and Stainless. Alex set it on all four,
+    // 2026-11-22 (before that only Gold and Copper shared it, 2026-10-22).
     'fdez-werx-p365-xl-ported-barrel': {
-      variants: ['fdez-werx-p365-xl-ported-barrel-copper-high-polished-copper', 'fdez-werx-p365-xl-ported-barrel-gold-high-polished-gold-tin'],
-      reason: 'four-finish group shot kept on Gold and Copper (default), which Fdez never photographs alone (Alex, 2026-10-22)',
+      variants: ['fdez-werx-p365-xl-ported-barrel-copper-high-polished-copper', 'fdez-werx-p365-xl-ported-barrel-black-high-polished-black-dlc', 'fdez-werx-p365-xl-ported-barrel-gold-high-polished-gold-tin', 'fdez-werx-p365-xl-ported-barrel-stainless-steel-high-polished-stainless'],
+      reason: 'one photo on all four finishes (Alex, 2026-11-22)',
+    },
+    // One photo on all six finishes of the XL flush barrel (Alex,
+    // 2026-11-22).
+    'fdez-werx-p365-xl-flush-barrel': {
+      variants: ['fdez-werx-p365-xl-flush-barrel-copper-satin-copper', 'fdez-werx-p365-xl-flush-barrel-black-satin-dlc', 'fdez-werx-p365-xl-flush-barrel-blue-satin-blue', 'fdez-werx-p365-xl-flush-barrel-gold-satin-gold', 'fdez-werx-p365-xl-flush-barrel-satin-stainless-steel-satin-stainless', 'fdez-werx-p365-xl-flush-barrel-stainless-steel-high-polished-stainless'],
+      reason: 'one photo on all six finishes (Alex, 2026-11-22)',
     },
     // Fdez's four-finish group shot of the FUSE flush barrel, on all four
     // variants: it shows every colour, so none is misleading (Alex,
