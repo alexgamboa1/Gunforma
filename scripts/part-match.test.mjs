@@ -73,7 +73,7 @@ const REAL = [
   ['compensator', 'Herrington Arms', 'Herrington Arms HC365 Compensator P365'], ['compensator', 'Faxon Firearms', 'Faxon Exos P365 Compensator'],
   ['compensator', 'True Precision', 'True Precision True-Lock Compensator P365'],
   ['barrel', 'True Precision', 'True Precision P365XL 3.7" Threaded Barrels'], ['barrel', 'True Precision', 'True Precision P365XL 3.7" Non-Threaded Barrels'],
-  ['barrel', 'Zaffiri Precision', 'Zaffiri Precision P365XL Flush & Crown Barrel'], ['barrel', 'Norsso', 'Norsso N365XL 3.7" C Port Barrel'],
+  ['barrel', 'Zaffiri Precision', 'Zaffiri Precision P365XL Flush & Crown 3.7" Barrel'], ['barrel', 'Norsso', 'Norsso N365XL 3.7" C Port Barrel'],
   ['basepad', 'Springer Precision', '+3 Magazine Extension for Sig Sauer X Macro 17rd Mags'], ['basepad', 'Tyrant CNC', 'Tyrant CNC P365 XMacro +3 Magazine Extension'],
   ['basepad', 'Radian Weapons', 'Radian TRU-17 Magazine Base Pad (2-Pack)'], ['basepad', 'Hogue', 'Hogue OverMolded Rubber Grip Extension Base Pad (10-Round) for P365'],
   ['magwell', 'Tyrant CNC', 'Tyrant CNC Sig Sauer P365 XMacro Magwell'], ['magwell', 'Herrington Arms', 'Herrington Arms HA Magwell for P365 X Macro'],
