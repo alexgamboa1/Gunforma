@@ -65,6 +65,14 @@ const { lintNote, TYPED_PRICE } = await import(join(ROOT, 'scripts/field-notes-l
 const CATALOG = JSON.parse(await readFile(join(ROOT, 'scripts/fixtures/product-names.json'), 'utf8')).products;
 const CATALOG_CATEGORY = new Map(CATALOG.map((p) => [p.slug, p.category]));
 
+// Every barrel's fitting slides (v_barrel_slide_fit, fit_status = 'fits',
+// slide approved and not discontinued), captured by fit-barrel-block.test.mjs
+// (`node scripts/fit-barrel-block.test.mjs --refresh-fixture`). A
+// ::fit barrel=a,b group is one box, so its barrels must fit EXACTLY the
+// same slides — a group must never hide a difference. The renderer
+// re-checks this live and refuses a group whose sets have since diverged.
+const BARREL_FITS = JSON.parse(await readFile(join(ROOT, 'scripts/fixtures/barrel-slide-fit.json'), 'utf8')).fits;
+
 // Gunforma guides rank aftermarket parts only (CLAUDE.md, Field Notes
 // evidence rules; Alex, 2026-10-26, on the XMacro grip guide). The catalog
 // has no per-product OEM flag — manufacturers.is_oem marks the brand, which
@@ -217,14 +225,28 @@ for (const a of FIELD_NOTES) {
       if (cat && cat !== b.part) fail(id + ': ::unlocks ' + b.part + '= names ' + b.slug + ', which is a ' + cat + ', not a ' + b.part);
     }
     if (b.kind === 'fit' && b.part === 'barrel') {
-      // ::fit barrel= lists that barrel's fitting slides — the slug must be
-      // a live product, and a barrel.
-      mustResolve(b.slug, '::fit barrel=');
-      const cat = CATALOG_CATEGORY.get(b.slug);
-      if (cat && cat !== 'barrel') fail(id + ': ::fit barrel= names ' + b.slug + ', which is a ' + cat + ', not a barrel');
+      // ::fit barrel= lists the fitting slides — every slug must be a live
+      // product, and a barrel; a group's barrels must fit the same slides.
+      for (const s of b.slugs) {
+        mustResolve(s, '::fit barrel=');
+        const cat = CATALOG_CATEGORY.get(s);
+        if (cat && cat !== 'barrel') fail(id + ': ::fit barrel= names ' + s + ', which is a ' + cat + ', not a barrel');
+      }
+      if (b.slugs.length > 1) {
+        const missing = b.slugs.filter((s) => CATALOG_CATEGORY.get(s) === 'barrel' && !BARREL_FITS[s]);
+        if (missing.length) fail(id + ': ::fit barrel= group names ' + missing.join(', ') + ', which scripts/fixtures/barrel-slide-fit.json does not carry — refresh it: node scripts/fit-barrel-block.test.mjs --refresh-fixture');
+        else {
+          const sets = b.slugs.map((s) => new Set(BARREL_FITS[s] || []));
+          const all = [...new Set(sets.flatMap((x) => [...x]))].sort();
+          const diff = all.filter((sl) => !sets.every((x) => x.has(sl)));
+          if (diff.length) fail(id + ': ::fit barrel=' + b.slugs.join(',') + ' groups barrels that do not fit the same slides — ' +
+            diff.map((sl) => sl + ' fits ' + b.slugs.filter((s, i) => sets[i].has(sl)).join(' + ') + ' only').join('; ') +
+            '. Split the group, or refresh the fixture if the fit data changed.');
+        }
+      }
     }
     if (b.kind === 'colors') {
-      mustResolve(b.baseline, '::colors baseline');
+      if (b.baseline) mustResolve(b.baseline, '::colors baseline');
       for (const s of b.slugs) mustResolve(s, '::colors');
     }
     if (b.kind === 'build') {

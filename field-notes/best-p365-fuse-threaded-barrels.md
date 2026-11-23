@@ -6,7 +6,7 @@ category: guides
 author: "Alex Gamboa"
 ---
 
-Two threaded barrels fit the P365 FUSE in the gunforma catalog: the True Precision P365 FUSE 4.3" Threaded and the Fdez Werx P365 FUSE Threaded 4.3", both 1/2x28. Three standard 4.3" barrels also fit: True Precision, Fdez Werx Flush & Crown and Norsso. None fit the P365 FUSE Comp, which uses a 3.7" barrel.
+If you want a comp or a suppressor on a P365 FUSE, you need a 4.3" threaded barrel, and the gunforma catalog has two: the True Precision P365 FUSE 4.3" Threaded and the Fdez Werx P365 FUSE Threaded 4.3", both 1/2x28. Not running a muzzle device? Three non-threaded 4.3" barrels fit instead. Nothing here fits the FUSE Comp, which runs a 3.7" barrel.
 
 ::picks
 true-precision-p365-fuse-threaded | Threaded 1/2x28, 416R stainless
@@ -18,7 +18,7 @@ norsso-p365-fuse-standard | Non-threaded, 17-4 PH stainless
 
 ## What threaded barrels fit the P365 FUSE?
 
-Every barrel on this page is 4.3", the barrel length of the factory P365 FUSE. Cards are ordered by whether a tracked retailer lists the barrel today; no gunforma build runs any of them yet.
+The FUSE already carries the longest barrel in the P365 family at 4.3". A threaded FUSE barrel keeps that length and adds 1/2x28 threads at the muzzle, which is what you need to hang a compensator or a suppressor off the front. Two makers cut one for the FUSE. Cards run in order of whether a tracked retailer lists the barrel today.
 
 ::compare barrel gun=p365-fuse cols=barrel_length_in,barrel_type,thread_pitch,is_lci,material slugs=true-precision-p365-fuse-threaded,fdez-werx-p365-fuse-threaded-barrel,true-precision-p365-fuse-non-threaded,fdez-werx-p365-fuse-flush-barrel,norsso-p365-fuse-standard
 
@@ -31,9 +31,7 @@ Every barrel on this page is 4.3", the barrel length of the factory P365 FUSE. C
 
 ::price true-precision-p365-fuse-threaded
 
-::fit barrel=true-precision-p365-fuse-threaded
-
-The True Precision P365 FUSE 4.3" Threaded barrel is 416R stainless steel. True Precision states it is not for use with P365 FUSE Comp slide pistols. It threads onto any 1/2x28 compensator, per True Precision.
+The True Precision P365 FUSE 4.3" Threaded is the FUSE threaded barrel you can buy from a tracked retailer today. It's 416R stainless and takes any 1/2x28 compensator, per True Precision. True Precision is clear that it's not for the FUSE Comp slide, so it's a barrel for the standard 4.3" FUSE.
 
 ::rank fdez-werx-p365-fuse-threaded-barrel best="Threaded 1/2x28, thread protector included" rank=2
 ~ 1/2x28 threaded muzzle
@@ -44,27 +42,26 @@ The True Precision P365 FUSE 4.3" Threaded barrel is 416R stainless steel. True 
 
 ::price fdez-werx-p365-fuse-threaded-barrel
 
-::fit barrel=fdez-werx-p365-fuse-threaded-barrel
+Fdez Werx built the P365 FUSE Threaded 4.3" around its own FUSE slide, and it ships with a thread protector, so the threads stay covered on the days nothing is mounted. It's 416 stainless and sold through Fdez Werx's own store; the gunforma catalog doesn't track a retailer listing for it yet.
 
-The Fdez Werx P365 FUSE Threaded 4.3" barrel is 416 stainless. It ships with a thread protector, per Fdez Werx. The gunforma catalog doesn't track a retailer listing for it today.
+::fit barrel=true-precision-p365-fuse-threaded,fdez-werx-p365-fuse-threaded-barrel
 
 ## Why get a threaded barrel for the P365 FUSE?
 
-A threaded barrel lets you mount a muzzle device on the P365 FUSE: a compensator or a suppressor. Both threaded FUSE barrels in the gunforma catalog, the True Precision P365 FUSE 4.3" Threaded and the Fdez Werx P365 FUSE Threaded 4.3", use 1/2x28 threads, the pitch every threaded P365 barrel in the catalog uses. If you aren't running a comp or a suppressor, a flush 4.3" barrel fits more FUSE slides: 12 of the 12 FUSE slides in the catalog, against 7 of 12 for a threaded barrel.
+Threads are about what goes on the end of the gun. A 1/2x28 barrel lets you run a compensator now and a suppressor later on the same barrel. 1/2x28 is the pitch every threaded P365 barrel in the gunforma catalog uses, so you're not locked into one maker's muzzle device.
 
-## True Precision vs Fdez Werx: which FUSE threaded barrel?
-
-The True Precision P365 FUSE 4.3" Threaded and the Fdez Werx P365 FUSE Threaded 4.3" share length (4.3"), thread pitch (1/2x28), caliber (9mm) and the absence of an LCI cut-out. Both fit the same 7 FUSE slides in the gunforma catalog.
-
-What differs:
-
-- Material: True Precision is 416R stainless; Fdez Werx is 416 stainless.
-- Thread protector: Fdez Werx lists one in the box; the gunforma catalog doesn't record one for True Precision.
-- Where to buy: a tracked retailer lists True Precision today; Fdez Werx is sold through Fdez Werx's own store.
+The trade is slide choice. A threaded barrel fits 7 of the 12 FUSE slides in the catalog, because some slide makers say no to threads. A non-threaded barrel fits all 12. If a comp or a suppressor isn't in your plans, the next section is probably where your barrel is.
 
 ## Do you need threads, or will a flush barrel do?
 
-If you aren't mounting a comp or a suppressor, a non-threaded 4.3" barrel fits every FUSE slide in the gunforma catalog. These three replace the factory barrel without threads.
+A barrel swap isn't only about the muzzle. On a FUSE the barrel is one of the simplest parts to change: it shows through the ejection port every time you look at the gun, and swapping it leaves the slide, the grip module and your optic alone. That makes it the easy way to make a factory FUSE look like yours.
+
+You have two directions:
+
+- A different finish. Trade the factory barrel for a gold, copper, polished stainless or black one. The colors table below shows exactly which finishes each barrel comes in.
+- A flush-and-crown muzzle. Flush means the barrel ends level with the front of the slide; the crown is the finished edge at the muzzle. The Fdez Werx Flush & Crown is built that way.
+
+None of these three limits your next slide: each one fits every FUSE slide in the gunforma catalog, 12 of 12.
 
 ::rank fdez-werx-p365-fuse-flush-barrel best="Flush and crowned muzzle" rank=3
 ~ Flush, crowned muzzle
@@ -75,9 +72,7 @@ If you aren't mounting a comp or a suppressor, a non-threaded 4.3" barrel fits e
 
 ::price fdez-werx-p365-fuse-flush-barrel
 
-::fit barrel=fdez-werx-p365-fuse-flush-barrel
-
-The Fdez Werx P365 FUSE Flush & Crown 4.3" barrel is 416 stainless. Fdez Werx sells it as the non-ported barrel option on its 365RS, FUSE and ACCS slides, and it drops into full-size P365 FUSE slides, per Fdez Werx.
+The Fdez Werx P365 FUSE Flush & Crown 4.3" has the widest finish choice of the FUSE barrels in the catalog. It's 416 stainless, and Fdez Werx sells it as the non-ported barrel for its 365RS, FUSE and ACCS slides. It drops into full-size P365 FUSE slides, per Fdez Werx.
 
 ::rank true-precision-p365-fuse-non-threaded best="Non-threaded, 416R stainless" rank=4
 ~ Non-threaded muzzle
@@ -88,9 +83,7 @@ The Fdez Werx P365 FUSE Flush & Crown 4.3" barrel is 416 stainless. Fdez Werx se
 
 ::price true-precision-p365-fuse-non-threaded
 
-::fit barrel=true-precision-p365-fuse-non-threaded
-
-The True Precision P365 FUSE 4.3" Non-Threaded barrel is 416R stainless. Like the threaded version, True Precision states it is not for use with P365 FUSE Comp slide pistols.
+The True Precision P365 FUSE 4.3" Non-Threaded is the same 416R barrel as the threaded version without the threads, and like it, it's not for the FUSE Comp slide, per True Precision. It's the non-threaded FUSE barrel a tracked retailer lists today.
 
 ::rank norsso-p365-fuse-standard best="Non-threaded, 17-4 PH stainless" rank=5
 ~ Non-threaded muzzle
@@ -101,37 +94,41 @@ The True Precision P365 FUSE 4.3" Non-Threaded barrel is 416R stainless. Like th
 
 ::price norsso-p365-fuse-standard
 
-::fit barrel=norsso-p365-fuse-standard
+Norsso machines the P365-FUSE 4.3" Standard from 17-4 PH stainless, the only FUSE barrel in the gunforma catalog in that steel. It drops into factory P365-FUSE slides without an LCI, per Norsso.
 
-The Norsso P365-FUSE 4.3" Standard barrel is the only 17-4 PH stainless FUSE barrel in the gunforma catalog. Norsso states it drops into factory P365-FUSE slides without an LCI.
+::fit barrel=fdez-werx-p365-fuse-flush-barrel,true-precision-p365-fuse-non-threaded,norsso-p365-fuse-standard
+
+::colors slugs=fdez-werx-p365-fuse-flush-barrel,true-precision-p365-fuse-non-threaded,norsso-p365-fuse-standard,true-precision-p365-fuse-threaded,fdez-werx-p365-fuse-threaded-barrel
 
 ## What slides and comps work with a threaded FUSE barrel?
 
-**Slides.** A threaded 4.3" barrel fits 7 of the 12 P365 FUSE slides in the gunforma catalog. The other 5 are slides whose makers say threaded barrels don't fit: the Arc Division Reactor 365F and four Norsso comp slides (Piranha C-Port, Reptile C-Port, Rail KP and Reptile KP). The fit table under each barrel above lists every slide by name.
+**Slides.** A threaded 4.3" barrel fits 7 of the 12 P365 FUSE slides in the gunforma catalog. The other 5 are slides whose makers say no to threaded barrels: the Arc Division Reactor 365F and four Norsso comp slides (Piranha C-Port, Reptile C-Port, Rail KP and Reptile KP). Open the fit box under the threaded barrels for the full list.
 
-**Comps.** Seven compensators in the gunforma catalog thread onto 1/2x28 and are sold without a barrel, so they thread onto both FUSE threaded barrels:
+**Comps.** Seven compensators in the gunforma catalog are 1/2x28 and sold without a barrel, so they thread onto both FUSE threaded barrels:
 
 ::compare compensator cols=thread_pitch,port_design,mounting_type,length_in slugs=armory-craft-comp-p365,faxon-firearms-exos-comp-p365,herrington-arms-hc365-p365,herrington-arms-hc365p-p365,herrington-arms-zero-p365,mcarbo-comp-p365,true-precision-tl-comp-p365
 
-Whether each comp clears a given FUSE slide isn't recorded in the catalog yet; FUSE compensators get their own field note.
+Whether each comp clears a given FUSE slide isn't in the catalog yet. FUSE compensators get their own field note.
 
-**Suppressors.** The gunforma catalog doesn't list suppressors.
+**Suppressors.** The gunforma catalog doesn't list suppressors yet.
 
 ## Do ported FUSE barrels fit any slide?
 
-No. Each ported P365 FUSE barrel in the gunforma catalog fits only the slides its maker cut to match it. Buy the barrel with its matching slide.
+No. A ported barrel is half of a matched set: its ports line up with cuts in one specific slide, so each one is sold to go with its maker's ported slide and nothing else. If you're shopping ported, pick the slide first and the barrel follows.
 
 ::compare barrel gun=p365-fuse cols=barrel_length_in,port_style,is_lci,material slugs=fdez-werx-p365-fuse-ported-barrel,fdez-werx-p365-fuse-chunk-port-barrel,norsso-n365-fuse-cport,norsso-n365-fuse-eport
 
-::fit barrel=fdez-werx-p365-fuse-ported-barrel
+The Fdez Werx ported and chunk-port barrels fit Fdez Werx P365 FUSE slides only:
 
-::fit barrel=fdez-werx-p365-fuse-chunk-port-barrel
+::fit barrel=fdez-werx-p365-fuse-ported-barrel,fdez-werx-p365-fuse-chunk-port-barrel
+
+The Norsso N365-FUSE C Port fits the Norsso Piranha C and Reptile C slides:
 
 ::fit barrel=norsso-n365-fuse-cport
 
-::fit barrel=norsso-n365-fuse-eport
+The Norsso N365-FUSE E Port fits the Norsso Reptile KP and Rail KP slides. Norsso states neither ported barrel fits a SIG factory slide.
 
-The Fdez Werx ported and chunk-port barrels fit Fdez Werx P365 FUSE slides only. The Norsso N365-FUSE C Port fits the Norsso Piranha C and Reptile C slides; the E Port fits the Norsso Reptile KP and Rail KP. Norsso states neither fits a SIG factory slide.
+::fit barrel=norsso-n365-fuse-eport
 
 ## FAQ
 

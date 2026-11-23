@@ -324,9 +324,15 @@ test('the fixture renders every guide block, tracked, honest, merged', async () 
 
   // the trust layer: the automatic disclosure near the top, the reviewed
   // month in the byline, the changelog newest first
-  assert.ok(h.includes('class="fn-affiliate-note"'), 'the affiliate disclosure renders');
-  assert.ok(h.indexOf('class="fn-affiliate-note"') < h.indexOf('class="fn-block'), 'and it sits above the first block');
-  assert.ok(h.includes('href="/gunforma-legal.html#affiliate"'));
+  // A note with a ::picks box carries the disclosure directly after it,
+  // not under the byline; exactly one, relative link, the standard text.
+  assert.equal(h.split('class="fn-affiliate-note"').length - 1, 1, 'exactly one affiliate disclosure');
+  const picksAt = h.indexOf('<div class="fn-block fn-picks">');
+  assert.ok(picksAt !== -1, 'the fixture has a picks box');
+  assert.ok(h.slice(picksAt).includes('</ol></div><p class="fn-affiliate-note">'), 'directly after the picks box');
+  assert.ok(h.indexOf('<p class="fn-affiliate-note">') > h.indexOf('<p class="fn-method">') && h.indexOf('<p class="fn-affiliate-note">') > picksAt, 'not under the byline');
+  assert.ok(h.includes('<p class="fn-affiliate-note">Buying through links on this page may earn Gunforma a commission, at no extra cost to you. <a href="/gunforma-legal.html#affiliate">How affiliate links work &rarr;</a></p>'));
+  assert.ok(!/fn-affiliate-note[^<]*<a href="https?:/.test(h), 'a relative link, never a preview URL');
   assert.ok(h.includes('Last reviewed November 2026'));
   assert.ok(h.includes('<div class="section-title">Latest updates</div>'));
   assert.ok(h.indexOf('Added the four guide blocks') < h.indexOf('First version of the fixture'), 'newest first');

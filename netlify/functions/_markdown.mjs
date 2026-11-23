@@ -137,7 +137,7 @@ export function parseDirective(line, bodyLines) {
   if (kind === 'fit') {
     const args = {};
     for (const tok of rest.split(/\s+/).filter(Boolean)) {
-      const kv = tok.match(/^([a-z]+)=([a-z0-9-]+)$/);
+      const kv = tok.match(/^([a-z]+)=([a-z0-9,-]+)$/);
       if (!kv) return null;
       args[kv[1]] = kv[2];
     }
@@ -150,8 +150,16 @@ export function parseDirective(line, bodyLines) {
     if (part !== 'barrel' && !args.gun) return null;
     const keys = Object.keys(args).filter((k) => k !== 'gun' && k !== part);
     if (keys.length) return null;
-    if (!SLUG_RE.test(args[part]) || (args.gun && !SLUG_RE.test(args.gun))) return null;
-    return { kind, part, slug: args[part], gun: args.gun || null };
+    if (args.gun && !SLUG_RE.test(args.gun)) return null;
+    // barrel= takes a comma list — one fit box for several barrels, which
+    // check-field-notes.mjs holds to the same set of fitting slides. Every
+    // other key is one slug.
+    const slugs = args[part].split(',');
+    if (!slugs.every((s) => SLUG_RE.test(s))) return null;
+    if (part !== 'barrel' && slugs.length !== 1) return null;
+    if (new Set(slugs).size !== slugs.length) return null;
+    if (part === 'barrel') return { kind, part, slug: slugs[0], slugs, gun: args.gun || null };
+    return { kind, part, slug: slugs[0], gun: args.gun || null };
   }
   if (kind === 'compare') {
     // ::compare <category> [gun=<slug>] cols=<col,…> slugs=<slug,…>
@@ -213,17 +221,18 @@ export function parseDirective(line, bodyLines) {
     return { kind, part: kv[1], slug: kv[2] };
   }
   if (kind === 'colors') {
-    // ::colors slugs=<slug,…> baseline=<slug> — the baseline (factory) row
-    // renders first; it is not repeated if also listed under slugs.
+    // ::colors slugs=<slug,…> [baseline=<slug>] — the baseline (factory) row,
+    // when there is one, renders first; it is not repeated if also listed
+    // under slugs. Without it there is no factory row.
     const args = parseArgs(rest);
     if (!args) return null;
     for (const k of Object.keys(args)) if (!['slugs', 'baseline'].includes(k)) return null;
-    if (!args.baseline || !SLUG_RE.test(args.baseline)) return null;
+    if (args.baseline != null && !SLUG_RE.test(args.baseline)) return null;
     const slugs = (args.slugs || '').split(',').map((s) => s.trim()).filter(Boolean);
     if (!slugs.length || !slugs.every((s) => SLUG_RE.test(s))) return null;
     const deduped = [...new Set(slugs)].filter((s) => s !== args.baseline);
     if (!deduped.length) return null;
-    return { kind, baseline: args.baseline, slugs: deduped };
+    return { kind, baseline: args.baseline || null, slugs: deduped };
   }
   if (kind === 'build') {
     // ::build name="…" with one <role>=<slug> body line per role.
