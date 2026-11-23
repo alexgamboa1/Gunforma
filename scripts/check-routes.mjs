@@ -1219,12 +1219,12 @@ for (const [label, path, want] of [
       variants: ['norsso-n365xl-bb-standard-bull-barrel-satin-stainless-steel', 'norsso-n365xl-bb-standard-bull-barrel-black', 'norsso-n365xl-bb-standard-bull-barrel-copper', 'norsso-n365xl-bb-standard-bull-barrel-gold'],
       reason: 'Norsso publishes one array photo of all four finishes (Alex, 2026-11-18)',
     },
-    // Fdez's group photo of all four finishes (image 4496: copper, gold,
-    // stainless, black). Black DLC, Copper (the default) and Stainless
-    // share it; Gold keeps its own photo (4500). Alex's choice, 2026-10-22.
+    // One photo shared by all four finishes: Black DLC, Copper (the
+    // default), Gold and Stainless. Alex set it on all four, 2026-11-22
+    // (before that Gold kept its own photo, 2026-10-22).
     'fdez-werx-p365-fuse-ported-barrel': {
-      variants: ['fdez-werx-p365-fuse-ported-barrel-black-high-polished-black-dlc', 'fdez-werx-p365-fuse-ported-barrel-copper-high-polished-copper-rose', 'fdez-werx-p365-fuse-ported-barrel-stainless-steel-high-polished-stainless'],
-      reason: 'four-finish group photo shared by Black DLC, Copper (default) and Stainless; Gold has its own (Alex, 2026-10-22)',
+      variants: ['fdez-werx-p365-fuse-ported-barrel-black-high-polished-black-dlc', 'fdez-werx-p365-fuse-ported-barrel-copper-high-polished-copper-rose', 'fdez-werx-p365-fuse-ported-barrel-gold-high-polished-gold-tin', 'fdez-werx-p365-fuse-ported-barrel-stainless-steel-high-polished-stainless'],
+      reason: 'one photo shared by all four finishes (Alex, 2026-11-22)',
     },
   };
   const res = await fetch(`${SB_URL}/rest/v1/product_variants?select=slug,color,finish,is_default,primary_image_url,products!product_variants_product_id_fkey(slug,is_discontinued)&retired_at=is.null&primary_image_url=not.is.null&limit=3000`,
