@@ -90,6 +90,12 @@ const SERVICE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const DRY_RUN          = process.env.DRY_RUN === 'true';
 const FLOOR_OVERRIDE   = process.env.MATCH_RATE_FLOOR ? Number(process.env.MATCH_RATE_FLOOR) : null;
 const DEBUG_SAMPLES    = Number(process.env.DEBUG_SAMPLES || 0);
+// Variant photos are hand-selected to show what is in each variant (Alex,
+// 2026-11-21): the retailer feed does not supply them. The null-fill below is
+// OFF unless this is exactly '1' — a merchant's photo for a SKU is often a
+// group shot, a different finish, or a placeholder, and it renders fine while
+// being wrong. Price, stock and identifier writes are unaffected.
+const FILL_VARIANT_IMAGES = process.env.FILL_VARIANT_IMAGES === '1';
 const CONCURRENCY      = 10;
 const FETCH_TIMEOUT_MS = 120_000;
 
@@ -618,7 +624,10 @@ function processFeedRow(st, row, today) {
 // Exported for scripts/sync-gtin-tiebreak.test.mjs, on the same footing as
 // gtinNorm above: the test drives the REAL resolver rather than a copy, so
 // it cannot pass against logic that no longer ships.
-export function resolveProposals(st, today) {
+//
+// `fillImages` defaults to FILL_VARIANT_IMAGES (off); the test passes it to
+// drive both sides without re-importing the module.
+export function resolveProposals(st, today, { fillImages = FILL_VARIANT_IMAGES } = {}) {
   for (const [linkId, proposals] of st.proposals) {
     const target = st.byId.get(linkId);
     if (!target) continue;
@@ -795,7 +804,8 @@ export function resolveProposals(st, today) {
     st.filled += ['op_mpn', 'op_gtin', 'op_merchant_product_id'].filter(f => f in patch).length;
     st.updates.set(linkId, patch);
 
-    // ── variant image: fill a null, never replace one ──────────────────
+    // ── variant image: fill a null, never replace one — and only when ─
+    // FILL_VARIANT_IMAGES=1. Off by default: variant photos are hand-picked.
     // Deliberately inside the safe-to-write branch, AFTER the conflict and
     // drift guards. A contested match must not deposit a photo any more than
     // it deposits a price — a wrong image is a wrong claim about what someone
@@ -805,7 +815,7 @@ export function resolveProposals(st, today) {
     // is null, leave what is set. A hand-picked product photo outranks
     // whatever the merchant is using this week.
     const variant = target.product_variants;
-    if (variant && variant.id && p.rawImage &&
+    if (fillImages && variant && variant.id && p.rawImage &&
         (variant.primary_image_url == null || variant.primary_image_url === '')) {
       st.imageFills.set(variant.id, p.rawImage);
     }
@@ -996,7 +1006,9 @@ async function writePartner(st) {
 // paying for.
 async function writeVariantImages(st) {
   const entries = [...st.imageFills.entries()];
-  if (!entries.length) return { filled: 0, skipped: 0 };
+  // Belt and braces: resolveProposals leaves the map empty when the fill is
+  // off, but this function is the one that writes, so it checks too.
+  if (!FILL_VARIANT_IMAGES || !entries.length) return { filled: 0, skipped: 0 };
   log(c('bold', `\nFilling ${entries.length} variant image(s) for ${st.partner.name}…`));
   let filled = 0, skipped = 0;
   for (let i = 0; i < entries.length; i += CONCURRENCY) {
@@ -1150,8 +1162,12 @@ async function main() {
   if (DRY_RUN) {
     log(c('cyan', '\n[dry-run] no writes performed'));
     log(`  would write: ${willWrite.map(s => `${s.partner.name} ${s.updates.size}`).join(', ') || 'nothing'}`);
-    const wouldFill = willWrite.reduce((n, s) => n + s.imageFills.size, 0);
-    log(`  would fill ${wouldFill} variant image(s) where primary_image_url is null`);
+    if (FILL_VARIANT_IMAGES) {
+      const wouldFill = willWrite.reduce((n, s) => n + s.imageFills.size, 0);
+      log(`  would fill ${wouldFill} variant image(s) where primary_image_url is null`);
+    } else {
+      log(`  variant image fill is off (set FILL_VARIANT_IMAGES=1 to enable) — no photos would be written`);
+    }
     log(`  duration: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
   } else {
     let written = 0;
