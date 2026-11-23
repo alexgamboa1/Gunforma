@@ -75,6 +75,13 @@ export const GUIDE_SPECS = {
       barrel_type:      { label: 'Type' },
       thread_pitch:     { label: 'Thread Pitch' },
       caliber:          { label: 'Caliber' },
+      is_lci:           { label: 'LCI Cut-Out', fmt: YESNO },
+      // The port, named the way every page names one: the maker's own
+      // word, then Gunforma's geometry (CLAUDE.md, "Slide porting
+      // vocabulary"). Through the named FK, aliased to the key.
+      port_style: { label: 'Port Style',
+        select: 'port_style:port_styles!barrel_specs_port_style_fk(display_name,geometry)',
+        fmt: (v) => (v && v.display_name ? v.display_name + (v.geometry ? ' (' + v.geometry + ')' : '') : null) },
     },
     rank: ['barrel_length_in', 'barrel_type', 'thread_pitch', 'material'],
   },
