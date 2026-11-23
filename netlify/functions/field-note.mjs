@@ -593,7 +593,7 @@ function unlocksBlockHtml(u) {
   return '<div class="fn-block fn-unlocks">' +
     '<div class="fn-unlocks-head">What the <a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a> opens up</div>' +
     (lines.length ? '<ul class="fn-unlocks-list">' + lines.join('') + '</ul>' : '') +
-    '<div class="disclosure">Counts from the gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>' +
+    '<div class="disclosure">Counts from the Gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>' +
   '</div>';
 }
 

@@ -230,7 +230,7 @@ test('the method line: once, under the byline, above the disclosure, linking the
   const r = await run(PREVIEW + fieldNotePath(FIXTURE.slug));
   const h = r.html;
   assert.equal(count(h, 'class="fn-method"'), 1, 'the line exactly once');
-  assert.ok(h.includes('href="' + METHOD_PAGE_PATH + '">How gunforma checks parts'), 'links the methods page');
+  assert.ok(h.includes('href="' + METHOD_PAGE_PATH + '">How Gunforma checks parts'), 'links the methods page');
   const byline = h.indexOf('class="byline"'), method = h.indexOf('<p class="fn-method">'), disc = h.indexOf('class="fn-affiliate-note"');
   assert.ok(byline !== -1 && method !== -1 && disc !== -1);
   assert.ok(byline < method && method < disc, 'byline, then method line, then disclosure');
@@ -264,7 +264,7 @@ test('::unlocks frame: splits, live-only counts, the magwell gap, the dated foot
   assert.ok(block.includes('P365 MACRO (17-round) — 1 magazine fits at the family level'), 'the family name from the housing class (frame_specs has no magazine_family column)');
   assert.ok(block.includes('No add-on magwell on record for this module'), 'the one zero a reader should see');
   assert.ok(block.includes('2 colours'));
-  assert.ok(block.includes('Counts from the gunforma catalog on '), 'the dated footer');
+  assert.ok(block.includes('Counts from the Gunforma catalog on '), 'the dated footer');
   assert.ok(!block.includes('>0 '), 'no zero count renders as a line');
 });
 

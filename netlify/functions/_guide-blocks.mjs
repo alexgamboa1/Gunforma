@@ -180,9 +180,9 @@ export const BUILD_ROLE_META = {
 // never per-article text. It links the standing methods page.
 export const METHOD_PAGE_PATH = '/how-gunforma-checks-parts.html';
 export const METHOD_LINE_HTML =
-  '<p class="fn-method">Every part in the gunforma catalog is checked against the maker’s published specs and fit data before it is listed. ' +
+  '<p class="fn-method">Every part in the Gunforma catalog is checked against the maker’s published specs and fit data before it is listed. ' +
   'We don’t range-test parts; where a fit was confirmed by hand or by an owner’s build, the page says so. ' +
-  '<a href="' + METHOD_PAGE_PATH + '">How gunforma checks parts &rarr;</a></p>';
+  '<a href="' + METHOD_PAGE_PATH + '">How Gunforma checks parts &rarr;</a></p>';
 
 // The standard affiliate disclosure for any field note that renders a
 // ::price, ::picks or ::rank block — one implementation, never per-article
