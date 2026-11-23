@@ -58,8 +58,8 @@ A barrel swap isn't only about the muzzle. On a FUSE the barrel is one of the si
 
 You have two directions:
 
-- A different finish. Trade the factory barrel for a gold, copper, polished stainless or black one. The colors table below shows exactly which finishes each barrel comes in.
-- A flush-and-crown muzzle. Flush means the barrel ends level with the front of the slide; the crown is the finished edge at the muzzle. The Fdez Werx Flush & Crown is built that way.
+- **A different finish.** Trade the factory barrel for a gold, copper, polished stainless or black one. The colors table below shows exactly which finishes each barrel comes in.
+- **A flush-and-crown muzzle.** Flush means the barrel ends level with the front of the slide; the crown is the finished edge at the muzzle. The Fdez Werx Flush & Crown is built that way.
 
 None of these three limits your next slide: each one fits every FUSE slide in the gunforma catalog, 12 of 12.
 
