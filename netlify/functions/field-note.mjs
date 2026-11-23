@@ -1278,7 +1278,7 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
 'td.v-yes, td.v-plate { color: #1d6b43; font-weight: 600; } td.v-no { color: #b42318; font-weight: 600; } td.v-none { color: #777; }' +
 '.likely { color: #7a6a2f; font-style: normal; font-size: 11px; }' +
 '.fn-note { font-size: 12.5px; color: #555; margin: 8px 0 0; }' +
-'.fn-fit-barrel a { color: #1d6fb8; text-decoration: none; } .fn-fit-barrel a:hover { text-decoration: underline; }' +
+'.fn-fit-barrel a, .fn-block.fn-fit-barrel td a { color: #1d6fb8; text-decoration: none; } .fn-fit-barrel a:hover, .fn-block.fn-fit-barrel td a:hover { text-decoration: underline; }' +
 '.fn-fit-links a { display: inline-block; margin: 8px 14px 0 0; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
 '.fn-missing { font-size: 13px; color: #b03a2e; }' +
 '.fn-affiliate-note { font-size: 12px; color: #888; font-style: italic; margin: -10px 0 18px; } .fn-affiliate-note a { color: #1d6fb8; }' +
