@@ -715,7 +715,7 @@ directives. What is new:
     (N)" — "Slides these barrels fit (N)" for a group — then the barrels,
     linked, then the slides from `v_barrel_slide_fit` where `fit_status =
     'fits'` (approved, not discontinued), linked, brand then name, no
-    length column; zero rows reads "No slide in the gunforma catalog is on
+    length column; zero rows reads "No slide in the Gunforma catalog is on
     record as fitting this barrel." **A group must never hide a
     difference**: every barrel in it must fit exactly the same slides.
     `check-field-notes.mjs` fails a group that does not, against

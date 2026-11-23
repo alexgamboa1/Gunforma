@@ -161,7 +161,7 @@ test('four groups and two singles render as closed <details> boxes, summary firs
     assert.ok(x.body.startsWith('<summary class="fn-fit-q">'), 'the summary is the first child, so the box works with JS off');
     assert.ok(!/<details[^>]*\sopen/.test(html.slice(html.indexOf('<details class="fn-block fn-fit'), html.indexOf('</details>', html.indexOf('<details class="fn-block fn-fit')))), 'closed by default');
     assert.ok(!x.body.includes('<table') && !/Barrel length/i.test(x.body), 'no length column');
-    assert.match(x.body, /<div class="disclosure">Fit from the gunforma catalog on [A-Z][a-z]{2} \d{1,2}, \d{4}\.<\/div>$/);
+    assert.match(x.body, /<div class="disclosure">Fit from the Gunforma catalog on [A-Z][a-z]{2} \d{1,2}, \d{4}\.<\/div>$/);
   }
   assert.ok(!/<details class="fn-block fn-fit fn-fit-barrel"[^>]*\sopen/.test(html), 'no fit box is served open');
 });
@@ -195,10 +195,10 @@ test('zero fitting rows is said in words, singular and plural', async () => {
   const b = boxes(html);
   const ep = b.find((x) => x.body.includes('/parts/barrels/norsso-n365-fuse-eport'));
   assert.ok(ep.body.includes('Slides this barrel fits (0)'));
-  assert.ok(ep.body.includes('No slide in the gunforma catalog is on record as fitting this barrel.'));
+  assert.ok(ep.body.includes('No slide in the Gunforma catalog is on record as fitting this barrel.'));
   const flush = b.find((x) => x.body.includes('/parts/barrels/fdez-werx-p365-fuse-flush-barrel'));
   assert.ok(flush.body.includes('Slides these barrels fit (0)'));
-  assert.ok(flush.body.includes('No slide in the gunforma catalog is on record as fitting these barrels.'));
+  assert.ok(flush.body.includes('No slide in the Gunforma catalog is on record as fitting these barrels.'));
 });
 
 test('live: a group whose sets have diverged is refused in words, never merged', async () => {

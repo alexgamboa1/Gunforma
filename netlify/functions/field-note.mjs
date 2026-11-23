@@ -875,11 +875,11 @@ function barrelFitBlockHtml(f) {
   const many = f.barrels.length > 1;
   const names = '<div class="fn-fit-sub fn-fit-barrels">' +
     f.barrels.map((o) => '<a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>').join(' &middot; ') + '</div>';
-  const footer = '<div class="disclosure">Fit from the gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>';
+  const footer = '<div class="disclosure">Fit from the Gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>';
   if (f.differing.length) {
     // The live fit sets disagree: say so, never merge them.
     return '<div class="fn-block fn-fit fn-fit-barrel fn-fit-mismatch">' + names +
-      '<p class="fn-missing">These barrels no longer fit the same slides in the gunforma catalog, so this box does not list them together: ' +
+      '<p class="fn-missing">These barrels no longer fit the same slides in the Gunforma catalog, so this box does not list them together: ' +
       f.differing.map((d) => esc(d.slide.displayName) + ' fits ' + d.fits.map((o) => esc(o.displayName)).join(' and ') + ' only').join('; ') +
       '.</p>' + footer + '</div>';
   }
@@ -887,7 +887,7 @@ function barrelFitBlockHtml(f) {
   const head = (many ? 'Slides these barrels fit (' : 'Slides this barrel fits (') + n + ')';
   const body = n
     ? '<ul class="fn-fit-slides">' + f.slides.map((s) => '<li><a href="' + esc(s.href) + '">' + esc(s.displayName) + '</a></li>').join('') + '</ul>'
-    : '<p class="fn-fit-sub">No slide in the gunforma catalog is on record as fitting ' + (many ? 'these barrels' : 'this barrel') + '.</p>';
+    : '<p class="fn-fit-sub">No slide in the Gunforma catalog is on record as fitting ' + (many ? 'these barrels' : 'this barrel') + '.</p>';
   return '<details class="fn-block fn-fit fn-fit-barrel" data-fit-slides="' + n + '">' +
     '<summary class="fn-fit-q">' + esc(head) + '</summary>' +
     names + body + footer +
