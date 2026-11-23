@@ -141,8 +141,13 @@ function renderPage(allProducts) {
     .map(([category, [segment, label]]) => ({ category, segment, label, items: byCategory.get(category) || [] }))
     .filter((c) => c.items.length);
 
+  // "/parts#<segment>", never a bare "#<segment>": the head carries
+  // <base href="/"/> (the nav's relative links depend on it), and a bare
+  // fragment resolves against the base — "#barrels" becomes "/#barrels",
+  // the homepage. scripts/parts-index-anchors.test.mjs and check-routes.mjs
+  // refuse a bare "#" href on this page.
   const jumpNavHtml = categoryEntries
-    .map((c) => '<a class="jump-link" href="#' + esc(c.segment) + '">' + esc(c.label) + ' (' + c.items.length + ')</a>')
+    .map((c) => '<a class="jump-link" href="/parts#' + esc(c.segment) + '">' + esc(c.label) + ' (' + c.items.length + ')</a>')
     .join('');
 
   const sectionsHtml = categoryEntries.map((c) => {
@@ -227,7 +232,10 @@ function renderPage(allProducts) {
 '.sub a { color: #4a9edd; }' +
 '.jump-nav { display: flex; flex-wrap: wrap; gap: 6px 10px; margin: 20px 0 28px; padding: 14px; background: #fff; border: 0.5px solid #e5e5e5; border-radius: 8px; }' +
 '.jump-link { font-size: 12px; color: #345; text-decoration: none; background: #eef2f6; padding: 4px 10px; border-radius: 20px; }' +
-'.category { margin-bottom: 26px; }' +
+// scroll-margin-top = the sticky .nav's height (52px, the same at every
+// breakpoint — no media query changes it) + 16px, so a jump-nav click lands
+// with the section's h2 below the nav instead of under it. Change both together.
+'.category { margin-bottom: 26px; scroll-margin-top: 68px; }' +
 '.category h2 { font-size: 15px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: #1a1a1a; margin-bottom: 10px; padding-top: 8px; border-top: 0.5px solid #ececec; }' +
 '.category h2 .count { color: #999; font-weight: 400; text-transform: none; letter-spacing: 0; }' +
 '.discontinued summary { cursor: pointer; list-style: none; } .discontinued summary::-webkit-details-marker { display: none; }' +

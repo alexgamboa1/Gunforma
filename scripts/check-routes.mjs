@@ -36,6 +36,7 @@
 // measurement instead of guessing — which is the mistake this file exists to
 // stop repeating.
 import { auditFieldNotePage } from './field-note-page-audit.mjs';
+import { auditFragments } from './fragment-audit.mjs';
 
 const origin = (process.argv[2] || process.env.DEPLOY_URL || '').replace(/\/$/, '');
 if (!origin) {
@@ -769,6 +770,14 @@ for (const [label, path, want] of [
       if (got !== want) { wrong++; if (wrong <= 5) note(`/parts row for ${p.slug}`, `served "${got}", expected "${want}"`); }
     }
     ok(wrong === 0, '/parts: every live product is served under its display name', wrong + ' wrong of ' + products.length);
+
+    // The jump nav under <base href="/"/>: a bare "#barrels" resolves to
+    // "/#barrels", the homepage (shipped 2026-11-22). Every in-page link must
+    // name /parts, and every one must land on an id the page carries.
+    const frag = auditFragments(idx.body, '/parts');
+    ok(frag.bare.length === 0, '/parts: no bare "#…" href under <base href> (it would resolve to the homepage)', frag.bare.slice(0, 5).join(' ') || 'none');
+    ok(frag.selfLinks.length > 0, '/parts: the category jump nav is served as /parts#<segment> links', frag.selfLinks.length);
+    ok(frag.missing.length === 0, '/parts: every jump link targets a section id on the page', frag.missing.join(' ') || 'all resolve');
 
     // A product page whose stored name lacks its brand: the title opens
     // with the brand and never says "by <brand>" after a name that has it.
