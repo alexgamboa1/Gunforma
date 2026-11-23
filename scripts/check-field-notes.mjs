@@ -216,6 +216,13 @@ for (const a of FIELD_NOTES) {
       const cat = CATALOG_CATEGORY.get(b.slug);
       if (cat && cat !== b.part) fail(id + ': ::unlocks ' + b.part + '= names ' + b.slug + ', which is a ' + cat + ', not a ' + b.part);
     }
+    if (b.kind === 'fit' && b.part === 'barrel') {
+      // ::fit barrel= lists that barrel's fitting slides — the slug must be
+      // a live product, and a barrel.
+      mustResolve(b.slug, '::fit barrel=');
+      const cat = CATALOG_CATEGORY.get(b.slug);
+      if (cat && cat !== 'barrel') fail(id + ': ::fit barrel= names ' + b.slug + ', which is a ' + cat + ', not a barrel');
+    }
     if (b.kind === 'colors') {
       mustResolve(b.baseline, '::colors baseline');
       for (const s of b.slugs) mustResolve(s, '::colors');

@@ -18,7 +18,8 @@
 //   ![alt](src)    an image; alone on a line it becomes a <figure>
 //   **b** *i* `c`  bold, italic, code spans
 //   [t](url)       links — http(s), site-relative, #anchor, mailto only
-//   ::kind args    a BLOCK DIRECTIVE, resolved by the caller. price, fit,
+//   ::kind args    a BLOCK DIRECTIVE, resolved by the caller. price, fit
+//                  (optic=/magazine= with gun=, or barrel=),
 //                  compare, unlocks and colors are one line; picks, rank,
 //                  faq and build carry a body of lines closed by a lone
 //                  `::` (BODY_DIRECTIVE_KINDS)
@@ -140,12 +141,17 @@ export function parseDirective(line, bodyLines) {
       if (!kv) return null;
       args[kv[1]] = kv[2];
     }
-    const part = args.optic ? 'optic' : args.magazine ? 'magazine' : null;
-    if (!part || (args.optic && args.magazine) || !args.gun) return null;
+    // optic= and magazine= are judged against a pistol, so gun= is
+    // required; barrel= lists the slides v_barrel_slide_fit says fit, which
+    // no pistol narrows — gun= is accepted there and ignored.
+    const parts = ['optic', 'magazine', 'barrel'].filter((k) => args[k]);
+    if (parts.length !== 1) return null;
+    const part = parts[0];
+    if (part !== 'barrel' && !args.gun) return null;
     const keys = Object.keys(args).filter((k) => k !== 'gun' && k !== part);
     if (keys.length) return null;
-    if (!SLUG_RE.test(args[part]) || !SLUG_RE.test(args.gun)) return null;
-    return { kind, part, slug: args[part], gun: args.gun };
+    if (!SLUG_RE.test(args[part]) || (args.gun && !SLUG_RE.test(args.gun))) return null;
+    return { kind, part, slug: args[part], gun: args.gun || null };
   }
   if (kind === 'compare') {
     // ::compare <category> [gun=<slug>] cols=<col,…> slugs=<slug,…>

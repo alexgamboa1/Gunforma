@@ -785,8 +785,47 @@ function overall(rows) {
   return { cls: 'depends', text: 'Depends on the SKU' };
 }
 
+// ::fit barrel= — the slides v_barrel_slide_fit says this barrel fits
+// (fit_status = 'fits' and nothing else), the same listed-parts rule as the
+// product page's "Slides this barrel fits": approved and not discontinued.
+// The slide comes through slide_specs, which is ambiguous to products, so
+// the embed names its FK (CLAUDE.md, PGRST201); its barrel_length_in is
+// the length the slide takes, read off its own spec row.
+export function barrelFitQueryPath(barrelId) {
+  const sel = 'slide:products!slide_specs_product_id_fkey!inner(id,slug,name,category,is_approved,is_discontinued,' +
+    'manufacturers!products_brand_id_fkey(name),' +
+    'slide_specs!slide_specs_product_id_fkey!inner(barrel_length_in))';
+  return 'v_barrel_slide_fit?barrel_product_id=eq.' + encodeURIComponent(barrelId) + '&fit_status=eq.fits' +
+    '&select=' + encodeURIComponent(sel) + '&slide.is_discontinued=is.false';
+}
+
+async function resolveBarrelFit(block, product) {
+  const rows = await pgGet(barrelFitQueryPath(product.id));
+  const seg = (CATEGORY_META.slide || [])[0];
+  const seen = new Set();
+  const slides = [];
+  for (const r of rows) {
+    const p = r && r.slide;
+    // is_approved === true, never truthy-ish: a missing field is not approval.
+    if (!p || p.is_approved !== true || p.is_discontinued || seen.has(p.id)) continue;
+    seen.add(p.id);
+    const brand = (p.manufacturers || {}).name || '';
+    const spec = Array.isArray(p.slide_specs) ? p.slide_specs[0] : p.slide_specs;
+    slides.push({
+      brand, name: p.name || '',
+      displayName: displayProductName({ brand, name: p.name }),
+      href: '/parts/' + seg + '/' + p.slug,
+      barrelLength: spec && spec.barrel_length_in != null ? Number(spec.barrel_length_in) : null,
+    });
+  }
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  slides.sort((a, b) => cmp(a.brand.toLowerCase(), b.brand.toLowerCase()) || cmp(a.name.toLowerCase(), b.name.toLowerCase()));
+  return { block, product, gun: null, ok: true, slides };
+}
+
 async function resolveFit(block, products, guns, caches) {
   const product = products.get(block.slug) || null;
+  if (block.part === 'barrel') return product ? resolveBarrelFit(block, product) : { block, product, gun: null, ok: false };
   const gun = guns.get(block.gun) || null;
   if (!product || !gun) return { block, product, gun, ok: false };
   if (block.part === 'optic') {
@@ -812,8 +851,25 @@ async function resolveFit(block, products, guns, caches) {
   };
 }
 
+function barrelFitBlockHtml(f) {
+  const n = f.slides.length;
+  const body = n
+    ? '<div class="table-wrap"><table><thead><tr><th>Slide</th><th>Barrel length</th></tr></thead><tbody>' +
+        f.slides.map((s) => '<tr><td><a href="' + esc(s.href) + '">' + esc(s.displayName) + '</a></td>' +
+          '<td>' + (s.barrelLength != null ? esc(String(s.barrelLength)) + '"' : '—') + '</td></tr>').join('') +
+      '</tbody></table></div>'
+    : '<p class="fn-fit-sub">No slide in the gunforma catalog is on record as fitting this barrel.</p>';
+  return '<div class="fn-block fn-fit fn-fit-barrel" data-fit-slides="' + n + '">' +
+    '<div class="fn-fit-q">Slides this barrel fits (' + n + ')</div>' +
+    '<div class="fn-fit-sub"><a href="' + esc(f.product.href) + '">' + esc(f.product.displayName) + '</a></div>' +
+    body +
+    '<div class="disclosure">Fit from the gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>' +
+  '</div>';
+}
+
 function fitBlockHtml(f) {
   if (!f.product) return '<div class="fn-block fn-fit">' + missingLine('Part', f.block.slug) + '</div>';
+  if (f.block.part === 'barrel') return barrelFitBlockHtml(f);
   if (!f.gun)     return '<div class="fn-block fn-fit">' + missingLine('Pistol', f.block.gun) + '</div>';
   const gunName = f.gun.name || GUN_META[f.gun.slug] || f.gun.slug;
   const head =
@@ -892,7 +948,7 @@ async function resolveBlocks(blocks, articleSlug, blockSections = []) {
   const gunSlugs = new Set();
   for (const b of blocks) {
     if (b.kind === 'price') b.slugs.forEach((s) => productSlugs.add(s));
-    if (b.kind === 'fit') { productSlugs.add(b.slug); gunSlugs.add(b.gun); }
+    if (b.kind === 'fit') { productSlugs.add(b.slug); if (b.part !== 'barrel') gunSlugs.add(b.gun); }
     if (b.kind === 'picks') b.picks.forEach((p) => productSlugs.add(p.slug));
     if (b.kind === 'rank') { productSlugs.add(b.slug); if (b.baseline) productSlugs.add(b.baseline); }
     if (b.kind === 'compare') b.slugs.forEach((s) => productSlugs.add(s));
@@ -1222,6 +1278,7 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
 'td.v-yes, td.v-plate { color: #1d6b43; font-weight: 600; } td.v-no { color: #b42318; font-weight: 600; } td.v-none { color: #777; }' +
 '.likely { color: #7a6a2f; font-style: normal; font-size: 11px; }' +
 '.fn-note { font-size: 12.5px; color: #555; margin: 8px 0 0; }' +
+'.fn-fit-barrel a { color: #1d6fb8; text-decoration: none; } .fn-fit-barrel a:hover { text-decoration: underline; }' +
 '.fn-fit-links a { display: inline-block; margin: 8px 14px 0 0; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
 '.fn-missing { font-size: 13px; color: #b03a2e; }' +
 '.fn-affiliate-note { font-size: 12px; color: #888; font-style: italic; margin: -10px 0 18px; } .fn-affiliate-note a { color: #1d6fb8; }' +
