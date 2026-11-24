@@ -87,7 +87,7 @@ export function lintNote(src, { nameCheck } = {}) {
       } else n++;
       const d = parseDirective(line, dirBody);
       if (!d) { fail(at(start), 'directive does not parse: ' + line.trim()); continue; }
-      if (d.kind === 'fit' && !GUN_META[d.gun]) fail(at(start), 'fit directive names a gun the registry does not know: ' + d.gun);
+      if (d.kind === 'fit' && (d.part !== 'barrel' || d.gun) && !GUN_META[d.gun]) fail(at(start), 'fit directive names a gun the registry does not know: ' + d.gun);
       if (d.kind === 'compare' && d.gun && !GUN_META[d.gun]) fail(at(start), 'compare directive names a gun the registry does not know: ' + d.gun);
       continue;
     }

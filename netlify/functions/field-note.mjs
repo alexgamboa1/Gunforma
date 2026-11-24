@@ -593,20 +593,21 @@ function unlocksBlockHtml(u) {
   return '<div class="fn-block fn-unlocks">' +
     '<div class="fn-unlocks-head">What the <a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a> opens up</div>' +
     (lines.length ? '<ul class="fn-unlocks-list">' + lines.join('') + '</ul>' : '') +
-    '<div class="disclosure">Counts from the gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>' +
+    '<div class="disclosure">Counts from the Gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>' +
   '</div>';
 }
 
 // ::colors — the colour table. One row per product, the baseline (factory)
-// row first; colour names in colors.sort_order; never typed.
+// row first when the block names one (baseline= is optional — without it
+// there is no factory row); colour names in colors.sort_order; never typed.
 function colorsBlockHtml(block, products, ctx) {
-  const order = [block.baseline, ...block.slugs];
+  const order = block.baseline ? [block.baseline, ...block.slugs] : block.slugs;
   const missing = order.filter((s) => !products.has(s));
   const rows = order.map((s, i) => {
     const o = products.get(s);
     if (!o) return '';
     const colors = orderColors(o.variantColors, ctx.colorsOrder);
-    return '<tr><td><a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' + (i === 0 ? ' <span class="fn-factory">(factory)</span>' : '') + '</td>' +
+    return '<tr><td><a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>' + (block.baseline && i === 0 ? ' <span class="fn-factory">(factory)</span>' : '') + '</td>' +
       '<td>' + (colors.length ? colors.map((c) => swatchChipHtml(c, o.brand)).join(' ') : '&mdash;') + '</td>' +
       '<td>' + colors.length + '</td>' +
       '<td>' + (o.cerakote ? 'Cerakote' : '&mdash;') + '</td></tr>';
@@ -785,8 +786,63 @@ function overall(rows) {
   return { cls: 'depends', text: 'Depends on the SKU' };
 }
 
+// ::fit barrel=a[,b,…] — the slides v_barrel_slide_fit says these barrels
+// fit (fit_status = 'fits' and nothing else), the same listed-parts rule as
+// the product page's "Slides this barrel fits": approved and not
+// discontinued. The slide comes through slide_specs, which is ambiguous to
+// products, so the embed names its FK (CLAUDE.md, PGRST201).
+//
+// A group is one box for several barrels, and it is only honest when every
+// barrel fits the SAME slides. check-field-notes.mjs holds that at build
+// time against scripts/fixtures/barrel-slide-fit.json; this re-checks it
+// on every request, and a group whose live sets differ renders a visible
+// refusal naming the barrels and the differing slides — never the union,
+// never the first barrel's list. A group must never hide a difference.
+export function barrelFitQueryPath(barrelId) {
+  const sel = 'slide:products!slide_specs_product_id_fkey!inner(id,slug,name,category,is_approved,is_discontinued,' +
+    'manufacturers!products_brand_id_fkey(name))';
+  return 'v_barrel_slide_fit?barrel_product_id=eq.' + encodeURIComponent(barrelId) + '&fit_status=eq.fits' +
+    '&select=' + encodeURIComponent(sel) + '&slide.is_discontinued=is.false';
+}
+
+async function fittingSlides(barrelId) {
+  const rows = await pgGet(barrelFitQueryPath(barrelId));
+  const seg = (CATEGORY_META.slide || [])[0];
+  const bySlug = new Map();
+  for (const r of rows) {
+    const p = r && r.slide;
+    // is_approved === true, never truthy-ish: a missing field is not approval.
+    if (!p || p.is_approved !== true || p.is_discontinued || bySlug.has(p.slug)) continue;
+    const brand = (p.manufacturers || {}).name || '';
+    bySlug.set(p.slug, {
+      slug: p.slug, brand, name: p.name || '',
+      displayName: displayProductName({ brand, name: p.name }),
+      href: '/parts/' + seg + '/' + p.slug,
+    });
+  }
+  return bySlug;
+}
+
+async function resolveBarrelFit(block, products) {
+  const slugs = block.slugs || [block.slug];
+  const barrels = slugs.map((s) => products.get(s) || null);
+  if (barrels.some((o) => !o)) return { block, product: null, missing: slugs.filter((s, i) => !barrels[i]), ok: false };
+  const sets = [];
+  for (const o of barrels) sets.push(await fittingSlides(o.id));
+  // The same-set rule, live: any slide one barrel fits and another does not.
+  const all = new Map();
+  sets.forEach((m) => m.forEach((v, k) => all.set(k, v)));
+  const differing = [...all.values()].filter((sl) => !sets.every((m) => m.has(sl.slug)))
+    .map((sl) => ({ slide: sl, fits: barrels.filter((_, i) => sets[i].has(sl.slug)) }));
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  const slides = [...sets[0].values()].sort((a, b) =>
+    cmp(a.brand.toLowerCase(), b.brand.toLowerCase()) || cmp(a.name.toLowerCase(), b.name.toLowerCase()));
+  return { block, product: barrels[0], barrels, ok: differing.length === 0, slides, differing };
+}
+
 async function resolveFit(block, products, guns, caches) {
   const product = products.get(block.slug) || null;
+  if (block.part === 'barrel') return resolveBarrelFit(block, products);
   const gun = guns.get(block.gun) || null;
   if (!product || !gun) return { block, product, gun, ok: false };
   if (block.part === 'optic') {
@@ -812,7 +868,34 @@ async function resolveFit(block, products, guns, caches) {
   };
 }
 
+// Closed by default: a <details> whose <summary> is the heading, so it
+// opens and closes with JS off.
+function barrelFitBlockHtml(f) {
+  if (f.missing) return '<div class="fn-block fn-fit">' + f.missing.map((s) => missingLine('Part', s)).join('') + '</div>';
+  const many = f.barrels.length > 1;
+  const names = '<div class="fn-fit-sub fn-fit-barrels">' +
+    f.barrels.map((o) => '<a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>').join(' &middot; ') + '</div>';
+  const footer = '<div class="disclosure">Fit from the Gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>';
+  if (f.differing.length) {
+    // The live fit sets disagree: say so, never merge them.
+    return '<div class="fn-block fn-fit fn-fit-barrel fn-fit-mismatch">' + names +
+      '<p class="fn-missing">These barrels no longer fit the same slides in the Gunforma catalog, so this box does not list them together: ' +
+      f.differing.map((d) => esc(d.slide.displayName) + ' fits ' + d.fits.map((o) => esc(o.displayName)).join(' and ') + ' only').join('; ') +
+      '.</p>' + footer + '</div>';
+  }
+  const n = f.slides.length;
+  const head = (many ? 'Slides these barrels fit (' : 'Slides this barrel fits (') + n + ')';
+  const body = n
+    ? '<ul class="fn-fit-slides">' + f.slides.map((s) => '<li><a href="' + esc(s.href) + '">' + esc(s.displayName) + '</a></li>').join('') + '</ul>'
+    : '<p class="fn-fit-sub">No slide in the Gunforma catalog is on record as fitting ' + (many ? 'these barrels' : 'this barrel') + '.</p>';
+  return '<details class="fn-block fn-fit fn-fit-barrel" data-fit-slides="' + n + '">' +
+    '<summary class="fn-fit-q">' + esc(head) + '</summary>' +
+    names + body + footer +
+  '</details>';
+}
+
 function fitBlockHtml(f) {
+  if (f.block.part === 'barrel') return barrelFitBlockHtml(f);
   if (!f.product) return '<div class="fn-block fn-fit">' + missingLine('Part', f.block.slug) + '</div>';
   if (!f.gun)     return '<div class="fn-block fn-fit">' + missingLine('Pistol', f.block.gun) + '</div>';
   const gunName = f.gun.name || GUN_META[f.gun.slug] || f.gun.slug;
@@ -892,12 +975,12 @@ async function resolveBlocks(blocks, articleSlug, blockSections = []) {
   const gunSlugs = new Set();
   for (const b of blocks) {
     if (b.kind === 'price') b.slugs.forEach((s) => productSlugs.add(s));
-    if (b.kind === 'fit') { productSlugs.add(b.slug); gunSlugs.add(b.gun); }
+    if (b.kind === 'fit') { (b.slugs || [b.slug]).forEach((s) => productSlugs.add(s)); if (b.part !== 'barrel') gunSlugs.add(b.gun); }
     if (b.kind === 'picks') b.picks.forEach((p) => productSlugs.add(p.slug));
     if (b.kind === 'rank') { productSlugs.add(b.slug); if (b.baseline) productSlugs.add(b.baseline); }
     if (b.kind === 'compare') b.slugs.forEach((s) => productSlugs.add(s));
     if (b.kind === 'unlocks') productSlugs.add(b.slug);
-    if (b.kind === 'colors') { productSlugs.add(b.baseline); b.slugs.forEach((s) => productSlugs.add(s)); }
+    if (b.kind === 'colors') { if (b.baseline) productSlugs.add(b.baseline); b.slugs.forEach((s) => productSlugs.add(s)); }
     if (b.kind === 'build') b.parts.forEach((p) => productSlugs.add(p.slug));
   }
   const products = new Map((await fetchProducts([...productSlugs])).map((p) => [p.slug, p]));
@@ -957,6 +1040,10 @@ async function resolveBlocks(blocks, articleSlug, blockSections = []) {
     // The automatic affiliate disclosure near the top: any block whose buy
     // buttons can earn a commission puts it on the page.
     hasAffiliate: blocks.some((b) => b.kind === 'price' || b.kind === 'picks' || b.kind === 'rank'),
+    // Where the disclosure goes: directly after the first ::picks box when
+    // there is one (the first buy buttons a reader meets), else under the
+    // byline. Exactly one per page either way.
+    firstPicks: blocks.findIndex((b) => b.kind === 'picks'),
   };
 }
 
@@ -1105,7 +1192,9 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
   const typeLabel = meta.type === 'review' ? 'Review' : meta.type === 'comparison' ? 'Comparison' : 'Guide';
 
   // Each placeholder becomes its resolved block, in order.
-  const html = bodyHtml.replace(/<!--fn-block-(\d+)-->/g, (_, n) => data.rendered[Number(n)] || '');
+  const html = bodyHtml.replace(/<!--fn-block-(\d+)-->/g, (_, n) =>
+    (data.rendered[Number(n)] || '') + (Number(n) === data.firstPicks ? AFFILIATE_DISCLOSURE_HTML : ''));
+  const disclosureUp = data.hasAffiliate && !(data.firstPicks >= 0);
 
   const changelog = changelogHtml(article.changelog);
   const toc = tocEntries(headings, { hasChangelog: !!changelog, hasRelated: related.length > 0 });
@@ -1222,6 +1311,14 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
 'td.v-yes, td.v-plate { color: #1d6b43; font-weight: 600; } td.v-no { color: #b42318; font-weight: 600; } td.v-none { color: #777; }' +
 '.likely { color: #7a6a2f; font-style: normal; font-size: 11px; }' +
 '.fn-note { font-size: 12.5px; color: #555; margin: 8px 0 0; }' +
+'.fn-fit-barrel a { color: #1d6fb8; font-weight: 400; text-decoration: none; } .fn-fit-barrel a:hover { text-decoration: underline; }' +
+'details.fn-fit-barrel > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }' +
+'details.fn-fit-barrel > summary::-webkit-details-marker { display: none; }' +
+'details.fn-fit-barrel > summary::before { content: "\\25B8"; font-size: 12px; color: #667; transition: transform .15s; }' +
+'details.fn-fit-barrel[open] > summary::before { transform: rotate(90deg); }' +
+'details.fn-fit-barrel[open] > summary { margin-bottom: 8px; }' +
+'.fn-fit-barrels { margin-bottom: 8px; }' +
+'.fn-fit-slides { margin: 0 0 4px 20px; padding: 0; } .fn-fit-slides li { font-size: 14px; line-height: 1.75; }' +
 '.fn-fit-links a { display: inline-block; margin: 8px 14px 0 0; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
 '.fn-missing { font-size: 13px; color: #b03a2e; }' +
 '.fn-affiliate-note { font-size: 12px; color: #888; font-style: italic; margin: -10px 0 18px; } .fn-affiliate-note a { color: #1d6fb8; }' +
@@ -1330,12 +1427,13 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
   '<div class="eyebrow">Field Notes &middot; ' + esc(typeLabel) + (meta.category ? ' &middot; ' + esc(meta.category) : '') + '</div>' +
   '<h1>' + inline(title) + '</h1>' +
   '<div class="byline">' + bylineParts.join(' &middot; ') + '</div>' +
-  // The method line, on every field note, directly under the byline and
-  // above the disclosure — one implementation (_guide-blocks.mjs), never
-  // per-article text.
+  // The method line, on every field note, directly under the byline — one
+  // implementation (_guide-blocks.mjs), never per-article text. The
+  // disclosure follows it only on a note with no ::picks box; otherwise it
+  // sits right after the picks (data.firstPicks).
   METHOD_LINE_HTML +
   (toc.length ? tocMobileHtml(toc, slug) : '') +
-  (data.hasAffiliate ? AFFILIATE_DISCLOSURE_HTML : '') +
+  (disclosureUp ? AFFILIATE_DISCLOSURE_HTML : '') +
   html +
   changelog +
   relatedSectionHtml(related, slug) +

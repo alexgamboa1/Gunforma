@@ -19,7 +19,7 @@
 
 // ── the two word lists, in one constant ─────────────────────────────────
 // `why` is printed with every hit. FAIL breaks the build; WARN is printed.
-const NO_TEST = 'gunforma doesn\u2019t test products \u2014 state a spec, a fit row, or the maker\u2019s wording';
+const NO_TEST = 'Gunforma doesn\u2019t test products \u2014 state a spec, a fit row, or the maker\u2019s wording';
 export const VOICE_RULES = {
   fail: [
     { group: 'implied testing', why: NO_TEST,
@@ -40,7 +40,7 @@ export const VOICE_RULES = {
                 'premium', 'solid', 'flat-shooting', 'reduces recoil'] },
     { group: 'pro/con framing', why: 'different is not worse \u2014 state the difference with its number; the reader decides what it is worth',
       phrases: ['downside', 'drawback'] },
-    { group: 'vague count', why: 'a vague count \u2014 give the number, "in the gunforma catalog"',
+    { group: 'vague count', why: 'a vague count \u2014 give the number, "in the Gunforma catalog"',
       phrases: ['many', 'most', 'several', 'a lot of'] },
   ],
 };

@@ -108,6 +108,7 @@ check "comp label copies agree"    scripts/comp-label.test.mjs
 check "catalog spec filter wiring" scripts/spec-filter.test.mjs
 check "hero photo follows default"  scripts/hero-image.test.mjs
 check "/parts jump links stay on /parts" scripts/parts-index-anchors.test.mjs
+check "::fit barrel= block"     scripts/fit-barrel-block.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

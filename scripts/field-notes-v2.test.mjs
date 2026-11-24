@@ -17,6 +17,9 @@
 //     zero-row line OMITTED (never "0 …") — except the magwell gap, the
 //     one zero a reader should see; the slide side's direct/plate split
 //     and the derived recoil-spring requirement; the dated footer
+//   - ::colors: without baseline= no factory row, everything else the same
+//   - the affiliate disclosure on a note with no ::picks: under the method
+//     line, exactly once (a note WITH picks: guide-blocks.test.mjs)
 //   - ::colors: the baseline (factory) row first, colour names in
 //     colors.sort_order, the count, the Cerakote column and "—" without it
 //   - ::build: the happy path (role labels, product links, fresh prices
@@ -40,6 +43,7 @@ const md = await import(fn('_markdown.mjs'));
 const { BUILD_ROLE_META, METHOD_PAGE_PATH } = await import(fn('_guide-blocks.mjs'));
 const { FIELD_NOTES, fieldNotePath } = await import(fn('_field-notes-meta.mjs'));
 const handler = (await import(fn('field-note.mjs'))).default;
+const { renderNote } = await import(fn('field-note.mjs'));
 
 const FIXTURE = FIELD_NOTES.find((a) => a.slug === 'renderer-check');
 assert.ok(FIXTURE && FIXTURE.draft, 'the renderer-check draft fixture must stay in _field-notes-meta.mjs');
@@ -62,7 +66,8 @@ test('the v2 directives parse; the malformed shapes are null', () => {
 
   assert.deepEqual(md.parseDirective('::colors slugs=a,b baseline=c'), { kind: 'colors', baseline: 'c', slugs: ['a', 'b'] });
   assert.deepEqual(md.parseDirective('::colors slugs=a,c,b baseline=c').slugs, ['a', 'b'], 'the baseline is not repeated in the rows');
-  assert.equal(md.parseDirective('::colors slugs=a,b'), null, 'baseline required');
+  assert.deepEqual(md.parseDirective('::colors slugs=a,b'), { kind: 'colors', baseline: null, slugs: ['a', 'b'] }, 'baseline is optional');
+  assert.equal(md.parseDirective('::colors slugs=a,b baseline=Bad_Slug'), null, 'a baseline, when given, is a slug');
   assert.equal(md.parseDirective('::colors baseline=c'), null, 'slugs required');
 
   const b = md.parseDirective('::build name="A build"', ['frame=f-1', 'slide=s-1']);
@@ -225,11 +230,28 @@ test('the method line: once, under the byline, above the disclosure, linking the
   const r = await run(PREVIEW + fieldNotePath(FIXTURE.slug));
   const h = r.html;
   assert.equal(count(h, 'class="fn-method"'), 1, 'the line exactly once');
-  assert.ok(h.includes('href="' + METHOD_PAGE_PATH + '">How gunforma checks parts'), 'links the methods page');
+  assert.ok(h.includes('href="' + METHOD_PAGE_PATH + '">How Gunforma checks parts'), 'links the methods page');
   const byline = h.indexOf('class="byline"'), method = h.indexOf('<p class="fn-method">'), disc = h.indexOf('class="fn-affiliate-note"');
   assert.ok(byline !== -1 && method !== -1 && disc !== -1);
   assert.ok(byline < method && method < disc, 'byline, then method line, then disclosure');
   assert.ok(!h.includes('We don’t range-test parts; where a fit') || true);
+});
+
+test('::colors without baseline=: no factory row, the same table; no ::picks keeps the disclosure up top', async () => {
+  stubFetch(catalog);
+  const src = '---\ntitle: No picks here\ntype: explainer\n---\n\nA paragraph.\n\n::price holosun-507k-x2\n\n' +
+    '::colors slugs=wilson-combat-wcp365-xmacro,icarus-precision-air-xmacro\n';
+  const { page: h } = await renderNote({ ...FIXTURE, slug: 'renderer-check' }, src, { mode: 'admin-preview' });
+  const block = h.slice(h.indexOf('<div class="fn-block fn-colors">'));
+  assert.ok(block.startsWith('<div class="fn-block fn-colors"><div class="table-wrap"><table>'), 'the colours table renders');
+  assert.equal(count(block.slice(0, block.indexOf('</table>')), 'fn-factory'), 0, 'no factory row without baseline=');
+  const wilson = block.indexOf('wilson-combat-wcp365-xmacro'), air = block.indexOf('icarus-precision-air-xmacro');
+  assert.ok(wilson !== -1 && wilson < air, 'rows in the order the block names them');
+  assert.ok(block.includes('<td>Cerakote</td>'), 'the Cerakote column is unchanged');
+  // the disclosure: no ::picks, so it stays under the method line, once
+  assert.equal(count(h, 'class="fn-affiliate-note"'), 1, 'exactly one disclosure');
+  const method = h.indexOf('<p class="fn-method">'), disc = h.indexOf('<p class="fn-affiliate-note">'), first = h.indexOf('class="fn-block');
+  assert.ok(method < disc && disc < first, 'under the method line, above the first block');
 });
 
 test('::unlocks frame: splits, live-only counts, the magwell gap, the dated footer', async () => {
@@ -242,7 +264,7 @@ test('::unlocks frame: splits, live-only counts, the magwell gap, the dated foot
   assert.ok(block.includes('P365 MACRO (17-round) — 1 magazine fits at the family level'), 'the family name from the housing class (frame_specs has no magazine_family column)');
   assert.ok(block.includes('No add-on magwell on record for this module'), 'the one zero a reader should see');
   assert.ok(block.includes('2 colours'));
-  assert.ok(block.includes('Counts from the gunforma catalog on '), 'the dated footer');
+  assert.ok(block.includes('Counts from the Gunforma catalog on '), 'the dated footer');
   assert.ok(!block.includes('>0 '), 'no zero count renders as a line');
 });
 

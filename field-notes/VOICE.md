@@ -9,7 +9,7 @@ number; the reader decides what it is worth.
 
 USE: fits / does not fit / needs a plate / needs an adapter; verified on <date> / per the
 maker / unverified; numbers with units; lightest / heaviest / the only one with /
-lowest-priced today + "in the gunforma catalog"; appears in N gunforma builds;
+lowest-priced today + "in the Gunforma catalog"; appears in N Gunforma builds;
 owner-reported.
 
 NEVER: feel words, performance claims, verdicts, implied testing, vague counts, pros/cons,

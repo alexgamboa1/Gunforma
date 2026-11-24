@@ -71,6 +71,12 @@ export const FIELD_NOTES = [
       '2026-11-20: Pick labels rewritten to measurable facts.',
       '2026-10-26: First published.',
     ] },
+  // P365 FUSE barrels roundup — a draft until Alex flips it.
+  { slug: 'best-p365-fuse-threaded-barrels', published: '2026-11-22', updated: '2026-11-22', draft: true,
+    tags: ['p365', 'p365-fuse', 'barrels'],
+    changelog: [
+      '2026-11-22: first published',
+    ] },
 ];
 
 export const FIELD_NOTES_INDEX_PATH = '/field-notes.html';
@@ -132,6 +138,7 @@ const FIELD_NOTE_LINKS = {
   ],
   'p365-fuse': [
     { slug: 'best-p365-xmacro-grip-modules', label: 'Best XMacro-size grip modules (the size the FUSE ships on), ranked' },
+    { slug: 'best-p365-fuse-threaded-barrels', label: 'Threaded and standard 4.3" barrels that fit the FUSE' },
   ],
 };
 

@@ -129,7 +129,7 @@ this module", a real gap the reader should see.
   slide page already derives (`part_classes.display_name`) — a line, not
   a count.
 
-Every ::unlocks block ends with "Counts from the gunforma catalog on
+Every ::unlocks block ends with "Counts from the Gunforma catalog on
 {render date}."
 
 ## `::colors` — the colour table
