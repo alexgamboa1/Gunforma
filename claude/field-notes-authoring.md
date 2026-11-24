@@ -33,7 +33,7 @@ commit to it. Nothing goes live until the PR is merged.
 ## The voice, and the article type (2026-11-20)
 
 **Read [`field-notes/VOICE.md`](../field-notes/VOICE.md) before writing a
-word** — gunforma is a reference desk, not a reviewer. The voice is a build
+word** — Gunforma is a reference desk, not a reviewer. The voice is a build
 guard (`scripts/field-notes-voice.mjs`, run by `check-field-notes.mjs`), so
 review language does not ship:
 

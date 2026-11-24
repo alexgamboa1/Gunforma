@@ -1,7 +1,7 @@
 name: Backup storage
 
 # Supabase's daily backups cover the DATABASE, not STORAGE. Every build photo
-# on gunforma exists in exactly one place, and unlike a parts row a lost photo
+# on Gunforma exists in exactly one place, and unlike a parts row a lost photo
 # cannot be retyped. This copies every object out of Supabase, daily.
 #
 # WHERE THE COPIES GO

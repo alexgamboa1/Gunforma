@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 // WHY THIS EXISTS
 // Supabase's daily backups cover the DATABASE, not STORAGE. Every build photo
-// on gunforma therefore exists in exactly one place. The database can be
+// on Gunforma therefore exists in exactly one place. The database can be
 // restored from a snapshot; the photos cannot be restored from anything. With
 // ~20 founding builders about to upload pictures of guns they built, that is
 // the one class of data here that is genuinely irreplaceable — a lost parts
@@ -230,7 +230,7 @@ function checkDrop(manifest, previous) {
     });
   }
 
-  log(c('bold', 'gunforma storage backup') + c('grey', `  ${new Date().toISOString()}`));
+  log(c('bold', 'Gunforma storage backup') + c('grey', `  ${new Date().toISOString()}`));
   log(c('grey', `project ${SUPABASE_URL}`));
   log(c('grey', `buckets ${BUCKETS.join(', ')}`));
   log(c('grey', `out     ${OUT_DIR}${DRY_RUN ? '  (DRY RUN — nothing will be written)' : ''}`));

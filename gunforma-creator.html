@@ -20,7 +20,7 @@
   // refuses, which matches CLAUDE.md: email/password auth is apex-only.)
   window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
     ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
-    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // Gunforma production key
   // The widget's container is rendered after the preview loads, so this
   // only marks the script ready; renderCaptcha() does the explicit render.
   window.onloadTurnstileCallback = function () {

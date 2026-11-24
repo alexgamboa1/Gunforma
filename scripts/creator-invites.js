@@ -3,7 +3,7 @@
 // -----------------------------------------------------------------------------
 // The admin CLI for claimable creator pages (creator-invite Edge Function).
 // Nothing here emails anyone: the claim link comes back to THIS terminal and
-// you DM it yourself from the gunforma Instagram account. That is deliberate —
+// you DM it yourself from the Gunforma Instagram account. That is deliberate —
 // a DM from the account they already follow is the trust signal, and we hold
 // no email address they never gave us.
 //
