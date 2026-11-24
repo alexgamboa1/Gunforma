@@ -110,6 +110,15 @@ jobs:
           PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/barrel-slide-fit.sql
 
+      # v_comp_barrel_fit: a comp fits only on a matching, stated thread
+      # pitch (no NULL pitch, so an Intra-Lok comp fits nothing), and a comp
+      # sold with its own barrel fits no other barrel. Two of its statuses
+      # have no live row, so this is the only place they run.
+      - name: v_comp_barrel_fit demands a matching pitch and refuses kit comps
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/comp-barrel-fit.sql
+
       # Finish families: the vocabulary seeded (11 families, 33 finishes),
       # a listed finish deriving its family through the real create_product(),
       # a NULL finish saving with a NULL family, an unlisted finish refused in
