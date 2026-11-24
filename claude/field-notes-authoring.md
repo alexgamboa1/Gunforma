@@ -167,7 +167,8 @@ slide×frame (`v_slide_frame_fit.fits`), optic×slide
 (`v_optic_slide_variant_fit` row), light×frame (`v_frame_light_fit` row —
 `adapter-separate` renders "needs a key/adapter, sold separately", no
 verified row renders "fit likely, not verified"), barrel×slide (`fits`),
-comp×barrel (`v_comp_barrel_fit` `fits`), magwell×frame
+comp×barrel (`v_comp_barrel_fit` `fits` — both pitches stated and equal,
+and never for a comp sold with its own barrel: `kit-barrel-only`), magwell×frame
 (`magwell_frame_requirements` row). A pair with no fit source (trigger ×
 slide) is allowed and says nothing. A pair the views refuse takes the
 block down to a visible refusal naming the pair — no parts table, no
