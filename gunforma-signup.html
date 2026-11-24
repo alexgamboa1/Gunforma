@@ -141,7 +141,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-
   // real key's hostname allowlist doesn't include localhost.
   window.TURNSTILE_SITE_KEY = window.location.hostname === 'localhost'
     ? '1x00000000000000000000AA'    // Cloudflare test key — always passes
-    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // gunforma production key
+    : '0x4AAAAAAEU9QpYQb4Q7aI-y';    // Gunforma production key
 
   // Explicit-render callback: Turnstile invokes this once its script loads
   // (registered via ?onload= in the script src). We render every .cf-turnstile

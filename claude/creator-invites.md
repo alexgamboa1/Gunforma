@@ -1,6 +1,6 @@
 # Creator invites — claimable pages (2026-10-27)
 
-How gunforma recruits creators: build their page first, keep it invisible,
+How Gunforma recruits creators: build their page first, keep it invisible,
 DM one private link. They claim it or they delete it. Until they choose,
 nothing about them is public anywhere — their handle 404s, their builds are
 unowned drafts RLS hides, and the invite table is deny-all.
@@ -35,7 +35,7 @@ NOTHING until the creator signs in themselves.
    like launch claim tokens. Lose it: `--new-link <handle>` mints another
    (and kills the old one). Links last 30 days.
 
-3. **DM the link from the gunforma Instagram account.** No email is sent and
+3. **DM the link from the Gunforma Instagram account.** No email is sent and
    none is asked for — the DM from the account they already know IS the
    trust signal. Suggested message:
 
@@ -91,7 +91,7 @@ NOTHING until the creator signs in themselves.
 
 - Claiming **renames an existing account** to the invite's handle (the page
   says which account it is claiming as). For a creator with an existing
-  gunforma account under another name, that is the point; `/u/<old name>`
+  Gunforma account under another name, that is the point; `/u/<old name>`
   links stop resolving, same as any rename.
 - A **declined** invite keeps the handle held forever (anti-impersonation).
   Releasing it is a deliberate act: `--revoke <handle>`.

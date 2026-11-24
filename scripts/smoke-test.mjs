@@ -310,7 +310,7 @@ async function main() {
     });
   }
 
-  log(c('bold', 'gunforma smoke test') + c('grey', `  ${new Date().toISOString()}`));
+  log(c('bold', 'Gunforma smoke test') + c('grey', `  ${new Date().toISOString()}`));
   log(c('grey', `project ${SUPABASE_URL}  bucket ${BUCKET}  role authenticated (not service_role)`));
   log('');
 

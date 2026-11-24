@@ -3,7 +3,7 @@
 **Artifact:** https://claude.ai/code/artifact/45f1e778-cee9-4154-9cbc-2df59ba65bda
 Private to AG. State lives in the artifact's own database, not in this file.
 
-**Why it exists:** a founder-level tracker for gunforma — not a dev log. It holds the
+**Why it exists:** a founder-level tracker for Gunforma — not a dev log. It holds the
 judgment calls no repo can answer. Anything the repo can answer belongs in the repo.
 
 ---
@@ -1272,7 +1272,7 @@ the wrong products since it was built (a Primos choke tube and a Streamlight lig
 part number); 26 Olight prices wrong, some by 25%; a privilege-escalation hole that let
 any signed-up user make themselves admin.
 
-That material is the raw form of two things gunforma needs: the credibility answer for an
+That material is the raw form of two things Gunforma needs: the credibility answer for an
 **AvantLink** application ("why should a network trust your price data"), and a public
 changelog. One entry per deploy-week, written from `git log` at week close.
 
