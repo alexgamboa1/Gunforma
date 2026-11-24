@@ -2,7 +2,8 @@
 title: 'Best P365 FUSE Threaded Barrels (2026): 4.3" Options'
 description: 'Every 4.3" P365 FUSE barrel in the Gunforma catalog, threaded (1/2x28) and standard, with a table of length, pitch, LCI and the slides each fits.'
 type: roundup
-category: guides
+category: Barrels
+cover: https://op1.0ps.us/640-640/opplanet-true-precision-sig-p365-fuse-bbl-threaded-black-nitride-m.jpg
 author: "Alex Gamboa"
 ---
 
