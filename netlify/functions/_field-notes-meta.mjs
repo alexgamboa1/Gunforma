@@ -72,7 +72,7 @@ export const FIELD_NOTES = [
       '2026-10-26: First published.',
     ] },
   // P365 FUSE barrels roundup — a draft until Alex flips it.
-  { slug: 'best-p365-fuse-threaded-barrels', published: '2026-11-22', updated: '2026-11-22', draft: true,
+  { slug: 'best-p365-fuse-threaded-barrels', published: '2026-11-22', updated: '2026-11-24', draft: false,
     tags: ['p365', 'p365-fuse', 'barrels'],
     changelog: [
       '2026-11-22: first published',
