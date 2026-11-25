@@ -90,12 +90,14 @@ const SERVICE_KEY      = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const DRY_RUN          = process.env.DRY_RUN === 'true';
 const FLOOR_OVERRIDE   = process.env.MATCH_RATE_FLOOR ? Number(process.env.MATCH_RATE_FLOOR) : null;
 const DEBUG_SAMPLES    = Number(process.env.DEBUG_SAMPLES || 0);
-// Variant photos are hand-selected to show what is in each variant (Alex,
-// 2026-11-21): the retailer feed does not supply them. The null-fill below is
-// OFF unless this is exactly '1' — a merchant's photo for a SKU is often a
-// group shot, a different finish, or a placeholder, and it renders fine while
-// being wrong. Price, stock and identifier writes are unaffected.
-const FILL_VARIANT_IMAGES = process.env.FILL_VARIANT_IMAGES === '1';
+// Variant photos are Alex's, chosen by hand (2026-11-21, and the 2026-11-24
+// ruling: every photo URL he entered is correct by definition). This sync
+// writes NO photo — not a fill, not a replacement. The null-fill it used to
+// carry behind FILL_VARIANT_IMAGES is gone, not switched off; a write path
+// that exists can be switched back on. scripts/sync-gtin-tiebreak.test.mjs
+// fails if any write to product_variants or variant_images reappears here,
+// and the photo_changes audit (check-photo-changes.mjs) reports one from
+// anywhere.
 const CONCURRENCY      = 10;
 const FETCH_TIMEOUT_MS = 120_000;
 
@@ -197,28 +199,6 @@ export function gtinNorm(val) {
 }
 
 // ─── feed images ────────────────────────────────────────────────────────────
-// Awin puts "https://images2.productserve.com/noimage.gif" in the image
-// columns when a merchant supplied no photo. That placeholder is not a picture
-// of the product, and it was stored as one on two variants (found 2026-11-16:
-// a Timber Creek mag release and a Zaffiri barrel "sharing" one photo — the
-// placeholder, one variant each, which the per-product photo audit could not
-// see). Rejected AT THE DOOR, before the proposal is even recorded, so the
-// image fill below can never deposit it — nulling the stored copies without
-// this would last exactly until the next sync night refilled them.
-//
-// The productserve host is rejected whole, not just noimage.gif: it is Awin's
-// own image CDN, its copies are low-res feed previews, and every real photo
-// this feed has ever supplied came on the merchant's own host
-// (merchant_image_url). scripts/check-routes.mjs audits the same rule over
-// the live rows, so a placeholder that arrives by any other route still fails
-// the scheduled run.
-export function feedImage(row) {
-  const url = ((row.merchant_image_url || '').trim() || (row.aw_image_url || '').trim()) || null;
-  if (!url) return null;
-  if (/noimage/i.test(url) || /\/\/images\d*\.productserve\.com\//i.test(url)) return null;
-  return url;
-}
-
 // ─── non-retail listings ────────────────────────────────────────────────────
 // OpticsPlanet lists open-box and demo units as separate feed rows on the SAME
 // product page as the retail item. They therefore land in the same URL
@@ -297,24 +277,6 @@ async function pgGet(pathAndQuery) {
   if (!res.ok) fail(`GET ${pathAndQuery} → ${res.status}: ${await res.text()}`);
   return res.json();
 }
-// PATCH that returns the rows it changed, so a caller can count them instead
-// of trusting a 204. An RLS- or filter-narrowed PATCH matching zero rows is a
-// success response in PostgREST — the failure mode CLAUDE.md's "a green result
-// is not evidence" section is about.
-async function pgPatchReturning(pathAndQuery, body) {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
-    method: 'PATCH',
-    headers: {
-      apikey:         SERVICE_KEY,
-      Authorization:  `Bearer ${SERVICE_KEY}`,
-      'Content-Type': 'application/json',
-      Prefer:         'return=representation',
-    },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) fail(`PATCH ${pathAndQuery} → ${res.status}: ${await res.text()}`);
-  return res.json();
-}
 
 async function pgPatch(pathAndQuery, body) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${pathAndQuery}`, {
@@ -344,11 +306,10 @@ async function loadExistingRows(partner, host) {
   const allRows = await pgGet(
     `affiliate_links?partner_id=eq.${partner.id}&limit=5000` +
     `&select=id,url,street_price,in_stock,retired_at,op_mpn,op_gtin,op_merchant_product_id,op_last_matched_by`
-    // variant id + current image, for the primary_image_url backfill below.
     // Single FK from affiliate_links to product_variants, so this embed is
     // unambiguous and must NOT be given an explicit FK name — see the
     // PGRST201 rule in CLAUDE.md, which also says not to 'fix' this one.
-    + `,product_variants(id,sku,upc,primary_image_url)`
+    + `,product_variants(id,sku,upc)`
   );
 
   // Retired listings are skipped, not matched — but they are COUNTED and
@@ -601,13 +562,6 @@ function processFeedRow(st, row, today) {
     isDemo: isNonRetail(row),
     condition: conditionOf(row),
     feedName: (row.product_name || '').slice(0, 120),
-    // merchant_image_url first, aw_image_url as the fallback — Awin populates
-    // the second from the first but not always the other way round. One image
-    // PER COLOUR SKU, which is the whole reason this is worth doing: the feed
-    // carries a distinct photo for each of True Precision's seven barrel
-    // finishes, and 244 of our 649 live variants have no image at all.
-    // feedImage() rejects Awin's noimage/productserve placeholders — see it.
-    rawImage: feedImage(row),
     url: canonicalDest,
   });
 }
@@ -624,10 +578,7 @@ function processFeedRow(st, row, today) {
 // Exported for scripts/sync-gtin-tiebreak.test.mjs, on the same footing as
 // gtinNorm above: the test drives the REAL resolver rather than a copy, so
 // it cannot pass against logic that no longer ships.
-//
-// `fillImages` defaults to FILL_VARIANT_IMAGES (off); the test passes it to
-// drive both sides without re-importing the module.
-export function resolveProposals(st, today, { fillImages = FILL_VARIANT_IMAGES } = {}) {
+export function resolveProposals(st, today) {
   for (const [linkId, proposals] of st.proposals) {
     const target = st.byId.get(linkId);
     if (!target) continue;
@@ -803,22 +754,6 @@ export function resolveProposals(st, today, { fillImages = FILL_VARIANT_IMAGES }
     st.tierCounts[p.tier] = (st.tierCounts[p.tier] || 0) + 1;
     st.filled += ['op_mpn', 'op_gtin', 'op_merchant_product_id'].filter(f => f in patch).length;
     st.updates.set(linkId, patch);
-
-    // ── variant image: fill a null, never replace one — and only when ─
-    // FILL_VARIANT_IMAGES=1. Off by default: variant photos are hand-picked.
-    // Deliberately inside the safe-to-write branch, AFTER the conflict and
-    // drift guards. A contested match must not deposit a photo any more than
-    // it deposits a price — a wrong image is a wrong claim about what someone
-    // is buying, and it is the harder one to notice because it renders fine.
-    //
-    // Same policy as the op_* identifiers and for the same reason: fill what
-    // is null, leave what is set. A hand-picked product photo outranks
-    // whatever the merchant is using this week.
-    const variant = target.product_variants;
-    if (fillImages && variant && variant.id && p.rawImage &&
-        (variant.primary_image_url == null || variant.primary_image_url === '')) {
-      st.imageFills.set(variant.id, p.rawImage);
-    }
   }
 }
 
@@ -990,44 +925,6 @@ async function writePartner(st) {
   return written;
 }
 
-// ─── fill primary_image_url on variants that have none ──────────────────────
-// Separate pass, separate table, deliberately after the link writes: if this
-// fails, prices have already landed. An image is the nice-to-have here.
-//
-// THE NEVER-OVERWRITE GUARANTEE IS IN THE QUERY, not in the if-statement that
-// populated the map. `&primary_image_url=is.null` means PostgREST itself
-// refuses the row if a value appeared since we read it, so a concurrent hand
-// edit cannot be clobbered by a stale in-memory view. The guard that matters
-// is the one the database enforces.
-//
-// Rows are COUNTED FROM THE RESPONSE, not assumed from the request. A PATCH
-// whose filter matches nothing returns 200 with [] — indistinguishable from a
-// write unless you look, which is the exact shape of failure this repo keeps
-// paying for.
-async function writeVariantImages(st) {
-  const entries = [...st.imageFills.entries()];
-  // Belt and braces: resolveProposals leaves the map empty when the fill is
-  // off, but this function is the one that writes, so it checks too.
-  if (!FILL_VARIANT_IMAGES || !entries.length) return { filled: 0, skipped: 0 };
-  log(c('bold', `\nFilling ${entries.length} variant image(s) for ${st.partner.name}…`));
-  let filled = 0, skipped = 0;
-  for (let i = 0; i < entries.length; i += CONCURRENCY) {
-    const chunk = entries.slice(i, i + CONCURRENCY);
-    const results = await Promise.all(chunk.map(([variantId, imageUrl]) =>
-      pgPatchReturning(
-        `product_variants?id=eq.${variantId}&primary_image_url=is.null&select=id`,
-        { primary_image_url: imageUrl },
-      )
-    ));
-    for (const rows of results) {
-      if (Array.isArray(rows) && rows.length === 1) filled++;
-      else skipped++;   // already had an image, or the row is gone
-    }
-  }
-  log(c('grey', `  ${filled} filled, ${skipped} already set or gone`));
-  return { filled, skipped };
-}
-
 // ─── main ───────────────────────────────────────────────────────────────────
 async function main() {
   const startedAt = Date.now();
@@ -1073,7 +970,6 @@ async function main() {
     states.set(mid, {
       partner: p, host: cfg.host, floor: cfg.floor, ...ix,
       proposals: new Map(),          // link id → [proposal] (resolved after the feed pass)
-      imageFills: new Map(),         // variant id → feed image, for variants with none
       updates: new Map(),
       tierCounts: {},
       unresolvedAmbiguous: [], unmatchedFeedUrls: [],
@@ -1162,19 +1058,10 @@ async function main() {
   if (DRY_RUN) {
     log(c('cyan', '\n[dry-run] no writes performed'));
     log(`  would write: ${willWrite.map(s => `${s.partner.name} ${s.updates.size}`).join(', ') || 'nothing'}`);
-    if (FILL_VARIANT_IMAGES) {
-      const wouldFill = willWrite.reduce((n, s) => n + s.imageFills.size, 0);
-      log(`  would fill ${wouldFill} variant image(s) where primary_image_url is null`);
-    } else {
-      log(`  variant image fill is off (set FILL_VARIANT_IMAGES=1 to enable) — no photos would be written`);
-    }
     log(`  duration: ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
   } else {
     let written = 0;
     for (const st of willWrite) written += await writePartner(st);
-    let imagesFilled = 0;
-    for (const st of willWrite) imagesFilled += (await writeVariantImages(st)).filled;
-    if (imagesFilled) log(c('green', `  ${imagesFilled} variant image(s) filled from the feed`));
     let reviewed = 0;
     const runAt = new Date().toISOString();
     for (const st of states.values()) reviewed += await writeDriftReview(st, runAt);

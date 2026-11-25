@@ -129,6 +129,17 @@ jobs:
           PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
         run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/finish-families.sql
 
+      # Photo changes: every product-photo write recorded by the triggers —
+      # primary_image_url insert/change, variant_images insert/url/position/
+      # delete — approved only for an admin's request or a declared
+      # gunforma.photo_edit; a direct session, the service role and a
+      # non-admin flagged; a write that changes no photo not recorded; the
+      # table private; create_variant() closed to every API role.
+      - name: photo changes are recorded, and only Alex's flow is approved
+        env:
+          PGURL: postgresql://postgres:postgres@127.0.0.1:54322/postgres
+        run: psql "$PGURL" -X -v ON_ERROR_STOP=1 -f supabase/tests/photo-changes.sql
+
       - name: Stop the local stack
         if: always()
         run: supabase stop --no-backup || true

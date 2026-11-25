@@ -116,6 +116,7 @@ check "Featured in Field Notes"  scripts/featured-field-notes.test.mjs
 # real in check-routes.yml, which sets both.
 check "barrel fit fixture is current" scripts/check-barrel-fit-fixture.mjs
 check "barrel fit fixture auto-refresh" scripts/refresh-barrel-fit-fixture.test.mjs
+check "photo-change alarm"       scripts/check-photo-changes.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
@@ -138,6 +139,10 @@ NOT_BUILD_CHECKS=(
   # current) are facts about production rows — same reason, same workflow.
   # The database enforces the first two at write time (FK + trigger).
   scripts/check-finish-data.mjs
+  # photo_changes is private production data, read with the service key; a
+  # photo changed outside Alex's flow is a data event, not a broken tree, and
+  # must not fail a deploy. Runs from check-routes.yml twice a day.
+  scripts/check-photo-changes.mjs
   # Imports refresh-affiliate-prices.mjs, which needs csv-parse from
   # scripts/package.json. Nothing installs that during the site build, so it
   # would fail for the wrong reason. It runs in

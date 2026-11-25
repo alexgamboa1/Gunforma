@@ -13,6 +13,17 @@ Both migrations (`20261111120000_armory_share_links`,
 **"The Armory: the shipped phase-1 builder"** section is the behaviour
 reference; this file is what's left.
 
+## The add-part skill's corrections must declare themselves (2026-11-25)
+
+`photo_changes` (CLAUDE.md, **Product photos are Alex's**) approves a
+photo change only from an admin request or a transaction that runs
+`set local gunforma.photo_edit = 'Alex: <why>';` first. The
+`gunforma-add-part` skill's Step 6 corrections run direct SQL through the
+connector, so each photo correction must open with that line, or the
+scheduled check flags it (harmlessly — it is then reviewed by hand). The
+skill is an installed plugin outside this repo; the line goes into its
+Step 6 there.
+
 ## Barrel fit fixture: refreshed by a workflow, which needs one setting
 
 The add-part flows (the `gunforma-add-part` skill, the admin add-part
