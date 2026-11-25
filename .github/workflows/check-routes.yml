@@ -100,3 +100,16 @@ jobs:
       - name: Check finish-family data invariants
         if: always()
         run: node scripts/check-finish-data.mjs
+
+      # scripts/fixtures/barrel-slide-fit.json (what the build holds every
+      # ::fit barrel= group to) still matches v_barrel_slide_fit. The same
+      # script runs in check-all.sh, where it has no credentials and only
+      # warns; here it has them, so a stale fixture turns this job red with
+      # the refresh command. The public anon key — the one in
+      # js/supabase-client.js — not a secret.
+      - name: Check barrel fit fixture is current
+        if: always()
+        env:
+          SUPABASE_URL: https://lagjjcpclvzrjlrswojt.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4
+        run: node scripts/check-barrel-fit-fixture.mjs

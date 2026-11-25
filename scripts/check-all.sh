@@ -111,6 +111,10 @@ check "/parts jump links stay on /parts" scripts/parts-index-anchors.test.mjs
 check "::fit barrel= block"     scripts/fit-barrel-block.test.mjs
 check "Gunforma is capitalized"  scripts/check-brand-case.mjs
 check "Featured in Field Notes"  scripts/featured-field-notes.test.mjs
+# Warns and passes here: no SUPABASE_URL / SUPABASE_ANON_KEY in the Netlify
+# build, on purpose (a data change must not fail a deploy). It compares for
+# real in check-routes.yml, which sets both.
+check "barrel fit fixture is current" scripts/check-barrel-fit-fixture.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

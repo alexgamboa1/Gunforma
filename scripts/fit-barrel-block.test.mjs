@@ -35,32 +35,19 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 // from v_barrel_slide_fit with the public key (fit_status = 'fits', the
 // slide approved and not discontinued — the renderer's own filter).
 // check-field-notes.mjs reads it to hold a ::fit barrel=a,b group to one
-// set of slides. Refresh after a fit or catalog change:
+// set of slides. The live read is scripts/barrel-fit-fixture.mjs, shared
+// with check-barrel-fit-fixture.mjs, which fails when this file is stale.
+// Refresh after a fit or catalog change:
 //   node scripts/fit-barrel-block.test.mjs --refresh-fixture
 // The renderer re-checks the same rule live on every request.
-const FIT_FIXTURE = join(ROOT, 'scripts/fixtures/barrel-slide-fit.json');
+const FIX = await import(pathToFileURL(join(ROOT, 'scripts/barrel-fit-fixture.mjs')).href);
 if (process.argv.includes('--refresh-fixture')) {
   const client = await readFile(join(ROOT, 'js/supabase-client.js'), 'utf8');
   const url = client.match(/https:\/\/[a-z0-9]+\.supabase\.co/)[0];
   const key = client.match(/eyJ[A-Za-z0-9._-]+/)[0];
-  const get = async (path) => {
-    const res = await fetch(url + '/rest/v1/' + path, { headers: { apikey: key, Authorization: 'Bearer ' + key } });
-    if (!res.ok) throw new Error('PostgREST ' + res.status + ' on ' + path);
-    return res.json();
-  };
-  const barrels = await get('products?category=eq.barrel&is_discontinued=eq.false&select=slug&order=slug.asc&limit=1000');
-  const sel = 'barrel:products!barrel_specs_product_id_fkey!inner(slug),' +
-    'slide:products!slide_specs_product_id_fkey!inner(slug,is_approved,is_discontinued)';
-  const rows = await get('v_barrel_slide_fit?fit_status=eq.fits&select=' + encodeURIComponent(sel) + '&limit=10000');
-  const fits = Object.fromEntries(barrels.map((b) => [b.slug, []]));
-  for (const r of rows) {
-    if (!r.barrel || !r.slide || r.slide.is_approved !== true || r.slide.is_discontinued) continue;
-    if (!fits[r.barrel.slug]) fits[r.barrel.slug] = [];
-    if (!fits[r.barrel.slug].includes(r.slide.slug)) fits[r.barrel.slug].push(r.slide.slug);
-  }
-  for (const k of Object.keys(fits)) fits[k].sort();
-  await writeFile(FIT_FIXTURE, JSON.stringify({ captured: new Date().toISOString().slice(0, 10),
-    source: "v_barrel_slide_fit?fit_status=eq.fits, slide approved and not discontinued (public key)", fits }, null, 1) + '\n');
+  const fits = await FIX.readLiveFits({ url, key });
+  await writeFile(FIX.FIT_FIXTURE, JSON.stringify({ captured: new Date().toISOString().slice(0, 10),
+    source: FIX.FIXTURE_SOURCE, fits }, null, 1) + '\n');
   console.log('fit fixture refreshed: ' + Object.keys(fits).length + ' barrels');
 }
 const fn = (f) => pathToFileURL(join(ROOT, 'netlify/functions', f)).href;
@@ -225,7 +212,7 @@ async function guardWith(edit) {
 }
 
 test('the fit fixture carries the article\'s barrels, with the sets the groups rely on', async () => {
-  const f = JSON.parse(await readFile(FIT_FIXTURE, 'utf8')).fits;
+  const f = JSON.parse(await readFile(FIX.FIT_FIXTURE, 'utf8')).fits;
   const same = (a, b) => JSON.stringify(f[a]) === JSON.stringify(f[b]);
   assert.ok(same(SLUGS.TPT, SLUGS.FWT));
   assert.ok(same(SLUGS.FWF, SLUGS.TPN) && same(SLUGS.TPN, SLUGS.NST));

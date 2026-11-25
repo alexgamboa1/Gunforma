@@ -13,6 +13,21 @@ Both migrations (`20261111120000_armory_share_links`,
 **"The Armory: the shipped phase-1 builder"** section is the behaviour
 reference; this file is what's left.
 
+## Barrel fit fixture: the add-part flow cannot refresh it (2026-11-24)
+
+`scripts/fixtures/barrel-slide-fit.json` must be refreshed
+(`node scripts/fit-barrel-block.test.mjs --refresh-fixture`) and committed
+whenever a barrel or slide is added, approved, discontinued or locked.
+Neither add-part path can do that: the `gunforma-add-part` skill works
+only through the Supabase SQL connector (no shell, no git), and
+`gunforma-admin-part.html` is a browser page. So a part saved through
+either leaves the fixture stale until someone refreshes it by hand.
+`check-barrel-fit-fixture.mjs` in `check-routes.yml` turns the scheduled
+job red within twelve hours of that, naming the barrels that moved — the
+gap is caught, not closed. Closing it: a workflow that runs the refresh
+and opens a PR when the file changes (Alex merges it), or a line in the
+skill's Step 7 handing Alex a one-line Claude Code prompt to refresh.
+
 ## Follow-ups, logged during phase 1
 
 - **Turnstile via a Netlify function** (logged in #246). The anonymous
