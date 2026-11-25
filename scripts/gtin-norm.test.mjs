@@ -15,7 +15,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { gtinNorm, feedImage } from './refresh-affiliate-prices.mjs';
+import { gtinNorm } from './refresh-affiliate-prices.mjs';
 
 test('whitespace GTIN keeps only the first token (the regression this fixes)', () => {
   // The exact value from the Olight feed, for the Osight C red-dot link.
@@ -79,34 +79,4 @@ test('numeric input is accepted, not just strings', () => {
 test('the old concatenating behaviour is gone', () => {
   // Guards against a regression back to String(v).replace(/[^0-9]/g,'').
   assert.notEqual(gtinNorm('6978095650162 78'), '697809565016278');
-});
-
-// ─── feedImage: placeholders never become product photos ────────────────────
-// Awin serves images2.productserve.com/noimage.gif for a SKU the merchant
-// never photographed, and the image backfill would otherwise store it as the
-// variant's picture — which is exactly how two different products came to
-// "share" one photo (2026-11-16). The whole productserve host is out: it is
-// Awin's own CDN of low-res feed previews, never the merchant's photo.
-
-test('feedImage rejects the noimage placeholder on either column', () => {
-  assert.equal(feedImage({ merchant_image_url: 'https://images2.productserve.com/noimage.gif' }), null);
-  assert.equal(feedImage({ merchant_image_url: '', aw_image_url: 'https://images2.productserve.com/noimage.gif' }), null);
-  // any future noimage spelling, whatever the host
-  assert.equal(feedImage({ merchant_image_url: 'https://cdn.example.com/NoImage_default.png' }), null);
-});
-
-test('feedImage rejects the productserve host whole, previews included', () => {
-  assert.equal(feedImage({ aw_image_url: 'https://images.productserve.com/preview/1234/567890.jpg' }), null);
-  assert.equal(feedImage({ aw_image_url: 'https://images3.productserve.com/anything.jpg' }), null);
-});
-
-test('feedImage passes a real merchant photo, trimmed, preferring merchant_image_url', () => {
-  assert.equal(
-    feedImage({ merchant_image_url: ' https://op1.0ps.us/640-640/opplanet-foo-main.jpg ' }),
-    'https://op1.0ps.us/640-640/opplanet-foo-main.jpg');
-  assert.equal(
-    feedImage({ merchant_image_url: '', aw_image_url: 'https://www.tyrantcnc.com/media/foo.jpg' }),
-    'https://www.tyrantcnc.com/media/foo.jpg');
-  assert.equal(feedImage({}), null);
-  assert.equal(feedImage({ merchant_image_url: '   ' }), null);
 });

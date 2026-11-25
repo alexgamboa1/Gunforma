@@ -1697,6 +1697,7 @@ Registered today:
 | `scripts/featured-field-notes.test.mjs` | a product page's "Featured in Field Notes" section linking a draft, an undeclared article or one whose file is missing; counting a block it must not (`::rank baseline=`, `::fit optic=`/`magazine=`, `::price`, `::colors`, `::unlocks`) or missing one it must (`::picks`, `::rank`, `::compare`, `::fit barrel=`, `::build`); more than three notes, or not newest reviewed first; a heading over no notes; `field-notes/*.md` dropped from product-page's `included_files` — runs `_field-note-features.mjs` over a stubbed registry and over the real articles, and `product-page.mjs` against a stubbed fetch |
 | `scripts/check-barrel-fit-fixture.mjs` *(compares only with `SUPABASE_URL` + `SUPABASE_ANON_KEY` set — the Netlify build sets neither, so there it warns and passes; `check-routes.yml` sets both and goes red)* | `scripts/fixtures/barrel-slide-fit.json` — what `check-field-notes.mjs` holds every `::fit barrel=a,b` group to, offline — no longer matching the live `v_barrel_slide_fit` fits rows under the renderer's filter (slide approved, not discontinued; every live barrel present): a barrel or slide added, approved, discontinued or locked without a refresh. Fails with "Barrel fit fixture is out of date. Run node scripts/fit-barrel-block.test.mjs --refresh-fixture." and names each barrel that moved; a failed read with credentials fails too. The read is `scripts/barrel-fit-fixture.mjs`, shared with the refresh, so the two cannot define the fixture differently |
 | `scripts/refresh-barrel-fit-fixture.test.mjs` | the scheduled auto-refresh (`.github/workflows/refresh-barrel-fit-fixture.yml` → `scripts/refresh-barrel-fit-fixture.mjs`, after every scheduled "Check routes") breaking its one-PR contract — a second PR opened beside the open one instead of `gh pr edit`, a branch other than `auto/refresh-barrel-fit-fixture`, a title other than "Refresh barrel fit fixture", any `gh pr merge` / auto-merge / push to `main`, a checkout of anything but `main`, a commit of anything but the fixture, a PR main no longer needs left open, a run on anything but a scheduled check or by hand, a key other than the site's public anon key; the PR body not listing every changed barrel once with each change; the shared live read counting an unapproved or discontinued slide, or answering a failed read with an empty map — over a stubbed PostgREST and the workflow's own text (the workflow itself only runs on GitHub) |
+| `scripts/check-photo-changes.test.mjs` | the scheduled photo-change alarm (`scripts/check-photo-changes.mjs`, `check-routes.yml`) reading a failed read as clean — a 401, a 5xx, a network error or a non-array body must fail; only PGRST205 (the audit table not created yet) passes, with a notice — or asking for anything but unapproved, unreviewed `photo_changes` rows, or not listing every flagged variant with its old → new value and who; no credentials not warning, or sending a request anyway; the step missing from `check-routes.yml` or its service-role secret, or the check landing in the build instead of `NOT_BUILD_CHECKS` — over a stubbed PostgREST. The triggers themselves are `supabase/tests/photo-changes.sql`, in `check-migrations.yml` |
 | `scripts/parts-index-anchors.test.mjs` | a category jump link on `/parts` going to the homepage — `parts-index.mjs` sets `<base href="/"/>`, so a bare `href="#barrels"` resolves to `/#barrels`; the links must read `/parts#<segment>`, no href on the page may start with `#`, every jump link must hit a section id, and the Discontinued list gets no bare-fragment link — runs the handler against a stubbed catalog through `scripts/fragment-audit.mjs`, which `check-routes.mjs` also runs on the served `/parts` |
 | `scripts/check-finish-data.mjs` *(live database — under `NOT_BUILD_CHECKS`, run by `check-routes.yml` beside `check-fitment-data.mjs`, not by the build)* | a variant's finish wording with no `finishes` row, a `finish_family` (on a variant or in `finishes`) with no `finish_families` row, or `product_variants.finish_family` gone stale against the family `finishes` files its wording under (NULL finish ⇔ NULL family); a half-applied schema (the table without the column, or the reverse) — passes with a notice until `*_finish_families.sql` is applied. The database enforces the first two at write time (FK + `set_finish_family()`); this is the second witness |
 | `scripts/guide-editor.test.mjs` | the Armory's guide editor sending the wrong write — a Gunforma guide saved anywhere but `guides`, or with a `user_id`; a community guide's UPDATE carrying `user_id` (an admin's edit taking the guide over); an update that matched no row on someone else's guide or a Gunforma guide falling back to an INSERT (a silent copy beside an untouched original); `gun_id` sent to `guides` before the migration adds it; a duplicate theme inserted for a name that exists; an opened guide dropping a part silently instead of listing it, or replacing a build in progress without asking; "Start a new build" leaving part of the identity behind; a plain Armory visit adopting a saved guide's identity from the stored draft; an Edit on a published Gunforma guide opening the live row instead of a draft (new, or the one already saved for it), a Gunforma guide update without the `is_published = false` filter, or publishing a draft of a live guide doing anything but updating the live row, deleting the draft and resetting the builder; and on the gallery, an admin's Gunforma guides not split into Drafts / Published, a live card offering plain Edit instead of Edit as draft, an Unpublish reported done without a row back, Edit / Delete shown to anyone but an admin (every card) or the owner (their own community guide), or a delete reported done when no row came back — runs both pages' inline scripts against a recording supabase stub; and on the Armory's My builds / Saved parts tabs, a read of anyone's rows but the signed-in reader's, anything read or listed for a signed-out visitor (or a sign-in prompt before the session is known), a hash that does not select its tab, `?edit=` dropping the tab's hash, Open or Add to build not landing on the Build tab (or landing there on a "no"), the old My Armory button or panel coming back, an Open that is not `?edit=community:` or that clears the build on screen when the reader says no, an "Add to build" that adds a part the pickers would not offer (or that changes the build's target, `savedId`, `ownerId` or title), a write to `part_favorites` from anything but the ♥, a heart missing from a picker card, a picked card or a saved part, a heart that changes the picks, the open picker, the stored draft or the build's identity, a heart that does not move the Saved parts count and grid (or a failed one that does not put them back in place), a signed-out heart that writes or does not link sign-in back to the Armory, the "Saved" picker filter listing an unsaved part or making a saved part that doesn't fit pickable, a delete reported done without a row back, deleting the open build leaving it pointed at the deleted row, the Armory build card's total, photo or taken-down state; a reader-facing "community guide" / "Gun Guide" for a reader's build; Gun Guides growing a Community tab or a `gun_guides` read back; and a plain Armory visit opening in edit mode or losing the build in progress — the identity-less build not carried over between visits or through the sign-in round trip (`BUILD_KEY`), an identity adopted from a stored blob (only `?edit=` adopts one), an old pre-rebuild draft blob restored, the `?edit=` draft leaking into a plain visit, or `?edit=` losing its guide or a reload's unsaved changes; and the Share / Save split — a signed-out Share redirecting instead of opening the panel (link, export tabs, "Don't lose it" box), its export not riding `ArmoryShare.exportText`, the anonymous save's token not kept or `?edit=` not written, a rate-limited Share showing the raw error instead of "Sharing is busy right now. Sign in to save your build.", Share before the migration sending an RPC that doesn't exist, a signed-out Save writing anything (even an anonymous row) instead of the sign-in modal that holds the picks and finishes the save after the round trip, a signed-in Save of a token-held anonymous build not claiming first (a direct UPDATE RLS matches to nothing), a signed-in Share leaving a link that isn't in My builds, or a Gunforma guide draft growing a Share button; and the token's boundary — the edit token reaching any URL, toast or panel (it lives in `TOKENS_KEY` localStorage only), or a `?edit=community:<id>` opened without the token (the address bar right after a Share, so the URL that gets pasted by mistake) doing anything but landing on the build's `/l/` page (pre-migration, today's toasts) — never adopting the identity, never a write |
@@ -2586,20 +2587,57 @@ an `is_primary` column now fails.
 A new row therefore looks like: a variant, a partner, a URL, its tracked URL,
 and nothing else. It will show as "Check price" until the first sync matches it.
 
+## Product photos are Alex's
+
+**Every product photo URL Alex entered is correct by definition** (Alex,
+2026-11-24): he chose each one by looking at it, and where it is hosted
+does not matter. The only problem is a photo changed by anything other
+than Alex. So nothing automated writes a photo, and every write is
+recorded (`supabase/migrations/*_photo_changes_audit.sql`):
+
+- **`public.photo_changes`** gets one row per change to
+  `product_variants.primary_image_url` (insert with a photo, any change)
+  and to `variant_images` (insert, delete, url, position) — old and new
+  value, when, the JWT role and user, the session, and the declared
+  reason. Written by AFTER triggers through a SECURITY DEFINER function, so
+  no caller can skip it. Private: RLS on, no policies, no grants to `anon`
+  or `authenticated`.
+- **`approved`** is true only for Alex's flow: an **admin's own request**
+  (the add-part page through `create_product()` / `add_variants()`), or a
+  transaction that **declares itself**:
+  `set local gunforma.photo_edit = 'Alex: <why>';` — the add-part skill's
+  corrections, a restore migration, any SQL Alex asked for. A direct
+  session that does not declare itself (the MCP SQL tool, the dashboard, a
+  migration), the service role and anyone else are recorded unapproved.
+  **A migration or SQL that changes a photo must declare itself**, or it
+  turns the scheduled job red.
+- **`scripts/check-photo-changes.mjs`** runs in `check-routes.yml` twice a
+  day with the service key and fails, listing each variant, while an
+  unapproved row has no `reviewed_at`. Clear one by setting `reviewed_at`
+  and `review_note` (never delete a row). `NOT_BUILD_CHECKS`: a data event
+  must not fail a deploy.
+- **The writers, as of 2026-11-25** — the only paths that can change a
+  photo: the admin add-part page (`create_product()`, `add_variants()`),
+  and direct SQL (migrations, the MCP / dashboard, the add-part skill's
+  corrections), which must declare itself. The price sync's fill is
+  **removed**; `create_variant()` is **closed** to every API role (its
+  service-role CSV loader, `scripts/add-variants.mjs`, is deleted). Readers
+  have no write path: neither table has a write policy.
+- `supabase/tests/photo-changes.sql` drives every caller kind through the
+  real triggers on every migration PR.
+
 ## Affiliate price sync
 
 `scripts/refresh-affiliate-prices.mjs` runs nightly from
 `.github/workflows/refresh-affiliate-prices.yml` and updates `street_price`,
 `in_stock`, `last_checked` and four `op_*` audit columns on `affiliate_links`.
-It also **backfills `product_variants.primary_image_url` from the feed's
-image columns** — fill a null, never replace one, and only on an uncontested
-match — through `feedImage()`, which **rejects Awin's noimage/productserve
-placeholder URLs at the door**: the feed serves
-`images2.productserve.com/noimage.gif` for a SKU the merchant never
-photographed, and storing that as a photo is how two different products came
-to "share" one image (2026-11-16). `gtin-norm.test.mjs` pins the rejection in
-the workflow, and `check-routes.mjs` audits the live rows for both halves:
-no placeholder photo anywhere, and no photo shared across two products.
+**It writes no photo** (since 2026-11-25). It used to backfill an empty
+`product_variants.primary_image_url` from the feed's image columns; that path
+was switched off on 2026-11-21 and is now removed, not flagged off — see
+**Product photos are Alex's** below. `sync-gtin-tiebreak.test.mjs` fails if a
+write to `product_variants` or `variant_images` reappears in the script.
+`check-routes.mjs` still audits the live rows: no feed placeholder photo
+anywhere, and no photo shared across two products.
 
 **It is multi-merchant.** One combined Awin feed (`AWIN_FEED_URL_V2`) carries
 every joined merchant, and rows are routed by the feed's `merchant_id` to

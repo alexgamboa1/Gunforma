@@ -57,7 +57,6 @@ function stateWith(target, proposals) {
     proposals: new Map([[LINK, proposals]]),
     byId: new Map([[LINK, { id: LINK, url: target.url || 'https://shop/x', ...target }]]),
     updates: new Map(),
-    imageFills: new Map(),
     withheldIds: new Set(),
     conflicts: [], driftReview: [], tierCounts: {},
     demoRowsDropped: 0, resolvedByStoredId: 0, resolvedByStoredGtin: 0,
@@ -389,54 +388,34 @@ test('hyphen-insensitive confirmsStored still separates a shared-URL row', () =>
   assert.equal(st.resolvedByStoredId, 1, 'the stored-identifier rule did not claim the resolution');
 });
 
-// ─── variant photos: the feed does not supply them (Alex, 2026-11-21) ──────
-// Variant photos are hand-selected to show what is in each variant. The
-// null-fill exists but is OFF unless FILL_VARIANT_IMAGES=1. These drive the
-// real resolver on a clean, uncontested match against a variant with no photo
-// — the one case the fill ever acted on.
+// ─── variant photos: the sync writes none (Alex, 2026-11-21 / 2026-11-24) ──
+// Every product photo is Alex's, chosen by hand. The null-fill that used to
+// sit behind FILL_VARIANT_IMAGES is removed, not switched off. These hold it
+// gone: a clean, uncontested match on a variant with NO photo — the one case
+// the fill ever acted on — writes its price and nothing else, and the module's
+// own text carries no write to a photo column or table.
 const NULL_PHOTO_TARGET = {
   op_mpn: 'TPP365BXBL', op_gtin: null, op_merchant_product_id: null,
-  product_variants: { id: 'variant-without-photo', primary_image_url: null },
+  product_variants: { id: 'variant-without-photo' },
 };
-const WITH_FEED_PHOTO = { ...TRUE_PRECISION, rawImage: 'https://merchant.example/photo.jpg' };
 
-test('a null-photo variant is NOT filled from the feed by default', () => {
-  assert.notEqual(process.env.FILL_VARIANT_IMAGES, '1', 'run this test without FILL_VARIANT_IMAGES set');
-  const st = stateWith(NULL_PHOTO_TARGET, [WITH_FEED_PHOTO]);
+test('a match on a photo-less variant writes the price and no photo', () => {
+  const st = stateWith(NULL_PHOTO_TARGET, [{ ...TRUE_PRECISION, rawImage: 'https://merchant.example/photo.jpg' }]);
   resolveProposals(st, TODAY);
-  assert.equal(st.updates.has(LINK), true, 'the price write must be unaffected by the image gate');
-  assert.equal(st.updates.get(LINK).street_price, 144.99);
-  assert.equal(st.imageFills.size, 0, 'a feed photo was queued with the fill off');
+  assert.equal(st.updates.get(LINK).street_price, 144.99, 'the price write is unaffected');
+  assert.ok(!('imageFills' in st), 'a photo queue came back');
+  for (const patch of st.updates.values())
+    assert.ok(!Object.keys(patch).some((k) => /image|photo/i.test(k)), 'a link patch carries a photo field');
 });
 
-test('a null-photo variant IS filled when the fill is switched on', () => {
-  const st = stateWith(NULL_PHOTO_TARGET, [WITH_FEED_PHOTO]);
-  resolveProposals(st, TODAY, { fillImages: true });
-  assert.equal(st.imageFills.get('variant-without-photo'), 'https://merchant.example/photo.jpg');
-});
-
-test('FILL_VARIANT_IMAGES=1 in the environment switches the fill on; anything else does not', async () => {
-  const prior = process.env.FILL_VARIANT_IMAGES;
-  try {
-    for (const [value, expectFill] of [['1', true], ['true', false], ['0', false]]) {
-      process.env.FILL_VARIANT_IMAGES = value;
-      // A fresh module instance reads the env at load, as the nightly run does.
-      const mod = await import(`./refresh-affiliate-prices.mjs?fill=${value}`);
-      const st = stateWith(NULL_PHOTO_TARGET, [WITH_FEED_PHOTO]);
-      mod.resolveProposals(st, TODAY);
-      assert.equal(st.imageFills.size, expectFill ? 1 : 0, `FILL_VARIANT_IMAGES=${value}`);
-    }
-  } finally {
-    if (prior === undefined) delete process.env.FILL_VARIANT_IMAGES;
-    else process.env.FILL_VARIANT_IMAGES = prior;
-  }
-});
-
-test('a variant that already has a photo is never filled, even with the fill on', () => {
-  const st = stateWith(
-    { ...NULL_PHOTO_TARGET, product_variants: { id: 'variant-with-photo', primary_image_url: 'https://hand.picked/x.jpg' } },
-    [WITH_FEED_PHOTO],
-  );
-  resolveProposals(st, TODAY, { fillImages: true });
-  assert.equal(st.imageFills.size, 0);
+test('the sync carries no write to product_variants or variant_images', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('./refresh-affiliate-prices.mjs', import.meta.url), 'utf8');
+  const code = src.replace(/\/\/[^\n]*/g, '');           // comments may name what is gone
+  assert.doesNotMatch(code, /primary_image_url/, 'the sync names primary_image_url again');
+  assert.doesNotMatch(code, /variant_images/, 'the sync names variant_images');
+  assert.doesNotMatch(code, /FILL_VARIANT_IMAGES/, 'the fill flag is back');
+  // Every write the sync sends goes to affiliate_links or sync_drift_review.
+  for (const m of code.matchAll(/pg(?:Patch|Post|Delete|Upsert)\w*\(\s*[`'"]([a-z_]+)/g))
+    assert.ok(['affiliate_links', 'sync_drift_review'].includes(m[1]), 'a write to ' + m[1]);
 });
