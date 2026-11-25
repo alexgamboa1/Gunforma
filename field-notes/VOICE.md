@@ -15,9 +15,12 @@ owner-reported.
 NEVER: feel words, performance claims, verdicts, implied testing, vague counts, pros/cons,
 hype words.
 
-List only what fits. No "doesn't fit", "won't fit", "not compatible" or "will not work"
-lists or sentences: the Armory warns builders about bad pairs. Describe each group by what
+List only what fits. No "doesn't fit", "won't fit", "not compatible", "will not work" or
+"refuses" lists or sentences: the Armory warns builders about bad pairs. Describe each group by what
 it takes ("fits 7 of the 12 FUSE slides"), and phrase FAQ answers by what fits.
+
+A fit box (`::fit`) closes its group: it goes after the last product card of the parts it
+covers, never between cards. The build fails a `::rank` that follows a `::fit` in the same H2.
 
 Owner opinions only inside a blockquote copied verbatim from a public build, linked to it.
 Name the product in full (brand + product + model) at first mention in every section.

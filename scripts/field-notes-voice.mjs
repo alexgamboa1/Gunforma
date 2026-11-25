@@ -47,7 +47,7 @@ export const VOICE_RULES = {
     // takes. Both apostrophes, since editors type either.
     { group: 'negative fit', why: 'list only what fits \u2014 say what the part takes ("fits 7 of the 12 FUSE slides"), not what it refuses; the Armory warns about bad pairs',
       phrases: ['doesn\'t fit', 'doesn\u2019t fit', 'does not fit', 'won\'t fit', 'won\u2019t fit', 'will not fit',
-                'not compatible', 'will not work'] },
+                'not compatible', 'will not work', 'refuses', 'refuse'] },
   ],
 };
 

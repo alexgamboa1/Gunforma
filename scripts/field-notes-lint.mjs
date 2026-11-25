@@ -96,6 +96,25 @@ export function lintNote(src, { nameCheck } = {}) {
   }
   if (inFence) fail(null, 'unclosed code fence');
 
+  // ── fit-box placement (Alex, 2026-11-25) ──
+  // A ::fit box closes its group: it goes after the LAST product card of
+  // the parts it covers, never between cards. So within one H2 section a
+  // ::fit followed by a ::rank fails — the box would sit under one card
+  // while describing several, or repeat once per card.
+  {
+    let fence = false, fitAt = null;
+    for (const [k, line] of lines.entries()) {
+      if (/^```/.test(line)) { fence = !fence; continue; }
+      if (fence) continue;
+      if (/^##\s/.test(line)) { fitAt = null; continue; }
+      if (/^::fit\b/.test(line)) { if (fitAt == null) fitAt = k; continue; }
+      if (/^::rank\b/.test(line) && fitAt != null) {
+        fail(at(k), '::rank after a ::fit box in the same H2 section (box at line ' + at(fitAt) + ') — a fit box goes after the last product card of its group, never between cards');
+        fitAt = null;
+      }
+    }
+  }
+
   let r;
   try { r = renderMarkdown(body); } catch (e) { fail(null, 'renderMarkdown threw: ' + (e && e.message)); return { meta, body, issues, blocks: [], headings: [], lines, fmLines }; }
 
