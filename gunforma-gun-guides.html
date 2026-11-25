@@ -353,7 +353,7 @@ async function loadAll() {
   var r = await Promise.all([
     sb.from('platforms').select('id, name'),
     sb.from('guns').select('id, name'),
-    curatedQ.order('title'),
+    curatedQ.order('created_at', { ascending: false }).order('title'),
   ]);
   (r[0].data || []).forEach(function (p) { PLATFORMS_BY_ID[p.id] = p; });
   (r[1].data || []).forEach(function (g) { GUNS_BY_ID[g.id] = g; });

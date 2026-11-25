@@ -1109,7 +1109,7 @@ function handleAdd(add) {
 var START_GUIDES = [];
 async function loadStartGuides() {
   try {
-    var r = await sb.from('guides').select('*').eq('is_published', true).order('title');
+    var r = await sb.from('guides').select('*').eq('is_published', true).order('created_at', { ascending: false }).order('title');
     if (!r.error) START_GUIDES = r.data || [];
   } catch (e) {}
 }
