@@ -7,13 +7,17 @@ A part is described by how it differs from the factory part. Different is not be
 worse: more weight is not a con, less weight is not a pro. State the difference with its
 number; the reader decides what it is worth.
 
-USE: fits / does not fit / needs a plate / needs an adapter; verified on <date> / per the
+USE: fits / needs a plate / needs an adapter; verified on <date> / per the
 maker / unverified; numbers with units; lightest / heaviest / the only one with /
 lowest-priced today + "in the Gunforma catalog"; appears in N Gunforma builds;
 owner-reported.
 
 NEVER: feel words, performance claims, verdicts, implied testing, vague counts, pros/cons,
 hype words.
+
+List only what fits. No "doesn't fit", "won't fit", "not compatible" or "will not work"
+lists or sentences: the Armory warns builders about bad pairs. Describe each group by what
+it takes ("fits 7 of the 12 FUSE slides"), and phrase FAQ answers by what fits.
 
 Owner opinions only inside a blockquote copied verbatim from a public build, linked to it.
 Name the product in full (brand + product + model) at first mention in every section.

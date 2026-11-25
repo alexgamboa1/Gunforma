@@ -41,6 +41,16 @@ test('every WARN phrase warns and never fails', () => {
   }
 });
 
+test('negative fit language warns; what fits does not', () => {
+  const neg = (t) => warns(t).filter((h) => h.group === 'negative fit');
+  assert.equal(neg('This barrel doesn\u2019t fit the FUSE Comp.').length, 1, 'curly apostrophe');
+  assert.equal(neg("It won't fit an XL slide.").length, 1, 'straight apostrophe');
+  assert.equal(neg('The two are not compatible.').length, 1);
+  assert.equal(neg('A ported barrel will not work here.').length, 1);
+  assert.equal(neg('A threaded barrel fits 7 of the 12 FUSE slides in the Gunforma catalog.').length, 0, 'a positive fit line');
+  assert.equal(fails('It does not fit the FUSE Comp.').length, 0, 'a warning, never a failure');
+});
+
 test('whole words, case-insensitive, across line wrap spacing', () => {
   assert.equal(fails('FEELS like home').length, 1, 'case-insensitive');
   assert.equal(fails('a must   have module').length, 1, 'a phrase across extra spaces');
