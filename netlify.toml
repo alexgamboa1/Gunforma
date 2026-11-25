@@ -69,8 +69,11 @@
 # browser's own rule, js/slide-fit.js — read from disk and evaluated by
 # _slide-fit.mjs, never copied. Without this the grid is skipped and the page
 # answers x-fits-on: no-rule, which check-routes.mjs fails on.
+# The Field Notes files ship too: "Featured in Field Notes" is derived from
+# the articles' own blocks (_field-note-features.mjs), and without them the
+# page answers x-field-notes: listed:0 everywhere.
 [functions."product-page"]
-  included_files = ["js/slide-fit.js"]
+  included_files = ["js/slide-fit.js", "field-notes/*.md"]
 
 # home-page and builds-page serve the static homepage and gallery with the
 # newest approved builds rendered into them (the served HTML held no /b/

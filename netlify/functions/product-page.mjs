@@ -70,6 +70,9 @@ import { pgRows as pgGet, unavailable } from './_pg.mjs';
 // The P365 slide-on-grip rule — js/slide-fit.js itself, read and evaluated,
 // never copied. See _slide-fit.mjs.
 import { loadSlideFit } from './_slide-fit.mjs';
+// "Featured in Field Notes": derived from the article files themselves
+// (included_files), never a hand-kept list. See _field-note-features.mjs.
+import { featuredNotesFor } from './_field-note-features.mjs';
 import { CDN_CACHE_PAGE, CDN_CACHE_NO_STORE } from './_cache.mjs';
 
 const SB_URL  = 'https://lagjjcpclvzrjlrswojt.supabase.co';
@@ -1156,7 +1159,7 @@ function discontinuedHtml(disc) {
   return '';
 }
 
-function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn, disc, compSec }) {
+function renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn, disc, compSec, fieldNotes }) {
   const brand = product.manufacturers || {};
   const variants = product.product_variants || [];
   const discontinued = product.is_discontinued === true;
@@ -1372,6 +1375,19 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
       '</div>'
     : '';
 
+  // The live Field Notes that put this part in a picks, rank, compare,
+  // barrel-fit or build block — up to three, newest reviewed first, in the
+  // fit-guide card style above. Drafts never reach here
+  // (_field-note-features.mjs), and none renders nothing.
+  const fieldNotesHtml = (fieldNotes && fieldNotes.length)
+    ? '<div class="section-title">Featured in Field Notes</div>' +
+      '<div class="fitguides fn-features">' +
+        fieldNotes.map((n) => '<a class="fitguide" href="' + esc(n.href) + '">' +
+          '<span class="fg-gun">' + esc(n.title) + '</span>' +
+          '<span class="fg-go">Read the field note &rarr;</span></a>').join('') +
+      '</div>'
+    : '';
+
   return '<!DOCTYPE html><html lang="en"><head>' +
 '<meta charset="UTF-8"/>' +
 '<base href="/"/>' +
@@ -1470,6 +1486,9 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
 '.fg-go { font-size: 11px; color: #4a9edd; text-decoration: none; }' +
 'a.fg-gun:hover { color: #4a9edd; } a.fg-go:hover { text-decoration: underline; }' +
 '.fitguide-note { font-size: 11.5px; color: #888; margin: 6px 0 2px; }' +
+'.fn-features { flex-direction: column; flex-wrap: nowrap; }' +
+'.fn-features .fitguide { max-width: 100%; }' +
+'.fn-features .fg-gun { overflow-wrap: anywhere; }' +
 '.fit-lock { font-size: 13px; color: #8a4b00; background: #fff6e8; border: 0.5px solid #f0d3a6; border-radius: 6px; padding: 8px 11px; margin: 0 0 8px; }' +
 '.fit-group { font-size: 12px; font-weight: 700; color: #333; margin: 12px 0 4px; }' +
 '.fit-list { list-style: none; margin: 0; padding: 0; }' +
@@ -1638,6 +1657,7 @@ function renderPage({ product, specs, categorySegment, categoryPlural, categoryS
     // them down. Nothing renders when nothing is listed.
     fitsOnHtml(fitsOn) +
     fitHtml +
+    fieldNotesHtml +
     buildsHtml +
   '</div>' +
 '</div>' +
@@ -1793,7 +1813,20 @@ export default async (req) => {
     disc = { state: 'failed', successor: null, similar: [] };
   }
 
-  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid, disc, compSec });
+  // Featured in Field Notes. Non-fatal like the reads above — it reads the
+  // bundled article files, not the database. x-field-notes: listed:<n>
+  // (0 renders nothing) | failed.
+  let fieldNotes = [];
+  let fieldNotesState;
+  try {
+    fieldNotes = await featuredNotesFor(product.slug);
+    fieldNotesState = 'listed:' + fieldNotes.length;
+  } catch (err) {
+    console.error('[product-page] field-notes lookup failed', err);
+    fieldNotesState = 'failed';
+  }
+
+  const html = renderPage({ product, specs, categorySegment, categoryPlural, categorySingular, builds, fitGuides, restrictedStates, magazineHubs, fit, fitsOn: fitsOn.grid, disc, compSec, fieldNotes });
   return new Response(html, {
     status: 200,
     headers: {
@@ -1804,6 +1837,7 @@ export default async (req) => {
       'x-springs': compSec.springs ? 'listed:' + compSec.springs.items.length : 'n/a',
       'x-fits-on': fitsOn.state,
       'x-discontinued': disc.state,
+      'x-field-notes': fieldNotesState,
       // Durable, shared across every edge node — see _cache.mjs for the
       // measurement that put it here.
       'Netlify-CDN-Cache-Control': CDN_CACHE_PAGE,

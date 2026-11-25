@@ -110,6 +110,7 @@ check "hero photo follows default"  scripts/hero-image.test.mjs
 check "/parts jump links stay on /parts" scripts/parts-index-anchors.test.mjs
 check "::fit barrel= block"     scripts/fit-barrel-block.test.mjs
 check "Gunforma is capitalized"  scripts/check-brand-case.mjs
+check "Featured in Field Notes"  scripts/featured-field-notes.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list
