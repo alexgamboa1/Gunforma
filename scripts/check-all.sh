@@ -109,12 +109,14 @@ check "catalog spec filter wiring" scripts/spec-filter.test.mjs
 check "hero photo follows default"  scripts/hero-image.test.mjs
 check "/parts jump links stay on /parts" scripts/parts-index-anchors.test.mjs
 check "::fit barrel= block"     scripts/fit-barrel-block.test.mjs
+check "::fit slide= block"      scripts/fit-slide-block.test.mjs
 check "Gunforma is capitalized"  scripts/check-brand-case.mjs
 check "Featured in Field Notes"  scripts/featured-field-notes.test.mjs
 # Warns and passes here: no SUPABASE_URL / SUPABASE_ANON_KEY in the Netlify
 # build, on purpose (a data change must not fail a deploy). It compares for
 # real in check-routes.yml, which sets both.
 check "barrel fit fixture is current" scripts/check-barrel-fit-fixture.mjs
+check "slide fit fixture is current" scripts/check-slide-fit-fixture.mjs
 check "barrel fit fixture auto-refresh" scripts/refresh-barrel-fit-fixture.test.mjs
 check "photo-change alarm"       scripts/check-photo-changes.test.mjs
 

@@ -72,6 +72,13 @@ const CATALOG_CATEGORY = new Map(CATALOG.map((p) => [p.slug, p.category]));
 // same slides — a group must never hide a difference. The renderer
 // re-checks this live and refuses a group whose sets have since diverged.
 const BARREL_FITS = JSON.parse(await readFile(join(ROOT, 'scripts/fixtures/barrel-slide-fit.json'), 'utf8')).fits;
+// The slide side (::fit slide= against=frame|barrel): the grip classes each
+// slide fits, captured by fit-slide-block.test.mjs --refresh-fixture, and
+// the barrel fixture turned around. A group is one box, so its slides must
+// share ONE fit set.
+const { barrelsBySlide, SLIDE_REFRESH_COMMAND } = await import('./slide-fit-fixture.mjs');
+const SLIDE_FRAME_FITS = JSON.parse(await readFile(join(ROOT, 'scripts/fixtures/slide-frame-fit.json'), 'utf8')).fits;
+const SLIDE_BARRELS = barrelsBySlide(BARREL_FITS);
 
 // Gunforma guides rank aftermarket parts only (CLAUDE.md, Field Notes
 // evidence rules; Alex, 2026-10-26, on the XMacro grip guide). The catalog
@@ -243,6 +250,37 @@ for (const a of FIELD_NOTES) {
             diff.map((sl) => sl + ' fits ' + b.slugs.filter((s, i) => sets[i].has(sl)).join(' + ') + ' only').join('; ') +
             '. Split the group, or refresh the fixture if the fit data changed.');
         }
+      }
+    }
+    if (b.kind === 'fit' && b.part === 'slide') {
+      // ::fit slide= against=frame|barrel — every slug a live slide; a
+      // group's slides must share one fit set (grip class → verdict, or the
+      // barrels they take).
+      const what = '::fit slide= against=' + b.against;
+      for (const s of b.slugs) {
+        mustResolve(s, what);
+        const cat = CATALOG_CATEGORY.get(s);
+        if (cat && cat !== 'slide') fail(id + ': ' + what + ' names ' + s + ', which is a ' + cat + ', not a slide');
+      }
+      const isSlide = (s) => CATALOG_CATEGORY.get(s) === 'slide';
+      if (b.against === 'frame') {
+        const missing = b.slugs.filter((s) => isSlide(s) && !SLIDE_FRAME_FITS[s]);
+        if (missing.length) fail(id + ': ' + what + ' names ' + missing.join(', ') + ', which scripts/fixtures/slide-frame-fit.json does not carry — refresh it: ' + SLIDE_REFRESH_COMMAND);
+        else if (b.slugs.length > 1) {
+          const key = (s) => JSON.stringify(SLIDE_FRAME_FITS[s] || {});
+          const odd = b.slugs.filter((s) => isSlide(s) && key(s) !== key(b.slugs[0]));
+          if (odd.length) fail(id + ': ' + what + ' groups slides that do not fit the same grips — ' + odd.join(', ') + ' differ from ' + b.slugs[0] +
+            ' (' + odd.map((s) => Object.keys({ ...SLIDE_FRAME_FITS[s], ...SLIDE_FRAME_FITS[b.slugs[0]] })
+              .filter((c) => (SLIDE_FRAME_FITS[s] || {})[c] !== (SLIDE_FRAME_FITS[b.slugs[0]] || {})[c]).join(', ')).join('; ') +
+            '). Split the group, or refresh the fixture if the fit data changed.');
+        }
+      } else if (b.slugs.length > 1) {
+        const sets = b.slugs.map((s) => new Set(SLIDE_BARRELS[s] || []));
+        const all = [...new Set(sets.flatMap((x) => [...x]))].sort();
+        const diff = all.filter((br) => !sets.every((x) => x.has(br)));
+        if (diff.length) fail(id + ': ' + what + ' groups slides that do not take the same barrels — ' +
+          diff.map((br) => br + ' fits ' + b.slugs.filter((s, i) => sets[i].has(br)).join(' + ') + ' only').join('; ') +
+          '. Split the group, or refresh the fixture if the fit data changed.');
       }
     }
     if (b.kind === 'colors') {

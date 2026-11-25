@@ -97,6 +97,8 @@ export const BODY_DIRECTIVE_KINDS = ['picks', 'rank', 'faq', 'build'];
 // called on the page and which catalog category it must resolve to live in
 // _guide-blocks.mjs (BUILD_ROLE_META), and check-field-notes.mjs holds the
 // two in step.
+// What a ::fit slide= box is judged against.
+export const SLIDE_AGAINST = ['frame', 'barrel'];
 export const BUILD_ROLES = ['frame', 'slide', 'barrel', 'optic', 'light', 'magwell', 'comp', 'trigger', 'magazine'];
 
 // Gathers a block directive's body: lines from `from` until a line that is
@@ -144,11 +146,17 @@ export function parseDirective(line, bodyLines) {
     // optic= and magazine= are judged against a pistol, so gun= is
     // required; barrel= lists the slides v_barrel_slide_fit says fit, which
     // no pistol narrows — gun= is accepted there and ignored.
-    const parts = ['optic', 'magazine', 'barrel'].filter((k) => args[k]);
+    // slide= is the slide side (2026-11-25): against=frame reads
+    // v_slide_frame_fit (one row per grip class), against=barrel reads
+    // v_barrel_slide_fit (the barrels the slides take). No gun= — no
+    // pistol narrows either view.
+    const parts = ['optic', 'magazine', 'barrel', 'slide'].filter((k) => args[k]);
     if (parts.length !== 1) return null;
     const part = parts[0];
-    if (part !== 'barrel' && !args.gun) return null;
-    const keys = Object.keys(args).filter((k) => k !== 'gun' && k !== part);
+    if ((part === 'optic' || part === 'magazine') && !args.gun) return null;
+    if (part === 'slide' && (args.gun || !SLIDE_AGAINST.includes(args.against))) return null;
+    if (part !== 'slide' && 'against' in args) return null;
+    const keys = Object.keys(args).filter((k) => k !== 'gun' && k !== part && k !== 'against');
     if (keys.length) return null;
     if (args.gun && !SLUG_RE.test(args.gun)) return null;
     // barrel= takes a comma list — one fit box for several barrels, which
@@ -156,9 +164,10 @@ export function parseDirective(line, bodyLines) {
     // other key is one slug.
     const slugs = args[part].split(',');
     if (!slugs.every((s) => SLUG_RE.test(s))) return null;
-    if (part !== 'barrel' && slugs.length !== 1) return null;
+    if (part !== 'barrel' && part !== 'slide' && slugs.length !== 1) return null;
     if (new Set(slugs).size !== slugs.length) return null;
     if (part === 'barrel') return { kind, part, slug: slugs[0], slugs, gun: args.gun || null };
+    if (part === 'slide') return { kind, part, slug: slugs[0], slugs, against: args.against, gun: null };
     return { kind, part, slug: slugs[0], gun: args.gun || null };
   }
   if (kind === 'compare') {

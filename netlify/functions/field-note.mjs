@@ -840,9 +840,109 @@ async function resolveBarrelFit(block, products) {
   return { block, product: barrels[0], barrels, ok: differing.length === 0, slides, differing };
 }
 
+// ::fit slide=a[,b,…] against=frame|barrel — the slide side of the fit
+// views (Alex, 2026-11-25).
+//
+//   against=frame   v_slide_frame_fit: one row per grip class the slides
+//                   fit (fits = true only — a note lists only what fits),
+//                   with the number of live, approved grips in the class
+//                   and the view's own verdict ("Flush fit.").
+//   against=barrel  v_barrel_slide_fit: the barrels the slides take
+//                   (fit_status = 'fits' only), linked, the ones the view
+//                   words "no comp effect" listed apart.
+//
+// The same-set rule as ::fit barrel=: a group is one box, honest only when
+// every slide has the SAME fit set (grip class + verdict, or barrel +
+// verdict). check-field-notes.mjs holds it offline against the fixtures;
+// this re-checks it live and refuses a group whose sets differ, in words.
+// Every embed names its FK (CLAUDE.md, PGRST201): the view's product
+// columns come through frame_specs / barrel_specs, both ambiguous.
+export function slideFrameFitQueryPath(slideId) {
+  const sel = 'housing_class,verdict,frame:products!frame_specs_product_id_fkey!inner(slug,is_approved,is_discontinued)';
+  return 'v_slide_frame_fit?slide_product_id=eq.' + encodeURIComponent(slideId) + '&fits=is.true' +
+    '&select=' + encodeURIComponent(sel) + '&frame.is_discontinued=is.false';
+}
+export function slideBarrelFitQueryPath(slideId) {
+  const sel = 'verdict,barrel:products!barrel_specs_product_id_fkey!inner(id,slug,name,is_approved,is_discontinued,' +
+    'manufacturers!products_brand_id_fkey(name))';
+  return 'v_barrel_slide_fit?slide_product_id=eq.' + encodeURIComponent(slideId) + '&fit_status=eq.fits' +
+    '&select=' + encodeURIComponent(sel) + '&barrel.is_discontinued=is.false';
+}
+// The view's two barrel verdicts: a plain fit, and a non-ported barrel in a
+// ported slide ("Fits — no comp effect; …"), which is harmless and listed.
+export const NO_COMP_EFFECT = /no comp effect/i;
+
+async function slideFrameSet(slideId) {
+  const rows = await pgGet(slideFrameFitQueryPath(slideId));
+  const byClass = new Map();
+  for (const r of rows) {
+    const f = r && r.frame;
+    if (!f || f.is_approved !== true || f.is_discontinued || !r.housing_class) continue;
+    let c = byClass.get(r.housing_class);
+    if (!c) byClass.set(r.housing_class, (c = { housingClass: r.housing_class, verdict: r.verdict || '', grips: new Set() }));
+    c.grips.add(f.slug);
+  }
+  return byClass;
+}
+
+async function slideBarrelSet(slideId) {
+  const rows = await pgGet(slideBarrelFitQueryPath(slideId));
+  const seg = (CATEGORY_META.barrel || [])[0];
+  const bySlug = new Map();
+  for (const r of rows) {
+    const p = r && r.barrel;
+    if (!p || p.is_approved !== true || p.is_discontinued || bySlug.has(p.slug)) continue;
+    const brand = (p.manufacturers || {}).name || '';
+    bySlug.set(p.slug, {
+      slug: p.slug, brand, name: p.name || '', verdict: r.verdict || '',
+      displayName: displayProductName({ brand, name: p.name }),
+      href: '/parts/' + seg + '/' + p.slug,
+    });
+  }
+  return bySlug;
+}
+
+async function fetchHousingClasses(caches) {
+  if (!caches.housing) {
+    const rows = await pgGet('housing_classes?select=' + encodeURIComponent('housing_class,display_name,typical_slide_length_in'));
+    caches.housing = new Map(rows.filter((r) => r && r.housing_class).map((r) => [r.housing_class, r]));
+  }
+  return caches.housing;
+}
+
+async function resolveSlideFit(block, products, caches) {
+  const slugs = block.slugs || [block.slug];
+  const slides = slugs.map((s) => products.get(s) || null);
+  if (slides.some((o) => !o)) return { block, product: null, missing: slugs.filter((s, i) => !slides[i]), ok: false };
+  const frame = block.against === 'frame';
+  const sets = [];
+  for (const o of slides) sets.push(await (frame ? slideFrameSet(o.id) : slideBarrelSet(o.id)));
+  // The same-set rule, live: a member (grip class or barrel) one slide has
+  // and another lacks, or has with a different verdict.
+  const keyOf = (m, k) => (m.has(k) ? m.get(k).verdict : null);
+  const all = new Map();
+  sets.forEach((m) => m.forEach((v, k) => all.set(k, v)));
+  const differing = [...all.keys()].filter((k) => !sets.every((m) => keyOf(m, k) === keyOf(sets[0], k)));
+  const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+  if (frame) {
+    const housing = await fetchHousingClasses(caches);
+    const label = (k) => (housing.get(k) || {}).display_name || k;
+    const len = (k) => Number((housing.get(k) || {}).typical_slide_length_in) || 0;
+    const rows = [...sets[0].values()]
+      .map((c) => ({ housingClass: c.housingClass, label: label(c.housingClass), grips: c.grips.size, verdict: c.verdict }))
+      .sort((a, b) => len(a.housingClass) - len(b.housingClass) || cmp(a.label, b.label));
+    return { block, product: slides[0], slides, ok: !differing.length, rows, differing: differing.map(label) };
+  }
+  const barrels = [...sets[0].values()].sort((a, b) =>
+    cmp(a.brand.toLowerCase(), b.brand.toLowerCase()) || cmp(a.name.toLowerCase(), b.name.toLowerCase()));
+  return { block, product: slides[0], slides, ok: !differing.length, barrels,
+    differing: differing.map((k) => all.get(k).displayName || k) };
+}
+
 async function resolveFit(block, products, guns, caches) {
   const product = products.get(block.slug) || null;
   if (block.part === 'barrel') return resolveBarrelFit(block, products);
+  if (block.part === 'slide') return resolveSlideFit(block, products, caches);
   const gun = guns.get(block.gun) || null;
   if (!product || !gun) return { block, product, gun, ok: false };
   if (block.part === 'optic') {
@@ -894,8 +994,49 @@ function barrelFitBlockHtml(f) {
   '</details>';
 }
 
+// Closed by default, like the barrel box: a <details> whose <summary> is
+// the heading, so it opens and closes with JS off.
+function slideFitBlockHtml(f) {
+  if (f.missing) return '<div class="fn-block fn-fit">' + f.missing.map((s) => missingLine('Part', s)).join('') + '</div>';
+  const many = f.slides.length > 1;
+  const frame = f.block.against === 'frame';
+  const names = '<div class="fn-fit-sub fn-fit-barrels">' +
+    f.slides.map((o) => '<a href="' + esc(o.href) + '">' + esc(o.displayName) + '</a>').join(' &middot; ') + '</div>';
+  const footer = '<div class="disclosure">Fit from the Gunforma catalog on ' + esc(fmtDate(new Date().toISOString().slice(0, 10))) + '.</div>';
+  const cls = 'fn-block fn-fit fn-fit-slide fn-fit-slide-' + (frame ? 'frame' : 'barrel');
+  if (f.differing.length) {
+    return '<div class="' + cls + ' fn-fit-mismatch">' + names +
+      '<p class="fn-missing">These slides no longer share one fit set in the Gunforma catalog, so this box does not list them together (they differ on ' +
+      f.differing.map(esc).join(', ') + ').</p>' + footer + '</div>';
+  }
+  if (frame) {
+    const grips = f.rows.reduce((n, r) => n + r.grips, 0);
+    const head = 'Grips ' + (many ? 'these slides fit' : 'this slide fits') + ' (' + grips + ' in ' + f.rows.length + ' grip size' + (f.rows.length === 1 ? '' : 's') + ')';
+    const body = f.rows.length
+      ? '<div class="table-wrap"><table class="fn-fit-grips"><thead><tr><th>Grip size</th><th>Grips in the catalog</th><th>Fit</th></tr></thead><tbody>' +
+        f.rows.map((r) => '<tr><td>' + esc(r.label) + '</td><td>' + r.grips + '</td><td>' + esc(r.verdict) + '</td></tr>').join('') +
+        '</tbody></table></div>'
+      : '<p class="fn-fit-sub">No grip in the Gunforma catalog is on record for ' + (many ? 'these slides' : 'this slide') + '.</p>';
+    return '<details class="' + cls + '" data-fit-grips="' + grips + '">' +
+      '<summary class="fn-fit-q">' + esc(head) + '</summary>' + names + body + footer + '</details>';
+  }
+  const plain = f.barrels.filter((b) => !NO_COMP_EFFECT.test(b.verdict));
+  const noComp = f.barrels.filter((b) => NO_COMP_EFFECT.test(b.verdict));
+  const list = (xs) => '<ul class="fn-fit-slides">' + xs.map((b) => '<li><a href="' + esc(b.href) + '">' + esc(b.displayName) + '</a></li>').join('') + '</ul>';
+  const n = f.barrels.length;
+  const head = 'Barrels ' + (many ? 'these slides take' : 'this slide takes') + ' (' + n + ')';
+  let body;
+  if (!n) body = '<p class="fn-fit-sub">No barrel in the Gunforma catalog is on record for ' + (many ? 'these slides' : 'this slide') + '.</p>';
+  else if (!noComp.length) body = list(plain);
+  else body = (plain.length ? '<div class="fn-fit-sub">Matched barrel' + (plain.length === 1 ? '' : 's') + '</div>' + list(plain) : '') +
+    '<div class="fn-fit-sub">Also fit' + (noComp.length === 1 ? 's' : '') + ', no comp effect</div>' + list(noComp);
+  return '<details class="' + cls + '" data-fit-barrels="' + n + '">' +
+    '<summary class="fn-fit-q">' + esc(head) + '</summary>' + names + body + footer + '</details>';
+}
+
 function fitBlockHtml(f) {
   if (f.block.part === 'barrel') return barrelFitBlockHtml(f);
+  if (f.block.part === 'slide') return slideFitBlockHtml(f);
   if (!f.product) return '<div class="fn-block fn-fit">' + missingLine('Part', f.block.slug) + '</div>';
   if (!f.gun)     return '<div class="fn-block fn-fit">' + missingLine('Pistol', f.block.gun) + '</div>';
   const gunName = f.gun.name || GUN_META[f.gun.slug] || f.gun.slug;
@@ -975,7 +1116,7 @@ async function resolveBlocks(blocks, articleSlug, blockSections = []) {
   const gunSlugs = new Set();
   for (const b of blocks) {
     if (b.kind === 'price') b.slugs.forEach((s) => productSlugs.add(s));
-    if (b.kind === 'fit') { (b.slugs || [b.slug]).forEach((s) => productSlugs.add(s)); if (b.part !== 'barrel') gunSlugs.add(b.gun); }
+    if (b.kind === 'fit') { (b.slugs || [b.slug]).forEach((s) => productSlugs.add(s)); if (b.part === 'optic' || b.part === 'magazine') gunSlugs.add(b.gun); }
     if (b.kind === 'picks') b.picks.forEach((p) => productSlugs.add(p.slug));
     if (b.kind === 'rank') { productSlugs.add(b.slug); if (b.baseline) productSlugs.add(b.baseline); }
     if (b.kind === 'compare') b.slugs.forEach((s) => productSlugs.add(s));
@@ -985,7 +1126,7 @@ async function resolveBlocks(blocks, articleSlug, blockSections = []) {
   }
   const products = new Map((await fetchProducts([...productSlugs])).map((p) => [p.slug, p]));
   const guns = new Map((await fetchGuns([...gunSlugs])).map((g) => [g.slug, g]));
-  const caches = { optic: new Map(), cuts: new Map() };
+  const caches = { optic: new Map(), cuts: new Map(), housing: null };
   const ctx = {
     slug: articleSlug,
     products,
@@ -1311,12 +1452,12 @@ function renderPage({ article, meta, bodyHtml, data, headings = [], related = []
 'td.v-yes, td.v-plate { color: #1d6b43; font-weight: 600; } td.v-no { color: #b42318; font-weight: 600; } td.v-none { color: #777; }' +
 '.likely { color: #7a6a2f; font-style: normal; font-size: 11px; }' +
 '.fn-note { font-size: 12.5px; color: #555; margin: 8px 0 0; }' +
-'.fn-fit-barrel a { color: #1d6fb8; font-weight: 400; text-decoration: none; } .fn-fit-barrel a:hover { text-decoration: underline; }' +
-'details.fn-fit-barrel > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }' +
-'details.fn-fit-barrel > summary::-webkit-details-marker { display: none; }' +
-'details.fn-fit-barrel > summary::before { content: "\\25B8"; font-size: 12px; color: #667; transition: transform .15s; }' +
-'details.fn-fit-barrel[open] > summary::before { transform: rotate(90deg); }' +
-'details.fn-fit-barrel[open] > summary { margin-bottom: 8px; }' +
+'.fn-fit-barrel a, .fn-fit-slide a { color: #1d6fb8; font-weight: 400; text-decoration: none; } .fn-fit-barrel a:hover, .fn-fit-slide a:hover { text-decoration: underline; }' +
+'details.fn-fit-barrel > summary, details.fn-fit-slide > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: 8px; }' +
+'details.fn-fit-barrel > summary::-webkit-details-marker, details.fn-fit-slide > summary::-webkit-details-marker { display: none; }' +
+'details.fn-fit-barrel > summary::before, details.fn-fit-slide > summary::before { content: "\\25B8"; font-size: 12px; color: #667; transition: transform .15s; }' +
+'details.fn-fit-barrel[open] > summary::before, details.fn-fit-slide[open] > summary::before { transform: rotate(90deg); }' +
+'details.fn-fit-barrel[open] > summary, details.fn-fit-slide[open] > summary { margin-bottom: 8px; }' +
 '.fn-fit-barrels { margin-bottom: 8px; }' +
 '.fn-fit-slides { margin: 0 0 4px 20px; padding: 0; } .fn-fit-slides li { font-size: 14px; line-height: 1.75; }' +
 '.fn-fit-links a { display: inline-block; margin: 8px 14px 0 0; font-size: 13px; color: #1d6fb8; text-decoration: none; }' +
