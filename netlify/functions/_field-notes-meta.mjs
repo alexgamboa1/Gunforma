@@ -76,6 +76,7 @@ export const FIELD_NOTES = [
     tags: ['p365', 'p365-fuse', 'barrels'],
     changelog: [
       '2026-11-22: first published',
+      '2026-11-25: fit sections now list what fits.',
     ] },
 ];
 

@@ -42,6 +42,12 @@ export const VOICE_RULES = {
       phrases: ['downside', 'drawback'] },
     { group: 'vague count', why: 'a vague count \u2014 give the number, "in the Gunforma catalog"',
       phrases: ['many', 'most', 'several', 'a lot of'] },
+    // Alex, 2026-11-25: a field note lists only what fits. The Armory
+    // warns a builder about a bad pair; the article says what each part
+    // takes. Both apostrophes, since editors type either.
+    { group: 'negative fit', why: 'list only what fits \u2014 say what the part takes ("fits 7 of the 12 FUSE slides"), not what it refuses; the Armory warns about bad pairs',
+      phrases: ['doesn\'t fit', 'doesn\u2019t fit', 'does not fit', 'won\'t fit', 'won\u2019t fit', 'will not fit',
+                'not compatible', 'will not work', 'refuses', 'refuse'] },
   ],
 };
 

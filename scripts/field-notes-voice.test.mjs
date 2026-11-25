@@ -7,6 +7,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { lintVoice, lintSections, VOICE_RULES, FIELD_NOTE_TYPES } from './field-notes-voice.mjs';
+import { lintNote } from './field-notes-lint.mjs';
 
 const lint = (text, opts) => lintVoice(String(text).split('\n'), opts);
 const fails = (text, opts) => lint(text, opts).filter((h) => h.level === 'fail');
@@ -39,6 +40,17 @@ test('every WARN phrase warns and never fails', () => {
       assert.equal(hits.filter((h) => h.level === 'warn').length, 1, '"' + p + '" must warn once');
     }
   }
+});
+
+test('negative fit language warns; what fits does not', () => {
+  const neg = (t) => warns(t).filter((h) => h.group === 'negative fit');
+  assert.equal(neg('This barrel doesn\u2019t fit the FUSE Comp.').length, 1, 'curly apostrophe');
+  assert.equal(neg("It won't fit an XL slide.").length, 1, 'straight apostrophe');
+  assert.equal(neg('The two are not compatible.').length, 1);
+  assert.equal(neg('A ported barrel will not work here.').length, 1);
+  assert.equal(neg('A threaded barrel fits 7 of the 12 FUSE slides in the Gunforma catalog.').length, 0, 'a positive fit line');
+  assert.equal(fails('It does not fit the FUSE Comp.').length, 0, 'a warning, never a failure');
+  assert.equal(neg('The maker refuses threaded barrels.').length, 1, 'refuses');
 });
 
 test('whole words, case-insensitive, across line wrap spacing', () => {
@@ -128,4 +140,18 @@ test('required sections per type: warnings only, the right ones', () => {
   assert.deepEqual(lintSections({ type: 'explainer', title: 'T', blocks: [faq(5)], headings: h2('What is an optic cut', 'Next') }), []);
   assert.ok(lintSections({ type: 'explainer', title: 'T', blocks: [faq(5)], headings: h2('Next', 'What is it') }).length === 1, 'the FIRST H2');
   assert.deepEqual(lintSections({ type: 'builds', title: 'T', blocks: [faq(5)], headings: h2('From the builders') }), []);
+});
+
+test('fit-box placement: a ::fit box after the last card of its group, never between cards', () => {
+  const note = (body) => '---\ntitle: "A placement fixture title"\ndescription: "A fixture description long enough to pass the length rule here."\ntype: roundup\ncategory: guides\n---\n' + body;
+  const place = (body) => lintNote(note(body)).issues.filter((i) => /after a ::fit box/.test(i.msg));
+  const card = (s) => '::rank ' + s + ' best="B" rank=1\n~ x\n::\n';
+  const box = '::fit barrel=a-1,a-2\n';
+  assert.equal(place('## Group\n' + card('a-1') + card('a-2') + box).length, 0, 'box after the last card');
+  const bad = place('## Group\n' + card('a-1') + box + card('a-2'));
+  assert.equal(bad.length, 1, 'box between two cards fails');
+  assert.equal(bad[0].level, 'fail');
+  assert.equal(place('## One\n' + card('a-1') + box + '## Two\n' + card('a-2') + box).length, 0, 'a new H2 starts a new group');
+  assert.equal(place('## One\n### Sub A\n' + card('a-1') + box + '### Sub B\n' + card('a-2') + box).length, 0, 'an H3 sub-group starts a new group');
+  assert.equal(place('## Group\n```\n' + box + '```\n' + card('a-1')).length, 0, 'a fenced example is not a box');
 });
