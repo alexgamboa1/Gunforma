@@ -1,0 +1,121 @@
+name: Refresh barrel fit fixture
+
+# When production's barrel ↔ slide fits no longer match
+# scripts/fixtures/barrel-slide-fit.json, rewrite the file on ONE branch and
+# keep ONE pull request open for it, titled "Refresh barrel fit fixture",
+# listing the changed barrels. Alex merges; nothing here merges, and nothing
+# here touches main.
+#
+# Why it exists: the build holds every ::fit barrel= group to that file
+# (check-field-notes.mjs), offline. Neither add-part path — the
+# gunforma-add-part skill (Supabase SQL connector only) nor the admin
+# add-part page (a browser page) — can run the refresh or commit, so a
+# barrel or slide saved through either left the file stale. The "Check
+# barrel fit fixture is current" step in check-routes.yml noticed; this
+# acts on it.
+#
+# When: after every SCHEDULED "Check routes" run (twice a day), whatever its
+# conclusion — the refresh re-reads production itself rather than parse
+# that job's result — and on demand.
+#
+# One PR at a time:
+#   stale, no open PR        → push the branch, open the PR
+#   stale, PR already open   → force-push the branch, rewrite the PR body
+#                              (the branch is the bot's: do not commit to it)
+#   fresh, PR still open     → main caught up on its own (a hand refresh);
+#                              close the PR and delete its branch
+#   fresh, no PR             → nothing
+#
+# NEEDS ONE REPO SETTING: Settings → Actions → General → Workflow
+# permissions → "Allow GitHub Actions to create and approve pull requests".
+# It was OFF on 2026-11-25. With it off, the branch is still pushed and the
+# run fails at "Open or update the PR" with a message naming the setting.
+# No secret is needed: the reads use the public anon key and the writes use
+# this run's GITHUB_TOKEN, with the permissions below.
+
+on:
+  workflow_run:
+    workflows: ["Check routes"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: refresh-barrel-fit-fixture
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.event == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      BRANCH: auto/refresh-barrel-fit-fixture
+      TITLE: Refresh barrel fit fixture
+      BODY_FILE: /tmp/refresh-barrel-fit-fixture-body.md
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # Always main, never the triggering run's ref.
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # Reads production through scripts/barrel-fit-fixture.mjs (the same
+      # reader as the check and the hand refresh) and, when stale, rewrites
+      # the fixture and writes the PR body. The public anon key — the one in
+      # js/supabase-client.js — not a secret.
+      - name: Compare and refresh
+        id: refresh
+        env:
+          SUPABASE_URL: https://lagjjcpclvzrjlrswojt.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4
+        run: node scripts/refresh-barrel-fit-fixture.mjs
+
+      - name: Find the open PR
+        id: pr
+        run: |
+          n=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          echo "number=$n" >> "$GITHUB_OUTPUT"
+          echo "open PR: ${n:-none}"
+
+      # Only the fixture is committed; anything else in the tree is refused.
+      - name: Push the branch
+        if: steps.refresh.outputs.stale == 'true'
+        run: |
+          changed=$(git status --porcelain | awk '{print $2}')
+          if [ "$changed" != "scripts/fixtures/barrel-slide-fit.json" ]; then
+            echo "::error::expected only the fixture to change, got: $changed"; exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          git add scripts/fixtures/barrel-slide-fit.json
+          git commit -q -m "$TITLE" -m "${{ steps.refresh.outputs.changed }} barrel(s) changed in v_barrel_slide_fit. Written by .github/workflows/refresh-barrel-fit-fixture.yml."
+          git push --force origin "HEAD:refs/heads/$BRANCH"
+
+      - name: Open or update the PR
+        if: steps.refresh.outputs.stale == 'true'
+        run: |
+          n='${{ steps.pr.outputs.number }}'
+          if [ -n "$n" ]; then
+            gh pr edit "$n" --repo "$GITHUB_REPOSITORY" --title "$TITLE" --body-file "$BODY_FILE"
+            echo "updated #$n"
+          elif ! gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "$TITLE" --body-file "$BODY_FILE"; then
+            echo "::error::Could not open the PR. The branch $BRANCH is pushed. If the error above says GitHub Actions is not permitted to create pull requests, turn on Settings → Actions → General → 'Allow GitHub Actions to create and approve pull requests'."
+            exit 1
+          fi
+
+      - name: Close a PR main no longer needs
+        if: steps.refresh.outputs.stale == 'false' && steps.pr.outputs.number != ''
+        run: |
+          gh pr close '${{ steps.pr.outputs.number }}' --repo "$GITHUB_REPOSITORY" --delete-branch \
+            --comment "main's fixture matches production again, so this refresh is no longer needed. Closed by refresh-barrel-fit-fixture.yml."

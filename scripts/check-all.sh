@@ -115,6 +115,7 @@ check "Featured in Field Notes"  scripts/featured-field-notes.test.mjs
 # build, on purpose (a data change must not fail a deploy). It compares for
 # real in check-routes.yml, which sets both.
 check "barrel fit fixture is current" scripts/check-barrel-fit-fixture.mjs
+check "barrel fit fixture auto-refresh" scripts/refresh-barrel-fit-fixture.test.mjs
 
 # ── files that look like checks but deliberately are not build checks ──────
 # Each needs a reason. Anything discovered below that is in neither this list

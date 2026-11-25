@@ -66,3 +66,10 @@ export function diffFits(stored, live) {
   }
   return out;
 }
+
+// The fixture file's exact text for a set of fits — written by the hand
+// refresh and by the scheduled auto-refresh, so the two produce the same
+// bytes.
+export function fixtureText(fits, captured = new Date().toISOString().slice(0, 10)) {
+  return JSON.stringify({ captured, source: FIXTURE_SOURCE, fits }, null, 1) + '\n';
+}

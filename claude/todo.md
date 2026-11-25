@@ -13,20 +13,18 @@ Both migrations (`20261111120000_armory_share_links`,
 **"The Armory: the shipped phase-1 builder"** section is the behaviour
 reference; this file is what's left.
 
-## Barrel fit fixture: the add-part flow cannot refresh it (2026-11-24)
+## Barrel fit fixture: refreshed by a workflow, which needs one setting
 
-`scripts/fixtures/barrel-slide-fit.json` must be refreshed
-(`node scripts/fit-barrel-block.test.mjs --refresh-fixture`) and committed
-whenever a barrel or slide is added, approved, discontinued or locked.
-Neither add-part path can do that: the `gunforma-add-part` skill works
-only through the Supabase SQL connector (no shell, no git), and
-`gunforma-admin-part.html` is a browser page. So a part saved through
-either leaves the fixture stale until someone refreshes it by hand.
-`check-barrel-fit-fixture.mjs` in `check-routes.yml` turns the scheduled
-job red within twelve hours of that, naming the barrels that moved — the
-gap is caught, not closed. Closing it: a workflow that runs the refresh
-and opens a PR when the file changes (Alex merges it), or a line in the
-skill's Step 7 handing Alex a one-line Claude Code prompt to refresh.
+The add-part flows (the `gunforma-add-part` skill, the admin add-part
+page) cannot run the refresh or commit. Since 2026-11-25
+`.github/workflows/refresh-barrel-fit-fixture.yml` does it: after every
+scheduled "Check routes" it re-reads production and, when
+`scripts/fixtures/barrel-slide-fit.json` is stale, keeps ONE PR open on
+`auto/refresh-barrel-fit-fixture` titled "Refresh barrel fit fixture",
+listing the changed barrels; Alex merges. **It needs Settings → Actions →
+General → "Allow GitHub Actions to create and approve pull requests"
+turned on** (it was off on 2026-11-25). Until then the run pushes the
+branch and fails at "Open or update the PR", naming the setting.
 
 ## Follow-ups, logged during phase 1
 

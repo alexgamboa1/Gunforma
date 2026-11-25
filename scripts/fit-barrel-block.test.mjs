@@ -46,8 +46,7 @@ if (process.argv.includes('--refresh-fixture')) {
   const url = client.match(/https:\/\/[a-z0-9]+\.supabase\.co/)[0];
   const key = client.match(/eyJ[A-Za-z0-9._-]+/)[0];
   const fits = await FIX.readLiveFits({ url, key });
-  await writeFile(FIX.FIT_FIXTURE, JSON.stringify({ captured: new Date().toISOString().slice(0, 10),
-    source: FIX.FIXTURE_SOURCE, fits }, null, 1) + '\n');
+  await writeFile(FIX.FIT_FIXTURE, FIX.fixtureText(fits));
   console.log('fit fixture refreshed: ' + Object.keys(fits).length + ' barrels');
 }
 const fn = (f) => pathToFileURL(join(ROOT, 'netlify/functions', f)).href;
