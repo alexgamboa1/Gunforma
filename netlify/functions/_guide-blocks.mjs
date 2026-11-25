@@ -93,6 +93,11 @@ export const GUIDE_SPECS = {
       lightening_cuts:    { label: 'Lightening Cuts', fmt: YESNO },
       threaded_barrel_ok: { label: 'Fits Threaded Barrel', fmt: YESNO },
       integrated_comp:    { label: 'Integrated Compensator', fmt: YESNO },
+      // The slide's port, named like the barrel column: the maker's word,
+      // then Gunforma's geometry. NULL (no port) reads "—" in a compare.
+      port_style: { label: 'Port Style',
+        select: 'port_style:port_styles!slide_specs_port_style_fk(display_name,geometry)',
+        fmt: (v) => (v && v.display_name ? v.display_name + (v.geometry ? ' (' + v.geometry + ')' : '') : null) },
     },
     rank: ['slide_length_in', 'lightening_cuts', 'threaded_barrel_ok', 'material', 'weight_oz'],
   },

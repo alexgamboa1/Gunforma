@@ -77,6 +77,12 @@ export const FIELD_NOTES = [
     changelog: [
       '2026-11-22: first published',
     ] },
+  // P365 FUSE slides roundup — a draft until Alex flips it.
+  { slug: 'best-p365-fuse-slides', published: '2026-11-25', updated: '2026-11-25', draft: true,
+    tags: ['p365', 'p365-fuse', 'slides'],
+    changelog: [
+      '2026-11-25: first published',
+    ] },
 ];
 
 export const FIELD_NOTES_INDEX_PATH = '/field-notes.html';
@@ -139,6 +145,7 @@ const FIELD_NOTE_LINKS = {
   'p365-fuse': [
     { slug: 'best-p365-xmacro-grip-modules', label: 'Best XMacro-size grip modules (the size the FUSE ships on), ranked' },
     { slug: 'best-p365-fuse-threaded-barrels', label: 'Threaded and standard 4.3" barrels that fit the FUSE' },
+    { slug: 'best-p365-fuse-slides', label: 'Every 4.3" FUSE slide, by the barrel it takes' },
   ],
 };
 

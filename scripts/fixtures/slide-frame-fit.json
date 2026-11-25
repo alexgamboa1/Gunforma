@@ -1,0 +1,348 @@
+{
+ "captured": "2026-11-25",
+ "source": "v_slide_frame_fit?fits=is.true, grip approved and not discontinued (public key)",
+ "fits": {
+  "arc-division-reactor-365f-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "arc-division-reactor-365x-p365-xmacro": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "fdez-werx-365rs-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "fdez-werx-365rs-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "fdez-werx-accs-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "fdez-werx-accs-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "fdez-werx-p365-fuse-slide": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "fdez-werx-xl3-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "grey-ghost-precision-v1-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "grey-ghost-precision-v2-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "killer-innovations-velo-v1-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "killer-innovations-velo-v1-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "mcarbo-stainless-slide-ported-barrel-p365xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-barracuda-edc-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-bentham-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-bentham-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-piranha-cport-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-bull-barrel-ported-set-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-bull-barrel-set-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-cport-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-edc-bull-barrel-ported-set-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-edc-cport-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-rail-edc-cport-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-edc-n365dg-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-edc-n365dg-xp-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-edc-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-rail-edc-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-edc-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-kp-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-n365dg-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-rail-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-cport-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-reptile-cport-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-cport-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-edc-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-reptile-edc-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-edc-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-kp-bull-barrel-set-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-kp-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-n365dg-xp-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-og-n365dg-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-reptile-og-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-reptile-og-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-spec-ops-bull-barrel-ported-set-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-spec-ops-cport-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-spec-ops-cport-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-spec-ops-n365dg-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "norsso-spec-ops-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "norsso-spec-ops-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "sig-sauer-p365-xl-spectre-comp-slide": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "true-precision-axiom-p365": {
+   "p365": "Flush fit.",
+   "p365xl": "Flush fit.",
+   "xmacro-sub": "Flush fit."
+  },
+  "true-precision-axiom-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "true-precision-p365-fuse": {
+   "fuse": "Flush fit.",
+   "fuse-xl": "Flush fit.",
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "zaffiri-zps2-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  },
+  "zaffiri-zpsp-p365-xl": {
+   "p365": "Slide overhangs the grip. Intentional and fine.",
+   "p365xl": "Slide overhangs the grip. Intentional and fine.",
+   "xmacro": "Flush fit.",
+   "xmacro-sub": "Slide overhangs the grip. Intentional and fine."
+  }
+ }
+}

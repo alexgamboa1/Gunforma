@@ -114,6 +114,15 @@ jobs:
           SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4
         run: node scripts/check-barrel-fit-fixture.mjs
 
+      # The twin: scripts/fixtures/slide-frame-fit.json (what check-field-notes
+      # holds a ::fit slide= against=frame group to) still matches v_slide_frame_fit.
+      - name: Check slide fit fixture is current
+        if: always()
+        env:
+          SUPABASE_URL: https://lagjjcpclvzrjlrswojt.supabase.co
+          SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxhZ2pqY3BjbHZ6cmpscnN3b2p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUzODY1MDAsImV4cCI6MjEwMDk2MjUwMH0.sxOq3pWnK2k60rE-w6in2rcuWyQOT3ngrsAzY0VcVY4
+        run: node scripts/check-slide-fit-fixture.mjs
+
       # Every product photo is Alex's (the 2026-11-24 ruling). photo_changes
       # records every photo write; this fails, listing the variants, while a
       # change NOT made through his flow (an admin request, or a declared
