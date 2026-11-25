@@ -20,7 +20,7 @@ List only what fits. No "doesn't fit", "won't fit", "not compatible", "will not 
 it takes ("fits 7 of the 12 FUSE slides"), and phrase FAQ answers by what fits.
 
 A fit box (`::fit`) closes its group: it goes after the last product card of the parts it
-covers, never between cards. The build fails a `::rank` that follows a `::fit` in the same H2.
+covers, never between cards. The build fails a `::rank` that follows a `::fit` in the same H2 (or H3 sub-group).
 
 Owner opinions only inside a blockquote copied verbatim from a public build, linked to it.
 Name the product in full (brand + product + model) at first mention in every section.

@@ -152,5 +152,6 @@ test('fit-box placement: a ::fit box after the last card of its group, never bet
   assert.equal(bad.length, 1, 'box between two cards fails');
   assert.equal(bad[0].level, 'fail');
   assert.equal(place('## One\n' + card('a-1') + box + '## Two\n' + card('a-2') + box).length, 0, 'a new H2 starts a new group');
+  assert.equal(place('## One\n### Sub A\n' + card('a-1') + box + '### Sub B\n' + card('a-2') + box).length, 0, 'an H3 sub-group starts a new group');
   assert.equal(place('## Group\n```\n' + box + '```\n' + card('a-1')).length, 0, 'a fenced example is not a box');
 });
